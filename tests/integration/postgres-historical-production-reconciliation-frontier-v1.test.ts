@@ -127,8 +127,27 @@ function input() {
   return { ...f, inception, mark, genesis };
 }
 type Input = ReturnType<typeof input>;
-const appendAccounting = (tx: postgres.Sql, state: AccountingFrontierV1) =>
-  createAccountingFrontierRepositoryPostgres(drizzle(tx, { schema })).append({ organizationId }, state);
+/** Fixture-only driver binding. TransactionSql/savepoint handles intentionally lack
+ * options. Drizzle receives the actual originating pool's codec maps (as on its
+ * normal pool construction); every callable/query helper stays on the supplied
+ * held handle. No fabricated codecs, reservation or transaction ownership.
+ */
+function accountingExecutor(pool: postgres.Sql, held: postgres.Sql) {
+  const options = pool.options;
+  if (!options?.parsers || !options.serializers) throw new Error("FIXTURE_POOL_CODECS_REQUIRED");
+  const client = new Proxy(held, {
+    apply(target, _thisArg, args) { return Reflect.apply(target, target, args); },
+    get(target, property) {
+      if (property === "options") return options;
+      if (["begin", "reserve", "end", "close", "listen", "subscribe", "notify"].includes(String(property))) return undefined;
+      const value = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return drizzle(client, { schema });
+}
+const appendAccounting = (pool: postgres.Sql, tx: postgres.Sql, state: AccountingFrontierV1) =>
+  createAccountingFrontierRepositoryPostgres(accountingExecutor(pool, tx)).append({ organizationId }, state);
 async function mode(tx: postgres.Sql, f: Input) {
   await tx`INSERT INTO trader_historical_reconciliation_scope_mode_v1
     (organization_id,account_id,run_id,mode,profile,partition,symbol,genesis_id)
@@ -136,15 +155,15 @@ async function mode(tx: postgres.Sql, f: Input) {
       ${HISTORICAL_RECONCILIATION_PROFILE_V1},'DEVELOPMENT','BTCUSDT',${f.genesis.id}::uuid)
     ON CONFLICT (organization_id,account_id,run_id) DO NOTHING`;
 }
-async function profile(tx: postgres.Sql, f: Input, fault?: "after-mode" | "after-genesis" | "after-mark" | "after-checkpoint" | "after-companion", omitProjection = false) {
-  await appendAccounting(tx, f.inception);
+async function profile(pool: postgres.Sql, tx: postgres.Sql, f: Input, fault?: "after-mode" | "after-genesis" | "after-mark" | "after-checkpoint" | "after-companion", omitProjection = false, checkpointMembershipSibling?: string) {
+  await appendAccounting(pool, tx, f.inception);
   await mode(tx, f);
   if (fault === "after-mode") throw new Error("CONTROLLED_FAULT");
   const repository = createHistoricalReconciliationRepositoryV1(tx, f.scope);
   // Deliberately low-level native fixture, not repository.enroll's source-preregistration admission.
   await repository.append(f.genesis);
   if (fault === "after-genesis") throw new Error("CONTROLLED_FAULT");
-  await appendAccounting(tx, f.mark);
+  await appendAccounting(pool, tx, f.mark);
   if (fault === "after-mark") throw new Error("CONTROLLED_FAULT");
   const held = await prepareHistoricalSimulationProductionPortsV2({ tx, request: f.request, scope: f.scope, createPorts: () => null });
   // Controlled lower-level fixture writes candidates in the original INSERTs.
@@ -189,6 +208,11 @@ async function profile(tx: postgres.Sql, f: Input, fault?: "after-mode" | "after
             AND l.content_digest_hex=${cursor.ledgerHeadContentDigestHex} RETURNING state_kind`;
         expect(rows).toHaveLength(1);
       }
+      // Only the explicit low-level wide-sibling control changes this source body.
+      // It retains all selected identities; it is not a qualified owner request.
+      const persistedRequest = checkpointMembershipSibling === undefined ? f.request : {
+        ...f.request, datasetMembership: { ...f.request.datasetMembership, unrelatedFixtureSibling: checkpointMembershipSibling },
+      };
       await tx`INSERT INTO trader_historical_simulation_resume_checkpoint_v2
         (organization_id,account_id,run_id,split,committed_cycle_sequence,committed_cycle_id,ledger_entry_id,ledger_head_content_digest_hex,
           next_record_index,next_cycle_sequence,dataset_authority_json,stage_digest_json,snapshot_digest_json,checkpoint_json,
@@ -197,7 +221,7 @@ async function profile(tx: postgres.Sql, f: Input, fault?: "after-mode" | "after
           ${cursor.committedCycleId},l.entry_id,${cursor.ledgerHeadContentDigestHex},${cursor.nextRecordIndex},${cursor.nextCycleSequence},
           ${JSON.stringify(cursor.datasetAuthority)}::jsonb,${JSON.stringify(cursor.cycleStageBundleDigestHexByStage)}::jsonb,
           ${JSON.stringify(Object.fromEntries(Object.entries(snapshots).map(([kind, snapshot]) => [kind, snapshot.contentDigestHex])))}::jsonb,
-          ${JSON.stringify(cursor)}::jsonb,${cursor.contentDigestHex},${f.request.contentDigestHex},${JSON.stringify(f.request)}::jsonb,${cursor.schemaVersion}
+          ${JSON.stringify(cursor)}::jsonb,${cursor.contentDigestHex},${f.request.contentDigestHex},${JSON.stringify(persistedRequest)}::jsonb,${cursor.schemaVersion}
         FROM trader_historical_simulation_reason_ledger_v2 l WHERE l.organization_id=${organizationId}::uuid
           AND l.account_id=${f.scope.accountId} AND l.run_id=${f.scope.runId} AND l.cycle_id=${cursor.committedCycleId}`;
       for (const stage of HISTORICAL_SIMULATION_ATOMIC_STAGES_V2) await tx`INSERT INTO trader_historical_simulation_resume_stage_link_v2
@@ -364,23 +388,44 @@ describe.skipIf(!enabled)("bounded historical native reconciliation and legacy p
   });
   it("commits the real held0188 graph and three-phase companion, then reloads exact immutable bytes", async () => {
     const f = input();
-    const result = await sql.begin("isolation level serializable", tx => profile(tx as unknown as postgres.Sql, f));
+    const result = await sql.begin("isolation level serializable", tx => profile(sql, tx as unknown as postgres.Sql, f));
     expect(await counts(sql, f)).toEqual({ modes: 1, companions: 2, accounting: 2, checkpoints: 1 });
     const saved = await createHistoricalReconciliationRepositoryV1(sql, f.scope).loadFrontier(0);
     expect(saved).toEqual(result.frontier);
     const row = await sql`SELECT writer_xid FROM trader_historical_reconciliation_frontier_v1 WHERE id=${saved.id}::uuid`;
     expect(row[0]!.writer_xid).toMatch(/^\d+$/);
   });
+  it("uses fixed checkpoint leaf reads with a wide unrelated membership sibling", async () => {
+    const [installed] = await sql`SELECT pg_get_functiondef('public.waia_historical_reconciliation_verify_v1()'::regprocedure) AS body`;
+    expect(installed!.body).not.toMatch(/commit_request_json\s*->\s*'datasetMembership'/);
+    expect(installed!.body.match(/commit_request_json\s*#>>\s*'\{datasetMembership,sealedCycleContentDigestHex\}'/g)).toHaveLength(2);
+    const f = input();
+    // Guarded lower-level0188 source fixture, not a valid qualified/public-owner
+    // request or an execution/resource measurement. The nested sibling exceeds
+    // the new body's cap but is outside the selected checkpoint header.
+    const result = await sql.begin(tx => profile(sql, tx as unknown as postgres.Sql, f,
+      undefined, false, "ø".repeat(1048576)));
+    expect((await createHistoricalReconciliationRepositoryV1(sql, f.scope).loadFrontier(0))).toEqual(result.frontier);
+    const [saved] = await sql`SELECT
+      octet_length(commit_request_json#>>'{datasetMembership,unrelatedFixtureSibling}') AS sibling_bytes,
+      commit_request_json#>>'{datasetMembership,sealedCycleContentDigestHex}' AS selected,
+      commit_request_digest_hex AS digest
+      FROM trader_historical_simulation_resume_checkpoint_v2
+      WHERE organization_id=${organizationId}::uuid AND account_id=${f.scope.accountId} AND run_id=${f.scope.runId}`;
+    expect(saved).toEqual({ sibling_bytes: 2097152,
+      selected: f.entry.datasetMembership.sealedCycleContentDigestHex, digest: f.request.contentDigestHex });
+    expect(await counts(sql, f)).toEqual({ modes: 1, companions: 2, accounting: 2, checkpoints: 1 });
+  });
   it.each(["after-mode", "after-genesis", "after-mark", "after-checkpoint", "after-companion"] as const)(
     "rolls back every new source/mode/companion after controlled %s fault", async fault => {
       const f = input();
-      await expect(sql.begin("isolation level serializable", tx => profile(tx as unknown as postgres.Sql, f, fault))).rejects.toThrow("CONTROLLED_FAULT");
+      await expect(sql.begin("isolation level serializable", tx => profile(sql, tx as unknown as postgres.Sql, f, fault))).rejects.toThrow("CONTROLLED_FAULT");
       expect(await counts(sql, f)).toEqual({ modes: 0, companions: 0, accounting: 0, checkpoints: 0 });
     });
   it("preserves already committed mode-neutral inception through each later cycle fault", async () => {
     for (const fault of ["after-mode", "after-genesis", "after-mark", "after-checkpoint", "after-companion"] as const) {
-      const f = input(); await appendAccounting(sql, f.inception);
-      await expect(sql.begin(tx => profile(tx as unknown as postgres.Sql, f, fault))).rejects.toThrow("CONTROLLED_FAULT");
+      const f = input(); await appendAccounting(sql, sql, f.inception);
+      await expect(sql.begin(tx => profile(sql, tx as unknown as postgres.Sql, f, fault))).rejects.toThrow("CONTROLLED_FAULT");
       expect(await counts(sql, f)).toEqual({ modes: 0, companions: 0, accounting: 1, checkpoints: 0 });
     }
   });
@@ -388,7 +433,7 @@ describe.skipIf(!enabled)("bounded historical native reconciliation and legacy p
     for (const immediate of [false, true]) {
       const f = input();
       await expect(sql.begin(async tx => {
-        await appendAccounting(tx as unknown as postgres.Sql, f.inception);
+        await appendAccounting(sql, tx as unknown as postgres.Sql, f.inception);
         await mode(tx as unknown as postgres.Sql, f);
         if (immediate) await tx`SET CONSTRAINTS ALL IMMEDIATE`;
       })).rejects.toThrow(/CURRENT_TRANSACTION_CLOSURE|foreign key/);
@@ -403,10 +448,10 @@ describe.skipIf(!enabled)("bounded historical native reconciliation and legacy p
         has_table_privilege(current_user,'public.trader_historical_reconciliation_frontier_v1','INSERT') frontier,
         has_function_privilege(current_user,'public.waia_historical_reconciliation_verify_v1()','EXECUTE') verifier`;
       expect(rights[0]).toEqual({ modes: false, frontier: false, verifier: false });
-      await appendAccounting(tx as unknown as postgres.Sql, f.inception);
-      expect(await appendAccounting(tx as unknown as postgres.Sql, f.mark)).toEqual(f.mark);
-      expect(await appendAccounting(tx as unknown as postgres.Sql, f.mark)).toEqual(f.mark);
-      await appendAccounting(tx as unknown as postgres.Sql, next(f));
+      await appendAccounting(sql, tx as unknown as postgres.Sql, f.inception);
+      expect(await appendAccounting(sql, tx as unknown as postgres.Sql, f.mark)).toEqual(f.mark);
+      expect(await appendAccounting(sql, tx as unknown as postgres.Sql, f.mark)).toEqual(f.mark);
+      await appendAccounting(sql, tx as unknown as postgres.Sql, next(f));
     });
     expect(await counts(sql, f)).toEqual({ modes: 1, companions: 0, accounting: 3, checkpoints: 0 });
     expect((await sql`SELECT mode FROM trader_historical_reconciliation_scope_mode_v1 WHERE run_id=${f.scope.runId}`)[0]!.mode).toBe("LEGACY");
@@ -417,8 +462,8 @@ describe.skipIf(!enabled)("bounded historical native reconciliation and legacy p
         const f = input();
         const work = sql.begin(`isolation level ${isolation}`, async tx => {
           await tx.unsafe(`SET LOCAL ROLE ${role}`); await tx`SET CONSTRAINTS ALL IMMEDIATE`;
-          await appendAccounting(tx as unknown as postgres.Sql, f.inception);
-          await appendAccounting(tx as unknown as postgres.Sql, f.mark);
+          await appendAccounting(sql, tx as unknown as postgres.Sql, f.inception);
+          await appendAccounting(sql, tx as unknown as postgres.Sql, f.mark);
           const held = await prepareHistoricalSimulationProductionPortsV2({ tx: tx as unknown as postgres.Sql,
             request: f.request, scope: f.scope, createPorts: () => null });
           await commitHistoricalSimulationCycleAtomicallyV2({ repository: { transaction: async fn => fn(held.transaction) },
@@ -493,11 +538,11 @@ describe.skipIf(!enabled)("bounded historical native reconciliation and legacy p
     }
   }
   it("requires the current transaction's companion for a generic direct write to enrolled scope", async () => {
-    const f = input(); await sql.begin(tx => profile(tx as unknown as postgres.Sql, f));
+    const f = input(); await sql.begin(tx => profile(sql, tx as unknown as postgres.Sql, f));
     const before = await counts(sql, f);
     const error = await reason(sql.begin(async tx => {
       await tx.unsafe(`SET LOCAL ROLE ${role}`);
-      await appendAccounting(tx as unknown as postgres.Sql, next(f));
+      await appendAccounting(sql, tx as unknown as postgres.Sql, next(f));
     }));
     expect(error).toContain("CURRENT_TRANSACTION_CLOSURE");
     expect(await counts(sql, f)).toEqual(before);
@@ -505,34 +550,34 @@ describe.skipIf(!enabled)("bounded historical native reconciliation and legacy p
   it("cannot reuse a validated current companion for an uncovered write after SET CONSTRAINTS", async () => {
     const f = input();
     const error = await reason(sql.begin(async tx => {
-      await profile(tx as unknown as postgres.Sql, f);
+      await profile(sql, tx as unknown as postgres.Sql, f);
       await tx`SET CONSTRAINTS ALL IMMEDIATE`;
-      await appendAccounting(tx as unknown as postgres.Sql, next(f));
+      await appendAccounting(sql, tx as unknown as postgres.Sql, next(f));
     }));
     expect(error).toContain("UNCOVERED_ACCOUNTING");
     expect(await counts(sql, f)).toEqual({ modes: 0, companions: 0, accounting: 0, checkpoints: 0 });
   });
   it.each(["read committed", "repeatable read", "serializable"])("closes a real old %s snapshot after enrollment commits", async isolation => {
-    const f = input(); await appendAccounting(sql, f.inception);
+    const f = input(); await appendAccounting(sql, sql, f.inception);
     let ready!: () => void; const snapshot = new Promise<void>(resolve => { ready = resolve; });
     let resume!: () => void; const continueWriter = new Promise<void>(resolve => { resume = resolve; });
     const writer = reason(sql.begin(`isolation level ${isolation}`, async tx => {
       await tx.unsafe(`SET LOCAL ROLE ${role}`);
       await tx`SELECT id FROM trader_accounting_frontier WHERE organization_id=${organizationId}::uuid AND run_id=${f.scope.runId}`;
       ready(); await continueWriter;
-      await appendAccounting(tx as unknown as postgres.Sql, next(f));
+      await appendAccounting(sql, tx as unknown as postgres.Sql, next(f));
     }));
     try {
       await bounded(Promise.race([snapshot, writer.then(error => { throw new Error(`EARLY_WRITER:${error}`); })]), "old-snapshot");
-      await sql.begin(tx => profile(tx as unknown as postgres.Sql, f));
+      await sql.begin(tx => profile(sql, tx as unknown as postgres.Sql, f));
     } finally { resume(); }
     expect(await bounded(writer, "writer-refusal")).toMatch(/40001|MODE_WINNER_NOT_VISIBLE|CURRENT_TRANSACTION_CLOSURE/);
     expect(await counts(sql, f)).toEqual({ modes: 1, companions: 2, accounting: 2, checkpoints: 1 });
   });
   it("refuses enrollment after a legitimate legacy first write and across another split", async () => {
-    const f = input(); await appendAccounting(sql, f.inception); await appendAccounting(sql, f.mark);
+    const f = input(); await appendAccounting(sql, sql, f.inception); await appendAccounting(sql, sql, f.mark);
     const original = await counts(sql, f);
-    await expect(sql.begin(tx => profile(tx as unknown as postgres.Sql, f))).rejects.toThrow(/LEGACY_PREFIX_UNSUPPORTED/);
+    await expect(sql.begin(tx => profile(sql, tx as unknown as postgres.Sql, f))).rejects.toThrow(/LEGACY_PREFIX_UNSUPPORTED/);
     await expect(sql`INSERT INTO trader_historical_reconciliation_scope_mode_v1
       (organization_id,account_id,run_id,mode,profile,partition,symbol,genesis_id)
       VALUES (${organizationId}::uuid,${f.scope.accountId},${f.scope.runId},'PROFILE',${HISTORICAL_RECONCILIATION_PROFILE_V1},
@@ -540,11 +585,11 @@ describe.skipIf(!enabled)("bounded historical native reconciliation and legacy p
     expect(await counts(sql, f)).toEqual(original);
   });
   it("does not leak automatic LEGACY bookkeeping through a caught source-statement failure", async () => {
-    const f = input(); await appendAccounting(sql, f.inception);
+    const f = input(); await appendAccounting(sql, sql, f.inception);
     await sql.begin(async tx => {
       await tx.unsafe(`SET LOCAL ROLE ${role}`);
       await expect(tx.savepoint(async save => {
-        await appendAccounting(save as unknown as postgres.Sql, { ...f.mark, sourceFillId: randomUUID() });
+        await appendAccounting(sql, save as unknown as postgres.Sql, { ...f.mark, sourceFillId: randomUUID() });
       })).rejects.toThrow(/foreign key/);
       const rows = await tx`SELECT id FROM trader_accounting_frontier WHERE organization_id=${organizationId}::uuid AND run_id=${f.scope.runId}`;
       expect(rows).toHaveLength(1);
@@ -591,7 +636,7 @@ describe.skipIf(!enabled)("bounded historical native reconciliation and legacy p
   }
   it("PROFILE refuses omitted source projections without committed effects", async () => {
     const f = input();
-    await expect(sql.begin(tx => profile(tx as unknown as postgres.Sql, f, undefined, true)))
+    await expect(sql.begin(tx => profile(sql, tx as unknown as postgres.Sql, f, undefined, true)))
       .rejects.toThrow("SOURCE_PROJECTION_REQUIRED");
     expect(await counts(sql, f)).toEqual({ modes: 0, companions: 0, accounting: 0, checkpoints: 0 });
   });
@@ -693,14 +738,14 @@ describe.skipIf(!enabled)("bounded historical native reconciliation and legacy p
     const f = input();
     await expect(sql`INSERT INTO trader_historical_reconciliation_scope_mode_v1(organization_id,account_id,run_id,mode,writer_xid)
       VALUES(${organizationId}::uuid,${f.scope.accountId},${f.scope.runId},'LEGACY','1')`).rejects.toThrow("WRITER_STAMP");
-    const result = await sql.begin(tx => profile(tx as unknown as postgres.Sql, f));
+    const result = await sql.begin(tx => profile(sql, tx as unknown as postgres.Sql, f));
     await expect(sql`UPDATE trader_historical_reconciliation_frontier_v1 SET body_json=body_json||'{"expectedCashAfter":"0"}'::jsonb
       WHERE id=${result.frontier.id}::uuid`).rejects.toThrow("APPEND_ONLY");
     await expect(sql`DELETE FROM trader_historical_reconciliation_scope_mode_v1 WHERE organization_id=${organizationId}::uuid
       AND run_id=${f.scope.runId}`).rejects.toThrow("APPEND_ONLY");
   });
   it("rejects body/column, content and capacity mismatch before a new frontier can commit", async () => {
-    const f = input(); const result = await sql.begin(tx => profile(tx as unknown as postgres.Sql, f));
+    const f = input(); const result = await sql.begin(tx => profile(sql, tx as unknown as postgres.Sql, f));
     const before = await counts(sql, f);
     for (const expression of [
       "body_json||jsonb_build_object('symbol','ETHUSDT')",
@@ -724,7 +769,7 @@ describe.skipIf(!enabled)("bounded historical native reconciliation and legacy p
     // Existing source policy admits only organizationId, even when the caller has INSERT.
     const error = await reason(sql.begin(async tx => {
       await tx.unsafe(`SET LOCAL ROLE ${role}`);
-      await createAccountingFrontierRepositoryPostgres(drizzle(tx as unknown as postgres.Sql, { schema }))
+      await createAccountingFrontierRepositoryPostgres(accountingExecutor(sql, tx as unknown as postgres.Sql))
         .append({ organizationId: denied.organizationId }, denied);
     }));
     expect(error).toMatch(/42501|row-level security/);
@@ -741,7 +786,7 @@ describe.skipIf(!enabled)("bounded historical native reconciliation and legacy p
         await tx.unsafe(`GRANT SELECT ON public.trader_historical_reconciliation_scope_mode_v1 TO ${role}`);
       }
       await tx.unsafe(`SET LOCAL ROLE ${role}`);
-      await appendAccounting(tx as unknown as postgres.Sql, f.mark);
+      await appendAccounting(sql, tx as unknown as postgres.Sql, f.mark);
     }));
     expect(error).toMatch(/42501|permission denied|row-level security/);
     expect(await counts(sql, f)).toEqual({ modes: 0, companions: 0, accounting: 0, checkpoints: 0 });

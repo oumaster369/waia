@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Corrected full WP3 source is ready for immutable root/M01 review. Native/schema/full typecheck remain unexecuted; request coordinated grants only after coherent source acceptance. Root retains compatibility/CI/graph/publication."
+  nextAction: "Finite held-fixture/two-leaf corrections await review; separate recursive canonicalization envelope defect requires a source-backed amendment before dependent SQL. Native/schema unexecuted. Root retains compatibility/CI/graph/publication."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -880,3 +880,14 @@ The complete native source includes four-kind/numeric/Unicode/body/privilege/con
 Full accounting now also uses47 equivalent fixed-key nested reads inside the new verifier to avoid creating intermediate subobjects merely to read a leaf. Scope/immutable-parent reservation includes a conservative6× raw-text escaping allowance, with unchanged caps. Existing missing-current/predecessor/genesis categories remain typed refusals, separate from oversize. The full source/callback/representation certificate and exact trigger inventory are external under evidence/dee-1130/wp3-source-freeze and must be independently checked against this implementation.
 
 Last scoped pure proof before this checkpoint was82 assertions/4 files PASS, with genuine earlier scaffold RED retained. Scoped ESLint of seven changed TypeScript surfaces exited0 with three inherited warnings; no full lint/typecheck/build or new PostgreSQL run was executed. SQL/native bodies are prepared source, not native PASS. Current full typecheck, actual223 migrations, restricted-role/source/race/installed-expression proof, canonical companions, root compatibility tuples/CI/graphs, full readiness and independent final review remain outstanding. No qualification, source economics, memory/latency, final-host or full AD6c result follows from this source freeze.
+
+
+## WP-3 finite installed-driver and checkpoint-leaf correction
+
+The immutable fa7ae243 checkpoint and its82/4 pure proof remain preserved. Root subsequently ran the whole-project typecheck at that exact source and recorded PASS; that historical result does not claim current native execution. Root's installed-adapter probe found the new test's raw TransactionSql lacked the codec options required by Drizzle, failing before dispatch. The native fixture now receives its actual originating pool explicitly and supplies those authoritative codec maps through a fixture-local proxy; every callable/query helper still uses the exact held transaction/savepoint, with no inherited root acquisition or transaction capability. The denied-RLS fixture uses the same binding. No production TypeScript or old migration was changed for this correction.
+
+Independent review also found two remaining checkpoint membership expressions constructing an unbounded intermediate object. Root admitted only their equivalent fixed-path `#>>` replacements in allocated0222, bringing the incremental verifier substitutions from47 to49. The selected identity, four-times checkpoint-header reservation and all caps remain unchanged. The prepared native control checks the installed function definition and commits a guarded lower-level0188 fixture with a2MiB unrelated nested membership sibling while preserving selected identities. This is not a qualified/public-owner request or a memory measurement, and it has not been run.
+
+The actual installed-adapter/source probe passes5 controls with0 network attempts and0 forbidden root capability reads; it verifies generated Drizzle INSERT routing with real nonempty pool codecs and custom codec preservation, plus refusal and exact SQL delta. Its transports are inert, so it proves neither PostgreSQL/RLS/wire codecs nor actual transaction behavior. Scoped ESLint of the modified native fixture exits0. Evidence is additive under `evidence/dee-1130/wp3-finite-corrections`; the prior source freeze/certificate and raw failures are retained.
+
+A separate M01/root finding remains open: recursive `waia_canonical_jsonb_v1` reconstructs enclosing subtrees, so the previous16/64/24 single-body accounting is not a valid aggregate recursive-materialization proof. No structural guard, coefficient change, cap increase or old0161 alteration is part of this finite fix. A separate source-backed structural/recursive accounting amendment must be reviewed and admitted before dependent SQL. Current migration/native/resource acceptance is therefore pending; no database, heavy check, migration or campaign was executed by this author in this correction.

@@ -2978,7 +2978,7 @@ BEGIN
       END IF;
     END LOOP;
     -- Only bounded scalar/selected projection reads of the existing large checkpoint/snapshots.
-    SELECT octet_length((jsonb_build_object('digest',c.checkpoint_content_digest_hex,'cycleId',c.committed_cycle_id,'split',c.split,'ledgerId',c.ledger_entry_id,'ledgerDigest',c.ledger_head_content_digest_hex,'next',c.next_record_index,'release',c.commit_request_json->>'codeSha','membership',c.commit_request_json->>'datasetMembershipContentDigestHex','market',c.commit_request_json->'datasetMembership'->>'sealedCycleContentDigestHex'))::text) INTO bytes FROM public.trader_historical_simulation_resume_checkpoint_v2 c
+    SELECT octet_length((jsonb_build_object('digest',c.checkpoint_content_digest_hex,'cycleId',c.committed_cycle_id,'split',c.split,'ledgerId',c.ledger_entry_id,'ledgerDigest',c.ledger_head_content_digest_hex,'next',c.next_record_index,'release',c.commit_request_json->>'codeSha','membership',c.commit_request_json->>'datasetMembershipContentDigestHex','market',c.commit_request_json#>>'{datasetMembership,sealedCycleContentDigestHex}'))::text) INTO bytes FROM public.trader_historical_simulation_resume_checkpoint_v2 c
       WHERE c.organization_id=scope_org AND c.account_id=scope_account AND c.run_id=scope_run
         AND c.committed_cycle_sequence=current_row.cycle_sequence;
     IF bytes IS NULL OR bytes>1048576 THEN RAISE EXCEPTION 'HISTORICAL_RECONCILIATION_REFUSED:RESOURCE_ENVELOPE_OR_MISSING'; END IF;
@@ -2988,7 +2988,7 @@ BEGIN
       c.ledger_entry_id,c.ledger_head_content_digest_hex AS ledger_digest,c.next_record_index,
       c.commit_request_json->>'codeSha' AS release_sha,
       c.commit_request_json->>'datasetMembershipContentDigestHex' AS membership_digest,
-      c.commit_request_json->'datasetMembership'->>'sealedCycleContentDigestHex' AS market_digest
+      c.commit_request_json#>>'{datasetMembership,sealedCycleContentDigestHex}' AS market_digest
       INTO checkpoint_row FROM public.trader_historical_simulation_resume_checkpoint_v2 c
       WHERE c.organization_id=scope_org AND c.account_id=scope_account AND c.run_id=scope_run
         AND c.committed_cycle_sequence=current_row.cycle_sequence;
