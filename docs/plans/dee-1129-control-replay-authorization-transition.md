@@ -15,15 +15,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3]
+  currentWorkPackage: WP-3
+  completedWorkPackages: [WP-1, WP-2]
+  remainingWorkPackages: [WP-3]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Implement admitted WP1–WP3 bounded transition and fixed native reader plumbing; targeted synthetic unit/process tests only until root grants native/heavy resources."
+  nextAction: "Refresh normally to accepted 59e41f0f; obtain independent source review and isolated native/heavy grant. Positive PostgreSQL CLI companion and full readiness remain pending."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -358,3 +358,19 @@ Terminal output explicitly uses `checkpointEvidence: NOT_ASSESSED`: native T ↔
 Author must append this finite admission/FIFO clarification to the canonical plan and commit that metadata before the first executable edit. After that plan-only commit, the code barrier is RELEASED for WP1–WP3 within the exact named boundary and targeted unit/process tests on temporary synthetic inputs. No further permission handshake is needed for that sequence. Send the admission commit identity and then implementation progress. If a further source path is genuinely needed, describe the concrete reason before expanding.
 
 No PG or heavy build grant is included. Existing positive CLI native companion and full readiness require root-scheduled isolated resources after source/scoped checks. No push/PR by author, remote host/provider/credential/production/C3 activity, real campaign, authorization issuance or real trade. Root owns independent final implementation review, actual rendered preflight, fresh exact-head CI and normal guarded integration. Parent644 and whole-plan qualification remain unfinished.
+
+## Author scoped implementation checkpoint
+
+WP1/WP2 are implemented on accepted `9a4d1a73fa421961058d3733e11ea47ec7d147ec`; WP3 remains incomplete until native positive CLI, full readiness and independent review. The implementation is confined to the admitted13 production files, six changed/new test/helper files and this plan. No migration, issuer, driver, scientific threshold, host/provider or real campaign was changed or run.
+
+Executed author scoped acceptance before this commit: **112 assertions in10 actual test files,0 failures,0 skips**. This includes49 transition/adversarial cases, the byte-bound/FIFO and native-reader controls, real child-process/SIGKILL/actualCLI protocol cases, and unchanged generic-consume, terminal, Full Historical launch, bootstrap, two-phase and WAL/checkpoint companions. All fixtures are controlled local temporary data. Spawned CLI still fails its unchanged missing TEST_ONLY capability gate after native initialization; this is not campaign PASS. Scoped ESLint exits0 with16 warnings (12 inherited locations and four test-only discarded-digest bindings); diff-check passes. Actual legacy consumer loaded from immutable9a4d and the current generic consumer produce identical consumed bytes at fixed time; the new retained consumer is compared against that generic body in the scoped suite.
+
+Evidence is external under `evidence/dee-1129/author`: `scoped-freeze.json/.log`, `scoped-freeze-eslint.log`, `scoped-tested-source.json`, and `legacy-baseline-comparison.json`. Tests ran on precommit executable bytes, pinned individually in the source manifest; they must not be represented as an execution of a later commit without exact byte comparison. No PostgreSQL, full typecheck/build/lint or new native-positive test has run. Existing restricted native CLI test now asserts Ai-linked two-run output, exact Ac preservation, resumed output equality and caller-input snapshot across its first await; these new positive assertions remain unexecuted pending the separate resource grant.
+
+Retain raw initial failures: the six native-reader/CAS baseline cases are genuine product REDs. The initial process11PASS/1FAIL used an invalid CLI flag, corrected in the test. Adversarial24PASS/9FAIL and47PASS/2FAIL were incorrect expected refusal-code labels; actual sources already refused. Those are fixture expectation corrections, not additional repaired product defects. New frozen aggregate supersedes them only for current scoped acceptance; no raw evidence is overwritten.
+
+Limits remain unchanged: phase-only run lock, no lock stealing, consumed-but-incomplete failure refusal, no power-loss proof, no active-driver exclusion, no fabricated terminal, checkpointEvidence NOT_ASSESSED, no PG/file-driver or scientific qualification closure.
+
+## Accepted-base refresh authorized before integration
+
+Root reports PR685 accepted after33 checks and actual main `59e41f0f3a7861e7ecb49e68e5c7a49e10423637`. Preserve this author snapshot, then merge that exact accepted commit normally (no rebase/force). Incoming24 paths are source-disjoint from this implementation. Verify both complete binary patch directions, every own/incoming blob, all221 SQL/journal identities and the existing21 capital plus3 billing/2 payment/4 observation suite registrations. No DEE1129 migration or CI-count change is authorized here. A new current-base native/full proof must retain the old scoped attribution; no inheritance is described as a rerun. Root owns publication and grants native/heavy resources separately after source freeze.

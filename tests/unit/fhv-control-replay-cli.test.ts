@@ -2,7 +2,7 @@
  * DEE-436 — bounded Full-mode two-run control replay must pass determinism.
  */
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -20,6 +20,8 @@ import {
 import { postgresTestOnlyExecutionV2Authority } from "@/tests/helpers/execution-v2-test-only-postgres";
 import { resolveFhvControlReplayCycleBound } from "@/lib/trader/observability/fhv-control-replay-execution";
 
+import { readFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
+import { readFhvControlReplayReceipt } from "@/lib/trader/observability/fhv-control-replay-receipt";
 const RELEASE_SHA = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const ORG_ID = "00000000-0000-4000-8000-000000000436";
 
@@ -116,7 +118,15 @@ describe.skipIf(!pgEnabled)("DEE-436 FHV control-replay CLI", () => {
         organizationId: ORG_ID,
         operatorId: "unit-control-replay-operator",
       });
-      const result = await runFhvControlReplay({
+      const originalOne = readFileSync(prep.authorizationReceiptPathRunOne);
+      const originalTwo = readFileSync(prep.authorizationReceiptPathRunTwo);
+      const issuedOne = readFhvFullHistoricalAuthorizationReceipt(
+        prep.authorizationReceiptPathRunOne,
+      ).authorizationReceiptDigest;
+      const issuedTwo = readFhvFullHistoricalAuthorizationReceipt(
+        prep.authorizationReceiptPathRunTwo,
+      ).authorizationReceiptDigest;
+      const input = {
         releaseSha: RELEASE_SHA,
         releaseTag: FHV_TEST_RELEASE_TAG,
         organizationId: ORG_ID,
@@ -134,13 +144,48 @@ describe.skipIf(!pgEnabled)("DEE-436 FHV control-replay CLI", () => {
         runOneId: `fhv-control-replay-1-${RELEASE_SHA.slice(0, 8)}`,
         runTwoId: `fhv-control-replay-2-${RELEASE_SHA.slice(0, 8)}`,
         testOnlyExecutionV2Authority: postgresTestOnlyExecutionV2Authority,
-      });
+        controlReplayReceiptOutput: join(root, "two-run-receipt.json"),
+      };
+      const requested = { ...input };
+      const pending = runFhvControlReplay(input);
+      input.runTwoId = "caller-mutated-after-await";
+      input.authorizationReceiptPathRunTwo = join(root, "caller-missing.json");
+      const result = await pending;
       expect(result, JSON.stringify(result)).toMatchObject({
         classification: "CONTROL_REPLAY=PASS",
         digestsMatch: true,
       });
       expect(result.runOneDigest).toMatch(/^[a-f0-9]{64}$/);
       expect(result.runTwoDigest).toBe(result.runOneDigest);
+      const acOne = readFileSync(prep.authorizationReceiptPathRunOne);
+      const acTwo = readFileSync(prep.authorizationReceiptPathRunTwo);
+      expect(acOne).not.toEqual(originalOne);
+      expect(acTwo).not.toEqual(originalTwo);
+      expect(result.authorizationTransitions?.runOne.issuedAuthorizationReceiptDigest).toBe(
+        issuedOne,
+      );
+      expect(result.authorizationTransitions?.runTwo.issuedAuthorizationReceiptDigest).toBe(
+        issuedTwo,
+      );
+      expect(result.terminalLinks?.runOne).toMatchObject({
+        status: "TERMINAL_NOT_AVAILABLE",
+        checkpointEvidence: "NOT_ASSESSED",
+      });
+      const outputBefore = readFileSync(input.controlReplayReceiptOutput);
+      expect(readFhvControlReplayReceipt(input.controlReplayReceiptOutput)).toMatchObject({
+        runOneAuthorizationReceiptDigest: issuedOne,
+        runTwoAuthorizationReceiptDigest: issuedTwo,
+      });
+      const resumed = await runFhvControlReplay({ ...requested, resume: true });
+      expect(resumed, JSON.stringify(resumed)).toMatchObject({
+        classification: "CONTROL_REPLAY=PASS",
+        runOneDigest: result.runOneDigest,
+        runTwoDigest: result.runTwoDigest,
+        authorizationTransitions: result.authorizationTransitions,
+      });
+      expect(readFileSync(input.controlReplayReceiptOutput)).toEqual(outputBefore);
+      expect(readFileSync(prep.authorizationReceiptPathRunOne)).toEqual(acOne);
+      expect(readFileSync(prep.authorizationReceiptPathRunTwo)).toEqual(acTwo);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

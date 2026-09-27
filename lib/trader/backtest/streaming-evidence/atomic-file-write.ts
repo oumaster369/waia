@@ -1,11 +1,15 @@
 import {
+  assertMetadataBytesSupported,
+  readMetadataTextSync,
+  type FhvMetadataReadOptions,
+} from "@/lib/trader/backtest/streaming-evidence/bounded-metadata-read";
+import {
   closeSync,
   existsSync,
   fsyncSync,
   linkSync,
   mkdirSync,
   openSync,
-  readFileSync,
   renameSync,
   unlinkSync,
   writeFileSync,
@@ -196,6 +200,7 @@ export function writeFileAtomicCompareAndReplace(input: {
   finalPath: string;
   expectedContent: string;
   nextContent: string;
+  metadataReadProfile?: FhvMetadataReadOptions["metadataReadProfile"];
 }): void {
   if (!existsSync(input.finalPath)) {
     throw new AtomicFileWriteError(
@@ -203,7 +208,9 @@ export function writeFileAtomicCompareAndReplace(input: {
       `Compare-and-replace target missing: ${input.finalPath}`,
     );
   }
-  const current = readFileSync(input.finalPath, "utf8");
+  assertMetadataBytesSupported(input.expectedContent, input);
+  assertMetadataBytesSupported(input.nextContent, input);
+  const current = readMetadataTextSync(input.finalPath, input);
   if (current !== input.expectedContent) {
     throw new AtomicFileWriteError(
       "COMPARE_AND_REPLACE_CONTENT_MISMATCH",

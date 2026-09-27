@@ -1,3 +1,13 @@
+import { createHash } from "node:crypto";
+import { resolve } from "node:path";
+import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import {
+  assertMetadataBytesSupported,
+  readMetadataBytesSync,
+  CONTROL_REPLAY_METADATA_PROFILE,
+  readMetadataTextSync,
+  type FhvMetadataReadOptions,
+} from "@/lib/trader/backtest/streaming-evidence/bounded-metadata-read";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -145,9 +155,10 @@ export function buildFhvFullHistoricalAuthorizationReceipt(input: {
 
 export function readFhvFullHistoricalAuthorizationReceipt(
   receiptPath: string,
+  options?: FhvMetadataReadOptions,
 ): FhvFullHistoricalAuthorizationReceiptV1 {
   const parsed = JSON.parse(
-    readFileSync(receiptPath, "utf8"),
+    readMetadataTextSync(receiptPath, options),
   ) as FhvFullHistoricalAuthorizationReceiptV1;
   const { authorizationReceiptDigest, ...body } = parsed;
   const expected = computeAuthorizationReceiptDigest(body);
@@ -218,6 +229,53 @@ export function writeFhvFullHistoricalAuthorizationReceiptAtomic(input: {
 
 export { FhvImmutableArtifactCollisionError };
 
+function buildConsumedAuthorizationReceipt(
+  receipt: FhvFullHistoricalAuthorizationReceiptV1,
+  consumedAtUtc: string,
+): FhvFullHistoricalAuthorizationReceiptV1 {
+  const withoutDigest = {
+    schemaVersion: receipt.schemaVersion,
+    releaseSha: receipt.releaseSha,
+    releaseTag: receipt.releaseTag,
+    datasetQualificationReceiptDigest: receipt.datasetQualificationReceiptDigest,
+    datasetDigest: receipt.datasetDigest,
+    manifestDigest: receipt.manifestDigest,
+    configurationFreezeDigest: receipt.configurationFreezeDigest,
+    ...(receipt.controlReplayReceiptDigest
+      ? { controlReplayReceiptDigest: receipt.controlReplayReceiptDigest }
+      : {}),
+    organizationId: receipt.organizationId,
+    operatorId: receipt.operatorId,
+    runId: receipt.runId,
+    executionPurpose: receipt.executionPurpose,
+    oneExecution: true as const,
+    authorizedAtUtc: receipt.authorizedAtUtc,
+    consumed: true as const,
+    consumedAtUtc,
+  };
+  return {
+    ...withoutDigest,
+    authorizationReceiptDigest: computeAuthorizationReceiptDigest(withoutDigest),
+  };
+}
+
+function consumeAuthorizationSnapshotHeld(
+  receiptPath: string,
+  expectedContent: string,
+  receipt: FhvFullHistoricalAuthorizationReceiptV1,
+  options?: FhvMetadataReadOptions,
+): FhvFullHistoricalAuthorizationReceiptV1 {
+  const consumedReceipt = buildConsumedAuthorizationReceipt(receipt, new Date().toISOString());
+  const nextContent = `${JSON.stringify(consumedReceipt, null, 2)}\n`;
+  writeFileAtomicCompareAndReplace({
+    finalPath: receiptPath,
+    expectedContent,
+    nextContent,
+    metadataReadProfile: options?.metadataReadProfile,
+  });
+  return consumedReceipt;
+}
+
 export function consumeFhvFullHistoricalAuthorizationReceipt(
   receiptPath: string,
 ): FhvFullHistoricalAuthorizationReceiptV1 {
@@ -239,58 +297,30 @@ export function consumeFhvFullHistoricalAuthorizationReceipt(
         "Authorization receipt has already been consumed.",
       );
     }
-    const consumedAtUtc = new Date().toISOString();
-    const withoutDigest = {
-      schemaVersion: receipt.schemaVersion,
-      releaseSha: receipt.releaseSha,
-      releaseTag: receipt.releaseTag,
-      datasetQualificationReceiptDigest: receipt.datasetQualificationReceiptDigest,
-      datasetDigest: receipt.datasetDigest,
-      manifestDigest: receipt.manifestDigest,
-      configurationFreezeDigest: receipt.configurationFreezeDigest,
-      ...(receipt.controlReplayReceiptDigest
-        ? { controlReplayReceiptDigest: receipt.controlReplayReceiptDigest }
-        : {}),
-      organizationId: receipt.organizationId,
-      operatorId: receipt.operatorId,
-      runId: receipt.runId,
-      executionPurpose: receipt.executionPurpose,
-      oneExecution: true as const,
-      authorizedAtUtc: receipt.authorizedAtUtc,
-      consumed: true as const,
-      consumedAtUtc,
-    };
-    const consumedReceipt: FhvFullHistoricalAuthorizationReceiptV1 = {
-      ...withoutDigest,
-      authorizationReceiptDigest: computeAuthorizationReceiptDigest(withoutDigest),
-    };
-    const nextContent = `${JSON.stringify(consumedReceipt, null, 2)}\n`;
-    writeFileAtomicCompareAndReplace({
-      finalPath: receiptPath,
-      expectedContent,
-      nextContent,
-    });
-    return consumedReceipt;
+    return consumeAuthorizationSnapshotHeld(receiptPath, expectedContent, receipt);
   } finally {
     releaseFileExclusiveLock(lockPath, lockFd);
   }
 }
 
-export function assertFhvFullHistoricalAuthorizationReceiptForLaunch(input: {
-  receiptPath: string;
-  authorizationReceiptDigest: string;
-  releaseSha: string;
-  releaseTag?: string;
-  datasetQualificationReceiptDigest: string;
-  datasetDigest: string;
-  manifestDigest: string;
-  configurationFreezeDigest: string;
-  controlReplayReceiptDigest?: string;
-  organizationId: string;
-  operatorId: string;
-  runId: string;
-}): FhvFullHistoricalAuthorizationReceiptV1 {
-  const receipt = readFhvFullHistoricalAuthorizationReceipt(input.receiptPath);
+export function assertFhvFullHistoricalAuthorizationReceiptForLaunch(
+  input: {
+    receiptPath: string;
+    authorizationReceiptDigest: string;
+    releaseSha: string;
+    releaseTag?: string;
+    datasetQualificationReceiptDigest: string;
+    datasetDigest: string;
+    manifestDigest: string;
+    configurationFreezeDigest: string;
+    controlReplayReceiptDigest?: string;
+    organizationId: string;
+    operatorId: string;
+    runId: string;
+  },
+  options?: FhvMetadataReadOptions,
+): FhvFullHistoricalAuthorizationReceiptV1 {
+  const receipt = readFhvFullHistoricalAuthorizationReceipt(input.receiptPath, options);
   if (receipt.authorizationReceiptDigest !== input.authorizationReceiptDigest) {
     throw new FhvFullHistoricalAuthError(
       "AUTHORIZATION_RECEIPT_DIGEST_MISMATCH",
@@ -364,4 +394,275 @@ export function assertFhvFullHistoricalAuthorizationReceiptForLaunch(input: {
   }
   assertFhvExecutionPurpose(receipt.executionPurpose);
   return receipt;
+}
+
+export const FHV_CONTROL_REPLAY_METADATA_OPTIONS = Object.freeze({
+  metadataReadProfile: CONTROL_REPLAY_METADATA_PROFILE,
+});
+export type FhvControlReplayExpectedIdentity = Pick<
+  FhvFullHistoricalAuthorizationReceiptV1,
+  | "releaseSha"
+  | "releaseTag"
+  | "datasetQualificationReceiptDigest"
+  | "datasetDigest"
+  | "manifestDigest"
+  | "configurationFreezeDigest"
+  | "organizationId"
+  | "operatorId"
+  | "runId"
+>;
+export type FhvControlReplayTransitionInput = Readonly<{
+  artifactRoot: string;
+  runId: string;
+  authorizationReceiptPath: string;
+  expectedIdentity: FhvControlReplayExpectedIdentity;
+}>;
+const CONTROL_IDENTITY_KEYS = [
+  "releaseSha",
+  "releaseTag",
+  "datasetQualificationReceiptDigest",
+  "datasetDigest",
+  "manifestDigest",
+  "configurationFreezeDigest",
+  "organizationId",
+  "operatorId",
+  "runId",
+] as const;
+const strictMetadata = FHV_CONTROL_REPLAY_METADATA_OPTIONS;
+
+export function resolveFhvControlReplayHistoryDirectory(
+  artifactRoot: string,
+  runId: string,
+): string {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(runId)) {
+    throw new FhvFullHistoricalAuthError(
+      "AUTHORIZATION_IDENTITY_MISMATCH",
+      "Invalid Control Replay run identity.",
+    );
+  }
+  return resolve(
+    artifactRoot,
+    "RI-P7",
+    "fhv-full-historical",
+    runId,
+    "control",
+    "authorization-transition.v1",
+  );
+}
+
+export function computeFhvControlReplayByteDigest(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+function parseStrictControlReplayAuthorization(
+  bytes: Buffer,
+  expected: FhvControlReplayExpectedIdentity,
+  consumed: boolean,
+): FhvFullHistoricalAuthorizationReceiptV1 {
+  const receipt = JSON.parse(bytes.toString("utf8")) as FhvFullHistoricalAuthorizationReceiptV1;
+  const { authorizationReceiptDigest, ...body } = receipt;
+  if (computeAuthorizationReceiptDigest(body) !== authorizationReceiptDigest) {
+    throw new FhvFullHistoricalAuthError(
+      "AUTHORIZATION_RECEIPT_DIGEST_MISMATCH",
+      "Authorization receipt digest mismatch.",
+    );
+  }
+  const keys = [
+    ...CONTROL_IDENTITY_KEYS,
+    "schemaVersion",
+    "executionPurpose",
+    "oneExecution",
+    "authorizedAtUtc",
+    "authorizationReceiptDigest",
+    "consumed",
+    ...(consumed ? ["consumedAtUtc"] : []),
+  ].sort();
+  if (
+    JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(keys) ||
+    receipt.schemaVersion !== FHV_FULL_HISTORICAL_AUTHORIZATION_RECEIPT_SCHEMA_VERSION ||
+    receipt.executionPurpose !== FHV_EXECUTION_PURPOSE_CONTROL_REPLAY ||
+    receipt.oneExecution !== true ||
+    receipt.consumed !== consumed ||
+    typeof receipt.authorizedAtUtc !== "string" ||
+    !receipt.authorizedAtUtc ||
+    (consumed && (typeof receipt.consumedAtUtc !== "string" || !receipt.consumedAtUtc))
+  ) {
+    throw new FhvFullHistoricalAuthError(
+      "AUTHORIZATION_TRANSITION_INVALID",
+      "Unsupported Control Replay authorization body.",
+    );
+  }
+  if (
+    CONTROL_IDENTITY_KEYS.some(
+      (key) =>
+        typeof expected[key] !== "string" ||
+        expected[key].length === 0 ||
+        receipt[key] !== expected[key],
+    )
+  ) {
+    throw new FhvFullHistoricalAuthError(
+      "AUTHORIZATION_IDENTITY_MISMATCH",
+      "Control Replay authorization identity mismatch.",
+    );
+  }
+  return receipt;
+}
+
+function buildControlReplayPair(input: {
+  issued: FhvFullHistoricalAuthorizationReceiptV1;
+  consumed: FhvFullHistoricalAuthorizationReceiptV1;
+  issuedBytes: Buffer;
+  consumedBytes: Buffer;
+}) {
+  const body = {
+    schemaVersion: "fhv-control-replay-authorization-pair/v1" as const,
+    profile: CONTROL_REPLAY_METADATA_PROFILE,
+    identity: Object.fromEntries(
+      CONTROL_IDENTITY_KEYS.map((key) => [key, input.issued[key]]),
+    ) as FhvControlReplayExpectedIdentity,
+    executionPurpose: FHV_EXECUTION_PURPOSE_CONTROL_REPLAY,
+    issuedFilename: "issued.v1.json" as const,
+    consumedFilename: "consumed.v1.json" as const,
+    issuedAuthorizationReceiptDigest: input.issued.authorizationReceiptDigest,
+    consumedAuthorizationReceiptDigest: input.consumed.authorizationReceiptDigest,
+    issuedBytesSha256: computeFhvControlReplayByteDigest(input.issuedBytes),
+    consumedBytesSha256: computeFhvControlReplayByteDigest(input.consumedBytes),
+  };
+  return { ...body, pairDigest: computeStableJsonDigest(body) };
+}
+export type FhvControlReplayAuthorizationPairV1 = ReturnType<typeof buildControlReplayPair>;
+
+function writeControlReplayHistoryExact(path: string, bytes: Buffer): void {
+  assertMetadataBytesSupported(bytes, strictMetadata);
+  if (existsSync(path)) {
+    if (!readMetadataBytesSync(path, strictMetadata).equals(bytes)) {
+      throw new FhvFullHistoricalAuthError(
+        "AUTHORIZATION_HISTORY_CONFLICT",
+        "Immutable Control Replay history differs.",
+      );
+    }
+    return;
+  }
+  writeFileAtomicExclusive(path, bytes);
+}
+
+export function readFhvControlReplayAuthorizationTransitionV1(
+  input: FhvControlReplayTransitionInput,
+) {
+  if (input.expectedIdentity.runId !== input.runId)
+    throw new FhvFullHistoricalAuthError(
+      "AUTHORIZATION_IDENTITY_MISMATCH",
+      "Run identity mismatch.",
+    );
+  const historyDir = resolveFhvControlReplayHistoryDirectory(input.artifactRoot, input.runId);
+  const issuedPath = join(historyDir, "issued.v1.json");
+  if (!existsSync(issuedPath))
+    throw new FhvFullHistoricalAuthError(
+      "ORIGINAL_AUTHORIZATION_UNAVAILABLE",
+      "Original issued authorization is unavailable.",
+    );
+  const issuedBytes = readMetadataBytesSync(issuedPath, strictMetadata);
+  const issued = parseStrictControlReplayAuthorization(issuedBytes, input.expectedIdentity, false);
+  const consumedPath = join(historyDir, "consumed.v1.json");
+  const pairPath = join(historyDir, "pair.v1.json");
+  if (!existsSync(consumedPath) || !existsSync(pairPath))
+    throw new FhvFullHistoricalAuthError(
+      "AUTHORIZATION_TRANSITION_INCOMPLETE",
+      "Consumed authorization transition is incomplete.",
+    );
+  const consumedBytes = readMetadataBytesSync(consumedPath, strictMetadata);
+  const consumed = parseStrictControlReplayAuthorization(
+    consumedBytes,
+    input.expectedIdentity,
+    true,
+  );
+  const projected = buildConsumedAuthorizationReceipt(issued, consumed.consumedAtUtc!);
+  if (computeStableJsonDigest(projected) !== computeStableJsonDigest(consumed))
+    throw new FhvFullHistoricalAuthError(
+      "AUTHORIZATION_TRANSITION_INVALID",
+      "Consumed authorization is not the native transition from original Ai.",
+    );
+  const currentBytes = readMetadataBytesSync(input.authorizationReceiptPath, strictMetadata);
+  if (!currentBytes.equals(consumedBytes))
+    throw new FhvFullHistoricalAuthError(
+      "AUTHORIZATION_HISTORY_CONFLICT",
+      "Current authorization differs from retained Ac.",
+    );
+  const pair = JSON.parse(
+    readMetadataTextSync(pairPath, strictMetadata),
+  ) as FhvControlReplayAuthorizationPairV1;
+  const expectedPair = buildControlReplayPair({ issued, consumed, issuedBytes, consumedBytes });
+  if (computeStableJsonDigest(pair) !== computeStableJsonDigest(expectedPair))
+    throw new FhvFullHistoricalAuthError(
+      "AUTHORIZATION_TRANSITION_INVALID",
+      "Authorization pair content or digest mismatch.",
+    );
+  return { historyDir, issued, consumed, pair, issuedBytes, consumedBytes };
+}
+
+/** Owns the existing native consume lock; no caller-provided receipt or held-lock escape. */
+export function consumeFhvControlReplayAuthorizationWithHistoryV1(
+  input: FhvControlReplayTransitionInput & { expectedIssuedReceiptDigest: string },
+) {
+  const request = { ...input, expectedIdentity: { ...input.expectedIdentity } };
+  const historyDir = resolveFhvControlReplayHistoryDirectory(request.artifactRoot, request.runId);
+  if (request.expectedIdentity.runId !== request.runId)
+    throw new FhvFullHistoricalAuthError(
+      "AUTHORIZATION_IDENTITY_MISMATCH",
+      "Run identity mismatch.",
+    );
+  const lockPath = `${request.authorizationReceiptPath}.consume.lock`;
+  const lockFd = claimFileExclusiveLock(lockPath);
+  try {
+    const issuedBytes = readMetadataBytesSync(request.authorizationReceiptPath, strictMetadata);
+    const current = JSON.parse(
+      issuedBytes.toString("utf8"),
+    ) as FhvFullHistoricalAuthorizationReceiptV1;
+    if (current.consumed === true)
+      throw new FhvFullHistoricalAuthError(
+        "AUTHORIZATION_ALREADY_CONSUMED",
+        "Authorization receipt has already been consumed.",
+      );
+    const issued = parseStrictControlReplayAuthorization(
+      issuedBytes,
+      request.expectedIdentity,
+      false,
+    );
+    if (issued.authorizationReceiptDigest !== request.expectedIssuedReceiptDigest)
+      throw new FhvFullHistoricalAuthError(
+        "AUTHORIZATION_RECEIPT_DIGEST_MISMATCH",
+        "Issued authorization changed before consumption.",
+      );
+    for (const filename of ["consumed.v1.json", "pair.v1.json", "initialized.v1.json"]) {
+      if (existsSync(join(historyDir, filename)))
+        throw new FhvFullHistoricalAuthError(
+          "AUTHORIZATION_HISTORY_CONFLICT",
+          "Existing transition cannot be consumed again.",
+        );
+    }
+    mkdirSync(historyDir, { recursive: true });
+    writeControlReplayHistoryExact(join(historyDir, "issued.v1.json"), issuedBytes);
+    const consumed = consumeAuthorizationSnapshotHeld(
+      request.authorizationReceiptPath,
+      issuedBytes.toString("utf8"),
+      issued,
+      strictMetadata,
+    );
+    const nextContent = `${JSON.stringify(consumed, null, 2)}\n`;
+    const consumedBytes = readMetadataBytesSync(request.authorizationReceiptPath, strictMetadata);
+    if (!consumedBytes.equals(Buffer.from(nextContent)))
+      throw new FhvFullHistoricalAuthError(
+        "AUTHORIZATION_HISTORY_CONFLICT",
+        "Native consumed readback changed.",
+      );
+    writeControlReplayHistoryExact(join(historyDir, "consumed.v1.json"), consumedBytes);
+    const pair = buildControlReplayPair({ issued, consumed, issuedBytes, consumedBytes });
+    writeControlReplayHistoryExact(
+      join(historyDir, "pair.v1.json"),
+      Buffer.from(`${JSON.stringify(pair, null, 2)}\n`),
+    );
+    return readFhvControlReplayAuthorizationTransitionV1(request);
+  } finally {
+    releaseFileExclusiveLock(lockPath, lockFd);
+  }
 }

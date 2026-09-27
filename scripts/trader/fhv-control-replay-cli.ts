@@ -18,7 +18,10 @@ import {
   resumeFhvControlReplayLaunch,
 } from "@/lib/trader/observability/fhv-control-replay-execution";
 import type { TestOnlyExecutionV2AuthorityPort } from "@/lib/trader/execution/v2/test-only-authority-port";
-import { readFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
+import {
+  readFhvFullHistoricalAuthorizationReceipt,
+  FHV_CONTROL_REPLAY_METADATA_OPTIONS,
+} from "@/lib/trader/observability/fhv-full-historical-auth";
 import { readFhvDatasetQualificationReceipt } from "@/lib/trader/observability/fhv-dataset-qualification";
 import {
   FHV_CONTROL_REPLAY_PRE_HOLDOUT_STATUS,
@@ -37,6 +40,15 @@ export type FhvControlReplayResult = Readonly<{
   digestsMatch?: boolean;
   controlReplayReceiptPath?: string;
   failureReason?: string;
+  failureCode?: string;
+  authorizationTransitions?: Readonly<{
+    runOne: Awaited<ReturnType<typeof executeFhvControlReplayLaunch>>["authorizationTransition"];
+    runTwo: Awaited<ReturnType<typeof executeFhvControlReplayLaunch>>["authorizationTransition"];
+  }>;
+  terminalLinks?: Readonly<{
+    runOne: Awaited<ReturnType<typeof executeFhvControlReplayLaunch>>["terminalLink"];
+    runTwo: Awaited<ReturnType<typeof executeFhvControlReplayLaunch>>["terminalLink"];
+  }>;
 }>;
 
 /**
@@ -357,6 +369,7 @@ export async function runFhvControlReplay(input: {
   /** Human-authorized only for the nine admitted PostgreSQL test surfaces. */
   testOnlyExecutionV2Authority?: TestOnlyExecutionV2AuthorityPort;
 }): Promise<FhvControlReplayResult> {
+  input = { ...input };
   if (!FULL_SHA.test(input.releaseSha)) {
     return {
       schemaVersion: "fhv-control-replay/v1",
@@ -373,7 +386,10 @@ export async function runFhvControlReplay(input: {
     const qualificationReceipt = readFhvDatasetQualificationReceipt(
       input.datasetQualificationReceiptPath,
     );
-    const authReceipt = readFhvFullHistoricalAuthorizationReceipt(input.authorizationReceiptPath);
+    const authReceipt = readFhvFullHistoricalAuthorizationReceipt(
+      input.authorizationReceiptPath,
+      FHV_CONTROL_REPLAY_METADATA_OPTIONS,
+    );
 
     const freezePathTwo = boundedFixture
       ? (input.configurationFreezePathRunTwo ?? input.configurationFreezePath)
@@ -381,7 +397,10 @@ export async function runFhvControlReplay(input: {
     const authReceiptTwoPath = boundedFixture
       ? (input.authorizationReceiptPathRunTwo ?? input.authorizationReceiptPath)
       : input.authorizationReceiptPathRunTwo!;
-    const authReceiptTwo = readFhvFullHistoricalAuthorizationReceipt(authReceiptTwoPath);
+    const authReceiptTwo = readFhvFullHistoricalAuthorizationReceipt(
+      authReceiptTwoPath,
+      FHV_CONTROL_REPLAY_METADATA_OPTIONS,
+    );
     const checkoutProofRunOne = input.checkoutIdentityProofPathRunOne;
     const checkoutProofRunTwo = boundedFixture
       ? (input.checkoutIdentityProofPathRunTwo ?? input.checkoutIdentityProofPathRunOne)
@@ -493,8 +512,10 @@ export async function runFhvControlReplay(input: {
         manifestSemanticDigest: qualificationReceipt.manifestSemanticDigest,
         runOneConfigurationFreezeDigest: freezeOneDigest,
         runTwoConfigurationFreezeDigest: freezeTwoDigest,
-        runOneAuthorizationReceiptDigest: authReceipt.authorizationReceiptDigest,
-        runTwoAuthorizationReceiptDigest: authReceiptTwo.authorizationReceiptDigest,
+        runOneAuthorizationReceiptDigest:
+          resultOne.authorizationTransition.issuedAuthorizationReceiptDigest,
+        runTwoAuthorizationReceiptDigest:
+          resultTwo.authorizationTransition.issuedAuthorizationReceiptDigest,
         runOneCheckoutIdentityProofDigest: checkoutProofRunOne
           ? readFhvControlReplayLaunchCheckoutDigest(checkoutProofRunOne)
           : "0000000000000000000000000000000000000000000000000000000000000000",
@@ -534,12 +555,20 @@ export async function runFhvControlReplay(input: {
       runTwoDigest,
       digestsMatch: true,
       controlReplayReceiptPath,
+      authorizationTransitions: {
+        runOne: resultOne.authorizationTransition,
+        runTwo: resultTwo.authorizationTransition,
+      },
+      terminalLinks: { runOne: resultOne.terminalLink, runTwo: resultTwo.terminalLink },
     };
   } catch (error) {
     return {
       schemaVersion: "fhv-control-replay/v1",
       classification: "CONTROL_REPLAY=FAIL",
       failureReason: error instanceof Error ? error.message : String(error),
+      ...(error && typeof error === "object" && "code" in error && typeof error.code === "string"
+        ? { failureCode: error.code }
+        : {}),
     };
   }
 }

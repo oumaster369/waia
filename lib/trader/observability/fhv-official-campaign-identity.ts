@@ -1,4 +1,8 @@
-import { readFileSync } from "node:fs";
+import {
+  assertMetadataBytesSupported,
+  readMetadataTextSync,
+  type FhvMetadataReadOptions,
+} from "@/lib/trader/backtest/streaming-evidence/bounded-metadata-read";
 import { join } from "node:path";
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
@@ -19,6 +23,7 @@ export function writeFhvOfficialCampaignIdentity(
     FhvOfficialCampaignIdentityV1,
     "schemaVersion" | "executionPurpose" | "identityDigest"
   > & { runDir: string },
+  options?: FhvMetadataReadOptions,
 ): FhvOfficialCampaignIdentityV1 {
   const { runDir, ...identity } = input;
   const body = {
@@ -27,16 +32,18 @@ export function writeFhvOfficialCampaignIdentity(
     ...identity,
   };
   const receipt = { ...body, identityDigest: computePayloadDigest(body) };
-  writeFileAtomicExclusive(
-    join(runDir, FHV_OFFICIAL_CAMPAIGN_IDENTITY_FILENAME),
-    `${JSON.stringify(receipt, null, 2)}\n`,
-  );
+  const bytes = `${JSON.stringify(receipt, null, 2)}\n`;
+  assertMetadataBytesSupported(bytes, options);
+  writeFileAtomicExclusive(join(runDir, FHV_OFFICIAL_CAMPAIGN_IDENTITY_FILENAME), bytes);
   return receipt;
 }
 
-export function readFhvOfficialCampaignIdentity(runDir: string): FhvOfficialCampaignIdentityV1 {
+export function readFhvOfficialCampaignIdentity(
+  runDir: string,
+  options?: FhvMetadataReadOptions,
+): FhvOfficialCampaignIdentityV1 {
   const parsed = JSON.parse(
-    readFileSync(join(runDir, FHV_OFFICIAL_CAMPAIGN_IDENTITY_FILENAME), "utf8"),
+    readMetadataTextSync(join(runDir, FHV_OFFICIAL_CAMPAIGN_IDENTITY_FILENAME), options),
   ) as FhvOfficialCampaignIdentityV1;
   const { identityDigest, ...body } = parsed;
   if (
