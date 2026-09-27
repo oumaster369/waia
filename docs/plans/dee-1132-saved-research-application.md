@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-2]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 8f2d30d36f0cbeff169ac85678b750acdf1b4177
-  lastValidationAt: "2026-09-27T09:21:10.132091+00:00"
+  lastValidatedGitSha: 9648183bf0ef3456cd78359c9b3926357d0ec799
+  lastValidationAt: "2026-09-27T10:13:43.460073+00:00"
   blockedReason: null
-  nextAction: "Root and M01 review this sole-plan correction for D1132-WP2-01/02, five compiler diagnostics and native boundary obligations before code. Source remains64d39;0223 source-only/journal unchanged; no native or heavy grant."
+  nextAction: "Root and M01 review corrected source9648183b and exact135/6 scoped proof; compiler and all45 native cases remain unexecuted pending separate resources and complete0222/0223 integration. Journal/oldSQL unchanged; no package acceptance or publication claim."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -900,3 +900,18 @@ First preserve current source/diagnostic identities and obtain meaningful focuse
 7. **Native shared resources:** retain normal full P/A/B query/body tracing and run a maximum selected-history/near-row-cap positive scenario with the unchanged512/64MiB/4MB/120s limits. Report actual counts/bytes, not a claim every theoretical individual maximum fits simultaneously. Existing inert exact512/513, aggregate, deadline and cleanup controls remain separately attributed. Restore all fixture triggers/roles and close every client; preserve original protections and all failed-run receipts.
 
 After source release the focused editable owner/bounds/capability files plus unchanged `research-application-v1-compatibility.test.ts` are the first scoped selection. Because two existing lease modules change, include existing `trader-runtime-authority-repository-v2.test.ts` and `trader-noncapital-cycle-receipt-v2.test.ts` once as relevant read-only companions. A separately granted compiler run must clear all five current diagnostics without scope/type escapes. The complete application native suite, required compatible224-migration chain, cumulative registration and heavy readiness remain root-scheduled; no native execution before accepted/root-integrated0222. Evidence/final checkpoint must distinguish old102/5, compilerRED, corrected units, actual native and any later package acceptance. FullP10, qualification, capital, scientific or live readiness remains outside this correction.
+
+
+## WP2 correction source checkpoint — 9648183b
+
+M01 delegated source-only admission `ccfcbba2ffc510aceb659aa8530cc3c9be90d4d78997448098b77c9acf9e1276` accepted sole-plan `ef0465940417908810cb64d7664a40a191ad3f49`; root verified and adopted it. Executable correction `9648183bf0ef3456cd78359c9b3926357d0ec799` changes ten of its eleven admitted non-plan paths. The capability test is unchanged and included in verification. No other path, prior migration, journal or schema changed.
+
+The fixed application claim now reaches the actual held lease insert primitive without inventing a transaction-capable executor. The old public wrapper still owns its real transaction/savepoint and existing23505 recovery; held errors reach the new owner's outer rollback before its busy mapping. Existing lock, clock, epoch/prior, current-holder and claim body comparisons are preserved. Method-only types describe actual capabilities. Registration rows are validated into their actual selected domain fields; canonical-external inputs retain their discriminated schema/kind identity. These source corrections address the five saved compiler diagnostics, but this checkpoint does **not** claim a new compiler pass.
+
+Each fixed witness retains its HTR semantic canonical text, and0223 requires its bounded fixed payload shape, exact JSON value equality and raw UTF8 digest agreement with the stored canonical value. Complete witness bytes and exact SQL-projected candidate rows, including escaped body/holder/audit fields, are charged under the unchanged caps. Candidate and stored reads use PostgreSQL's same exact JSON-array identity text, so a repeated admitted row is not charged under a fabricated second identity. No native constraint is claimed executed yet.
+
+Genuine draft claim RED was37 passed/4 failed (`db.transaction is not a function` on actual missing/expired/failed claim paths); draft claim correction41/41 then passed. One later bounds fixture expected the wrong existing refusal code (76 passed/1 failed); only that expectation was corrected. Draft affected passes102/3 then103/3 are preserved. Initial scoped lint had one unused native import warning, removed before final. Those intermediate raw runs used working-tree drafts whose complete byte sets were not separately frozen and are not relabelled exact final proof. The authoritative clean-source run at9648183b is **135 passed/6 files,0 failed,0 skipped**, covering owner44, bounds37, capability22, compatibility12, old authority repository3 and noncapital receipt17. Scoped ESLint and diff-check both exit0.
+
+Native source now registers45 cases (previous36 plus9), unexecuted. New cases exercise actual absent-owner acquisition, after-history23505 rollback and retry, the old nested savepoint's usable outer transaction, actual32/33 writer histories, measured selected registration projections at65536/65537, fixed candidate physical65536/65537, and real-owner-produced payload/text/hash tampering on valid unused keys. Payload tests capture the real owner statements from a rolled-back first attempt, replay those exact canonical/audit inserts under the actual holder and change only the selected witness/body and corresponding audit digest; the unchanged insertion must pass all guards before a deliberate fixture rollback. The normal owner/process tests remain the positive completion/restart proof. Exact native counts, boundary attainment, resource metrics and SQL/role/fence results remain future observations, not inferred from source.
+
+External successor evidence is `parallel-runtime-owner/dee1132-wp2-correction-ef046594/`. The original64d/ef046 freezes, compiler RED and independent findings remain unchanged. Compiler/native/heavy/CI/full readiness/publication are still root-scheduled. Source review is not final package acceptance, fullP10 or scientific/capital/live authority.
