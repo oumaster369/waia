@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-2A, WP-2]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: bc2326288c6278a7dda3afb8d1aacc4d72679710
-  lastValidationAt: "2026-09-27T06:42:59.350150Z"
+  lastValidatedGitSha: d38976977e77f8f89114a2ab04a80e25eb9fd8a3
+  lastValidationAt: "2026-09-27T07:28:35.879848+00:00"
   blockedReason: null
-  nextAction: "Root verifies this sole-plan WP-2A amendment before releasing four mapped held-helper paths and three scoped test paths. Remaining WP-2 owner/CLI/schema/native work stays held; no migration is allocated."
+  nextAction: "Root and nonauthor review the WP-2A source/scoped checkpoint d3897697; native, typecheck and remaining WP-2 owner/CLI/schema work remain unexecuted and held for explicit release."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -248,6 +248,25 @@ Deferred native companions remain `tests/integration/postgres-research-understan
 ## Verbatim controlling contract
 
 The following exact historical bytes are retained for audit. Current admission and the normative clarification above control the status/holder-scope refinements; the embedded source history is not rewritten.
+
+## WP-2A author source/scoped checkpoint — pending independent acceptance
+
+Root verified plan54183f3c and released only its four production paths and three editable unit paths. Implementation **`d38976977e77f8f89114a2ab04a80e25eb9fd8a3`** is a direct child of that plan; no schema, migration, global manifest, CLI, new application owner, CI or graph file changed. This checkpoint is not completion of WP-2 or fullP10; WP-2A stays pending root/nonauthor review.
+
+The fixed held replay constructs an internal schema-bound Drizzle adapter on the supplied transaction client, captures selectors before I/O, retains actual actor/profile/source/predecessor checks and recomputes the exact saved output. Shared accounting charges actual nested SQL dispatch and selected projected bytes across local read budgets, preserves the invocation deadline and reserves counted finalization slots. It does not open, configure, commit or release the caller's transaction. The future application owner must supply the admitted isolation/settings, count transaction-control SQL, bind its operation-specific fenced effects and admit the final transaction acknowledgement. A held helper or the exposed narrow executor is not a JavaScript security sandbox, an application authorization or a global holder fence.
+
+Both extracted canonical measurement cores are identical to the old public transaction callback bodies after indentation normalization. The old public wrapper's pre-transaction validation, saved owner/replay/write bodies, source projections, schema, pure computation/manifests and six existing companion files remain unchanged. External `source-preservation.json` records55 passed source checks and24 Git source identities plus four installed driver identities. The additional private read orchestration and accounting are new behavior for the composed seam, not an inherited native result.
+
+| Proof | Exact attribution and result |
+|---|---|
+| Initial meaningful RED | At plan54183 production, the actual existing read-budget constructor ignored a new shared ledger: three aggregate/identity/projection assertions failed and the independent legacy limit control passed. This demonstrates the proposed composed budget requirement, not a production incident. |
+| Initial extraction fixture diagnostic |14 passed /7 failed in two files. The synthetic revision fixture omitted the selected createdAt field, changing the real recomputed output. The fixture was corrected to reflect the actual selected projection; no output, source or digest validator was relaxed. This transient working tree is historical diagnostic evidence, not an immutable-source acceptance. |
+| Historical draft scope |180 passed in nine files before the actual held-driver shape correction. This remains draft-attributed and is superseded for acceptance by the exact source run below. |
+| Real held-client composition RED |A selected actual-Drizzle replay failed at adapter construction because real postgres.js TransactionSql has no root options object;16 other cases were filtered. Contemporaneous source and installed driver/type snapshots are retained. |
+| Held transport correction |Drizzle receives adapter-local parser metadata and only the bound existing unsafe transport. It neither changes the held client's parsing configuration nor creates a root pool. The frozen actual-shape fixture has no options/begin/end. Date/string timestamp and JSONB object/text controls use the actual reader/mapper and preserve equal bodies. These remain inert-port controls; native driver/connection proof is pending. |
+| Exact final scoped acceptance |At clean d3897697, **182 assertions passed in nine files, zero failed/skipped**: three changed scopes plus the six named read-only companions. Scoped ESLint and diff check both exited0; the source tree and selected13 file hashes were unchanged before/after. `coherent-validation.json` records exact commands and `coherent-unit.json` retains every assertion. |
+
+Evidence is external in `parallel-runtime-owner/dee1132-wp2a-54183f3c`; initial RED, draft successes, actual-shape RED snapshots and corrected runs are retained separately. The source-equivalence verifier and final runner are reproducible. This later plan-only checkpoint does not alter tested production/tests. No PostgreSQL connection, transaction rollback/commit/lease proof, new native test, full typecheck/build/readiness or final capability/CLI proof was executed in WP-2A. A downstream missing canonical input insert error is deliberately shown to propagate through the actual writer; an inert port does not prove rollback. No resource grant is held after this scoped checkpoint.
 
 <!-- BEGIN FROZEN CONTRACT SHA256 da84172d4375ab7ed394cc73f71591b6ed1c2f99b081bc25034682388baf3fce -->
 # Categorical continuation: one saved-research application and later consumer
