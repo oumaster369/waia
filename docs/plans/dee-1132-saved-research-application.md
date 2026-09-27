@@ -20,10 +20,10 @@ state:
   remainingWorkPackages: [WP-2]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: 928df5184cb90487e8b128e15c4e12636dd8944e
-  lastValidationAt: "2026-09-27T08:08:54.177589+00:00"
+  lastValidatedGitSha: 8f2d30d36f0cbeff169ac85678b750acdf1b4177
+  lastValidationAt: "2026-09-27T09:21:10.132091+00:00"
   blockedReason: null
-  nextAction: "Root verifies this sole-plan remaining-WP2 amendment before source release. WP2A is bounded-source accepted at928df518;0223 is source-reserved only. Journal/0222 integration, native and heavy resources remain held."
+  nextAction: "Root and nonauthor review remaining-WP2 source8f2d30d3 plus102/5 scoped proof. Compiler/native require separate scheduling;0223 is source-only and journal remains222 entries through0221 pending accepted0222 integration. WP2 is not accepted or complete."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -807,3 +807,18 @@ After recording this amendment in the already admitted canonicalplan BEFORE edit
 
 Use existing mapped application capability test path for current selected old/new mode and meaningful adverse prefix/return controls; existing Understanding capability tests may be run unchanged as compatibility companions. Preserve genuine old-generator refusal as RED; no fabricated native proof. Root will inspect exact source/frozen raw controls in the complete package. This source-only addition changes no actor, saved assignment, evaluator semantics, permission or shared budget. All prior source/native/journal/CI/heavy/publication barriers remain; continue other admitted paths.
 <!-- END FROZEN UNDERSTANDING_GENERATOR_COMPATIBILITY -->
+
+
+### Remaining WP2 author source checkpoint —8f2d30d3
+
+The admitted connected source now branches in the real paper CLI before legacy setup, accepts only explicit saved application selectors, and uses the fixed pool-owning command. It composes the unchanged WP2A same-origin preparer/held reader/canonical writers, current trusted SERVICE or membership-checked USER context, and the original saved assignment actor check. P/A and optional later B use separate count-one selectors under the same captured assignment; this allows a legitimate B beyond the old single range's32-count window without relaxing that old range validator. No provider, evaluator/output callback, invented actor, hypothesis registration, ordinary Knowledge writer or capital capability is exposed by this command.
+
+Application/canonical witnesses/audit are written in one held transaction with an actual inserted application fence; a separate held transaction reads committed application then records availability. Later B consumption has its own actual inserted fence and assignment-local predecessor. Pure completed replay remains read-only and recomputes from saved P/A/B. New rows bind the maintained command source-manifest digest separately from the unchanged pure application specification manifest. These maintained identities are supported-version checks, not executing-binary attestation. Unexpected database/COMMIT failures propagate; late acknowledgement can mean an immutable stage committed and must be inspected/replayed next invocation, never falsely labelled rollback.
+
+The author preserved a genuine early-CLI RED (new flag reached legacy setup), the old Understanding generator's genuine first-branch RED, and a raw int8 projection RED (7 failed /19 filtered). The new bounded reader was comparing native int8 strings with numeric saved identities; it now normalizes only four explicit nonnegative safe sequence fields, refusing unsafe/malformed values. The actual Drizzle/inert transport controls preserve all body/seal and timestamp logic. A new CLI assertion annotation and new-table lease FK declarations match existing TypeScript/schema conventions; no shared helper or old SQL was changed.
+
+Final relevant scope passed **102 assertions in5 files,0 failed/0 skipped**, comprising owner36, bounds26, capability22, unchanged compatibility12 and unchanged saved-Understanding capability6. Tests executed parentd7d69b02 plus working bytes equal to source8f2d30d3 for every production and selected unit input; no redundant post-commit run is claimed. Native/helper source additions after that scoped run were only inspected/linted and remain unexecuted. Earlier31/2 and36/1 draft passes,90/5 failed fixture-environment scope and21/1 matcher diagnostic retain their separate logs/bytes. Corrected capability22/1 preceded the final102/5. Scoped ESLint and diff exited0; ESLint retained one pre-existing unused `t` warning in the untouched treasury schema declaration, with no new warning/error. No compiler or whole readiness ran for this source.
+
+The dedicated native source contains **36 planned cases**: real registered hypothesis/measurement and saved source producers; CLI FOR, AGAINST and unassessed; raw JSONB types; later nonadjacent B; replay/process death; canonical/audit/app/certificate/consumption faults and no-op inserts; expiry and changed deferred timing; races and two-application prefix; hostile session defaults; source/version/lifecycle/tenant/actor/manifest/max-age; query/body tracing; existing0221 predecessor/source-offset controls; immutable sidecars and both browser roles. These are acceptance obligations, **not executed evidence**. Actual positive reconstruction output, whole-path512/byte/time capacity, server JSON serialization, SQL constraints, concurrent lock behaviour and crash/cleanup effects remain to be measured. No existing protection is disabled or journal repaired by the proposed harness.
+
+External `parallel-runtime-owner/dee1132-wp2b-source-6500dd99` retains raw RED/GREEN, source snapshots and an unchanged222-migration hash/when receipt. All four accepted helper production files, pure specification/contract/kernels and old Understanding computation manifest are byte-identical to6500.0223 is source-only; the journal and all222 accepted SQL files remain byte-identical to397d. There was no DB/native, compiler/build, provider/host/C3, schema application, CI/registry/graph edit or publication. WP2 stays in progress pending independent source review, compatible accepted0222 chain and coordinated validation.
