@@ -7,7 +7,7 @@ import {
   assertHistoricalReconciliationFrontierV1, projectHistoricalReconciliationAccountingV1,
   createHistoricalReconciliationBudgetV1, HISTORICAL_RECONCILIATION_PROJECTION_BYTES_V1,
   captureHistoricalReconciliationProducedFillsV1, assertHistoricalReconciliationProducedFillsV1,
-  historicalReconciliationInstantV1,
+  historicalReconciliationInstantV1, projectHistoricalReconciliationSourceValueV1,
 } from "@/lib/trader/historical-simulation-v2/production-reconciliation-frontier-v1";
 import type { AccountingFrontierV1 } from "@/lib/trader/accounting/accounting-frontier.types";
 const digest = "a".repeat(64);
@@ -100,7 +100,7 @@ import { createHistoricalReconciliationRepositoryV1 } from
   "@/lib/trader/historical-simulation-v2/production-reconciliation-repository-postgres-v1";
 import { vi } from "vitest";
 import { historicalFillId } from "@/lib/trader/execution/deterministic-execution-id";
-import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { canonicalizeSemanticJsonString, computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { selectValidatedHistoricalReconciliationStateV1 } from "@/lib/trader/historical-simulation-v2/production-runtime-state-v2";
 
 function observations(delta: HistoricalReconciliationDeltaV1, parent: HistoricalReconciliationParentV1 | null, state = mark()) {
@@ -347,5 +347,114 @@ describe("fresh held parent read includes immutable creation bindings", () => {
   it.each(["type", "price", "riskAllowanceId", "riskAllowanceBindingDigest", "clientOrderId", "idempotencyKey",
     "riskDecisionId", "allocationDecisionId", "credentialId"])("refuses changed immutable creation %s", async (field) => {
     await expect(observe({ ...source(), [field]: "changed" })).rejects.toThrow("PARENT_SOURCE_IDENTITY");
+  });
+});
+
+
+describe("independently checkable source projections", () => {
+  it("reads only count/tail from a long canonical Accounting history", () => {
+    const state = inception();
+    state.consumedFillIds = new Proxy(Array.from({ length: 10000 }, (_, n) => `fill-${n}`), {
+      get(target, key, receiver) {
+        if (key !== "length" && key !== "9999") throw new Error("new history access");
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const value = projectHistoricalReconciliationSourceValueV1("ACCOUNTING_FRONTIER", state);
+    expect(value).toMatchObject({ accounting: { consumedFillCount: 10000, lastConsumedFillId: "fill-9999" }, positionBasis: {} });
+    expect(JSON.stringify(value)).not.toContain('"consumedFillIds"');
+  });
+  it("retains exact current position basis without changing frontier arithmetic", () => {
+    const state = fillCycle().final;
+    expect(projectHistoricalReconciliationSourceValueV1("ACCOUNTING_FRONTIER", state)).toEqual({
+      accounting: projectHistoricalReconciliationAccountingV1(state), positionBasis: state.positions,
+    });
+  });
+  it.each(["BTCUSDT", "ETHUSDT"])("refuses an additional position beside %s", (symbol) => {
+    const state = inception(); state.positions[symbol] = { quantity: "1", grossPositionBasis: "1", netPositionBasis: "1" };
+    state.positions.OTHER = { quantity: "0", grossPositionBasis: "0", netPositionBasis: "0" };
+    expect(() => projectHistoricalReconciliationSourceValueV1("ACCOUNTING_FRONTIER", state)).toThrow("SOURCE_PROJECTION");
+  });
+  it("captures actual fill details without copying nested Accounting history", () => {
+    const { detail } = fillCycle();
+    detail.accountingFrontier.consumedFillIds = new Proxy(detail.accountingFrontier.consumedFillIds, {
+      get() { throw new Error("detail history read"); },
+    });
+    const artifact = { artifactKind: "MODELED_EXECUTION_EFFECT", artifactId: "effect", contentDigestHex: digest,
+      payload: { lineagePayload: { fillDetail: detail } } };
+    const value = projectHistoricalReconciliationSourceValueV1("OBSERVED_EXECUTION_EFFECTS", [artifact]);
+    expect(value).toMatchObject({ artifactCount: 1, artifacts: [{ detail: {
+      accountingId: detail.accountingFrontier.id, accountingDigest: detail.accountingFrontier.semanticContentDigest,
+      event: { acceptedAt: detail.event.acceptedAt, fillTimestamp: detail.event.fillTimestamp },
+      economics: { sourceBarTimestamp: detail.economics.sourceBarTimestamp },
+    } }] });
+    expect(JSON.stringify(value)).not.toContain('"consumedFillIds"');
+  });
+  it("retains both artifact slots and refuses a third or second fill detail", () => {
+    const a = { artifactKind: "MODELED_EXECUTION_EFFECT", artifactId: "effect", contentDigestHex: digest };
+    expect(projectHistoricalReconciliationSourceValueV1("OBSERVED_EXECUTION_EFFECTS", [a, a])).toMatchObject({ artifactCount: 2 });
+    expect(() => projectHistoricalReconciliationSourceValueV1("OBSERVED_EXECUTION_EFFECTS", [a, a, a])).toThrow("SOURCE_PROJECTION");
+    const withDetail = { ...a, payload: { lineagePayload: { fillDetail: fillCycle().detail } } };
+    expect(() => projectHistoricalReconciliationSourceValueV1("OBSERVED_EXECUTION_EFFECTS", [withDetail, withDetail])).toThrow("SOURCE_PROJECTION");
+  });
+  it("keeps a no-fill effect and exact single Accounting artifact", () => {
+    const a = { artifactKind: "ACCOUNTING_FRONTIER", artifactId: "mark", contentDigestHex: digest };
+    expect(projectHistoricalReconciliationSourceValueV1("ACCOUNTING", [a])).toEqual({ artifactCount: 1, artifact: a });
+    expect(() => projectHistoricalReconciliationSourceValueV1("ACCOUNTING", [{ ...a, extra: true }])).toThrow("SOURCE_PROJECTION");
+    expect(() => projectHistoricalReconciliationSourceValueV1("ACCOUNTING", [a, a])).toThrow("SOURCE_PROJECTION");
+  });
+  it("projects flat exchange and refuses unexpected open-order cardinality", () => {
+    expect(projectHistoricalReconciliationSourceValueV1("MODELED_EXCHANGE", { openOrders: [], checkpoint: { openOrders: [] } }))
+      .toEqual({ orders: 0, entries: 0, parent: null });
+    expect(() => projectHistoricalReconciliationSourceValueV1("MODELED_EXCHANGE", { openOrders: [], checkpoint: { openOrders: [{}] } }))
+      .toThrow("SOURCE_PROJECTION");
+  });
+  it("leaves unrelated source kinds unprojected without touching their bodies", () => {
+    const body = new Proxy({}, { get() { throw new Error("unrelated source accessed"); } });
+    expect(projectHistoricalReconciliationSourceValueV1("KNOWLEDGE", body)).toBeNull();
+  });
+});
+
+describe("exact companion text and one candidate preparation budget", () => {
+  const stored = (bodyText: string) => {
+    const value = genesis();
+    return { bodyText, id: value.id, contentDigest: value.contentDigest, profile: value.profile,
+      partition: value.scope.split, symbol: value.symbol, previousId: value.previousId,
+      genesisId: value.genesisId, checkpointDigest: value.checkpointDigest };
+  };
+  it("loads canonical text through preflight and returns the unchanged complete identity", async () => {
+    const value = genesis(); const row = stored(canonicalizeSemanticJsonString(value));
+    const unsafe = vi.fn().mockResolvedValueOnce([{ bytes: Buffer.byteLength(JSON.stringify(row)) }])
+      .mockResolvedValueOnce([{ projection: row }]);
+    const repo = createHistoricalReconciliationRepositoryV1({ unsafe } as never, scope);
+    expect(await repo.loadFrontier(-1)).toEqual(value);
+    expect(unsafe.mock.calls[0]![0]).toContain("body_text");
+    expect(unsafe.mock.calls[0]![0]).not.toContain("body_json");
+  });
+  it.each(["trailing whitespace", "different key order"])("refuses %s despite equal parsed content", async kind => {
+    const value = genesis();
+    const text = kind === "trailing whitespace" ? canonicalizeSemanticJsonString(value) + " " : JSON.stringify(value);
+    expect(JSON.parse(text)).toEqual(value);
+    expect(text).not.toBe(canonicalizeSemanticJsonString(value));
+    const row = stored(text);
+    const unsafe = vi.fn().mockResolvedValueOnce([{ bytes: Buffer.byteLength(JSON.stringify(row)) }])
+      .mockResolvedValueOnce([{ projection: row }]);
+    await expect(createHistoricalReconciliationRepositoryV1({ unsafe } as never, scope).loadFrontier(-1))
+      .rejects.toThrow("FRONTIER_TEXT");
+  });
+  it("writes only exact canonical text, leaving independent derived JSON to the native stamp", async () => {
+    const value = genesis(); const tx = vi.fn().mockResolvedValue([]);
+    await createHistoricalReconciliationRepositoryV1(tx as never, scope).append(value);
+    const args = tx.mock.calls[0]!;
+    expect((args[0] as unknown as string[]).join("?")).toContain("body_text");
+    expect((args[0] as unknown as string[]).join("?")).not.toContain("body_json");
+    expect(args.at(-1)).toBe(canonicalizeSemanticJsonString(value));
+  });
+  it("charges repeated selected bodies in the same owner attempt and keeps failure sticky", () => {
+    const repo = createHistoricalReconciliationRepositoryV1({} as never, scope);
+    const artifacts = [{ artifactKind: "ACCOUNTING_FRONTIER", artifactId: "x".repeat(500_000), contentDigestHex: digest }];
+    for (let i = 0; i < 3; i++) expect(repo.prepareSourceValue("ACCOUNTING", artifacts)).not.toBeNull();
+    expect(() => repo.prepareSourceValue("ACCOUNTING", artifacts)).toThrow("RESOURCE_ENVELOPE");
+    expect(() => repo.prepareSourceValue("ACCOUNTING", [{ ...artifacts[0], artifactId: "small" }])).toThrow("RESOURCE_ENVELOPE");
   });
 });

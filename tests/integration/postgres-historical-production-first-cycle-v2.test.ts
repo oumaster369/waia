@@ -1521,6 +1521,19 @@ describe.skipIf(!enabled || !url || !disposable)(
       const runnerReserved = await pool.reserve();
       const runnerSql = bindPostgresReservedSession(pool, runnerReserved);
       const lifecyclePort = createHistoricalSimulationRunLifecyclePostgresV2(runnerSql);
+      const measureReconciliation = process.env.WAIA_HISTORICAL_PG_RECONCILIATION_PROFILE === "HISTORICAL_PG_RECONCILIATION_V1";
+      const nativeContexts: { sequence: number; callbacks: Record<string, number>; total: number; sourceRows: number }[] = [];
+      // Isolated native observation only; no product instrumentation relation/cache.
+      // Configure the existing reserved administrative session before assuming its runner role.
+      if (measureReconciliation) await runnerSql`SET track_functions='all'`;
+      const contextCounts = async () => {
+        await runnerSql`SELECT pg_stat_force_next_flush()`;
+        await runnerSql`SELECT pg_stat_clear_snapshot()`;
+        const rows = await runnerSql`SELECT funcname,calls::text FROM pg_stat_user_functions WHERE schemaname='public'
+          AND funcname IN ('waia_historical_reconciliation_stamp_v1','waia_historical_reconciliation_legacy_v1',
+            'waia_historical_reconciliation_verify_v1') ORDER BY funcname`;
+        return Object.fromEntries(rows.map(row => [row.funcname as string, Number(row.calls)]));
+      };
       const launchScope = {
         organizationId,
         accountId: productionInput.accountId,
@@ -1722,6 +1735,8 @@ describe.skipIf(!enabled || !url || !disposable)(
 
         latest = first;
         for (let sequence = 2; sequence < 35; sequence += 1) {
+          const measure = measureReconciliation && (sequence === 2 || sequence === 34);
+          const beforeContexts = measure ? await contextCounts() : null;
           latest = await runHistoricalSimulationNextCyclePostgresV2({
             sql: runnerSql,
             organizationId,
@@ -1731,6 +1746,21 @@ describe.skipIf(!enabled || !url || !disposable)(
             symbol: "BTCUSDT",
             expectedCycleSequence: sequence,
           });
+          if (measure) {
+            const afterContexts = await contextCounts();
+            const callbacks = Object.fromEntries(Object.entries(afterContexts).map(([key, value]) => [key, value - (beforeContexts?.[key] ?? 0)]));
+            expect(Object.keys(callbacks)).toHaveLength(3);
+            expect(Object.values(callbacks).every(value => value > 0)).toBe(true);
+            const total = Object.values(callbacks).reduce((sum, value) => sum + value, 0);
+            expect(total).toBeLessThanOrEqual(227);
+            const sourceRows = await runnerSql`SELECT
+              (SELECT count(*)::int FROM trader_historical_simulation_atomic_stage_v2 WHERE organization_id=${organizationId}::uuid
+                AND account_id=${productionInput.accountId} AND run_id=${runId} AND cycle_sequence=${sequence})+
+              (SELECT count(*)::int FROM trader_historical_simulation_durable_snapshot_v2 WHERE organization_id=${organizationId}::uuid
+                AND account_id=${productionInput.accountId} AND run_id=${runId} AND cycle_sequence=${sequence}) AS n`;
+            expect(sourceRows[0]!.n).toBe(16);
+            nativeContexts.push({ sequence, callbacks, total, sourceRows: sourceRows[0]!.n });
+          }
           lifecycleEvent = await lifecyclePort.append({
             previous: lifecycleEvent,
             phase: sequence === APPROVED_CYCLE_COUNT - 1 ? "COMPLETED" : "RUNNING",
@@ -1750,6 +1780,37 @@ describe.skipIf(!enabled || !url || !disposable)(
           expectedCycleSequence: 34,
         });
         expect(retry).toEqual(latest);
+        if (process.env.WAIA_HISTORICAL_PG_RECONCILIATION_PROFILE === "HISTORICAL_PG_RECONCILIATION_V1") {
+          expect(nativeContexts.map(row => row.sequence)).toEqual([2, 34]);
+          console.log("DEE1130_NATIVE_CONTEXTS", JSON.stringify(nativeContexts));
+          // Actual source-admitted public owner, separately run from the unchanged default/LEGACY control.
+          const reconciliation = await runnerSql`SELECT cycle_sequence,body_json,content_digest,checkpoint_digest
+            FROM trader_historical_reconciliation_frontier_v1 WHERE organization_id=${organizationId}::uuid
+              AND account_id=${productionInput.accountId} AND run_id=${runId} ORDER BY cycle_sequence`;
+          expect(reconciliation).toHaveLength(36);
+          expect(reconciliation.map(row => row.cycle_sequence)).toEqual(Array.from({ length: 36 }, (_, i) => i - 1));
+          expect(reconciliation.slice(1).every(row => {
+            const body = row.body_json as { observations: { phase: string }[]; checkpointDigest: string };
+            return body.observations.map(value => value.phase).join(",") === "frontier_mutation,before_guardian,before_cycle_complete"
+              && body.checkpointDigest === row.checkpoint_digest;
+          })).toBe(true);
+          const firstCursor = await runnerSql`SELECT checkpoint_json FROM trader_historical_simulation_resume_checkpoint_v2
+            WHERE organization_id=${organizationId}::uuid AND account_id=${productionInput.accountId} AND run_id=${runId}
+              AND committed_cycle_sequence=0`;
+          const oldRetry = await runHistoricalSimulationNextCyclePostgresV2({ sql: runnerSql, organizationId,
+            accountId: productionInput.accountId, runId, partition: "WALK_FORWARD", symbol: "BTCUSDT", expectedCycleSequence: 0 });
+          expect(oldRetry).toEqual(firstCursor[0]!.checkpoint_json);
+          // Persisted PROFILE is mandatory even after the opt-in environment selector disappears.
+          const selectedProfile = process.env.WAIA_HISTORICAL_PG_RECONCILIATION_PROFILE;
+          delete process.env.WAIA_HISTORICAL_PG_RECONCILIATION_PROFILE;
+          try {
+            expect(await runHistoricalSimulationNextCyclePostgresV2({ sql: runnerSql, organizationId,
+              accountId: productionInput.accountId, runId, partition: "WALK_FORWARD", symbol: "BTCUSDT", expectedCycleSequence: 34 })).toEqual(latest);
+          } finally { process.env.WAIA_HISTORICAL_PG_RECONCILIATION_PROFILE = selectedProfile; }
+          const after = await runnerSql`SELECT content_digest FROM trader_historical_reconciliation_frontier_v1
+            WHERE organization_id=${organizationId}::uuid AND account_id=${productionInput.accountId} AND run_id=${runId} ORDER BY cycle_sequence`;
+          expect(after.map(row => row.content_digest)).toEqual(reconciliation.map(row => row.content_digest));
+        }
         expect(lifecycleEvent.phase).toBe(PROVE_KNOWLEDGE_CONTINUATION ? "RUNNING" : "COMPLETED");
 
         // 0202 is NOT VALID so legacy compact rows remain readable, but PostgreSQL
@@ -1774,9 +1835,14 @@ describe.skipIf(!enabled || !url || !disposable)(
           )
         `).rejects.toThrow(/trader_accounting_frontier_semantic_state_complete/);
       } finally {
-        await releaseHistoricalSimulationConsumerLeasePostgresV2(runnerSql, launchScope);
-        await runnerSql.unsafe("RESET ROLE");
-        runnerReserved.release();
+        try { await releaseHistoricalSimulationConsumerLeasePostgresV2(runnerSql, launchScope); }
+        finally {
+          try { await runnerSql.unsafe("RESET ROLE"); }
+          finally {
+            try { if (measureReconciliation) await runnerSql`RESET track_functions`; }
+            finally { runnerReserved.release(); }
+          }
+        }
       }
       if (!latest) throw new Error("DEE919_HISTORICAL_RUNNER_DID_NOT_COMMIT");
       expect(latest.committedCycleId).toBe(

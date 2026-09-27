@@ -4,7 +4,7 @@ import { subtractDecimal } from "@/lib/trader/risk/numeric";
 import { computeEconomicsContentDigest } from "@/lib/trader/execution/fill-economics";
 import { historicalFillId, fillExecutionEconomicsRowId } from "@/lib/trader/execution/deterministic-execution-id";
 import type { CostedFillEconomics } from "@/lib/trader/execution/historical-execution-model.types";
-import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { canonicalizeSemanticJsonString, computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import type { HistoricalSimulationAtomicScopeV2, HistoricalSimulationResumeCursorV2 } from "./atomic-cycle-commit-v2";
 import { selectValidatedHistoricalReconciliationStateV1 } from "./production-runtime-state-v2";
 import type { HistoricalSimulationProductionRuntimeStateV2 } from "./production-runtime-state-v2";
@@ -16,6 +16,7 @@ import {
   type HistoricalReconciliationParentV1, type HistoricalReconciliationAccountingV1,
   type HistoricalReconciliationFillV1, type HistoricalReconciliationEconomicsV1,
   type HistoricalReconciliationConsumedV1, historicalReconciliationInstantV1,
+  projectHistoricalReconciliationSourceValueV1,
 } from "./production-reconciliation-frontier-v1";
 
 const refuse: (reason: string) => never = refuseHistoricalReconciliationV1;
@@ -79,15 +80,22 @@ export function createHistoricalReconciliationRepositoryV1(tx: postgres.Sql, sco
     return value;
   };
   const loadFrontier = async (sequence: number): Promise<HistoricalReconciliationFrontierV1> => {
-    const rows = await read<{ body: HistoricalReconciliationFrontierV1; id: string; contentDigest: string;
+    const rows = await read<{ bodyText: string; id: string; contentDigest: string;
       profile: string; partition: string; symbol: string; previousId: string | null; genesisId: string | null;
-      checkpointDigest: string | null }>(`SELECT jsonb_build_object('body',body_json,'id',id::text,
+      checkpointDigest: string | null }>(`SELECT jsonb_build_object('bodyText',body_text,'id',id::text,
       'contentDigest',content_digest,'profile',profile,'partition',partition,'symbol',symbol,
       'previousId',previous_id::text,'genesisId',genesis_id::text,'checkpointDigest',checkpoint_digest) projection
       FROM trader_historical_reconciliation_frontier_v1
       WHERE organization_id=$1::uuid AND account_id=$2 AND run_id=$3 AND cycle_sequence=$4`, [...prefix, sequence], 1);
     if (rows.length !== 1) refuse("FRONTIER_MISSING");
-    const row = rows[0]!; const value = row.body;
+    const row = rows[0]!;
+    if (typeof row.bodyText !== "string") refuse("FRONTIER_TEXT");
+    // The metadata read already charged the selected text before JSON parsing.
+    const value = JSON.parse(row.bodyText) as HistoricalReconciliationFrontierV1;
+    budget.charge(Buffer.byteLength(row.bodyText)); // parsed bounded representation
+    const canonical = canonicalizeSemanticJsonString(value);
+    budget.charge(Buffer.byteLength(canonical));
+    if (canonical !== row.bodyText) refuse("FRONTIER_TEXT");
     assertHistoricalReconciliationFrontierV1(value, scope);
     if (row.id !== value.id || row.contentDigest !== value.contentDigest || row.profile !== value.profile ||
         row.partition !== value.scope.split || row.symbol !== value.symbol || row.previousId !== value.previousId ||
@@ -300,15 +308,24 @@ export function createHistoricalReconciliationRepositoryV1(tx: postgres.Sql, sco
   };
   const append = async (value: HistoricalReconciliationFrontierV1) => {
     assertHistoricalReconciliationFrontierV1(value, scope);
-    const body = JSON.stringify(value); budget.charge(Buffer.byteLength(body));
+    const body = canonicalizeSemanticJsonString(value); budget.charge(Buffer.byteLength(body));
     await tx`INSERT INTO trader_historical_reconciliation_frontier_v1
       (id,organization_id,account_id,run_id,cycle_sequence,partition,profile,symbol,
-       previous_id,genesis_id,checkpoint_digest,content_digest,body_json)
+       previous_id,genesis_id,checkpoint_digest,content_digest,body_text)
       VALUES (${value.id}::uuid,${scope.organizationId}::uuid,${scope.accountId},${scope.runId},${value.cycleSequence},
         ${scope.split},${value.profile},${value.symbol},${value.previousId}::uuid,${value.genesisId}::uuid,
-        ${value.checkpointDigest},${value.contentDigest},${body}::jsonb)`;
+        ${value.checkpointDigest},${value.contentDigest},${body})`;
   };
   return Object.freeze({ readMode, loadFrontier, validateCursor, observeParents, verifyAccounting, append,
+    prepareSourceValue(kind: string, source: unknown): string | null {
+      const value = projectHistoricalReconciliationSourceValueV1(kind, source);
+      if (value === null) return null;
+      const text = JSON.stringify(value);
+      // Bounded leaf selection, its guarded copy/serialization and final transport.
+      // All four selected sources share this owner-attempt budget; no phase reset.
+      for (let occurrence = 0; occurrence < 5; occurrence++) budget.charge(Buffer.byteLength(text));
+      return text;
+    },
     async enroll(genesis: HistoricalReconciliationFrontierV1) {
       assertHistoricalReconciliationFrontierV1(genesis, scope);
       if (genesis.cycleSequence !== -1) refuse("GENESIS_SHAPE");

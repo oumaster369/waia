@@ -381,3 +381,85 @@ export function assertHistoricalReconciliationFrontierV1(value: HistoricalReconc
     value.observations.length === 3 && value.observations.every((v, i) => v.phase === HISTORICAL_RECONCILIATION_PHASES_V1[i]) &&
     value.steps.length >= 1 && value.steps.length <= 2 && same(value.steps.at(-1), value.accounting), "CYCLE_SHAPE");
 }
+
+
+/** Bounded candidates only. The database independently compares every selected field
+ * with the original inserted source; this function conveys no admission authority. */
+export function projectHistoricalReconciliationSourceValueV1(kind: string, input: unknown): unknown | null {
+  const object = (value: unknown): Record<string, unknown> => {
+    ensure(value !== null && typeof value === "object" && !Array.isArray(value), "SOURCE_PROJECTION");
+    return value as Record<string, unknown>;
+  };
+  const scalar = (value: unknown): string | number | boolean | null => {
+    ensure(value === null || typeof value === "string" || typeof value === "boolean" ||
+      typeof value === "number" && Number.isFinite(value), "SOURCE_PROJECTION");
+    return value as string | number | boolean | null;
+  };
+  const pick = (value: unknown, keys: readonly string[]) => {
+    const row = object(value);
+    return Object.fromEntries(keys.map((key) => [key, scalar(row[key])]));
+  };
+  const array = (value: unknown, maximum: number): readonly unknown[] => {
+    ensure(Array.isArray(value) && value.length <= maximum, "SOURCE_PROJECTION");
+    return value as unknown[];
+  };
+  if (kind === "ACCOUNTING_FRONTIER") {
+    const state = object(input); const positions = object(state.positions);
+    const positionBasis: Record<string, Record<string, string | number | boolean | null>> = {};
+    for (const symbol in positions) {
+      if (!Object.hasOwn(positions, symbol)) continue;
+      ensure((symbol === "BTCUSDT" || symbol === "ETHUSDT") && Object.keys(positionBasis).length === 0, "SOURCE_PROJECTION");
+      positionBasis[symbol] = pick(positions[symbol], ["quantity", "grossPositionBasis", "netPositionBasis"]);
+    }
+    return copy({ accounting: projectHistoricalReconciliationAccountingV1(input as AccountingFrontierV1), positionBasis });
+  }
+  if (kind === "MODELED_EXCHANGE") {
+    const state = object(input); const checkpoint = object(state.checkpoint);
+    const orders = array(state.openOrders, 1); const entries = array(checkpoint.openOrders, 1);
+    ensure(orders.length === entries.length, "SOURCE_PROJECTION");
+    if (!orders.length) return copy({ orders: 0, entries: 0, parent: null });
+    const order = object(orders[0]); const entry = object(entries[0]);
+    return copy({ orders: 1, entries: 1, parent: {
+      orderId: scalar(order.id), state: scalar(order.state), stateVersion: scalar(order.stateVersion),
+      filledQuantity: scalar(order.filledQuantity), entryOrderId: scalar(entry.orderId),
+      acceptedAt: scalar(entry.acceptedAtTs), firstEligibleAt: scalar(entry.firstEligibleTs),
+      eligibleBarsSeen: scalar(entry.sameSymbolEligibleBarsSeen), remainingQuantity: scalar(entry.remainingQty),
+      entryFilledQuantity: scalar(entry.filledQty), fillSequence: scalar(entry.fillSequence),
+      pendingCancel: entry.pendingCancel == null ? null : pick(entry.pendingCancel, ["requestedAtTs", "cancelEffectiveTs"]),
+    } });
+  }
+  if (kind === "ACCOUNTING") {
+    const artifacts = array(input, 1); ensure(artifacts.length === 1, "SOURCE_PROJECTION");
+    const row = object(artifacts[0]);
+    ensure(Object.keys(row).length === 3 && row.artifactKind === "ACCOUNTING_FRONTIER", "SOURCE_PROJECTION");
+    return copy({ artifactCount: 1, artifact: pick(row, ["artifactKind", "artifactId", "contentDigestHex"]) });
+  }
+  if (kind !== "OBSERVED_EXECUTION_EFFECTS") return null;
+  const artifacts = array(input, 2); ensure(artifacts.length >= 1, "SOURCE_PROJECTION");
+  let detailCount = 0;
+  const selected = artifacts.map((item) => {
+    const artifact = object(item);
+    const payload = artifact.payload == null ? null : object(artifact.payload);
+    const lineage = payload?.lineagePayload == null ? null : object(payload.lineagePayload);
+    const raw = lineage?.fillDetail;
+    let detail: unknown = null;
+    if (raw != null) {
+      ensure(++detailCount <= 1, "SOURCE_PROJECTION");
+      const source = object(raw); const event = object(source.event); const accounting = object(source.accountingFrontier);
+      detail = {
+        event: { ...pick(event, ["orderId", "organizationId", "symbol", "side", "fillSequence", "sourceBarIndex",
+          "grossFillPrice", "sliceQuantity", "remainingQuantityAfter", "acceptedAt", "fillTimestamp", "submitLatencyMs", "cancelLatencyMs"]),
+          sourceBar: pick(event.sourceBar, ["symbol", "interval", "open", "high", "low", "close", "volume", "barOpenTime", "barCloseTime"]) },
+        economics: pick(source.economics, ["executionFactKind", "grossFillPrice", "grossNotional", "feeAmount", "feeAsset",
+          "spreadCost", "impactSlippageCost", "totalExecutionCost", "netFillPrice", "netCashEffect", "economicsContentDigest",
+          "executionModelId", "executionModelSchemaVersion", "simulatorId", "simulatorVersion", "sourceBarTimestamp", "sourceBarIndex",
+          "acceptedAt", "fillTimestamp", "submitLatencyMs", "cancelLatencyMs", "remainingQuantityAfter", "fillSequence", "symbol", "side", "quantity"]),
+        evidence: pick(source.evidence, ["schemaVersion", "source", "capitalEligible", "cycleId", "sealedMarketCycleContentDigestHex",
+          "orderId", "fillId", "economicsContentDigestHex", "accountingFrontierContentDigestHex", "contentDigestHex"]),
+        accountingId: scalar(accounting.id), accountingDigest: scalar(accounting.semanticContentDigest),
+      };
+    }
+    return { ...pick(artifact, ["artifactKind", "artifactId", "contentDigestHex"]), detail };
+  });
+  return copy({ artifactCount: artifacts.length, artifacts: selected });
+}

@@ -1139,6 +1139,7 @@ async function appendLedger(
 function transactionPort(
   sql: postgres.Sql,
   commitRequest: HistoricalSimulationCommitRequestV2,
+  reconciliation: HistoricalReconciliationRepositoryV1 | null = null,
 ): HistoricalSimulationAtomicCycleTransactionV2 {
   return {
     async loadLedgerChain(scope) {
@@ -1242,14 +1243,20 @@ function transactionPort(
       return cursor;
     },
     async persistStageBundle(bundle) {
+      const projection = reconciliation?.prepareSourceValue(bundle.stage, bundle.artifacts) ?? null;
       const inserted = await sql<
         { stage: string }[]
       >`INSERT INTO trader_historical_simulation_atomic_stage_v2
         (organization_id,account_id,run_id,cycle_sequence,cycle_id,stage,ledger_entry_id,
-         ledger_entry_content_digest_hex,artifacts_json,bundle_content_digest_hex,schema_version)
+         ledger_entry_content_digest_hex,artifacts_json,bundle_content_digest_hex,schema_version,reconciliation_projection_v1)
         SELECT ${bundle.organizationId}::uuid,${bundle.accountId},${bundle.runId},l.cycle_sequence,
           ${bundle.cycleId},${bundle.stage},l.entry_id,${bundle.ledgerEntryContentDigestHex},
-          ${json(bundle.artifacts)}::text::jsonb,${bundle.contentDigestHex},${bundle.schemaVersion}
+          ${json(bundle.artifacts)}::text::jsonb,${bundle.contentDigestHex},${bundle.schemaVersion},
+          CASE WHEN ${projection}::text IS NULL THEN NULL ELSE jsonb_build_object(
+            'schemaVersion',1,'organizationId',l.organization_id::text,'accountId',l.account_id,'runId',l.run_id,
+            'cycleSequence',l.cycle_sequence,'cycleId',l.cycle_id,'kind',${bundle.stage},
+            'ledgerEntryId',l.entry_id,'ledgerDigest',l.content_digest_hex,
+            'sourceSchema',${bundle.schemaVersion},'sourceDigest',${bundle.contentDigestHex},'value',${projection}::text::jsonb) END
         FROM trader_historical_simulation_reason_ledger_v2 l
         WHERE l.organization_id=${bundle.organizationId}::uuid AND l.account_id=${bundle.accountId}
           AND l.run_id=${bundle.runId} AND l.cycle_id=${bundle.cycleId}
@@ -1273,18 +1280,29 @@ function transactionPort(
           } as const
         )[kind] as HistoricalSimulationDurableStateSnapshotV2,
       }));
-      for (const { kind, snapshot } of snapshots)
-        await sql`
+      for (const { kind, snapshot } of snapshots) {
+        const projection = reconciliation?.prepareSourceValue(kind, snapshot.state) ?? null;
+        const inserted = await sql<{ state_kind: string }[]>`
         INSERT INTO trader_historical_simulation_durable_snapshot_v2
           (organization_id,account_id,run_id,cycle_sequence,cycle_id,state_kind,ledger_entry_id,
            ledger_entry_content_digest_hex,state_json,
-           snapshot_content_digest_hex,schema_version)
-        VALUES (${cursor.organizationId}::uuid,${cursor.accountId},${cursor.runId},${cursor.nextCycleSequence - 1},
-          ${cursor.committedCycleId},${kind},
-          (SELECT entry_id FROM trader_historical_simulation_reason_ledger_v2 WHERE organization_id=${cursor.organizationId}::uuid
-            AND account_id=${cursor.accountId} AND run_id=${cursor.runId} AND cycle_sequence=${cursor.nextCycleSequence - 1}
-            AND content_digest_hex=${cursor.ledgerHeadContentDigestHex}),${cursor.ledgerHeadContentDigestHex},${json(snapshot.state)}::text::jsonb,
-          ${snapshot.contentDigestHex},${snapshot.schemaVersion})`;
+           snapshot_content_digest_hex,schema_version,reconciliation_projection_v1)
+        SELECT ${cursor.organizationId}::uuid,${cursor.accountId},${cursor.runId},l.cycle_sequence,
+          ${cursor.committedCycleId},${kind},l.entry_id,${cursor.ledgerHeadContentDigestHex},${json(snapshot.state)}::text::jsonb,
+          ${snapshot.contentDigestHex},${snapshot.schemaVersion},
+          CASE WHEN ${projection}::text IS NULL THEN NULL ELSE jsonb_build_object(
+            'schemaVersion',1,'organizationId',l.organization_id::text,'accountId',l.account_id,'runId',l.run_id,
+            'cycleSequence',l.cycle_sequence,'cycleId',l.cycle_id,'kind',${kind},
+            'ledgerEntryId',l.entry_id,'ledgerDigest',l.content_digest_hex,
+            'sourceSchema',${snapshot.schemaVersion},'sourceDigest',${snapshot.contentDigestHex},'value',${projection}::text::jsonb) END
+        FROM trader_historical_simulation_reason_ledger_v2 l
+        WHERE l.organization_id=${cursor.organizationId}::uuid AND l.account_id=${cursor.accountId}
+          AND l.run_id=${cursor.runId} AND l.cycle_sequence=${cursor.nextCycleSequence - 1}
+          AND l.cycle_id=${cursor.committedCycleId} AND l.content_digest_hex=${cursor.ledgerHeadContentDigestHex}
+        RETURNING state_kind`;
+        if (inserted.length !== 1)
+          throw new Error("HISTORICAL_SIMULATION_RESUME_REFUSED:SNAPSHOT_LEDGER_BINDING");
+      }
       await sql`INSERT INTO trader_historical_simulation_resume_checkpoint_v2
         (organization_id,account_id,run_id,split,committed_cycle_sequence,committed_cycle_id,ledger_entry_id,
          ledger_head_content_digest_hex,next_record_index,next_cycle_sequence,dataset_authority_json,
@@ -2619,7 +2637,7 @@ export async function runHistoricalSimulationNextCyclePostgresV2(
     }
     await verifyCommitRequestSources(tx, request, produced);
     await verifyCanonicalStageArtifacts(tx, scope, produced, previousCursor);
-    const transaction = transactionPort(tx, request);
+    const transaction = transactionPort(tx, request, reconciliation);
     const cursor = await commitHistoricalSimulationCycleAtomicallyV2({
       repository: {
         transaction: (callback) => callback(transaction),

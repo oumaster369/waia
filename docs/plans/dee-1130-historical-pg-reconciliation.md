@@ -15,7 +15,7 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: approved
-  currentWorkPackage: WP-1
+  currentWorkPackage: WP-3
   completedWorkPackages: []
   remainingWorkPackages: [WP-1, WP-2, WP-3, WP-4]
   prNumber: null
@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Finite CHECK representation/count successor embedded plan-only; preserve dirty source and await root verification before two-predicate correction. Native/source freeze and proof remain pending; no PG/heavy/registry/CI/graph grant."
+  nextAction: "Corrected full WP3 source is ready for immutable root/M01 review. Native/schema/full typecheck remain unexecuted; request coordinated grants only after coherent source acceptance. Root retains compatibility/CI/graph/publication."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -869,3 +869,14 @@ Author first makes a **sole canonical plan commit** embedding the exact successo
 
 All other previously admitted bounded source preparation may continue. Complete coherent migration/ACL/trigger/expression/owner/native-source freeze still requires root plus independent implementation review before any database/native grant. No PostgreSQL, heavy check, schema application, compatibility registry, CI, graph, publication, host or trading action is authorized by this design admission. Current draft709d3762 remains unaccepted; its CHECK prefix equals preservedc301694a, while two modeled-ledger byte charges outside that prefix require normal final whole-source review.
 <!-- END ROOT-CHECK-REPRESENTATION-ADMISSION -->
+
+
+## WP-3 complete source checkpoint — native proof pending
+
+The actual owner supplies bounded candidates in the two original INSERT paths, retaining one attempt budget; the allocated0222 now contains independent inline source checks, exact canonical companion text, two scoped relations and trigger-only LEGACY/readonly closure functions. The14B/C-text correction is implemented exactly after root verification of0cd16b31. All222 prior migration bytes and journal entries remain exact on accepted397d; only idx222/when1780000000222 is appended. The four relevant candidates, existing source integrity/phase checks, copied-before-await scope, exact old-N retry and original financial arithmetic remain unchanged in meaning.
+
+The complete native source includes four-kind/numeric/Unicode/body/privilege/concurrency/rollback/late-write controls, plus actual public35-cycle proof and small/long-prefix function observations. Genuine pre0222 parent/no-mode cases require a separate migration-boundary seed; the external prepared seed is unexecuted and not yet admitted as bootstrap/CI wiring. No latch deletion or guard-disable substitute is allowed. The private source candidate helper grants no admission authority.
+
+Full accounting now also uses47 equivalent fixed-key nested reads inside the new verifier to avoid creating intermediate subobjects merely to read a leaf. Scope/immutable-parent reservation includes a conservative6× raw-text escaping allowance, with unchanged caps. Existing missing-current/predecessor/genesis categories remain typed refusals, separate from oversize. The full source/callback/representation certificate and exact trigger inventory are external under evidence/dee-1130/wp3-source-freeze and must be independently checked against this implementation.
+
+Last scoped pure proof before this checkpoint was82 assertions/4 files PASS, with genuine earlier scaffold RED retained. Scoped ESLint of seven changed TypeScript surfaces exited0 with three inherited warnings; no full lint/typecheck/build or new PostgreSQL run was executed. SQL/native bodies are prepared source, not native PASS. Current full typecheck, actual223 migrations, restricted-role/source/race/installed-expression proof, canonical companions, root compatibility tuples/CI/graphs, full readiness and independent final review remain outstanding. No qualification, source economics, memory/latency, final-host or full AD6c result follows from this source freeze.
