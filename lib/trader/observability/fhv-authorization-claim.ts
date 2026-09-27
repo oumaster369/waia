@@ -1,4 +1,9 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import {
+  assertMetadataBytesSupported,
+  readMetadataTextSync,
+  type FhvMetadataReadOptions,
+} from "@/lib/trader/backtest/streaming-evidence/bounded-metadata-read";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -120,6 +125,7 @@ export function buildFhvAuthorizationClaimIssued(input: {
 
 export function claimFhvAuthorizationExclusive(input: {
   claimPath: string;
+  metadataReadProfile?: FhvMetadataReadOptions["metadataReadProfile"];
   leaseOwner: string;
   leaseExpiresAtUtc: string;
   cycleZeroCheckpointDigest: string;
@@ -131,7 +137,7 @@ export function claimFhvAuthorizationExclusive(input: {
     if (!existsSync(input.claimPath)) {
       throw new FhvAuthorizationClaimError("CLAIM_MISSING", "authorization claim file missing");
     }
-    const expectedContent = readFileSync(input.claimPath, "utf8");
+    const expectedContent = readMetadataTextSync(input.claimPath, input);
     const claim = JSON.parse(expectedContent) as FhvAuthorizationClaimV2;
     validateAuthorizationClaimDigest(claim);
     if (claim.state !== "ISSUED") {
@@ -152,6 +158,7 @@ export function claimFhvAuthorizationExclusive(input: {
       authorizationClaimDigest: computeAuthorizationClaimDigest(withoutDigest),
     };
     writeFileAtomicCompareAndReplace({
+      metadataReadProfile: input.metadataReadProfile,
       finalPath: input.claimPath,
       expectedContent,
       nextContent: `${JSON.stringify(next, null, 2)}\n`,
@@ -175,16 +182,22 @@ export function validateAuthorizationClaimDigest(claim: FhvAuthorizationClaimV2)
 export function writeFhvAuthorizationClaimAtomic(
   claimPath: string,
   claim: FhvAuthorizationClaimV2,
+  options?: FhvMetadataReadOptions,
 ): void {
   mkdirSync(join(claimPath, ".."), { recursive: true });
   if (existsSync(claimPath)) {
     throw new FhvAuthorizationClaimError("CLAIM_EXISTS", "authorization claim already exists");
   }
-  writeFileAtomicExclusive(claimPath, `${JSON.stringify(claim, null, 2)}\n`);
+  const bytes = `${JSON.stringify(claim, null, 2)}\n`;
+  assertMetadataBytesSupported(bytes, options);
+  writeFileAtomicExclusive(claimPath, bytes);
 }
 
-export function readFhvAuthorizationClaim(claimPath: string): FhvAuthorizationClaimV2 {
-  const claim = JSON.parse(readFileSync(claimPath, "utf8")) as FhvAuthorizationClaimV2;
+export function readFhvAuthorizationClaim(
+  claimPath: string,
+  options?: FhvMetadataReadOptions,
+): FhvAuthorizationClaimV2 {
+  const claim = JSON.parse(readMetadataTextSync(claimPath, options)) as FhvAuthorizationClaimV2;
   validateAuthorizationClaimDigest(claim);
   return claim;
 }
@@ -212,8 +225,32 @@ function stripAuthorizationClaimDigest(
   return body;
 }
 
+export type FhvAuthorizationClaimExpectedIdentity = Pick<
+  FhvAuthorizationClaimV2,
+  | "authorizationReceiptDigest"
+  | "executionPurpose"
+  | "runId"
+  | "releaseSha"
+  | "datasetContentDigest"
+  | "manifestSemanticDigest"
+  | "configurationFreezeDigest"
+  | "controlReplayReceiptDigest"
+>;
+const CLAIM_IDENTITY_KEYS = [
+  "authorizationReceiptDigest",
+  "executionPurpose",
+  "runId",
+  "releaseSha",
+  "datasetContentDigest",
+  "manifestSemanticDigest",
+  "configurationFreezeDigest",
+  "controlReplayReceiptDigest",
+] as const;
+
 function transitionAuthorizationClaim(input: {
   claimPath: string;
+  metadataReadProfile?: FhvMetadataReadOptions["metadataReadProfile"];
+  expectedIdentity?: FhvAuthorizationClaimExpectedIdentity;
   expectedState: FhvAuthorizationClaimState;
   nextState: FhvAuthorizationClaimState;
   patch: (
@@ -223,9 +260,18 @@ function transitionAuthorizationClaim(input: {
   const lockPath = `${input.claimPath}.claim.lock`;
   const lockFd = claimFileExclusiveLock(lockPath);
   try {
-    const expectedContent = readFileSync(input.claimPath, "utf8");
+    const expectedContent = readMetadataTextSync(input.claimPath, input);
     const claim = JSON.parse(expectedContent) as FhvAuthorizationClaimV2;
     validateAuthorizationClaimDigest(claim);
+    if (
+      input.expectedIdentity &&
+      CLAIM_IDENTITY_KEYS.some((key) => claim[key] !== input.expectedIdentity![key])
+    ) {
+      throw new FhvAuthorizationClaimError(
+        "CLAIM_IDENTITY_MISMATCH",
+        "Authorization claim immutable identity changed.",
+      );
+    }
     if (claim.state !== input.expectedState) {
       throw new FhvAuthorizationClaimError(
         "CLAIM_STATE_INVALID",
@@ -239,6 +285,7 @@ function transitionAuthorizationClaim(input: {
       authorizationClaimDigest: computeAuthorizationClaimDigest(bodyWithoutDigest),
     };
     writeFileAtomicCompareAndReplace({
+      metadataReadProfile: input.metadataReadProfile,
       finalPath: input.claimPath,
       expectedContent,
       nextContent: `${JSON.stringify(next, null, 2)}\n`,
@@ -251,9 +298,11 @@ function transitionAuthorizationClaim(input: {
 
 export function beginFhvAuthorizationRunning(input: {
   claimPath: string;
+  metadataReadProfile?: FhvMetadataReadOptions["metadataReadProfile"];
   leaseOwner: string;
 }): FhvAuthorizationClaimV2 {
   return transitionAuthorizationClaim({
+    metadataReadProfile: input.metadataReadProfile,
     claimPath: input.claimPath,
     expectedState: "CLAIMED",
     nextState: "RUNNING",
@@ -267,6 +316,7 @@ export function beginFhvAuthorizationRunning(input: {
 
 export function commitFhvAuthorizationEpoch(input: {
   claimPath: string;
+  metadataReadProfile?: FhvMetadataReadOptions["metadataReadProfile"];
   lastCommittedEpoch: number;
   lastCommittedCycle: number;
   checkpointDigest: string;
@@ -275,6 +325,7 @@ export function commitFhvAuthorizationEpoch(input: {
   activeGeneration?: number;
 }): FhvAuthorizationClaimV2 {
   return transitionAuthorizationClaim({
+    metadataReadProfile: input.metadataReadProfile,
     claimPath: input.claimPath,
     expectedState: "RUNNING",
     nextState: "RUNNING",
@@ -292,11 +343,15 @@ export function commitFhvAuthorizationEpoch(input: {
 
 export function takeoverFhvAuthorizationRunning(input: {
   claimPath: string;
+  metadataReadProfile?: FhvMetadataReadOptions["metadataReadProfile"];
+  expectedIdentity?: FhvAuthorizationClaimExpectedIdentity;
   leaseOwner: string;
   leaseExpiresAtUtc?: string;
 }): FhvAuthorizationClaimV2 {
   return transitionAuthorizationClaim({
+    metadataReadProfile: input.metadataReadProfile,
     claimPath: input.claimPath,
+    expectedIdentity: input.expectedIdentity,
     expectedState: "RUNNING",
     nextState: "RUNNING",
     patch: (claim) => ({
@@ -330,11 +385,16 @@ export function buildFhvTerminalResult(input: {
   return { ...body, terminalResultDigest: computeTerminalResultDigest(body) };
 }
 
-export function readFhvTerminalResult(terminalResultPath: string): FhvTerminalResultV1 {
+export function readFhvTerminalResult(
+  terminalResultPath: string,
+  options?: FhvMetadataReadOptions,
+): FhvTerminalResultV1 {
   if (!existsSync(terminalResultPath)) {
     throw new FhvAuthorizationClaimError("TERMINAL_RESULT_MISSING", "terminal result file missing");
   }
-  const terminal = JSON.parse(readFileSync(terminalResultPath, "utf8")) as FhvTerminalResultV1;
+  const terminal = JSON.parse(
+    readMetadataTextSync(terminalResultPath, options),
+  ) as FhvTerminalResultV1;
   const { terminalResultDigest, ...body } = terminal;
   if (computeTerminalResultDigest(body) !== terminalResultDigest) {
     throw new FhvAuthorizationClaimError(

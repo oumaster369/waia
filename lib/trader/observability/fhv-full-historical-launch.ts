@@ -1,3 +1,8 @@
+import {
+  assertMetadataBytesSupported,
+  readMetadataTextSync,
+  type FhvMetadataReadOptions,
+} from "@/lib/trader/backtest/streaming-evidence/bounded-metadata-read";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -247,21 +252,24 @@ export function assertFhvSyntheticScaleAuthorityRequired(input: {
   });
 }
 
-function assertFhvFullHistoricalAuthorizationReceiptForResume(input: {
-  receiptPath: string;
-  authorizationReceiptDigest: string;
-  releaseSha: string;
-  releaseTag?: string;
-  datasetQualificationReceiptDigest: string;
-  datasetDigest: string;
-  manifestDigest: string;
-  configurationFreezeDigest: string;
-  controlReplayReceiptDigest?: string;
-  organizationId: string;
-  operatorId: string;
-  runId: string;
-}): FhvFullHistoricalAuthorizationReceiptV1 {
-  const receipt = readFhvFullHistoricalAuthorizationReceipt(input.receiptPath);
+function assertFhvFullHistoricalAuthorizationReceiptForResume(
+  input: {
+    receiptPath: string;
+    authorizationReceiptDigest: string;
+    releaseSha: string;
+    releaseTag?: string;
+    datasetQualificationReceiptDigest: string;
+    datasetDigest: string;
+    manifestDigest: string;
+    configurationFreezeDigest: string;
+    controlReplayReceiptDigest?: string;
+    organizationId: string;
+    operatorId: string;
+    runId: string;
+  },
+  options?: FhvMetadataReadOptions,
+): FhvFullHistoricalAuthorizationReceiptV1 {
+  const receipt = readFhvFullHistoricalAuthorizationReceipt(input.receiptPath, options);
   if (receipt.authorizationReceiptDigest !== input.authorizationReceiptDigest) {
     throw new FhvFullHistoricalLaunchError(
       "AUTHORIZATION_RECEIPT_DIGEST_MISMATCH",
@@ -575,7 +583,7 @@ export function resolveFhvFullHistoricalTerminalClassification(input: {
 
 export function validateFhvFullHistoricalLaunchInput(
   input: FhvFullHistoricalLaunchInput,
-  options?: { resume?: boolean },
+  options?: { resume?: boolean } & FhvMetadataReadOptions,
 ): {
   configurationFreeze: FhvConfigurationFreezeV1;
   freezeArtifact: FhvConfigurationFreezeArtifactV1;
@@ -735,6 +743,7 @@ export function validateFhvFullHistoricalLaunchInput(
 
   const expectedExecutionPurpose = resolvedExecutionPurpose;
   const authorizationReceipt = assertFhvAuthorizationReceiptForExecution({
+    metadataReadProfile: options?.metadataReadProfile,
     receiptPath: input.authorizationReceiptPath,
     identity,
     runId: input.runId,
@@ -781,9 +790,9 @@ export function validateFhvFullHistoricalLaunchInput(
     runId: input.runId,
   };
   if (options?.resume) {
-    assertFhvFullHistoricalAuthorizationReceiptForResume(authorizationBinding);
+    assertFhvFullHistoricalAuthorizationReceiptForResume(authorizationBinding, options);
   } else {
-    assertFhvFullHistoricalAuthorizationReceiptForLaunch(authorizationBinding);
+    assertFhvFullHistoricalAuthorizationReceiptForLaunch(authorizationBinding, options);
   }
 
   const syntheticScaleAuthority = loadFhvSyntheticScaleAuthorityForLaunch({
@@ -895,15 +904,18 @@ export function resolveFhvFullLaunchRunDirectory(artifactRoot: string, runId: st
   return join(artifactRoot, "RI-P7", "fhv-full-historical", runId);
 }
 
-export function writeFhvFullLaunchReceipt(input: {
-  configurationFreeze: FhvConfigurationFreezeV1;
-  authorizationReceiptDigest: string;
-  datasetQualificationReceiptDigest: string;
-  artifactRoot: string;
-  runId: string;
-  boundedFixture?: boolean;
-  launchAtUtc?: string;
-}): { receiptPath: string; receipt: FhvFullLaunchReceiptV1 } {
+export function writeFhvFullLaunchReceipt(
+  input: {
+    configurationFreeze: FhvConfigurationFreezeV1;
+    authorizationReceiptDigest: string;
+    datasetQualificationReceiptDigest: string;
+    artifactRoot: string;
+    runId: string;
+    boundedFixture?: boolean;
+    launchAtUtc?: string;
+  },
+  options?: FhvMetadataReadOptions,
+): { receiptPath: string; receipt: FhvFullLaunchReceiptV1 } {
   const runDir = resolveFhvFullLaunchRunDirectory(input.artifactRoot, input.runId);
   if (existsSync(join(runDir, "fhv-full-launch-receipt.v1.json"))) {
     throw new FhvFullHistoricalLaunchError(
@@ -927,7 +939,9 @@ export function writeFhvFullLaunchReceipt(input: {
     launchReceiptDigest: computeLaunchReceiptDigest(baseReceipt),
   };
   const receiptPath = join(runDir, "fhv-full-launch-receipt.v1.json");
-  writeFileAtomicExclusive(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
+  const bytes = `${JSON.stringify(receipt, null, 2)}\n`;
+  assertMetadataBytesSupported(bytes, options);
+  writeFileAtomicExclusive(receiptPath, bytes);
   return { receiptPath, receipt };
 }
 
@@ -1294,8 +1308,11 @@ export async function resumeFhvFullHistoricalLaunch(
   });
 }
 
-export function readFhvFullLaunchReceipt(receiptPath: string): FhvFullLaunchReceiptV1 {
-  const parsed = JSON.parse(readFileSync(receiptPath, "utf8")) as FhvFullLaunchReceiptV1;
+export function readFhvFullLaunchReceipt(
+  receiptPath: string,
+  options?: FhvMetadataReadOptions,
+): FhvFullLaunchReceiptV1 {
+  const parsed = JSON.parse(readMetadataTextSync(receiptPath, options)) as FhvFullLaunchReceiptV1;
   const { launchReceiptDigest: _digest, ...body } = parsed;
   const expected = computeLaunchReceiptDigest(body);
   if (expected !== parsed.launchReceiptDigest) {

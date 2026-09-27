@@ -17,7 +17,23 @@ import {
   type FhvDatasetQualificationReceiptV1,
 } from "@/lib/trader/observability/fhv-dataset-qualification";
 import { revalidateFhvDatasetAtLaunch } from "@/lib/trader/observability/fhv-dataset-launch-guard";
-import { consumeFhvFullHistoricalAuthorizationReceipt } from "@/lib/trader/observability/fhv-full-historical-auth";
+import {
+  consumeFhvControlReplayAuthorizationWithHistoryV1,
+  FHV_CONTROL_REPLAY_METADATA_OPTIONS as metadataProfile,
+  type FhvControlReplayTransitionInput,
+} from "@/lib/trader/observability/fhv-full-historical-auth";
+import { readMetadataBytesSync } from "@/lib/trader/backtest/streaming-evidence/bounded-metadata-read";
+import {
+  resolveFhvControlReplayRunDirectory,
+  claimFhvControlReplayInitializationLock,
+  releaseFhvControlReplayInitializationLock,
+  assertFhvControlReplayFreshInitialization,
+  publishFhvControlReplayInitializedTransitionV1,
+  assertFhvControlReplayInitializedTransitionV1,
+  expectedFhvControlReplayClaimIdentity,
+  readFhvControlReplayTerminalLinkV1,
+  FhvControlReplayTransitionError,
+} from "@/lib/trader/observability/fhv-control-replay-authorization-transition";
 import {
   prepareFhvOfficialLaunchExecution,
   recoverFhvExecutionWalForResume,
@@ -35,8 +51,6 @@ import {
 import {
   assertCheckoutIdentity,
   FhvFullHistoricalLaunchError,
-  readFhvFullLaunchReceipt,
-  resolveFhvFullLaunchRunDirectory,
   validateFhvFullHistoricalLaunchInput,
   writeFhvFullLaunchReceipt,
   type FhvFullHistoricalLaunchInput,
@@ -243,179 +257,238 @@ async function runFhvControlReplayLaunchBacktest(input: {
   };
 }
 
+export type FhvControlReplayLaunchResult = FhvFullHistoricalLaunchResult &
+  Readonly<{
+    authorizationTransition: Readonly<{
+      issuedAuthorizationReceiptDigest: string;
+      consumedAuthorizationReceiptDigest: string;
+      pairDigest: string;
+    }>;
+    terminalLink: ReturnType<typeof readFhvControlReplayTerminalLinkV1>;
+  }>;
+
+function transitionInput(
+  input: FhvControlReplayLaunchInput,
+  freeze: FhvConfigurationFreezeV1,
+  qualificationDigest: string,
+): FhvControlReplayTransitionInput {
+  const native = readFhvFullHistoricalAuthorizationReceipt(
+    input.authorizationReceiptPath,
+    metadataProfile,
+  );
+  return {
+    artifactRoot: input.artifactRoot,
+    runId: input.runId,
+    authorizationReceiptPath: input.authorizationReceiptPath,
+    expectedIdentity: {
+      releaseSha: input.releaseSha.trim().toLowerCase(),
+      releaseTag: input.releaseTag?.trim() ?? native.releaseTag,
+      organizationId: input.organizationId,
+      operatorId: input.operatorId,
+      runId: input.runId,
+      datasetQualificationReceiptDigest: qualificationDigest,
+      datasetDigest: freeze.datasetDigest,
+      manifestDigest: freeze.manifestDigest,
+      configurationFreezeDigest: freeze.configurationFreezeDigest,
+    },
+  };
+}
+
 export async function executeFhvControlReplayLaunch(
   input: FhvControlReplayLaunchInput,
-): Promise<FhvFullHistoricalLaunchResult> {
-  if (input.executionPurpose !== FHV_CONTROL_REPLAY_EXECUTION_PURPOSE) {
+): Promise<FhvControlReplayLaunchResult> {
+  const request = { ...input };
+  if (request.executionPurpose !== FHV_CONTROL_REPLAY_EXECUTION_PURPOSE) {
     throw new FhvFullHistoricalLaunchError(
       "CONTROL_REPLAY_PURPOSE_REQUIRED",
       "executeFhvControlReplayLaunch requires executionPurpose CONTROL_REPLAY.",
     );
   }
-
-  const runDir = input.runDir ?? resolveFhvFullLaunchRunDirectory(input.artifactRoot, input.runId);
-  assertCheckoutIdentity(input, runDir);
-
-  const { configurationFreeze, qualificationReceipt, qualificationReceiptDigest } =
-    validateFhvFullHistoricalLaunchInput({
-      ...input,
-      controlReplayReceiptPath: undefined,
-      holdoutAccessRequested: false,
-      executionPurpose: FHV_CONTROL_REPLAY_EXECUTION_PURPOSE,
-    });
-
-  if (!input.boundedFixture && input.datasetRoot && input.manifestPath) {
-    revalidateFhvDatasetAtLaunch({
-      datasetQualificationReceiptPath: input.datasetQualificationReceiptPath,
-      datasetRoot: input.datasetRoot,
-      manifestPath: input.manifestPath,
-    });
-  }
-
-  const { receiptPath, receipt } = writeFhvFullLaunchReceipt({
-    configurationFreeze,
-    authorizationReceiptDigest: input.authorizationReceiptDigest,
-    datasetQualificationReceiptDigest: qualificationReceiptDigest,
-    artifactRoot: input.artifactRoot,
-    runId: input.runId,
-    boundedFixture: input.boundedFixture,
-  });
-  writeFhvOfficialCampaignIdentity({
-    runDir,
-    releaseSha: input.releaseSha.trim().toLowerCase(),
-    runId: input.runId,
-    organizationId: input.organizationId,
-    launchReceiptDigest: receipt.launchReceiptDigest,
-  });
-
-  consumeFhvFullHistoricalAuthorizationReceipt(input.authorizationReceiptPath);
-
-  const launchExecution = prepareFhvOfficialLaunchExecution({
-    runDir,
-    runId: input.runId,
-    executionPurpose: FHV_EXECUTION_PURPOSE_CONTROL_REPLAY,
-    authorizationReceiptDigest: input.authorizationReceiptDigest,
-    releaseSha: input.releaseSha,
-    datasetContentDigest: configurationFreeze.datasetDigest,
-    manifestSemanticDigest: configurationFreeze.manifestDigest,
-    configurationFreeze,
-    leaseOwner: `${input.operatorId}@${input.organizationId}`,
-  });
-
-  const result = await runFhvControlReplayLaunchBacktest({
-    launchInput: input,
-    runDir,
-    configurationFreeze,
-    qualificationReceipt,
-    qualificationReceiptDigest,
-    launchExecution,
-    launchReceiptDigest: receipt.launchReceiptDigest,
-  });
-
-  return { ...result, receiptPath };
-}
-
-export async function resumeFhvControlReplayLaunch(
-  input: FhvControlReplayLaunchInput,
-): Promise<FhvFullHistoricalLaunchResult> {
-  if (input.executionPurpose !== FHV_CONTROL_REPLAY_EXECUTION_PURPOSE) {
-    throw new FhvFullHistoricalLaunchError(
-      "CONTROL_REPLAY_PURPOSE_REQUIRED",
-      "resumeFhvControlReplayLaunch requires executionPurpose CONTROL_REPLAY.",
-    );
-  }
-
-  const runDir = input.runDir ?? resolveFhvFullLaunchRunDirectory(input.artifactRoot, input.runId);
-  const receiptPath = join(runDir, "fhv-full-launch-receipt.v1.json");
-  if (!existsSync(receiptPath)) {
-    throw new FhvFullHistoricalLaunchError(
-      "LAUNCH_RECEIPT_MISSING",
-      "Resume requires an existing launch receipt.",
-    );
-  }
-  const existingReceipt = readFhvFullLaunchReceipt(receiptPath);
-  const receiptBeforeMtime = readFileSync(receiptPath).toString();
-
-  assertCheckoutIdentity(input, runDir);
-
-  const authBefore = readFhvFullHistoricalAuthorizationReceipt(input.authorizationReceiptPath);
-
+  const runDir = resolveFhvControlReplayRunDirectory(request);
+  assertCheckoutIdentity(request, runDir);
   const { configurationFreeze, qualificationReceipt, qualificationReceiptDigest } =
     validateFhvFullHistoricalLaunchInput(
       {
-        ...input,
+        ...request,
         controlReplayReceiptPath: undefined,
         holdoutAccessRequested: false,
         executionPurpose: FHV_CONTROL_REPLAY_EXECUTION_PURPOSE,
       },
-      { resume: true },
+      metadataProfile,
     );
-
-  if (!input.boundedFixture && input.datasetRoot && input.manifestPath) {
+  if (!request.boundedFixture && request.datasetRoot && request.manifestPath)
     revalidateFhvDatasetAtLaunch({
-      datasetQualificationReceiptPath: input.datasetQualificationReceiptPath,
-      datasetRoot: input.datasetRoot,
-      manifestPath: input.manifestPath,
+      datasetQualificationReceiptPath: request.datasetQualificationReceiptPath,
+      datasetRoot: request.datasetRoot,
+      manifestPath: request.manifestPath,
     });
-  }
-
-  recoverFhvExecutionWalForResume(runDir);
-
-  const claimPath = resolveFhvAuthorizationClaimPath(runDir);
-  if (!existsSync(claimPath)) {
-    throw new FhvFullHistoricalLaunchError(
-      "AUTHORIZATION_CLAIM_MISSING",
-      "Resume requires an existing authorization claim.",
+  const identity = transitionInput(request, configurationFreeze, qualificationReceiptDigest);
+  const lock = claimFhvControlReplayInitializationLock(runDir);
+  let initialized: ReturnType<typeof assertFhvControlReplayInitializedTransitionV1>;
+  let launchExecution: ReturnType<typeof prepareFhvOfficialLaunchExecution>;
+  let receiptPath: string;
+  try {
+    assertFhvControlReplayFreshInitialization(identity);
+    const transition = consumeFhvControlReplayAuthorizationWithHistoryV1({
+      ...identity,
+      expectedIssuedReceiptDigest: request.authorizationReceiptDigest,
+    });
+    const written = writeFhvFullLaunchReceipt(
+      {
+        configurationFreeze,
+        authorizationReceiptDigest: transition.issued.authorizationReceiptDigest,
+        datasetQualificationReceiptDigest: qualificationReceiptDigest,
+        artifactRoot: request.artifactRoot,
+        runId: request.runId,
+        boundedFixture: request.boundedFixture,
+      },
+      metadataProfile,
     );
-  }
-
-  takeoverFhvAuthorizationRunning({
-    claimPath,
-    leaseOwner: `${input.operatorId}@${input.organizationId}`,
-  });
-
-  const launchExecution = prepareFhvOfficialLaunchExecution({
-    runDir,
-    runId: input.runId,
-    executionPurpose: FHV_EXECUTION_PURPOSE_CONTROL_REPLAY,
-    authorizationReceiptDigest: input.authorizationReceiptDigest,
-    releaseSha: input.releaseSha,
-    datasetContentDigest: configurationFreeze.datasetDigest,
-    manifestSemanticDigest: configurationFreeze.manifestDigest,
-    configurationFreeze,
-    leaseOwner: `${input.operatorId}@${input.organizationId}`,
-  });
-
-  const receiptAfterMtime = readFileSync(receiptPath).toString();
-  if (receiptAfterMtime !== receiptBeforeMtime) {
-    throw new FhvFullHistoricalLaunchError(
-      "LAUNCH_RECEIPT_REWRITE_FORBIDDEN",
-      "Resume must not rewrite the launch receipt.",
+    receiptPath = written.receiptPath;
+    writeFhvOfficialCampaignIdentity(
+      {
+        runDir,
+        releaseSha: request.releaseSha.trim().toLowerCase(),
+        runId: request.runId,
+        organizationId: request.organizationId,
+        launchReceiptDigest: written.receipt.launchReceiptDigest,
+      },
+      metadataProfile,
     );
+    launchExecution = prepareFhvOfficialLaunchExecution({
+      runDir,
+      runId: request.runId,
+      executionPurpose: FHV_EXECUTION_PURPOSE_CONTROL_REPLAY,
+      authorizationReceiptDigest: transition.issued.authorizationReceiptDigest,
+      releaseSha: request.releaseSha,
+      datasetContentDigest: configurationFreeze.datasetDigest,
+      manifestSemanticDigest: configurationFreeze.manifestDigest,
+      configurationFreeze,
+      leaseOwner: `${request.operatorId}@${request.organizationId}`,
+      ...metadataProfile,
+    });
+    initialized = publishFhvControlReplayInitializedTransitionV1(identity);
+  } finally {
+    releaseFhvControlReplayInitializationLock(lock);
   }
-
-  const authAfter = readFhvFullHistoricalAuthorizationReceipt(input.authorizationReceiptPath);
-  if (
-    authAfter.consumedAtUtc !== authBefore.consumedAtUtc ||
-    authAfter.authorizationReceiptDigest !== authBefore.authorizationReceiptDigest
-  ) {
-    throw new FhvFullHistoricalLaunchError(
-      "AUTHORIZATION_RECONSUME_FORBIDDEN",
-      "Resume must not re-consume authorization.",
-    );
-  }
-
-  return runFhvControlReplayLaunchBacktest({
-    launchInput: input,
+  const ai = initialized.transition.issued.authorizationReceiptDigest;
+  const result = await runFhvControlReplayLaunchBacktest({
+    launchInput: { ...request, authorizationReceiptDigest: ai },
     runDir,
     configurationFreeze,
     qualificationReceipt,
     qualificationReceiptDigest,
     launchExecution,
-    launchReceiptDigest: existingReceipt.launchReceiptDigest,
+    launchReceiptDigest: initialized.launch.launchReceiptDigest,
+  });
+  return {
+    ...result,
+    receiptPath,
+    authorizationTransition: {
+      issuedAuthorizationReceiptDigest: ai,
+      consumedAuthorizationReceiptDigest:
+        initialized.transition.consumed.authorizationReceiptDigest,
+      pairDigest: initialized.transition.pair.pairDigest,
+    },
+    terminalLink: readFhvControlReplayTerminalLinkV1(identity),
+  };
+}
+
+export async function resumeFhvControlReplayLaunch(
+  input: FhvControlReplayLaunchInput,
+): Promise<FhvControlReplayLaunchResult> {
+  const request = { ...input };
+  if (request.executionPurpose !== FHV_CONTROL_REPLAY_EXECUTION_PURPOSE)
+    throw new FhvFullHistoricalLaunchError(
+      "CONTROL_REPLAY_PURPOSE_REQUIRED",
+      "resumeFhvControlReplayLaunch requires executionPurpose CONTROL_REPLAY.",
+    );
+  const runDir = resolveFhvControlReplayRunDirectory(request);
+  assertCheckoutIdentity(request, runDir);
+  const { configurationFreeze, qualificationReceipt, qualificationReceiptDigest } =
+    validateFhvFullHistoricalLaunchInput(
+      {
+        ...request,
+        controlReplayReceiptPath: undefined,
+        holdoutAccessRequested: false,
+        executionPurpose: FHV_CONTROL_REPLAY_EXECUTION_PURPOSE,
+      },
+      { resume: true, ...metadataProfile },
+    );
+  if (!request.boundedFixture && request.datasetRoot && request.manifestPath)
+    revalidateFhvDatasetAtLaunch({
+      datasetQualificationReceiptPath: request.datasetQualificationReceiptPath,
+      datasetRoot: request.datasetRoot,
+      manifestPath: request.manifestPath,
+    });
+  const identity = transitionInput(request, configurationFreeze, qualificationReceiptDigest);
+  const lock = claimFhvControlReplayInitializationLock(runDir);
+  let initialized: ReturnType<typeof assertFhvControlReplayInitializedTransitionV1>;
+  let launchExecution: ReturnType<typeof prepareFhvOfficialLaunchExecution>;
+  try {
+    const claimPath = resolveFhvAuthorizationClaimPath(runDir);
+    if (existsSync(`${claimPath}.claim.lock`))
+      throw new FhvControlReplayTransitionError(
+        "CLAIM_OWNERSHIP_UNRESOLVED",
+        "Native claim lock exists; no automatic lock removal.",
+      );
+    initialized = assertFhvControlReplayInitializedTransitionV1(identity);
+    if (initialized.claim.state !== "RUNNING")
+      throw new FhvControlReplayTransitionError(
+        "CLAIM_STATE_INVALID",
+        "Strict resume requires the native RUNNING claim.",
+      );
+    const receiptBefore = readMetadataBytesSync(initialized.paths.launch, metadataProfile);
+    recoverFhvExecutionWalForResume(runDir, metadataProfile);
+    takeoverFhvAuthorizationRunning({
+      claimPath,
+      leaseOwner: `${request.operatorId}@${request.organizationId}`,
+      expectedIdentity: expectedFhvControlReplayClaimIdentity(initialized.transition.issued),
+      ...metadataProfile,
+    });
+    launchExecution = prepareFhvOfficialLaunchExecution({
+      runDir,
+      runId: request.runId,
+      executionPurpose: FHV_EXECUTION_PURPOSE_CONTROL_REPLAY,
+      authorizationReceiptDigest: initialized.transition.issued.authorizationReceiptDigest,
+      releaseSha: request.releaseSha,
+      datasetContentDigest: configurationFreeze.datasetDigest,
+      manifestSemanticDigest: configurationFreeze.manifestDigest,
+      configurationFreeze,
+      leaseOwner: `${request.operatorId}@${request.organizationId}`,
+      ...metadataProfile,
+    });
+    if (!readMetadataBytesSync(initialized.paths.launch, metadataProfile).equals(receiptBefore))
+      throw new FhvFullHistoricalLaunchError(
+        "LAUNCH_RECEIPT_REWRITE_FORBIDDEN",
+        "Resume must not rewrite the launch receipt.",
+      );
+    initialized = assertFhvControlReplayInitializedTransitionV1(identity);
+  } finally {
+    releaseFhvControlReplayInitializationLock(lock);
+  }
+  const ai = initialized.transition.issued.authorizationReceiptDigest;
+  const result = await runFhvControlReplayLaunchBacktest({
+    launchInput: { ...request, authorizationReceiptDigest: ai },
+    runDir,
+    configurationFreeze,
+    qualificationReceipt,
+    qualificationReceiptDigest,
+    launchExecution,
+    launchReceiptDigest: initialized.launch.launchReceiptDigest,
     replaceLaunchResult: true,
     resumeFromCheckpoint: true,
   });
+  return {
+    ...result,
+    authorizationTransition: {
+      issuedAuthorizationReceiptDigest: ai,
+      consumedAuthorizationReceiptDigest:
+        initialized.transition.consumed.authorizationReceiptDigest,
+      pairDigest: initialized.transition.pair.pairDigest,
+    },
+    terminalLink: readFhvControlReplayTerminalLinkV1(identity),
+  };
 }
 
 function buildControlReplayLaunchResult(input: {
@@ -476,16 +549,8 @@ export function readFhvControlReplayLaunchCheckoutDigest(proofPath: string): str
 }
 
 export function readFhvControlReplayLaunchAuthorizationDigest(receiptPath: string): string {
-  const receipt = JSON.parse(readFileSync(receiptPath, "utf8")) as {
-    authorizationReceiptDigest?: string;
-  };
-  if (!receipt.authorizationReceiptDigest) {
-    throw new FhvFullHistoricalLaunchError(
-      "AUTHORIZATION_RECEIPT_DIGEST_MISSING",
-      "Authorization receipt digest missing.",
-    );
-  }
-  return receipt.authorizationReceiptDigest;
+  return readFhvFullHistoricalAuthorizationReceipt(receiptPath, metadataProfile)
+    .authorizationReceiptDigest;
 }
 
 export function readFhvControlReplayLaunchFreezeDigest(freezePath: string): string {

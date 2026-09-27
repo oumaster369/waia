@@ -1,3 +1,4 @@
+import type { FhvMetadataReadOptions } from "@/lib/trader/backtest/streaming-evidence/bounded-metadata-read";
 import {
   chmodSync,
   closeSync,
@@ -198,6 +199,7 @@ export function prepareFhvOfficialLaunchExecution(input: {
   controlReplayReceiptDigest?: string;
   leaseOwner: string;
   leaseExpiresAtUtc?: string;
+  metadataReadProfile?: FhvMetadataReadOptions["metadataReadProfile"];
 }): FhvOfficialLaunchExecutionArtifacts {
   mkdirSync(join(input.runDir, "control"), { recursive: true });
   const claimPath = resolveFhvAuthorizationClaimPath(input.runDir);
@@ -214,13 +216,13 @@ export function prepareFhvOfficialLaunchExecution(input: {
   let resumeFromCycle = 0;
 
   if (existsSync(claimPath)) {
-    authorizationClaim = readFhvAuthorizationClaim(claimPath);
+    authorizationClaim = readFhvAuthorizationClaim(claimPath, input);
     if (authorizationClaim.state !== "RUNNING") {
       throw new Error(
         `[fhv] authorization claim must be RUNNING for resume, got ${authorizationClaim.state}`,
       );
     }
-    const recovered = cleanupFhvTwoPhaseResumeState(input.runDir);
+    const recovered = cleanupFhvTwoPhaseResumeState(input.runDir, input);
     const evidenceRoot = join(input.runDir, "evidence");
     if (
       recovered.lastCommittedEpoch >= 0 &&
@@ -235,6 +237,7 @@ export function prepareFhvOfficialLaunchExecution(input: {
     }
     if (recovered.lastCommittedEpoch > authorizationClaim.lastCommittedEpoch) {
       reconcileFhvJournalClaimCatchUp({
+        metadataReadProfile: input.metadataReadProfile,
         runDir: input.runDir,
         claimPath,
         claim: authorizationClaim,
@@ -242,7 +245,7 @@ export function prepareFhvOfficialLaunchExecution(input: {
         journalCycle: recovered.lastCommittedCycle,
         journalDigest: recovered.lastEpochCommitDigest,
       });
-      authorizationClaim = readFhvAuthorizationClaim(claimPath);
+      authorizationClaim = readFhvAuthorizationClaim(claimPath, input);
     } else if (authorizationClaim.lastCommittedEpoch > recovered.lastCommittedEpoch) {
       throw new Error("FHV_CLAIM_AHEAD_OF_JOURNAL");
     }
@@ -271,14 +274,16 @@ export function prepareFhvOfficialLaunchExecution(input: {
         ? { controlReplayReceiptDigest: input.controlReplayReceiptDigest }
         : {}),
     });
-    writeFhvAuthorizationClaimAtomic(claimPath, issued);
+    writeFhvAuthorizationClaimAtomic(claimPath, issued, input);
     authorizationClaim = claimFhvAuthorizationExclusive({
+      metadataReadProfile: input.metadataReadProfile,
       claimPath,
       leaseOwner: input.leaseOwner,
       leaseExpiresAtUtc: input.leaseExpiresAtUtc ?? new Date(Date.now() + 86_400_000).toISOString(),
       cycleZeroCheckpointDigest,
     });
     authorizationClaim = beginFhvAuthorizationRunning({
+      metadataReadProfile: input.metadataReadProfile,
       claimPath,
       leaseOwner: input.leaseOwner,
     });
@@ -294,6 +299,7 @@ export function prepareFhvOfficialLaunchExecution(input: {
         runId: input.runId,
         walPath: walWriter.getWalPath(),
       }),
+      input,
     );
   }
 
@@ -310,6 +316,8 @@ export function prepareFhvOfficialLaunchExecution(input: {
 function reconcileFhvJournalClaimCatchUp(input: {
   runDir: string;
   claimPath: string;
+  metadataReadProfile?: FhvMetadataReadOptions["metadataReadProfile"];
+
   claim: FhvAuthorizationClaimV2;
   journalEpoch: number;
   journalCycle: number;
@@ -355,6 +363,7 @@ function reconcileFhvJournalClaimCatchUp(input: {
     }
   }
   commitFhvAuthorizationEpoch({
+    metadataReadProfile: input.metadataReadProfile,
     claimPath: input.claimPath,
     lastCommittedEpoch: input.journalEpoch,
     lastCommittedCycle: input.journalCycle,
@@ -1168,12 +1177,15 @@ export function createFhvEpochBoundaryController(input: {
   };
 }
 
-export function recoverFhvExecutionWalForResume(runDir: string): {
+export function recoverFhvExecutionWalForResume(
+  runDir: string,
+  options?: FhvMetadataReadOptions,
+): {
   validRecords: ReturnType<typeof recoverFhvExecutionWalTail>["validRecords"];
   truncatedTailBytes: number;
 } {
   const journal = existsSync(join(runDir, "fhv-launch-journal.v1.json"))
-    ? readFhvLaunchJournal(runDir)
+    ? readFhvLaunchJournal(runDir, options)
     : undefined;
   if (!journal) {
     const walPath = join(runDir, "execution.wal.ndjson");
