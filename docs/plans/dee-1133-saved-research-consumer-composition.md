@@ -15,15 +15,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: in-progress
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3]
+  currentWorkPackage: WP-2
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: [WP-2, WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: b040b2a909823fe6e84a1226ab473f4df8170d26
+  lastValidationAt: "2026-09-27T17:45:26.102801Z"
   blockedReason: null
-  nextAction: "WP-1 fixed completion writer and held accounting source frozen for independent review and coordinated scoped checks. WP-2 composition and native execution are not yet released."
+  nextAction: "Root accepted WP-1 source and scoped checks. Implement WP-2 complete-consumer only within the admitted map, then freeze for independent review and request coordinated checks; DB/native execution remains separately gated."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -139,3 +139,13 @@ The held seam mints private, one-use snapshot/completion handles from the actual
 Deterministic application manifest generation completed from these actual dependencies. The actual command closure has 93 paths (the old 91 plus the fixed internal writer and its unchanged existing sufficiency repository), with no removals. The only changed prior command dependency is the held seam; both pure manifests and the accepted MI service's two measurement delegates are preserved. No composite operation, fixture, native test, SQL, schema, migration, workflow, lease policy or pure meaning changed in WP-1. All 45 existing application native cases and the old Understanding native file remain unchanged.
 
 This is source handoff only. Scoped tests/readiness have not run, compatibility is not yet claimed, and native execution remains separately gated. Freeze and raw generation receipt: `parallel-runtime-owner/dee1133-wp1-source-5854be7d/`. WP-2 wiring waits for independent review and root disposition.
+
+## WP-1 acceptance and WP-2 source release — 2026-09-27
+
+Clean WP-1 executable source `b040b2a909823fe6e84a1226ab473f4df8170d26`, tree `a9c6c1f8ecff54c4e8da7ea1b323211dd58621e1`, passed exactly seven root-granted serial scoped checks at `17:44:52.082752–17:45:26.102801Z`: application manifest check, Understanding pure check/runtime inventory, 299 unit assertions in 13 files with zero skips, ten-path ESLint, typecheck and canon. No source change occurred during checks. Source freeze `parallel-runtime-owner/dee1133-wp1-source-5854be7d/FREEZE.json` SHA `fc4ff64f2ff4bd59c850ac6897396f81f130233b69f3568544b6031a18d5e125` seals 18 artifacts; scoped-check freeze `parallel-runtime-owner/dee1133-wp1-checks-b040b2a9/FREEZE.json` SHA `831060ee9310a13ebb5c2d61414135b4195cc4087a3fb4e558521ba664b9e043` seals 24. Actual selected application/Understanding closures are 93/85 paths; both pure manifests are unchanged.
+
+Independent finite review `milestone-audits/DEE1133-WP1-source-b040b2a9/REPORT.md` SHA `27b79af00e3e74c7c8a2110eba8a1c10b5c8179fe9ccde842ed5f6fbc639ecd6`, nine-artifact freeze `4259b97f81cc66c9f990bd542c6a1f170f624243fbfe043df9b1cd4eb61d414d`, found no blocking source issue and verified all source/check pins. Root adoption `parallel-runtime-owner/dee1133-wp1-source-5854be7d/root-wp1-adoption.json` SHA `beb2e08645293bf0fc36ac2e31461bb2828fc58910d8e6025455ee83398c2f5b` accepts only WP-1 source and these attributed checks.
+
+The extraction has one precise harmless refusal-timing difference: a missing assignment or elapsed deadline discovered by fixed snapshot capture now refuses before the read-only RR transaction commits, whereas the old wrapper could discover that refusal after RR commit. Successful fixed computation still follows the public wrapper's RR commit. No identical SQL timing or operational identity is claimed.
+
+Root released WP-2 source after this sole-plan checkpoint. The explicit one-B route must prove actual private same-holder/accounting and RR→RC/finalization wiring; native candidate projection, maximum32 capacity, restart/fencing and old native compatibility remain unexecuted. Heavy checks, DB/native, publication and merge require separate root grants. No additional path or semantic scope is admitted.
