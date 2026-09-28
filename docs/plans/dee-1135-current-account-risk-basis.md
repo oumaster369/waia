@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A reference header is stored only when every member digest is already retained. Missing members refuse and write nothing. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "An acquisition job is stored only when the reference header already exists. A missing reference refuses and writes nothing. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null

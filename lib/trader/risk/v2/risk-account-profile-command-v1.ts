@@ -193,6 +193,50 @@ export async function retainStoredRiskAccountReferenceV1(
   });
 }
 
+
+/** An acquisition job cannot start without a retained reference, and it never writes the current pointer. */
+export async function retainStoredRiskAccountAcquisitionJobV1(
+  sql: postgres.Sql,
+  input: { organizationId: string; accountId: string; id: string; profileDigest: string; referenceDigest: string; actorId: string; auditId: string },
+): Promise<{ decision: "RETAINED_NON_AUTHORITY"; jobDigest: string; currentPointer: null; allowanceId: null; orderId: null }> {
+  const body = {
+    schemaVersion: "risk-account-acquisition-job/v1" as const,
+    organizationId: input.organizationId,
+    accountId: input.accountId,
+    id: input.id,
+    profileDigest: input.profileDigest,
+    referenceDigest: input.referenceDigest,
+  };
+  const jobDigest = riskAccountDigestV1(body);
+  const bodyText = canonicalJsonString(body);
+  return sql.begin(async (tx) => {
+    await requireMatchingAuditActorV1(tx as unknown as postgres.Sql, input.auditId, input.actorId, input.organizationId);
+    const [profile] = await tx<{ n: number }[]>`
+      select count(*)::int n from trader_risk_account_profiles_v1
+      where organization_id = ${input.organizationId}::uuid and account_id = ${input.accountId} and content_digest = ${input.profileDigest}`;
+    if ((profile?.n ?? 0) !== 1) throw new RiskCurrentAccountRefusedV1("PROFILE_PROPOSAL_ABSENT");
+    const [reference] = await tx<{ n: number }[]>`
+      select count(*)::int n from trader_risk_account_references_v1
+      where organization_id = ${input.organizationId}::uuid and account_id = ${input.accountId} and content_digest = ${input.referenceDigest}`;
+    if ((reference?.n ?? 0) !== 1) throw new RiskCurrentAccountRefusedV1("REFERENCE_ABSENT");
+    const [held] = await tx<{ content_digest: string }[]>`
+      select content_digest from trader_risk_account_acquisition_jobs_v1
+      where organization_id = ${input.organizationId}::uuid and account_id = ${input.accountId} and id = ${input.id}::uuid`;
+    if (held?.content_digest === jobDigest) {
+      return { decision: "RETAINED_NON_AUTHORITY" as const, jobDigest, currentPointer: null, allowanceId: null, orderId: null };
+    }
+    if (held) throw new RiskCurrentAccountRefusedV1("PROFILE_COMMAND_CONFLICT");
+    await tx`insert into trader_risk_account_acquisition_jobs_v1
+      (organization_id, account_id, content_digest, body_text, id, profile_digest, reference_digest)
+      values (${input.organizationId}::uuid, ${input.accountId}, ${jobDigest}, ${bodyText}, ${input.id}::uuid, ${input.profileDigest}, ${input.referenceDigest})`;
+    const [current] = await tx<{ n: number }[]>`
+      select count(*)::int n from trader_risk_account_current_v1
+      where organization_id = ${input.organizationId}::uuid and account_id = ${input.accountId}`;
+    if (current?.n !== 0) throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
+    return { decision: "RETAINED_NON_AUTHORITY" as const, jobDigest, currentPointer: null, allowanceId: null, orderId: null };
+  });
+}
+
 /** Cooling comes from the sealed profile. A caller cannot supply a shorter wait. */
 export function coolingOffMsFromProfileBodyV1(bodyText: string): number {
   let coolingOffMs: unknown;

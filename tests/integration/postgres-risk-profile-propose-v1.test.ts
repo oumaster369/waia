@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { describe, expect, it } from "vitest";
-import { admitOpenProfileFrontierV1, cancelStoredProfileProposalV1, refuseProfileBackedExecutionV1, readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, reproposeStoredProfileV1, retainProposedRiskAccountProfileV1, retainStoredRiskAccountReferenceV1, revokeStoredProfileAuthorityV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
+import { admitOpenProfileFrontierV1, cancelStoredProfileProposalV1, refuseProfileBackedExecutionV1, readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, reproposeStoredProfileV1, retainProposedRiskAccountProfileV1, retainStoredRiskAccountReferenceV1, retainStoredRiskAccountAcquisitionJobV1, revokeStoredProfileAuthorityV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
 import { RiskCurrentAccountRefusedV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import {
   createRiskAccountProfileV1,
@@ -104,6 +104,12 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
       await expect(retainStoredRiskAccountReferenceV1(sql, { reference, actorId: user!.id, auditId: audit!.id })).rejects.toThrow(/REFERENCE_MEMBERS/);
       const [references] = await sql<{ n: number }[]>`select count(*)::int n from trader_risk_account_references_v1 where account_id = ${accountId}`;
       expect(references?.n).toBe(0);
+      await expect(retainStoredRiskAccountAcquisitionJobV1(sql, {
+        organizationId: org!.id, accountId, id: randomUUID(), profileDigest: profile.contentDigest,
+        referenceDigest: reference.contentDigest, actorId: user!.id, auditId: audit!.id,
+      })).rejects.toThrow(/REFERENCE_ABSENT/);
+      const [jobs] = await sql<{ n: number }[]>`select count(*)::int n from trader_risk_account_acquisition_jobs_v1 where account_id = ${accountId}`;
+      expect(jobs?.n).toBe(0);
       const [afterReplay] = await sql<{ n: number }[]>`select count(*)::int n from trader_risk_account_profile_events_v1 where account_id = ${accountId}`;
       expect(afterReplay?.n).toBe(1);
       const [event] = await sql<{ action: string; n: number }[]>`select action, count(*)::int n
