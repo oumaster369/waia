@@ -733,7 +733,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   predecessorPendingExposureNotional: string;
   predecessorReservationNotional: string;
   openedAllowances: readonly { allowanceId: string; reservedExposureNotional: string }[];
-  closedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; disposition: "CONSUMED" | "RELEASED" }[];
+  closedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; disposition: "CONSUMED" | "RELEASED"; truthRecordId?: string | null }[];
   events: readonly {
     sequence: string;
     previousDigest: string | null;
@@ -793,6 +793,15 @@ export function foldExpectedEnforcementSuffixV1(input: {
   for (const id of input.alreadyDisposedTruthIds) {
     if (!riskAccountDigestSchemaV1.safeParse(id).success || disposed.has(id)) refuse("INDEPENDENT_INCLUSION_IDENTITY");
     disposed.add(id);
+  }
+  for (const prior of input.closedAllowances) {
+    if (prior.disposition === "RELEASED" && prior.truthRecordId != null) refuse("EXPECTED_STATE");
+    if (prior.disposition === "CONSUMED" && prior.truthRecordId != null) {
+      if (!riskAccountDigestSchemaV1.safeParse(prior.truthRecordId).success || disposed.has(prior.truthRecordId)) {
+        refuse("INDEPENDENT_INCLUSION_IDENTITY");
+      }
+      disposed.add(prior.truthRecordId);
+    }
   }
   const heldTruthRecordIds: string[] = [];
   let issued = 0n;
