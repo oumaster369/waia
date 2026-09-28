@@ -513,6 +513,37 @@ export function admitCurrentAccountBasisV1(
   return { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null };
 }
 
+function sumExpectedObligationsV1(obligations: readonly RiskAccountObligationV1[]): { reservations: bigint; consumedPending: bigint } {
+  const allowanceIds = new Set<string>();
+  const orderIds = new Set<string>();
+  let reservations = 0n, consumedPending = 0n;
+  for (const obligation of obligations) {
+    if (allowanceIds.has(obligation.allowanceId) || !["BUY", "SELL"].includes(obligation.side))
+      refuse("EXPECTED_OBLIGATION_IDENTITY");
+    allowanceIds.add(obligation.allowanceId);
+    for (const value of [obligation.allowanceContentDigest, obligation.verdictContentDigest, obligation.instrumentIdentityDigest])
+      riskAccountDigestSchemaV1.parse(value);
+    if (nonnegative(obligation.quantity) === 0n) refuse("EXPECTED_OBLIGATION_IDENTITY");
+    if (!/^[A-Z0-9]{1,24}$/.test(obligation.baseAsset) || obligation.baseAsset === "USDT" ||
+        obligation.symbol !== `${obligation.baseAsset}/USDT`)
+      refuse("EXPECTED_OBLIGATION_IDENTITY");
+    if (obligation.state === "ISSUED") {
+      if (obligation.orderId !== null || obligation.orderBindingDigest !== null || nonnegative(obligation.pendingNotional) !== 0n)
+        refuse("EXPECTED_ISSUED_STATE");
+      reservations += nonnegative(obligation.reservedNotional);
+    } else if (obligation.state === "CONSUMED") {
+      if (!obligation.orderId || !obligation.orderBindingDigest || orderIds.has(obligation.orderId))
+        refuse("EXPECTED_CONSUMED_STATE");
+      riskAccountDigestSchemaV1.parse(obligation.orderBindingDigest);
+      orderIds.add(obligation.orderId);
+      consumedPending += nonnegative(obligation.pendingNotional);
+    } else refuse("EXPECTED_STATE");
+    if (obligation.side === "SELL" && (nonnegative(obligation.reservedNotional) !== 0n || nonnegative(obligation.pendingNotional) !== 0n))
+      refuse("REDUCTION_ACCOUNTING");
+  }
+  return { reservations, consumedPending };
+}
+
 /** Validates the sealed Expected frontier, then observes Actual. The delta still cannot publish. */
 export function observeSealedExpectedFrontierV1(input: {
   expected: RiskExpectedFrontierV1;
@@ -543,37 +574,13 @@ export function observeSealedExpectedFrontierV1(input: {
       refuse("PREDECESSOR_SCOPE_OR_TIME");
     if (predecessor.eventHeadDigest !== null) riskAccountDigestSchemaV1.parse(predecessor.eventHeadDigest);
     if ((priorEvent === 1n) !== (predecessor.eventHeadDigest === null)) refuse("EXPECTED_SEQUENCE");
+    const priorSums = sumExpectedObligationsV1(predecessor.obligations);
+    if (priorSums.reservations !== nonnegative(predecessor.reservationNotional)) refuse("EXPECTED_RESERVATION_SUM");
   }
   if (expected.eventHeadDigest !== null) riskAccountDigestSchemaV1.parse(expected.eventHeadDigest);
   if ((nextEvent === 1n) !== (expected.eventHeadDigest === null)) refuse("EXPECTED_SEQUENCE");
-  const allowanceIds = new Set<string>();
-  const orderIds = new Set<string>();
-  let reservations = 0n, consumedPending = 0n;
-  for (const obligation of expected.obligations) {
-    if (allowanceIds.has(obligation.allowanceId) || !["BUY", "SELL"].includes(obligation.side))
-      refuse("EXPECTED_OBLIGATION_IDENTITY");
-    allowanceIds.add(obligation.allowanceId);
-    for (const value of [obligation.allowanceContentDigest, obligation.verdictContentDigest, obligation.instrumentIdentityDigest])
-      riskAccountDigestSchemaV1.parse(value);
-    if (nonnegative(obligation.quantity) === 0n) refuse("EXPECTED_OBLIGATION_IDENTITY");
-    if (!/^[A-Z0-9]{1,24}$/.test(obligation.baseAsset) || obligation.baseAsset === "USDT" ||
-        obligation.symbol !== `${obligation.baseAsset}/USDT`)
-      refuse("EXPECTED_OBLIGATION_IDENTITY");
-    if (obligation.state === "ISSUED") {
-      if (obligation.orderId !== null || obligation.orderBindingDigest !== null || nonnegative(obligation.pendingNotional) !== 0n)
-        refuse("EXPECTED_ISSUED_STATE");
-      reservations += nonnegative(obligation.reservedNotional);
-    } else if (obligation.state === "CONSUMED") {
-      if (!obligation.orderId || !obligation.orderBindingDigest || orderIds.has(obligation.orderId))
-        refuse("EXPECTED_CONSUMED_STATE");
-      riskAccountDigestSchemaV1.parse(obligation.orderBindingDigest);
-      orderIds.add(obligation.orderId);
-      consumedPending += nonnegative(obligation.pendingNotional);
-    } else refuse("EXPECTED_STATE");
-    if (obligation.side === "SELL" && (nonnegative(obligation.reservedNotional) !== 0n || nonnegative(obligation.pendingNotional) !== 0n))
-      refuse("REDUCTION_ACCOUNTING");
-  }
-  if (reservations !== nonnegative(expected.reservationNotional)) refuse("EXPECTED_RESERVATION_SUM");
+  const sums = sumExpectedObligationsV1(expected.obligations);
+  if (sums.reservations !== nonnegative(expected.reservationNotional)) refuse("EXPECTED_RESERVATION_SUM");
   const referenceDigest = input.referenceDigest ?? null;
   const priorReferenceDigest = input.priorReferenceDigest ?? null;
   if (expected.obligations.length > 0 && referenceDigest === null) refuse("REFERENCE_CURRENTNESS");
@@ -585,7 +592,7 @@ export function observeSealedExpectedFrontierV1(input: {
   if (input.priorReconciledExposureNotional != null && reconciled !== nonnegative(input.priorReconciledExposureNotional))
     refuse("PREDECESSOR_SCOPE_OR_TIME");
   const declaredPending = nonnegative(expected.pendingExposureNotional);
-  if (input.externalDebtNotional !== null && declaredPending !== consumedPending + nonnegative(input.externalDebtNotional))
+  if (input.externalDebtNotional !== null && declaredPending !== sums.consumedPending + nonnegative(input.externalDebtNotional))
     refuse("EXPECTED_PENDING_SUM");
   return compareExpectedAccountFrontierV1({
     expectedExposureNotional: expected.reconciledExposureNotional,

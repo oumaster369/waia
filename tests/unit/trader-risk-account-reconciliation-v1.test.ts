@@ -324,5 +324,20 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
     }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
   });
+  it("refuses a predecessor obligation that fails the same identity rules", () => {
+    const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, predecessor: { ...initialExpected(), obligations: [obligation("allow-1", "0", "BUY")] },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, predecessor: { ...initialExpected(), reservationNotional: "1" },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected, predecessor: { ...initialExpected(), reservationNotional: "10", obligations: [obligation("allow-1", "1", "BUY")] },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
 
 });

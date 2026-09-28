@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A predecessor frontier must tie its own event head to its sequence. A consistent predecessor still publishes nothing. Do not invent caps or mark WP-1 complete."
+  nextAction: "A predecessor obligation uses the same identity and reservation-sum rules. A valid predecessor still publishes nothing. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null
