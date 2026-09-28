@@ -528,17 +528,23 @@ export function observeSealedExpectedFrontierV1(input: {
   sequence(expected.nextEventSequence);
   if (expected.eventHeadDigest !== null) riskAccountDigestSchemaV1.parse(expected.eventHeadDigest);
   const allowanceIds = new Set<string>();
+  const orderIds = new Set<string>();
   let reservations = 0n, consumedPending = 0n;
   for (const obligation of expected.obligations) {
     if (allowanceIds.has(obligation.allowanceId) || !["BUY", "SELL"].includes(obligation.side))
       refuse("EXPECTED_OBLIGATION_IDENTITY");
     allowanceIds.add(obligation.allowanceId);
+    for (const value of [obligation.allowanceContentDigest, obligation.verdictContentDigest])
+      riskAccountDigestSchemaV1.parse(value);
     if (obligation.state === "ISSUED") {
       if (obligation.orderId !== null || obligation.orderBindingDigest !== null || nonnegative(obligation.pendingNotional) !== 0n)
         refuse("EXPECTED_ISSUED_STATE");
       reservations += nonnegative(obligation.reservedNotional);
     } else if (obligation.state === "CONSUMED") {
-      if (!obligation.orderId || !obligation.orderBindingDigest) refuse("EXPECTED_CONSUMED_STATE");
+      if (!obligation.orderId || !obligation.orderBindingDigest || orderIds.has(obligation.orderId))
+        refuse("EXPECTED_CONSUMED_STATE");
+      riskAccountDigestSchemaV1.parse(obligation.orderBindingDigest);
+      orderIds.add(obligation.orderId);
       consumedPending += nonnegative(obligation.pendingNotional);
     } else refuse("EXPECTED_STATE");
     if (obligation.side === "SELL" && (nonnegative(obligation.reservedNotional) !== 0n || nonnegative(obligation.pendingNotional) !== 0n))

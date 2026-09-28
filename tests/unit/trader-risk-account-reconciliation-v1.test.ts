@@ -236,5 +236,21 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     expect(() => holdUnpublishedInclusionsV1({ truthRecordIds: [id], alreadyDisposedTruthIds: [id] })).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => holdUnpublishedInclusionsV1({ truthRecordIds: [id, id], alreadyDisposedTruthIds: [] })).toThrow(RiskCurrentAccountRefusedV1);
   });
+  it("refuses a consumed obligation whose order binding is not a digest", () => {
+    const consumed = { ...obligation("allow-1", "1", "BUY"), state: "CONSUMED" as const, orderId: "order-1",
+      orderBindingDigest: digest("bind-1"), pendingNotional: "1", reservedNotional: "0" };
+    const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1", obligations: [consumed] };
+    expect(observeSealedExpectedFrontierV1({
+      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...expected, obligations: [{ ...consumed, orderBindingDigest: "not-a-digest" }] },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+    })).toThrow();
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...expected, obligations: [consumed, { ...consumed, allowanceId: "allow-2" }] },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+  });
 
 });
