@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Predecessor allowances must name this account. A row from another account is refused. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "A closed predecessor must say whether an inclusion was used. Omitting that field is refused. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null

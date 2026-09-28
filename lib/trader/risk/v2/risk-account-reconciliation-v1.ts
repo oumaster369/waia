@@ -747,7 +747,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   predecessorReservationNotional: string;
   predecessorStateVersion: string;
   openedAllowances: readonly { organizationId: string; accountId: string; allowanceId: string; reservedExposureNotional: string; quantity: string; riskVerdictId: string }[];
-  closedAllowances: readonly { organizationId: string; accountId: string; allowanceId: string; reservedExposureNotional: string; quantity: string; disposition: "CONSUMED" | "RELEASED"; riskVerdictId: string | null; boundOrderId: string | null; boundOrderDigestHex: string | null; truthRecordId?: string | null }[];
+  closedAllowances: readonly { organizationId: string; accountId: string; allowanceId: string; reservedExposureNotional: string; quantity: string; disposition: "CONSUMED" | "RELEASED"; riskVerdictId: string | null; boundOrderId: string | null; boundOrderDigestHex: string | null; truthRecordId: string | null }[];
   events: readonly {
     sequence: string;
     previousDigest: string | null;
@@ -846,8 +846,9 @@ export function foldExpectedEnforcementSuffixV1(input: {
     disposed.add(id);
   }
   for (const prior of input.closedAllowances) {
-    if (prior.disposition === "RELEASED" && prior.truthRecordId != null) refuse("EXPECTED_STATE");
-    if (prior.disposition === "CONSUMED" && prior.truthRecordId != null) {
+    if (prior.truthRecordId === undefined) refuse("EXPECTED_STATE");
+    if (prior.disposition === "RELEASED" && prior.truthRecordId !== null) refuse("EXPECTED_STATE");
+    if (prior.disposition === "CONSUMED" && prior.truthRecordId !== null) {
       if (!riskAccountDigestSchemaV1.safeParse(prior.truthRecordId).success || disposed.has(prior.truthRecordId)) {
         refuse("INDEPENDENT_INCLUSION_IDENTITY");
       }
