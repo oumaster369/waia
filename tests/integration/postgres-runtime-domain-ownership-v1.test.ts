@@ -397,7 +397,7 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
     for (const value of malformed) {
       const changed = { ...body }; if (value === undefined) delete changed.commandManifestDigest; else changed.commandManifestDigest = value;
       const raw = canonicalizeSemanticJsonString(changed), contentDigest = createHash("sha256").update(raw).digest("hex");
-      const candidate = { ...row, body_json: raw, content_digest: contentDigest };
+      const candidate: Record<string, unknown> = { ...row, body_json: raw, content_digest: contentDigest };
       expect((await client`select encode(sha256(convert_to(${raw},'UTF8')),'hex') digest`)[0]!.digest).toBe(contentDigest);
       const failure = await client.begin(async held => {
         // The actual body-hash/audit verifier runs before CHECK enforcement.
