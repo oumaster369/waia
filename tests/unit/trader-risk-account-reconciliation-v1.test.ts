@@ -6,7 +6,7 @@ import { createRiskAccountProfileV1, createRiskAccountReferenceV1, riskAccountDi
   RISK_ACCOUNT_CHANNELS_V1, RISK_REFERENCE_METHOD_V1, RiskCurrentAccountRefusedV1, sealRiskAccountRecordV1,
   type RiskAccountProfileDraftV1, type RiskReferenceMemberV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import { availableRiskAccountQuantityV1, constructRiskAccountBasisV1, compareExpectedAccountFrontierV1,
-  admitCurrentAccountBasisV1, decideCurrentAccountBasisPublicationV1, retainObservedFrontierV1,
+  admitCurrentAccountBasisV1, decideCurrentAccountBasisPublicationV1, observeSealedExpectedFrontierV1, retainObservedFrontierV1,
   type RiskAccountObligationV1, type RiskExpectedFrontierV1, type RiskIndependentInclusionV1 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
 
 // These pure values exercise arithmetic and refusal contracts only. No persisted authority,
@@ -203,6 +203,20 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       decision: "NON_AUTHORITY", action: "PROPOSE", currentPointer: null, basisWrite: null, allowanceId: null, orderId: null,
     });
     expect(() => decideRiskAccountProfileCommandV1({ action: "ACTIVATE", liveCapitalEnvelope: null })).toThrow(RiskCurrentAccountRefusedV1);
+  });
+  it("observes a sealed Expected frontier without publishing a limit", () => {
+    const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };
+    expect(observeSealedExpectedFrontierV1({
+      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: true,
+    })).toEqual({
+      decision: "OBSERVED",
+      publication: { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" },
+      exposureDelta: "2", pendingDelta: "-1",
+    });
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...expected, reservationNotional: "1" },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false,
+    })).toThrow(RiskCurrentAccountRefusedV1);
   });
 
 });

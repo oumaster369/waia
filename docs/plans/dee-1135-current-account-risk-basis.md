@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Profile activation and the current-account bind gate both refuse without a live envelope, and the proof database gained no event, allowance, order, or pointer. Do not invent caps or mark WP-1 complete."
+  nextAction: "A sealed Expected frontier can be observed against Actual and still publishes nothing. A reservation sum that does not match the obligations is refused. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

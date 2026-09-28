@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   admitCurrentAccountBasisV1,
   compareExpectedAccountFrontierV1,
+  observeSealedExpectedFrontierV1,
   retainObservedFrontierV1,
 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
 import { readCurrentAccountAuthorityV1 } from "@/lib/trader/risk/v2/risk-current-account-read-v1";
@@ -66,6 +67,32 @@ describe.skipIf(!enabled)("current-account issue writes no authority", () => {
         (select count(*)::int from trader_orders) as orders,
         (select count(*)::int from trader_risk_account_current_v1) as current_rows,
         (select count(*)::int from trader_risk_account_profile_events_v1) as events`).toEqual(before);
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+  });
+  it("observes a sealed Expected frontier and still writes nothing", async () => {
+    const sql = postgres(url!, { max: 1 });
+    try {
+      const before = await sql`select
+        (select count(*)::int from trader_risk_allowances_v2) as allowances,
+        (select count(*)::int from trader_orders) as orders,
+        (select count(*)::int from trader_risk_account_current_v1) as current_rows`;
+      const observed = observeSealedExpectedFrontierV1({
+        expected: {
+          stateVersion: "1", nextAdmissionSequence: "1", nextEventSequence: "1", eventHeadDigest: null,
+          reconciledExposureNotional: "10", pendingExposureNotional: "1", reservationNotional: "0", obligations: [],
+        },
+        actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false,
+      });
+      expect(observed.publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+      expect(admitCurrentAccountBasisV1(retainObservedFrontierV1(observed))).toEqual({
+        decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
+      });
+      expect(await sql`select
+        (select count(*)::int from trader_risk_allowances_v2) as allowances,
+        (select count(*)::int from trader_orders) as orders,
+        (select count(*)::int from trader_risk_account_current_v1) as current_rows`).toEqual(before);
     } finally {
       await sql.end({ timeout: 5 });
     }

@@ -512,3 +512,43 @@ export function admitCurrentAccountBasisV1(
   }
   return { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null };
 }
+
+/** Validates the sealed Expected frontier, then observes Actual. The delta still cannot publish. */
+export function observeSealedExpectedFrontierV1(input: {
+  expected: RiskExpectedFrontierV1;
+  actualExposureNotional: string;
+  actualPendingNotional: string;
+  sourceMethodQualified: boolean;
+}): ReturnType<typeof compareExpectedAccountFrontierV1> {
+  const expected = input.expected;
+  sequence(expected.stateVersion);
+  sequence(expected.nextAdmissionSequence);
+  sequence(expected.nextEventSequence);
+  if (expected.eventHeadDigest !== null) riskAccountDigestSchemaV1.parse(expected.eventHeadDigest);
+  const allowanceIds = new Set<string>();
+  let reservations = 0n;
+  for (const obligation of expected.obligations) {
+    if (allowanceIds.has(obligation.allowanceId) || !["BUY", "SELL"].includes(obligation.side))
+      refuse("EXPECTED_OBLIGATION_IDENTITY");
+    allowanceIds.add(obligation.allowanceId);
+    if (obligation.state === "ISSUED") {
+      if (obligation.orderId !== null || obligation.orderBindingDigest !== null || nonnegative(obligation.pendingNotional) !== 0n)
+        refuse("EXPECTED_ISSUED_STATE");
+      reservations += nonnegative(obligation.reservedNotional);
+    } else if (obligation.state === "CONSUMED") {
+      if (!obligation.orderId || !obligation.orderBindingDigest) refuse("EXPECTED_CONSUMED_STATE");
+    } else refuse("EXPECTED_STATE");
+    if (obligation.side === "SELL" && (nonnegative(obligation.reservedNotional) !== 0n || nonnegative(obligation.pendingNotional) !== 0n))
+      refuse("REDUCTION_ACCOUNTING");
+  }
+  if (reservations !== nonnegative(expected.reservationNotional)) refuse("EXPECTED_RESERVATION_SUM");
+  nonnegative(expected.reconciledExposureNotional);
+  nonnegative(expected.pendingExposureNotional);
+  return compareExpectedAccountFrontierV1({
+    expectedExposureNotional: expected.reconciledExposureNotional,
+    expectedPendingNotional: expected.pendingExposureNotional,
+    actualExposureNotional: input.actualExposureNotional,
+    actualPendingNotional: input.actualPendingNotional,
+    sourceMethodQualified: input.sourceMethodQualified,
+  });
+}
