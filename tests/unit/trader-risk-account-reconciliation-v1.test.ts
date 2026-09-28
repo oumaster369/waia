@@ -475,7 +475,7 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     const base = {
       predecessorHeadDigest: null, predecessorNextEventSequence: "1", predecessorNextAdmissionSequence: "1",
       predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0",
-      openedAllowances: [], closedAllowanceIds: [],
+      openedAllowances: [], closedAllowances: [],
       declaredMaxEvents: 4,
     };
     const issued = { sequence: "1", previousDigest: null, contentDigest: head, type: "ALLOWANCE_ISSUED" as const, allowanceId: "allow-1", reservedExposureNotional: "10" };
@@ -512,10 +512,23 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
     }).eventCount).toBe(1);
     expect(() => foldExpectedEnforcementSuffixV1({
-      ...base, closedAllowanceIds: ["allow-1"],
+      ...base, closedAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "0", disposition: "RELEASED" }],
       events: [issued],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(foldExpectedEnforcementSuffixV1({
+      ...base, predecessorPendingExposureNotional: "10",
+      closedAllowances: [{ allowanceId: "allow-old", reservedExposureNotional: "10", disposition: "CONSUMED" }],
+      events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+    }).eventCount).toBe(0);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, predecessorPendingExposureNotional: "10",
+      events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
     })).toThrow(RiskCurrentAccountRefusedV1);
     const refusedHead = digest("fold-refused");
     expect(foldExpectedEnforcementSuffixV1({

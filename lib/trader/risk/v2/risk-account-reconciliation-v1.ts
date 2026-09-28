@@ -733,7 +733,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   predecessorPendingExposureNotional: string;
   predecessorReservationNotional: string;
   openedAllowances: readonly { allowanceId: string; reservedExposureNotional: string }[];
-  closedAllowanceIds: readonly string[];
+  closedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; disposition: "CONSUMED" | "RELEASED" }[];
   events: readonly {
     sequence: string;
     previousDigest: string | null;
@@ -778,11 +778,15 @@ export function foldExpectedEnforcementSuffixV1(input: {
     open.set(prior.allowanceId, reserved);
     explained += reserved;
   }
-  for (const allowanceId of input.closedAllowanceIds) {
-    if (!allowanceId || open.has(allowanceId) || closed.has(allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
-    closed.add(allowanceId);
+  let explainedPending = 0n;
+  for (const prior of input.closedAllowances) {
+    if (!prior.allowanceId || open.has(prior.allowanceId) || closed.has(prior.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
+    if (prior.disposition !== "CONSUMED" && prior.disposition !== "RELEASED") refuse("EXPECTED_STATE");
+    const reserved = nonnegative(prior.reservedExposureNotional);
+    closed.add(prior.allowanceId);
+    if (prior.disposition === "CONSUMED") explainedPending += reserved;
   }
-  if (explained !== reservation) refuse("EXPECTED_RESERVATION_SUM");
+  if (explained !== reservation || explainedPending !== pending) refuse("EXPECTED_RESERVATION_SUM");
   let issued = 0n;
   for (const event of input.events) {
     if (!(ENFORCEMENT_SUFFIX_TYPES as readonly string[]).includes(event.type)) refuse("EXPECTED_STATE");

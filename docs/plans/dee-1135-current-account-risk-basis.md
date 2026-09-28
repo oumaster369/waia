@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "The suffix fold now starts from the predecessor open and closed allowances. A closed predecessor allowance cannot be reissued, and consuming an open one moves its reservation into pending. The fold still publishes nothing. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "Predecessor pending must be explained by consumed closed allowances. Released allowances do not add pending. The fold still publishes nothing. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
