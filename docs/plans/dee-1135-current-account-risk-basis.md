@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Revocation of an account with no current pointer appends nothing. Do not adopt the allocation figure or mark WP-1 complete."
+  nextAction: "A cancelled proposal can be reopened for the same sealed profile and still publishes no authority. A different profile digest is refused. Do not mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

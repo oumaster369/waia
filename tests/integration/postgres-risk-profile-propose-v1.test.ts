@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { describe, expect, it } from "vitest";
-import { cancelStoredProfileProposalV1, readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, retainProposedRiskAccountProfileV1, revokeStoredProfileAuthorityV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
+import { cancelStoredProfileProposalV1, readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, reproposeStoredProfileV1, retainProposedRiskAccountProfileV1, revokeStoredProfileAuthorityV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
 import { RiskCurrentAccountRefusedV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import {
   createRiskAccountProfileV1,
@@ -104,6 +104,21 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
       const afterRevoke = await sql<{ action: string }[]>`select action from trader_risk_account_profile_events_v1
         where account_id = ${accountId} order by event_sequence`;
       expect(afterRevoke.map(row => row.action)).toEqual(["PROPOSE", "CANCEL"]);
+      await expect(reproposeStoredProfileV1(sql, {
+        organizationId: org!.id, accountId, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
+        profileDigest: "ab".repeat(32),
+      })).rejects.toThrow(/PROFILE_DIGEST_MISMATCH/);
+      const reopened = await reproposeStoredProfileV1(sql, {
+        organizationId: org!.id, accountId, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
+        profileDigest: retained.profileDigest,
+      });
+      expect(reopened).toMatchObject({ decision: "RETAINED_NON_AUTHORITY", action: "PROPOSE", currentPointer: null, allowanceId: null, orderId: null });
+      expect(await readStoredProfileAuthorityV1(sql, org!.id, accountId)).toEqual({
+        action: "PROPOSE", authority: "NONE", currentPointer: null, allocationCopied: false,
+      });
+      const reopenedChain = await sql<{ action: string }[]>`select action from trader_risk_account_profile_events_v1
+        where account_id = ${accountId} order by event_sequence`;
+      expect(reopenedChain.map(row => row.action)).toEqual(["PROPOSE", "CANCEL", "PROPOSE"]);
       const [after] = await sql<{ allowances: number; orders: number; current_rows: number }[]>`select
         (select count(*)::int from trader_risk_allowances_v2) as allowances,
         (select count(*)::int from trader_orders) as orders,
