@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "An issued predecessor obligation must remain on the current frontier with the same quantity, side, symbol, and reservation. Dropping or resizing it is refused, and keeping it still publishes nothing. Do not invent caps or mark WP-1 complete."
+  nextAction: "An issued predecessor obligation must also keep its instrument, allowance, and verdict seals. A changed seal is refused, and an unchanged obligation still publishes nothing. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

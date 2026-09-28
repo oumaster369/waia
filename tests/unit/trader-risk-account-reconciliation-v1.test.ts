@@ -391,6 +391,11 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
       referenceDigest: digest("ref-1"),
     })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...carried, obligations: [{ ...issued, instrumentIdentityDigest: digest("other-instrument") }] }, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+      referenceDigest: digest("ref-1"),
+    })).toThrow(RiskCurrentAccountRefusedV1);
     expect(observeSealedExpectedFrontierV1({
       expected: carried, predecessor,
       actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",

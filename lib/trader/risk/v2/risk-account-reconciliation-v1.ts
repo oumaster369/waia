@@ -600,7 +600,10 @@ export function observeSealedExpectedFrontierV1(input: {
       if (prior.state !== "ISSUED") continue;
       const current = expected.obligations.find(row => row.allowanceId === prior.allowanceId);
       if (!current || current.state !== "ISSUED" || current.quantity !== prior.quantity ||
-          current.side !== prior.side || current.symbol !== prior.symbol ||
+          current.side !== prior.side || current.symbol !== prior.symbol || current.baseAsset !== prior.baseAsset ||
+          current.instrumentIdentityDigest !== prior.instrumentIdentityDigest ||
+          current.allowanceContentDigest !== prior.allowanceContentDigest ||
+          current.verdictContentDigest !== prior.verdictContentDigest ||
           current.reservedNotional !== prior.reservedNotional || current.orderId !== null)
         refuse("EXPECTED_OBLIGATION_IDENTITY");
     }
