@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "The event head stays with its sequence and must change when the sequence advances. A rewritten or stale head is refused, and a consistent advance still publishes nothing. Do not invent caps or mark WP-1 complete."
+  nextAction: "A new allowance must advance the admission sequence. Reusing the old sequence for a new allowance is refused, and an advanced sequence still publishes nothing. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

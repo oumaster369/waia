@@ -385,8 +385,13 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       referenceDigest: digest("ref-1"),
     })).toThrow(RiskCurrentAccountRefusedV1);
     const fresh = { ...consumed, allowanceId: "allow-2", orderId: "order-2" };
-    expect(observeSealedExpectedFrontierV1({
+    expect(() => observeSealedExpectedFrontierV1({
       expected: { ...base, obligations: [fresh] }, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+      referenceDigest: digest("ref-1"),
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected: { ...base, nextAdmissionSequence: "2", obligations: [fresh] }, predecessor,
       actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
       referenceDigest: digest("ref-1"),
     }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });

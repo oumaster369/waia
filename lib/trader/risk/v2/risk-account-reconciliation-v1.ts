@@ -569,10 +569,11 @@ export function observeSealedExpectedFrontierV1(input: {
   const nextEvent = sequence(expected.nextEventSequence);
   const predecessor = input.predecessor ?? null;
   let priorEvent: bigint | null = null;
+  let priorAdmission: bigint | null = null;
   if (input.priorExternalDebtNotional != null && !predecessor) refuse("PREDECESSOR_SCOPE_OR_TIME");
   if (predecessor) {
     const priorState = sequence(predecessor.stateVersion);
-    const priorAdmission = sequence(predecessor.nextAdmissionSequence);
+    priorAdmission = sequence(predecessor.nextAdmissionSequence);
     priorEvent = sequence(predecessor.nextEventSequence);
     if (stateVersion < priorState || nextAdmission < priorAdmission || nextEvent < priorEvent)
       refuse("PREDECESSOR_SCOPE_OR_TIME");
@@ -616,6 +617,9 @@ export function observeSealedExpectedFrontierV1(input: {
           current.reservedNotional !== prior.reservedNotional || current.orderId !== null)
         refuse("EXPECTED_OBLIGATION_IDENTITY");
     }
+    const priorAllowances = new Set(predecessor.obligations.map(row => row.allowanceId));
+    const addedAllowance = expected.obligations.some(row => !priorAllowances.has(row.allowanceId));
+    if (addedAllowance && priorAdmission !== null && nextAdmission <= priorAdmission) refuse("EXPECTED_SEQUENCE");
   }
   const referenceDigest = input.referenceDigest ?? null;
   const priorReferenceDigest = input.priorReferenceDigest ?? null;
