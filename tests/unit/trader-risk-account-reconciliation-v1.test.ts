@@ -1,3 +1,4 @@
+import { classifyCurrentAccountRowV1 } from "@/lib/trader/risk/v2/risk-current-account-read-v1";
 import { describe, expect, it } from "vitest";
 import { createRealityProjectionV2, type RealityProjectionEntryV2 } from "@/lib/trader/reality/v2/contracts";
 import { createRiskAccountProfileV1, createRiskAccountReferenceV1, riskAccountDigestV1,
@@ -187,6 +188,13 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     }));
     expect(admitCurrentAccountBasisV1(retained)).toEqual({
       decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
+    });
+  });
+  it("treats a missing or baseless current row as not current", () => {
+    expect(classifyCurrentAccountRowV1(null)).toEqual({ current: false, reason: "NO_CURRENT_POINTER" });
+    expect(classifyCurrentAccountRowV1({ basis_digest: null })).toEqual({ current: false, reason: "BASIS_ABSENT" });
+    expect(classifyCurrentAccountRowV1({ basis_digest: "ab".repeat(32) })).toEqual({
+      current: false, reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", basisDigest: "ab".repeat(32),
     });
   });
 

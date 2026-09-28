@@ -5,6 +5,7 @@ import {
   compareExpectedAccountFrontierV1,
   retainObservedFrontierV1,
 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
+import { readCurrentAccountAuthorityV1 } from "@/lib/trader/risk/v2/risk-current-account-read-v1";
 
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 const enabled =
@@ -41,6 +42,17 @@ describe.skipIf(!enabled)("current-account issue writes no authority", () => {
         orderId: null,
       });
       expect(await counts()).toEqual(before);
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+  });
+  it("reads an absent current pointer as not current", async () => {
+    const sql = postgres(url!, { max: 1 });
+    try {
+      const [count] = await sql`select count(*)::int n from trader_risk_account_current_v1`;
+      expect(count!.n).toBe(0);
+      expect(await readCurrentAccountAuthorityV1(sql, "00000000-0000-4000-8000-000000113501", "missing-account"))
+        .toEqual({ current: false, reason: "NO_CURRENT_POINTER" });
     } finally {
       await sql.end({ timeout: 5 });
     }

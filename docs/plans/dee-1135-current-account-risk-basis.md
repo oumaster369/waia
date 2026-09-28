@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Current-account issue was executed against the proof database and wrote no allowance, order, or current pointer. Do not invent caps or mark WP-1 complete."
+  nextAction: "An absent current pointer reads as not current and still grants no trading authority. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null
