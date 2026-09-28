@@ -166,8 +166,8 @@ Exactly38 nonplan paths plus this plan =39. Original37 concrete paths plus the r
 | `tests/integration/postgres-runtime-domain-ownership-v1.test.ts` (new) | Real two-domain/legacy/upgrade-relevant race/fence/native accounting proof described in PROOF-PLAN. |
 | `db/migrations_postgres/0225_trader_noncapital_domain_ownership_v1.sql` (new) | Exact hand-authored migration/constraints/backfill/fences after full225 predecessor. |
 | `docs/plans/dee-1136-noncapital-domain-ownership.md` (new) | Sole integration state, scope, evidence and publication metadata. |
-| 40 | `lib/trader/paper/research-application-v1/bounded-read-postgres.ts` | Add the exact ownershipDomain scalar to four fixed application read/candidate projections; preserve bounds, identities and statement count |
-| 41 | `tests/unit/research-application-v1-bounds.test.ts` | Update the exact candidate fixture and verify domain scalar read/write accounting and refusal controls |
+| `lib/trader/paper/research-application-v1/bounded-read-postgres.ts` | Add the exact ownershipDomain scalar to four fixed application read/candidate projections; preserve bounds, identities and statement count |
+| `tests/unit/research-application-v1-bounds.test.ts` | Update the exact candidate fixture and verify domain scalar read/write accounting and refusal controls |
 
 The #10/#31 application/root-helper responsibilities include the G01 third root and exact accounting; #32 and schema/migration include A01 positive shape versus profile membership; domain unit/native/helper paths carry their new controls. No change to old capital modules, original CLI, SQL0000..0224, pure members, canonical MI service/repository, Forecast/Decision/Risk/Execution/Guardian, scheduler or operator UI. Original application71 and Understanding24 native files remain byte-identical; their setup helper keeps the old default behavior while adding only named fixed-route support. Existing exact two MI service Measurement delegates remain the only application lineage calls, with no source/trust/Forecast authority.
 
