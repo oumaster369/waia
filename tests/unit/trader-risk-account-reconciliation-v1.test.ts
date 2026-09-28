@@ -475,7 +475,7 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     const base = {
       predecessorHeadDigest: null, predecessorNextEventSequence: "1", predecessorNextAdmissionSequence: "1",
       predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0",
-      openedAllowances: [], closedAllowances: [],
+      openedAllowances: [], closedAllowances: [], alreadyDisposedTruthIds: [],
       declaredMaxEvents: 4,
     };
     const issued = { sequence: "1", previousDigest: null, contentDigest: head, type: "ALLOWANCE_ISSUED" as const, allowanceId: "allow-1", reservedExposureNotional: "10" };
@@ -483,7 +483,7 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       ...base, events: [issued],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
-    })).toEqual({ decision: "AUTHENTICATED", eventCount: 1, notionalsVerified: true, currentPointer: null });
+    })).toEqual({ decision: "AUTHENTICATED", eventCount: 1, notionalsVerified: true, heldTruthRecordIds: [], currentPointer: null });
     const consumedHead = digest("fold-consumed");
     expect(foldExpectedEnforcementSuffixV1({
       ...base, events: [issued, { sequence: "2", previousDigest: head, contentDigest: consumedHead, type: "ALLOWANCE_CONSUMED", allowanceId: "allow-1", reservedExposureNotional: "10" }],
@@ -536,6 +536,24 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       terminalHeadDigest: refusedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
     }).eventCount).toBe(2);
+    const inclusion = digest("suffix-inclusion");
+    const includedHead = digest("fold-included");
+    const included = [issued, { sequence: "2", previousDigest: head, contentDigest: includedHead, type: "ALLOWANCE_CONSUMED" as const, allowanceId: "allow-1", reservedExposureNotional: "10", truthRecordId: inclusion }];
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [{ ...issued, truthRecordId: inclusion }],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(foldExpectedEnforcementSuffixV1({
+      ...base, events: included,
+      terminalHeadDigest: includedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+    }).heldTruthRecordIds).toEqual([inclusion]);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, alreadyDisposedTruthIds: [inclusion], events: included,
+      terminalHeadDigest: includedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
   });
 
 });

@@ -741,7 +741,9 @@ export function foldExpectedEnforcementSuffixV1(input: {
     type: (typeof ENFORCEMENT_SUFFIX_TYPES)[number];
     allowanceId: string;
     reservedExposureNotional: string;
+    truthRecordId?: string | null;
   }[];
+  alreadyDisposedTruthIds: readonly string[];
   terminalHeadDigest: string | null;
   terminalNextEventSequence: string;
   terminalNextAdmissionSequence: string;
@@ -749,7 +751,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   terminalPendingExposureNotional: string;
   terminalReservationNotional: string;
   declaredMaxEvents: number;
-}): { decision: "AUTHENTICATED"; eventCount: number; notionalsVerified: true; currentPointer: null } {
+}): { decision: "AUTHENTICATED"; eventCount: number; notionalsVerified: true; heldTruthRecordIds: readonly string[]; currentPointer: null } {
   authenticateExpectedEventSuffixV1({
     predecessorHeadDigest: input.predecessorHeadDigest,
     predecessorNextEventSequence: input.predecessorNextEventSequence,
@@ -787,11 +789,18 @@ export function foldExpectedEnforcementSuffixV1(input: {
     if (prior.disposition === "CONSUMED") explainedPending += reserved;
   }
   if (explained !== reservation || explainedPending !== pending) refuse("EXPECTED_RESERVATION_SUM");
+  const disposed = new Set<string>();
+  for (const id of input.alreadyDisposedTruthIds) {
+    if (!riskAccountDigestSchemaV1.safeParse(id).success || disposed.has(id)) refuse("INDEPENDENT_INCLUSION_IDENTITY");
+    disposed.add(id);
+  }
+  const heldTruthRecordIds: string[] = [];
   let issued = 0n;
   for (const event of input.events) {
     if (!(ENFORCEMENT_SUFFIX_TYPES as readonly string[]).includes(event.type)) refuse("EXPECTED_STATE");
     const reserved = nonnegative(event.reservedExposureNotional);
     if (!event.allowanceId) refuse("EXPECTED_OBLIGATION_IDENTITY");
+    if (event.type !== "ALLOWANCE_CONSUMED" && event.truthRecordId != null) refuse("EXPECTED_STATE");
     if (event.type === "ALLOWANCE_ISSUED") {
       if (open.has(event.allowanceId) || closed.has(event.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
       open.set(event.allowanceId, reserved);
@@ -804,7 +813,16 @@ export function foldExpectedEnforcementSuffixV1(input: {
       closed.add(event.allowanceId);
       if (reservation < reserved) refuse("EXPECTED_RESERVATION_SUM");
       reservation -= reserved;
-      if (event.type === "ALLOWANCE_CONSUMED") pending += reserved;
+      if (event.type === "ALLOWANCE_CONSUMED") {
+        pending += reserved;
+        if (event.truthRecordId != null) {
+          if (!riskAccountDigestSchemaV1.safeParse(event.truthRecordId).success || disposed.has(event.truthRecordId)) {
+            refuse("INDEPENDENT_INCLUSION_IDENTITY");
+          }
+          disposed.add(event.truthRecordId);
+          heldTruthRecordIds.push(event.truthRecordId);
+        }
+      } else if (event.truthRecordId != null) refuse("EXPECTED_STATE");
     }
   }
   if (sequence(input.terminalNextAdmissionSequence) !== sequence(input.predecessorNextAdmissionSequence) + issued) {
@@ -813,5 +831,5 @@ export function foldExpectedEnforcementSuffixV1(input: {
   if (reservation !== nonnegative(input.terminalReservationNotional) || pending !== nonnegative(input.terminalPendingExposureNotional)) {
     refuse("SUFFIX_TERMINAL_MISMATCH");
   }
-  return { decision: "AUTHENTICATED", eventCount: input.events.length, notionalsVerified: true, currentPointer: null };
+  return { decision: "AUTHENTICATED", eventCount: input.events.length, notionalsVerified: true, heldTruthRecordIds, currentPointer: null };
 }

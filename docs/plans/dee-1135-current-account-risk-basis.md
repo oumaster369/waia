@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Predecessor pending must be explained by consumed closed allowances. Released allowances do not add pending. The fold still publishes nothing. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "A consumed suffix event can hold one inclusion identity, and a repeated identity is refused. The fold still publishes nothing. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
