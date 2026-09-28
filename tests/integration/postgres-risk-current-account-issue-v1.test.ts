@@ -37,6 +37,11 @@ describe.skipIf(!enabled)("current-account issue writes no authority", () => {
               sourceMethodQualified: false,
             }),
           ),
+          {
+            authority: { current: false, reason: "NO_CURRENT_POINTER" },
+            accounting: { reconciledExposureNotional: "10", worstCasePendingExposureNotional: "1", outstandingReservationNotional: "0", exposureLimitNotional: "1000" },
+            requestedReservationNotional: "1", posture: "NORMAL", strictExposureReduction: false,
+          },
         ),
       ).toEqual({
         decision: "REFUSED",
@@ -96,7 +101,11 @@ describe.skipIf(!enabled)("current-account issue writes no authority", () => {
         externalDebtNotional: "0",
       })).toThrow();
       expect(observed.publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
-      expect(admitCurrentAccountBasisV1(retainObservedFrontierV1(observed))).toEqual({
+      expect(admitCurrentAccountBasisV1(retainObservedFrontierV1(observed), {
+        authority: { current: false, reason: "NO_CURRENT_POINTER" },
+        accounting: { reconciledExposureNotional: "10", worstCasePendingExposureNotional: "1", outstandingReservationNotional: "0", exposureLimitNotional: "1000" },
+        requestedReservationNotional: "1", posture: "NORMAL", strictExposureReduction: false,
+      })).toEqual({
         decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
       });
       expect(await sql`select
