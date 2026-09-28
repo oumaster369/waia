@@ -444,7 +444,7 @@ describe.skipIf(!enabled)("Postgres saved research application actual producer/c
     await client.begin("isolation level repeatable read read only", async held => {
       const db = prepared.bindHeld(held).executor;
       const row = { organizationId, assignmentDigest: "a".repeat(64), contentDigest: "b".repeat(64), bodyJson: "x",
-        runtimeInstanceId: "synthetic-candidate-only", leaseEpoch: 1, leaseContentDigest: "c".repeat(64), researchSessionId: "r", researchAssignmentDigest: "d".repeat(64) };
+        runtimeInstanceId: "synthetic-candidate-only", leaseEpoch: 1, leaseContentDigest: "c".repeat(64), ownershipDomain: "CAPITAL_LEGACY_V2", researchSessionId: "r", researchAssignmentDigest: "d".repeat(64) };
       const initial = accounting.budget(limits.additionalAggregate); await admitApplicationWriteRow(db, "assignment", row, initial);
       row.bodyJson = "x".repeat(1 + limits.assignment - initial.total);
       // New ledger avoids treating deliberately different synthetic candidate sizes as one row identity.

@@ -16,11 +16,13 @@ import { seedApplicationNative, seedSavedDomainApplicationNative } from "../help
 import { runSavedApplication, runSavedDomainApplication } from "@/lib/trader/paper/research-application-v1/run-saved-application";
 import { runSavedDomainResearchLoop } from "@/lib/trader/paper/research-understanding-v1/run-saved-research-loop";
 import { createSavedResearchOwner } from "@/lib/trader/paper/research-understanding-v1/repository-postgres";
+import { ResearchReadBudget } from "@/lib/trader/paper/research-understanding-v1/bounded-source-postgres";
 import { HeldResearchAccounting, prepareHeldSavedDomainResearchReplay } from "@/lib/trader/paper/research-understanding-v1/held-replay";
 import { claimRecordedAcquisitionWithinHeldTransactionV1, claimSavedResearchWithinHeldTransactionV1,
   assertSavedResearchHolderWithinHeldTransactionV1, lockSavedResearchOrganizationV1,
   assertRecordedAcquisitionHolderWithinHeldTransactionV1, lockRecordedAcquisitionOrganizationV1 } from "@/lib/trader/runtime-authority/v2/noncapital-domain-lease-postgres-v1";
 import { claimRuntimeControlLeaseAtDatabaseTimeV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
+import { commitRecordedNoncapitalCyclePostgresV2 } from "@/lib/trader/runtime-v2/noncapital-cycle-owner-postgres-v2";
 import type { SavedApplicationRequest } from "@/lib/trader/paper/research-application-v1/repository-postgres";
 
 const url = process.env.DATABASE_URL_POSTGRES?.trim(), enabled = process.env.WAIA_PG_INTEGRATION === "1" && !!url;
@@ -59,6 +61,14 @@ function errorCode(error: unknown): string | null {
   if ("code" in error && typeof error.code === "string") return error.code;
   return "cause" in error ? errorCode(error.cause) : null;
 }
+function insertParameter(query: string, column: string) {
+  const parsed = /^insert into "[^"]+" \(([^)]+)\) values \(([^)]+)\)/.exec(query);
+  if (!parsed) throw new Error("DOMAIN_SINGLE_INSERT_REQUIRED");
+  const columns = parsed[1]!.split(",").map(value => value.trim().replaceAll('"', ""));
+  const term = parsed[2]!.split(",").map(value => value.trim())[columns.indexOf(column)];
+  if (!term || !/^\$[1-9][0-9]*$/.test(term)) throw new Error(`DOMAIN_INSERT_PARAMETER_REQUIRED:${column}`);
+  return Number(term.slice(1)) - 1;
+}
 describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () => {
   let client: postgres.Sql, organizationId: string, userId: string, directory: string;
   const trace: Array<{ query: string; params: unknown[] }> = [];
@@ -86,11 +96,11 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
     return { f, applied, b, input };
   }
   async function clearFault() {
-    for (const table of [completionTable, ...applicationTables]) await client.unsafe(`drop trigger if exists ${fault} on ${table}`);
+    for (const table of receiptTables) await client.unsafe(`drop trigger if exists ${fault} on ${table}`);
     await client.unsafe(`drop function if exists ${fault}()`);
   }
   async function faultAt(table: string, body: string) {
-    expect([completionTable, ...applicationTables]).toContain(table);
+    expect(receiptTables).toContain(table);
     await client.unsafe(`create function ${fault}() returns trigger language plpgsql as $$ begin if NEW.organization_id='${organizationId}'::uuid then ${body} end if; return NEW; end $$`);
     await client.unsafe(`create trigger ${fault} before insert on ${table} for each row execute function ${fault}()`);
   }
@@ -247,6 +257,12 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
   it("uses one natural32-history ledger with bounded control, candidate bytes and actual submitted SQL", async () => {
     const { f, b, input } = await composite({ hypothesisVersions: 32, priorOrdinal: "p".repeat(60000) }, 3);
     const ledgers: HeldResearchAccounting[] = [], original = HeldResearchAccounting.prototype.budget;
+    const admissions: Array<{ table: string; identity: string; bytes: number; projection: string | undefined }> = [];
+    const originalAdmit = ResearchReadBudget.prototype.admit;
+    vi.spyOn(ResearchReadBudget.prototype, "admit").mockImplementation(function (this: ResearchReadBudget, table, identity, bytes, maximum, projection) {
+      if (table === completionTable || table === "trader_information_sufficiency_receipt_v2") admissions.push({ table, identity, bytes, projection });
+      return originalAdmit.call(this, table, identity, bytes, maximum, projection);
+    });
     vi.spyOn(HeldResearchAccounting.prototype, "budget").mockImplementation(function (this: HeldResearchAccounting, maximum) {
       if (!ledgers.includes(this)) ledgers.push(this); return original.call(this, maximum);
     });
@@ -254,13 +270,115 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
     expect(ledgers).toHaveLength(1); const ledger = ledgers[0]!;
     expect(ledger.statements).toBe(queries.length); expect(ledger.statements).toBeLessThanOrEqual(512);
     expect(ledger.inputs.total).toBeLessThanOrEqual(67108864); expect(ledger.noncapitalControls.total).toBeGreaterThan(0); expect(ledger.noncapitalControls.total).toBeLessThanOrEqual(4096);
-    expect(elapsedMs).toBeLessThanOrEqual(60000); expect(queries.filter(q => /^begin /i.test(q.query))).toHaveLength(5);
+    expect(elapsedMs).toBeLessThanOrEqual(60000);
+    expect(queries.filter(q => /^begin /i.test(q.query)).map(q => q.query.toLowerCase())).toEqual([
+      "begin isolation level repeatable read read only", "begin isolation level read committed", "begin isolation level repeatable read read only",
+      "begin isolation level read committed", "begin isolation level repeatable read"]);
+    expect(queries.filter(q => /^commit$/i.test(q.query))).toHaveLength(5);
+    const selected = [input.previousSourceSequence, input.currentSourceSequence, b];
+    for (const [table, sessionId] of [["trader_recorded_analysis_packets_v1", input.configuration.sourceSessionId],
+      [completionTable, input.configuration.researchSessionId]] as const) {
+      const bodies: number[] = [], metadata: number[] = [];
+      for (const read of queries.filter(q => q.query.startsWith("select ") && q.query.includes(`from "${table}"`) && !q.query.includes("octet_length"))) {
+        const scope = read.query.match(new RegExp(`from "${table}" where ([\\s\\S]+?) limit (?:\\$(\\d+)|(\\d+))\\s*$`, "i"));
+        expect(scope, read.query).not.toBeNull();
+        const parameter = (column: string) => {
+          const match = scope![1]!.match(new RegExp(`"${table}"\\."${column}" = \\$(\\d+)`));
+          if (!match) throw new Error(`DOMAIN_BODY_SCOPE_MISSING:${column}`); return Number(match[1]) - 1;
+        };
+        expect(read.params[parameter("organization_id")]).toBe(organizationId); expect(read.params[parameter("session_id")]).toBe(sessionId);
+        expect(scope![2] ? read.params[Number(scope![2]) - 1] : Number(scope![3])).toBe(2);
+        if (scope![2]) expect(Number(scope![2]) - 1).not.toBe(parameter("sequence"));
+        const sequence = Number(read.params[parameter("sequence")]) + (table === completionTable ? input.research.assignment.firstSourceSequence : 0);
+        if (read.query.includes('"body_json"')) bodies.push(sequence);
+        else {
+          expect(table).toBe(completionTable); const projection = [...read.query.matchAll(/as "([^"]+)"/g)].map(m => m[1]);
+          if (projection.length === 1 && projection[0] === "receiptId") expect(selected).toContain(sequence);
+          else { metadata.push(sequence); expect(projection).toEqual(["organizationId", "sessionId", "sequence", "contentDigest", "assignmentDigest", "sourceSessionId", "sourceSequence", "packetDigest"]); }
+        }
+      }
+      expect([...new Set(bodies)].sort()).toEqual(selected); if (table === completionTable) expect(metadata).toContain(b - 1);
+    }
     expect(queries.filter(q => q.query.includes("selected_roots"))).toHaveLength(1);
     expect(queries.filter(q => q.query.includes("octet_length(jsonb_build_object")).length).toBeGreaterThanOrEqual(3);
     expect(result.consumption?.consumer.sourceSequence).toBe(b);
+    const receiptWrite = queries.findIndex(q => q.query.startsWith('insert into "trader_information_sufficiency_receipt_v2"'));
+    const completionWrite = queries.findIndex(q => q.query.startsWith(`insert into "${completionTable}"`));
+    expect(receiptWrite).toBeGreaterThan(0); expect(completionWrite).toBeGreaterThan(receiptWrite);
+    expect(queries.slice(0, receiptWrite).filter(q => q.query.includes("octet_length(jsonb_build_object"))).toHaveLength(2);
+    const completionBytes = Number((await client`select octet_length(to_jsonb(q)::text)::int bytes from (select
+      organization_id as "organizationId", session_id as "sessionId", sequence, content_digest as "contentDigest", body_json as "bodyJson",
+      assignment_digest as "assignmentDigest", source_session_id as "sourceSessionId", source_sequence as "sourceSequence", packet_digest as "packetDigest",
+      receipt_id as "receiptId", previous_completion_digest as "previousCompletionDigest", runtime_instance_id as "runtimeInstanceId", lease_epoch as "leaseEpoch",
+      lease_content_digest as "leaseContentDigest" from trader_research_understanding_completions_v1 where organization_id=${organizationId}::uuid and source_sequence=${b}) q`)[0]!.bytes);
+    const selectedAdmissions = admissions.filter(row => row.table === completionTable && row.projection === "completion" && JSON.parse(row.identity)[2] === b);
+    expect(selectedAdmissions.length).toBeGreaterThan(1); expect(selectedAdmissions.every(row => row.bytes === completionBytes)).toBe(true);
     console.info(JSON.stringify({ proof: "DEE1136_NATURAL32", statements: ledger.statements, uniqueBytes: ledger.inputs.total,
-      controlBytes: ledger.noncapitalControls.total, elapsedMs, registrationBytes: await f.hypothesisProjectionBytes(), transactions: 5 }));
+      controlBytes: ledger.noncapitalControls.total, elapsedMs, registrationBytes: await f.hypothesisProjectionBytes(), transactions: 5,
+      selectedBodies: selected, predecessorMetadataOnly: b - 1, candidateMetadataBeforeReceipt: true, completionBytes }));
   }, 90000);
+  it("refuses an actual 33-version saved registry at metadata admission without fetching that history body", async () => {
+    const f = await fixture({ hypothesisVersions: 33 }), before = await counts(); trace.length = 0;
+    const result = await run(f.application), queries = [...trace];
+    expect(result.status).toBe("APPLICATION_ROW_SET_REFUSED");
+    const selected = queries.filter(q => q.query.includes('from "trader_mi_hypothesis"') && q.query.includes('order by "trader_mi_hypothesis"."version_seq"'));
+    expect(selected).toHaveLength(1); expect(selected[0]!.query).toContain("octet_length");
+    expect(selected[0]!.query).toMatch(/limit \$[0-9]+/); expect(selected[0]!.params).toContain(33);
+    expect(queries.some(q => applicationTables.some(table => q.query.startsWith(`insert into "${table}"`)))).toBe(false);
+    expect(await counts()).toEqual(before);
+    console.info(JSON.stringify({ proof: "DEE1136_SELECTED_HISTORY33", status: result.status, metadataOnly: true, newStageRows: 0 }));
+  }, 45000);
+  it.each([65536, 65537])("measures actual saved registry projection at%dbytes and preserves restart or refuses before body", async target => {
+    const f = await fixture({ targetHypothesisBytes: target }); expect(await f.hypothesisProjectionBytes()).toBe(target);
+    const before = await counts(); trace.length = 0;
+    const result = await run(f.application), queries = [...trace];
+    const selected = queries.filter(q => q.query.includes('from "trader_mi_hypothesis"') && q.params.includes(f.hypothesis.id));
+    expect(selected.length).toBeGreaterThan(0); expect(selected[0]!.query).toContain("octet_length");
+    if (target === 65537) {
+      expect(result.status).toBe("STORED_ROW_LIMIT_EXCEEDED"); expect(selected).toHaveLength(1); expect(await counts()).toEqual(before);
+    } else {
+      const applied = complete(result), replay = await worker("saved", await argsFor(f, "replay")).result;
+      expect(replay.event, replay.message).toBe("result"); expect(complete(replay.result).application).toEqual(applied.application);
+      expect(replay.forbidden).toEqual([]); expect(replay.fetches).toBe(0); expect(queries.length).toBeLessThanOrEqual(512);
+    }
+    console.info(JSON.stringify({ proof: "DEE1136_REGISTERED_ROW_BOUND", actualProjectionBytes: target, status: result.status }));
+  }, 45000);
+  it("accounts a genuine 32-input saved Understanding range and resumes an honest budget-limited prefix with a fresh invocation", async () => {
+    const f = await fixture({ savedSource32: true }); await f.appendSourceThrough(31); expect(f.packets).toHaveLength(32);
+    const preserved = await records(completionTable); expect(preserved).toHaveLength(2);
+    const ledgers: HeldResearchAccounting[] = [], original = HeldResearchAccounting.prototype.budget;
+    vi.spyOn(HeldResearchAccounting.prototype, "budget").mockImplementation(function (this: HeldResearchAccounting, cap: number) {
+      if (!ledgers.includes(this)) ledgers.push(this); return original.call(this, cap);
+    });
+    const request = { ...f.application.research, range: { startSequence: 0, count: 32, leaseDurationMs: 10000 } };
+    trace.length = 0; const started = performance.now();
+    const first = await runSavedDomainResearchLoop(client, f.researchContext, request), queries = [...trace], elapsedMs = performance.now() - started;
+    expect(["COMPLETE", "STATEMENT_LIMIT_EXCEEDED"]).toContain(first.status); expect(first.completed.length).toBeGreaterThan(2);
+    expect(first.completed.map(row => row.sourceSequence)).toEqual(Array.from({ length: first.completed.length }, (_, i) => i));
+    expect(ledgers).toHaveLength(1); expect(ledgers[0]!.statements).toBe(queries.length);
+    expect(ledgers[0]!.statements).toBeLessThanOrEqual(512); expect(ledgers[0]!.inputs.total).toBeLessThanOrEqual(67108864);
+    expect(ledgers[0]!.noncapitalControls.total).toBeLessThanOrEqual(4096); expect(elapsedMs).toBeLessThanOrEqual(120000);
+    const prefix = await records(completionTable); expect(prefix).toHaveLength(first.completed.length);
+    for (const row of preserved) expect(prefix).toContainEqual(row);
+    let resumed = false;
+    if (first.status === "STATEMENT_LIMIT_EXCEEDED") {
+      expect(first.completed.length).toBeLessThan(32); await f.expiry();
+      trace.length = 0;
+      const next = await runSavedDomainResearchLoop(client, f.researchContext, { ...request,
+        range: { ...request.range, startSequence: first.completed.length, count: 1 } });
+      const nextQueries = [...trace]; expect(next.status).toBe("COMPLETE"); expect(next.completed).toHaveLength(1);
+      expect(next.completed[0]!.sourceSequence).toBe(first.completed.length); expect(next.completed[0]!.outcome).toBe("COMMITTED");
+      expect(ledgers).toHaveLength(2); expect(ledgers[1]).not.toBe(ledgers[0]); expect(ledgers[1]!.statements).toBe(nextQueries.length);
+      expect(ledgers[1]!.statements).toBeLessThanOrEqual(512); expect(ledgers[1]!.inputs.total).toBeLessThanOrEqual(67108864);
+      expect(ledgers[1]!.noncapitalControls.total).toBeLessThanOrEqual(4096);
+      const after = await records(completionTable); expect(after).toHaveLength(prefix.length + 1); for (const row of prefix) expect(after).toContainEqual(row);
+      resumed = true;
+    } else expect(first.completed).toHaveLength(32);
+    expect(await capital()).toEqual([]);
+    console.info(JSON.stringify({ proof: "DEE1136_RANGE32_BOUNDED_PREFIX", availableInputs: 32, status: first.status,
+      firstCompleted: first.completed.length, firstElapsedMs: elapsedMs, explicitFreshInvocationResumedNext: resumed,
+      invocations: ledgers.map(ledger => ({ statements: ledger.statements, uniqueBytes: ledger.inputs.total, controlBytes: ledger.noncapitalControls.total })) }));
+  }, 150000);
   it.each(["saved", "acquisition"] as const)("keeps%s lease busy through expiry and rejects stale held identity after real successor", async domain => {
     const first = await claim(domain, 1000); expect(first).not.toBeNull(); expect(await claim(domain)).toBeNull();
     const table = domain === "saved" ? "trader_saved_research_lease_heads_v1" : "trader_recorded_acquisition_lease_heads_v1";
@@ -472,5 +590,157 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
     expect(await records(table)).toEqual(before); expect(await records("trader_information_sufficiency_receipt_v2")).toEqual(receiptsBefore);
     console.info(JSON.stringify({ proof: "DEE1136_IMMEDIATE_AFFINITY", stage, sqlstate: errorCode(failure), constraint: failure.constraint_name, rolledBack: true }));
   }, 60000);
+
+  it.each(["packet", "companion-packet", "companion-cycle"] as const)("reaches the exact recorded%s affinity with genuine prior data and a separately owned canonical cycle", async stage => {
+    const f = await fixture(), packetTable = receiptTables[2]!, companionTable = receiptTables[3]!, cycleTable = receiptTables[0]!;
+    const table = stage === "packet" ? packetTable : companionTable;
+    await faultAt(table, "RAISE EXCEPTION 'DEE1136_CAPTURE_RECORDED';"); trace.length = 0;
+    const failure = await f.appendSourceThrough(2).then(() => null, error => error); expect(errorCode(failure)).toBe("P0001");
+    const candidate = trace.find(q => q.query.startsWith(`insert into "${table}"`)); expect(candidate).toBeDefined();
+    const cycle = trace.find(q => q.query.startsWith(`insert into "${cycleTable}"`));
+    await clearFault();
+    const capitalHolder = await claimRuntimeControlLeaseAtDatabaseTimeV2(db(), { organizationId, runtimeInstanceId: "recorded-affinity-capital", durationMs: 30000 });
+    expect(capitalHolder).not.toBeNull();
+    const parameters = [...candidate!.params];
+    if (stage !== "packet") {
+      expect(cycle).toBeDefined();
+      const captured = JSON.parse(String(cycle!.params[insertParameter(cycle!.query, "canonical_json")]));
+      // The unchanged public owner creates its real NO_TRADE cycle from the
+      // captured input; there is no forged cycle, lease, evaluator or receipt.
+      const actual = await commitRecordedNoncapitalCyclePostgresV2(db(), { organizationId }, capitalHolder!, captured.input);
+      expect(actual.outcome).toBe("COMMITTED");
+      const body = JSON.parse(String(parameters[insertParameter(candidate!.query, "body_json")]));
+      body.canonicalReceiptDigest = actual.receipt.contentDigest;
+      const raw = canonicalizeSemanticJsonString(body);
+      parameters[insertParameter(candidate!.query, "body_json")] = raw;
+      parameters[insertParameter(candidate!.query, "content_digest")] = createHash("sha256").update(raw).digest("hex");
+    }
+    if (stage !== "companion-cycle") for (const [column, value] of Object.entries({ ownership_domain: "CAPITAL_LEGACY_V2",
+      runtime_instance_id: capitalHolder!.runtimeInstanceId, lease_epoch: capitalHolder!.leaseEpoch, lease_content_digest: capitalHolder!.leaseContentDigest }))
+      parameters[insertParameter(candidate!.query, column)] = value;
+    const before = await Promise.all(receiptTables.slice(0, 4).map(records));
+    const refused = await client.unsafe(candidate!.query, parameters as Parameters<postgres.TransactionSql["unsafe"]>[1]).then(() => null, error => error);
+    expect(errorCode(refused)).toBe("23503"); expect(refused.constraint_name).toBe(`noncapital_affinity_${stage === "packet" ? 0 : stage === "companion-packet" ? 1 : 2}`);
+    expect(await Promise.all(receiptTables.slice(0, 4).map(records))).toEqual(before);
+    console.info(JSON.stringify({ proof: "DEE1136_RECORDED_AFFINITY", stage, sqlstate: errorCode(refused), constraint: refused.constraint_name }));
+  }, 60000);
+
+  it.each(["saved", "acquisition"] as const)("rejects malformed%s history envelopes, hashes and clock/sequence projections without retained control rows", async domain => {
+    const history = domain === "saved" ? "trader_saved_research_lease_history_v1" : "trader_recorded_acquisition_lease_history_v1";
+    const head = domain === "saved" ? "trader_saved_research_lease_heads_v1" : "trader_recorded_acquisition_lease_heads_v1";
+    trace.length = 0;
+    await expect(db().transaction(async tx => {
+      const input = { organizationId, runtimeInstanceId: "captured-real-claim", durationMs: 30000 };
+      const holder = domain === "saved" ? await claimSavedResearchWithinHeldTransactionV1(tx, input, new HeldResearchAccounting().noncapitalControls)
+        : await claimRecordedAcquisitionWithinHeldTransactionV1(tx, input);
+      expect(holder).not.toBeNull(); throw new Error("DEE1136_ROLLBACK_VALID_CLAIM");
+    })).rejects.toThrow("DEE1136_ROLLBACK_VALID_CLAIM");
+    const emitted = trace.find(q => q.query.includes(`insert into "${history}"`)); expect(emitted).toBeDefined();
+    const source = JSON.parse(String(emitted!.params.find(value => typeof value === "string" && value.includes('"schemaVersion":"waia.trader.noncapital_domain_lease.v1"'))));
+    const project = (body: typeof source) => ({ organization_id: body.organizationId, runtime_instance_id: body.runtimeInstanceId, lease_epoch: body.leaseEpoch,
+      content_digest: createHash("sha256").update(canonicalizeSemanticJsonString(body)).digest("hex"), prior_content_digest: body.expectedPreviousDigest,
+      adjudicated_at_utc: body.adjudicatedAtUtc, valid_until_utc: body.validUntilUtc, duration_ms: body.durationMs, body_json: canonicalizeSemanticJsonString(body) });
+    const controls = ["missing", "null", "wrong-type", "extra-key", "wrong-domain", "wrong-hash", "projection", "duration", "epoch", "prior", "future", "expired"] as const;
+    for (const mode of controls) {
+      const body = structuredClone(source);
+      if (mode === "missing") delete body.durationMs;
+      if (mode === "null") body.durationMs = null;
+      if (mode === "wrong-type") body.durationMs = "30000";
+      if (mode === "extra-key") body.authority = "NONE";
+      if (mode === "wrong-domain") body.ownershipDomain = "CAPITAL_LEGACY_V2";
+      const row = { ...project(source), body_json: canonicalizeSemanticJsonString(body) };
+      row.content_digest = createHash("sha256").update(row.body_json).digest("hex");
+      if (mode === "wrong-hash") row.content_digest = "0".repeat(64);
+      if (mode === "projection") row.runtime_instance_id = "another-runtime";
+      if (mode === "duration") row.duration_ms = 0;
+      if (mode === "epoch") row.lease_epoch = 2;
+      if (mode === "prior") row.prior_content_digest = "1".repeat(64);
+      if (mode === "future") Object.assign(row, project({ ...source,
+        adjudicatedAtUtc: new Date(Date.parse(source.adjudicatedAtUtc) + 60000).toISOString(), validUntilUtc: new Date(Date.parse(source.validUntilUtc) + 60000).toISOString() }));
+      if (mode === "expired") Object.assign(row, project({ ...source,
+        adjudicatedAtUtc: new Date(Date.parse(source.adjudicatedAtUtc) - 60000).toISOString(), validUntilUtc: new Date(Date.parse(source.validUntilUtc) - 60000).toISOString() }));
+      const fields = Object.keys(row).join(",");
+      const refused = await client.unsafe(`insert into ${history} (${fields}) select ${fields} from jsonb_populate_record(null::${history},$1::jsonb)`, [JSON.stringify(row)]).then(() => null, error => error);
+      expect(errorCode(refused)).toBe(["epoch", "prior", "future", "expired"].includes(mode) ? "P0001" : "23514");
+      if (["missing", "null", "wrong-type", "extra-key", "wrong-domain", "wrong-hash", "projection"].includes(mode))
+        expect(refused.constraint_name).toBe(domain === "saved" ? "noncapital_saved_body" : "noncapital_acq_body");
+      expect(await records(history)).toEqual([]); expect(await records(head)).toEqual([]); expect(await records("trader_runtime_ownership_refs_v1")).toEqual([]);
+    }
+    // A structurally valid history without its head reaches the real deferred
+    // COMMIT fence; no SET CONSTRAINTS IMMEDIATE substitutes for that boundary.
+    const row = project(source), fields = Object.keys(row).join(",");
+    const orphan = await client.unsafe(`insert into ${history} (${fields}) select ${fields} from jsonb_populate_record(null::${history},$1::jsonb)`, [JSON.stringify(row)]).then(() => null, error => error);
+    expect(errorCode(orphan)).toBe("P0001"); expect(String(orphan.message)).toContain("NONCAPITAL_LEASE_COMMIT_FENCE");
+    expect(await records(history)).toEqual([]); expect(await records("trader_runtime_ownership_refs_v1")).toEqual([]);
+    console.info(JSON.stringify({ proof: "DEE1136_MALFORMED_HISTORY", domain, malformedControls: controls.length, realOrphanCommitRefused: true }));
+  }, 15000);
+
+  it.each(["saved", "acquisition"] as const)("keeps%s history/reference append-only and denies head renewal, delete and mismatched projection", async domain => {
+    const holder = await claim(domain, 30000); expect(holder).not.toBeNull();
+    const history = domain === "saved" ? "trader_saved_research_lease_history_v1" : "trader_recorded_acquisition_lease_history_v1";
+    const head = domain === "saved" ? "trader_saved_research_lease_heads_v1" : "trader_recorded_acquisition_lease_heads_v1";
+    const tables = [history, head, "trader_runtime_ownership_refs_v1"], before = await Promise.all(tables.map(records));
+    for (const table of [history, "trader_runtime_ownership_refs_v1"]) {
+      for (const command of [`update ${table} set runtime_instance_id=runtime_instance_id`, `delete from ${table}`]) {
+        const failure = await client.unsafe(`${command} where organization_id=$1::uuid`, [organizationId]).then(() => null, error => error);
+        expect(errorCode(failure)).toBe("P0001");
+      }
+    }
+    for (const command of [`update ${head} set updated_at=updated_at`, `update ${head} set valid_until_utc=valid_until_utc+interval '1 second'`,
+      `update ${head} set runtime_instance_id='forged'`, `delete from ${head}`]) {
+      const failure = await client.unsafe(`${command} where organization_id=$1::uuid`, [organizationId]).then(() => null, error => error);
+      expect(errorCode(failure)).toBe("P0001");
+    }
+    expect(await Promise.all(tables.map(records))).toEqual(before); expect(await claim(domain)).toBeNull();
+  }, 15000);
+
+  it("does not wait on a held capital advisory lock and keeps another organization independent", async () => {
+    let release!: () => void, entered!: () => void, heldCapital = false;
+    const barrier = new Promise<void>(resolve => { entered = resolve; }), resumed = new Promise<void>(resolve => { release = resolve; });
+    const owner = client.begin(async held => {
+      await held`select pg_advisory_xact_lock(hashtextextended(${organizationId},637))`;
+      heldCapital = true; entered(); await resumed; heldCapital = false;
+    });
+    await barrier;
+    try {
+      const saved = await claim("saved", 30000), acquisition = await claim("acquisition", 30000);
+      expect(saved).not.toBeNull(); expect(acquisition).not.toBeNull(); expect(heldCapital).toBe(true);
+      const foreignId = await seedWp13User(url!, randomUUID(), "DEE1136 independent synthetic organization");
+      const foreign = await db().transaction(tx => claimSavedResearchWithinHeldTransactionV1(tx,
+        { organizationId: foreignId, runtimeInstanceId: "foreign-owner", durationMs: 30000 }, new HeldResearchAccounting().noncapitalControls));
+      expect(foreign?.organizationId).toBe(foreignId); expect(foreign?.leaseEpoch).toBe(1); expect(heldCapital).toBe(true);
+      expect(await capital()).toEqual([]); expect(await claim("saved")).toBeNull();
+    } finally { release(); await owner; }
+    console.info(JSON.stringify({ proof: "DEE1136_DOMAIN_LOCK_ISOLATION", completedWhileCapitalHeld: true, foreignOrgIndependent: true }));
+  }, 15000);
+  it("keeps all five control tables browser-denied without granting or altering any global role", async () => {
+    const tables = ["trader_recorded_acquisition_lease_history_v1", "trader_recorded_acquisition_lease_heads_v1",
+      "trader_saved_research_lease_history_v1", "trader_saved_research_lease_heads_v1", "trader_runtime_ownership_refs_v1"];
+    expect(await claim("saved", 30000)).not.toBeNull(); expect(await claim("acquisition", 30000)).not.toBeNull();
+    const before = await Promise.all(tables.map(records));
+    const policies = await client`select tablename,roles,cmd,qual,with_check from pg_policies where schemaname='public' and tablename=any(${tables}) order by tablename,policyname`;
+    expect(policies).toHaveLength(5); expect(policies.every(p => p.cmd === "ALL" && p.qual === "false" && p.with_check === "false" &&
+      [...p.roles].sort().join(",") === "anon,authenticated")).toBe(true);
+    const relations = await client`select relname,relrowsecurity from pg_class where oid=any(${tables}::regclass[]) order by relname`;
+    expect(relations).toHaveLength(5); expect(relations.every(row => row.relrowsecurity)).toBe(true);
+    const roles = await client`select rolname,rolsuper,rolbypassrls,rolcreaterole from pg_roles where rolname in ('anon','authenticated') order by rolname`;
+    expect(roles).toHaveLength(2); expect(roles.every(r => !r.rolsuper && !r.rolbypassrls && !r.rolcreaterole)).toBe(true);
+    for (const role of ["anon", "authenticated"]) for (const table of tables) {
+      const outcome = await client.begin(async held => {
+        await held.unsafe(`set local role ${role}`);
+        return held.unsafe(`select count(*)::int n from ${table} where organization_id=$1::uuid`, [organizationId]);
+      }).then(rows => ({ rows, error: null }), error => ({ rows: null, error }));
+      if (outcome.error) expect(errorCode(outcome.error)).toBe("42501");
+      else expect(outcome.rows).toEqual([{ n: 0 }]);
+      const denied = await client.begin(async held => {
+        await held.unsafe(`set local role ${role}`);
+        return held.unsafe(`insert into ${table} select (jsonb_populate_record(null::${table},$1::jsonb)).*`, [JSON.stringify(before[tables.indexOf(table)]![0]!.value)]);
+      }).then(() => null, error => error);
+      expect(errorCode(denied)).toBe("42501");
+    }
+    expect(await Promise.all(tables.map(records))).toEqual(before);
+    expect(await client`select rolname,rolsuper,rolbypassrls,rolcreaterole from pg_roles where rolname in ('anon','authenticated') order by rolname`).toEqual(roles);
+    console.info(JSON.stringify({ proof: "DEE1136_BROWSER_DENY", tables: 5, roles: 2, globalRoleChanges: false }));
+  }, 15000);
 
 });

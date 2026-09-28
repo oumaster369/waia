@@ -3,7 +3,7 @@ import type postgres from "postgres";
 import type { SavedApplicationRequest } from "@/lib/trader/paper/research-application-v1/repository-postgres";
 import { pathToFileURL } from "node:url";
 
-type NativeSeedOptions = { against?: boolean; missing4h?: boolean; userAssignment?: boolean; hypothesisVersions?: number; priorOrdinal?: string; targetHypothesisBytes?: number; firstSourceSequence?: number };
+type NativeSeedOptions = { against?: boolean; missing4h?: boolean; userAssignment?: boolean; hypothesisVersions?: number; priorOrdinal?: string; targetHypothesisBytes?: number; firstSourceSequence?: number; savedSource32?: boolean };
 export async function seedApplicationNative(client: postgres.Sql, organizationId: string, userId: string, options: NativeSeedOptions = {}) {
   return seedApplicationCore(client, organizationId, userId, options, false);
 }
@@ -56,8 +56,11 @@ async function seedApplicationCore(client: postgres.Sql, organizationId: string,
       rationale: "explicit synthetic admission, not production source trust", recordedBy: userId, eventTime: time, ingestTime: time });
     admissions.push({ sourceId: source.id, contentDigest: revision.contentDigest });
   }
+  // Only the new domain range proof requests 32 genuine saved inputs; legacy setup retains its exact defaults.
+  if (options.savedSource32 && !savedDomain) throw new Error("FIXTURE_SAVED_RANGE_ONLY");
+  const sourceLeaseMs = options.savedSource32 ? 30000 : 3000;
   const session = captureSession({ organizationId, accountId: "saved-account", symbol: "BTC/USDT", sessionId: "application-source",
-    releaseSha: "a".repeat(40), maxPacketBytes: 2_000_000, maxBarsPerInterval: 1000, maxCycles: 8, leaseDurationMs: 3000 });
+    releaseSha: "a".repeat(40), maxPacketBytes: 2_000_000, maxBarsPerInterval: 1000, maxCycles: options.savedSource32 ? 32 : 8, leaseDurationMs: sourceLeaseMs });
   const config = research.captureAssignmentConfig({ organizationId, accountId: session.accountId, symbol: session.symbol,
     researchSessionId: "application-research", sourceSessionId: session.sessionId, sourceConfigDigest: session.configDigest, firstSourceSequence: options.firstSourceSequence ?? 0,
     releaseSha: "b".repeat(40), admissions: ["1m", "4h"].map(lane => ({ lane, sourceId: admissions[0]!.sourceId, revisionDigests: [admissions[0]!.contentDigest] })) });
@@ -105,7 +108,7 @@ async function seedApplicationCore(client: postgres.Sql, organizationId: string,
   const request = { assignment: config, profile: { definition: profileDefinition }, range: { startSequence: config.firstSourceSequence, count: 2, leaseDurationMs: 1500 } };
   async function appendSourceThrough(last: number, sourceOptions: { missing4h?: boolean } = {}) {
     await expiry();
-    const claim = { organizationId, runtimeInstanceId: `application-source-${packets.length}`, durationMs: 3000 };
+    const claim = { organizationId, runtimeInstanceId: `application-source-${packets.length}`, durationMs: sourceLeaseMs };
     const holder = savedDomain ? { domain: "RECORDED_ACQUISITION_V1" as const,
       value: await db.transaction(tx => claimRecordedAcquisitionWithinHeldTransactionV1(tx, claim)) }
       : { domain: "CAPITAL_LEGACY_V2" as const, value: await claimRuntimeControlLeaseAtDatabaseTimeV2(db, claim) };
