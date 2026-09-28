@@ -14,16 +14,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: in-progress
+  status: in-review
   currentWorkPackage: WP-2
   completedWorkPackages: [WP-1]
   remainingWorkPackages: [WP-2]
-  prNumber: null
-  prUrl: null
+  prNumber: 694
+  prUrl: https://github.com/oumaster369/waia/pull/694
   lastValidatedGitSha: 02653262858ee75eae814c8c7382b6a10e9f2bb1
   lastValidationAt: "2026-09-28T00:25:06.656Z"
   blockedReason: null
-  nextAction: "Complete independent native-outcome and plan-only carry review, publish the one integration PR, then require all exact-head CI and fresh checked-merge admission. No deployment or trading activation follows."
+  nextAction: "Require all exact-head applicable CI for PR694 and fresh independent head/base/blocker/checked-merge admission. No deployment or trading activation follows."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -91,3 +91,6 @@ The independent 67-artifact native-source/runner review, manifest `e71666a8abf89
 One admitted synthetic attempt ran the entire delivery file: **41 passed, zero failures, zero skips**, actual00:24:58.817–00:25:06.656UTC, terminal exit0. The new cases prove distinct fill times through actual stored Execution reports, Reality source/truth/projection and fresh-client/CLI replay; genuine original828 mapping through the unchanged writer followed by `SOURCE_BINDING_INVALID` catch-up and direct immutable-lineage refusal; actual stored noncanonical timestamp refusals; and future source-time rollback at the existing knowledge-time rule. No old case was removed. Native event-time preservation is not separately claimed; unchanged source and focused controls cover the non-fill boundary.
 
 All224 actual migration hash/when rows, all5533 tracked Git entries, roles and database posture matched before/after. Every cleanup phase succeeded and final other clients were zero. The synthetic database and raw evidence are retained. The 19-artifact result seal is `005c57f6763dd29e09f9b94fd209f26fbb647aa273b8112deb7c242677c41f9e` under external `evidence/dee-1137/native-preparation/results-0010`. Root verification does not replace independent outcome review, which is the remaining prepublication gate. This plan-only successor carries the five non-plan changed files unchanged; it does not relabel026 execution as a run on the successor commit. Final exact-head CI and checked merge remain required. The correction supplies no history repair, scientific acceptance or live enablement.
+
+
+Independent actual-outcome and49c plan-only carry review subsequently accepted the finite proof with no actionable finding: REPORT `5559c40cc45f1cb44e992156f84d00b4bed1ad7dd5bf9fab2d31f5762dc1abd0`,43-artifact manifest `c93f5322ee660fc626fe37378da61a28509e2a867c99ea1b0c4e15ecb50df6b7`, root adoption `c6f191a73c5853122cb6851eab4a6afb9c9b8518813804028cf873d3ff9f5438`. PR694 is the sole integration PR. This final publication-metadata carry again changes only this plan;026 native/readiness and49c canon identities remain exact historical evidence. Published-head CI and final independent carry review must be accepted before merge.
