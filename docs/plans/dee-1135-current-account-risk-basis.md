@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Issue and consumption carry no reason code. Revoke, expiry, and consumption refusal must name one. A reason on an issue is refused. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "A consumed predecessor keeps its verdict through the terminal list. A substituted verdict is refused. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
