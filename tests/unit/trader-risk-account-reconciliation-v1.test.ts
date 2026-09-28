@@ -1,4 +1,4 @@
-import { decideRiskAccountProfileCommandV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
+import { admitOpenProfileFrontierV1, decideRiskAccountProfileCommandV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
 import { classifyCurrentAccountRowV1 } from "@/lib/trader/risk/v2/risk-current-account-read-v1";
 import { describe, expect, it } from "vitest";
 import { createRealityProjectionV2, type RealityProjectionEntryV2 } from "@/lib/trader/reality/v2/contracts";
@@ -425,6 +425,13 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
       referenceDigest: digest("ref-1"),
     }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
+
+  it("refuses to issue from an open profile proposal", () => {
+    expect(admitOpenProfileFrontierV1({ storedAction: "PROPOSE" })).toEqual({
+      decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
+    });
+    expect(() => admitOpenProfileFrontierV1({ storedAction: "CANCEL" })).toThrow(RiskCurrentAccountRefusedV1);
   });
 
 });

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { describe, expect, it } from "vitest";
-import { cancelStoredProfileProposalV1, readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, reproposeStoredProfileV1, retainProposedRiskAccountProfileV1, revokeStoredProfileAuthorityV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
+import { admitOpenProfileFrontierV1, cancelStoredProfileProposalV1, readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, reproposeStoredProfileV1, retainProposedRiskAccountProfileV1, revokeStoredProfileAuthorityV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
 import { RiskCurrentAccountRefusedV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import {
   createRiskAccountProfileV1,
@@ -125,6 +125,10 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
       const afterRepeat = await sql<{ action: string }[]>`select action from trader_risk_account_profile_events_v1
         where account_id = ${accountId} order by event_sequence`;
       expect(afterRepeat.map(row => row.action)).toEqual(["PROPOSE", "CANCEL", "PROPOSE"]);
+      const stored = await readStoredProfileAuthorityV1(sql, org!.id, accountId);
+      expect(admitOpenProfileFrontierV1({ storedAction: stored.action })).toEqual({
+        decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
+      });
       const [after] = await sql<{ allowances: number; orders: number; current_rows: number }[]>`select
         (select count(*)::int from trader_risk_allowances_v2) as allowances,
         (select count(*)::int from trader_orders) as orders,

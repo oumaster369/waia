@@ -350,3 +350,22 @@ export async function revokeStoredProfileAuthorityV1(
   });
   throw new RiskCurrentAccountRefusedV1("PROFILE_AUTHORITY_ABSENT");
 }
+
+/** An open proposal plus an observed frontier still cannot issue an allowance or an order. */
+export function admitOpenProfileFrontierV1(input: {
+  storedAction: "PROPOSE" | "CANCEL" | "REVOKE" | "CONFIRM" | "ACTIVATE" | "ABSENT";
+}): {
+  decision: "REFUSED";
+  reason: "LIVE_CAPITAL_ENVELOPE_ABSENT";
+  allowanceId: null;
+  orderId: null;
+} {
+  if (input.storedAction !== "PROPOSE")
+    throw new RiskCurrentAccountRefusedV1("PROFILE_PROPOSAL_NOT_OPEN");
+  return {
+    decision: "REFUSED",
+    reason: "LIVE_CAPITAL_ENVELOPE_ABSENT",
+    allowanceId: null,
+    orderId: null,
+  };
+}

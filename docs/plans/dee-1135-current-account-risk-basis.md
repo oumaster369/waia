@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "The first proposal insert refuses an account that already has a profile event chain. Reopening stays on the chained path. Do not mark WP-1 complete."
+  nextAction: "An open profile proposal cannot issue an allowance from an observed frontier. A cancelled proposal is not an open issuer. Do not mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null
