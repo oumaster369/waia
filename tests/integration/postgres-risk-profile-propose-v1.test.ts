@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { describe, expect, it } from "vitest";
-import { cancelStoredProfileProposalV1, readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, retainProposedRiskAccountProfileV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
+import { cancelStoredProfileProposalV1, readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, retainProposedRiskAccountProfileV1, revokeStoredProfileAuthorityV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
 import { RiskCurrentAccountRefusedV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import {
   createRiskAccountProfileV1,
@@ -100,6 +100,10 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
       const chain = await sql<{ action: string }[]>`select action from trader_risk_account_profile_events_v1
         where account_id = ${accountId} order by event_sequence`;
       expect(chain.map(row => row.action)).toEqual(["PROPOSE", "CANCEL"]);
+      await expect(revokeStoredProfileAuthorityV1(sql, { organizationId: org!.id, accountId })).rejects.toThrow(/PROFILE_AUTHORITY_ABSENT/);
+      const afterRevoke = await sql<{ action: string }[]>`select action from trader_risk_account_profile_events_v1
+        where account_id = ${accountId} order by event_sequence`;
+      expect(afterRevoke.map(row => row.action)).toEqual(["PROPOSE", "CANCEL"]);
       const [after] = await sql<{ allowances: number; orders: number; current_rows: number }[]>`select
         (select count(*)::int from trader_risk_allowances_v2) as allowances,
         (select count(*)::int from trader_orders) as orders,

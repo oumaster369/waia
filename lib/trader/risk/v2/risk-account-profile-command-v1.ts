@@ -245,3 +245,26 @@ export async function refuseStoredProfileActivationV1(
   decideRiskAccountProfileCommandV1({ action: input.action, liveCapitalEnvelope: null });
   throw new RiskCurrentAccountRefusedV1("LIVE_CAPITAL_ENVELOPE_ABSENT");
 }
+
+/** Revocation needs an active current pointer. An empty pointer appends no event. */
+export async function revokeStoredProfileAuthorityV1(
+  sql: postgres.Sql,
+  input: { organizationId: string; accountId: string },
+): Promise<never> {
+  const command = decideRiskAccountProfileCommandV1({
+    action: "REVOKE",
+    liveCapitalEnvelope: null,
+  });
+  if (command.currentPointer !== null || command.allowanceId !== null || command.orderId !== null) {
+    throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
+  }
+  await sql.begin(async (tx) => {
+    const rows = await tx<{ organization_id: string }[]>`
+      select organization_id from trader_risk_account_current_v1
+      where organization_id = ${input.organizationId}::uuid and account_id = ${input.accountId}
+      for update`;
+    if (rows.length === 0) throw new RiskCurrentAccountRefusedV1("PROFILE_AUTHORITY_ABSENT");
+    throw new RiskCurrentAccountRefusedV1("LIVE_CAPITAL_ENVELOPE_ABSENT");
+  });
+  throw new RiskCurrentAccountRefusedV1("PROFILE_AUTHORITY_ABSENT");
+}

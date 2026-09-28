@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "An open profile proposal can be cancelled by a chained event. The cancel still publishes no authority. Do not adopt the allocation figure or mark WP-1 complete."
+  nextAction: "Revocation of an account with no current pointer appends nothing. Do not adopt the allocation figure or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null
