@@ -5,6 +5,7 @@ import {
   riskAccountDigestV1,
   RiskCurrentAccountRefusedV1,
   type RiskAccountProfileV1,
+  type RiskAccountReferenceV1,
 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import {
   readCurrentAccountAuthorityV1,
@@ -144,6 +145,53 @@ export async function retainProposedRiskAccountProfileV1(
   };
 }
 
+
+
+/** Every named member digest must already be retained. A missing member is not zero. */
+export function assertReferenceMembersRetainedV1(expected: readonly string[], stored: readonly string[]): void {
+  const have = new Set(stored);
+  if (expected.length === 0 || new Set(expected).size !== expected.length || expected.some(id => !have.has(id))) {
+    throw new RiskCurrentAccountRefusedV1("REFERENCE_MEMBERS");
+  }
+}
+
+/** Stores a sealed reference header only. It does not write a current pointer, allowance, or order. */
+export async function retainStoredRiskAccountReferenceV1(
+  sql: postgres.Sql,
+  input: { reference: RiskAccountReferenceV1; actorId: string; auditId: string },
+): Promise<{ decision: "RETAINED_NON_AUTHORITY"; referenceDigest: string; currentPointer: null; allowanceId: null; orderId: null }> {
+  const { contentDigest, ...body } = input.reference;
+  if (contentDigest !== riskAccountDigestV1(body)) throw new RiskCurrentAccountRefusedV1("PROFILE_SEAL");
+  const bodyText = canonicalJsonString(body);
+  return sql.begin(async (tx) => {
+    await requireMatchingAuditActorV1(tx as unknown as postgres.Sql, input.auditId, input.actorId, body.organizationId);
+    const [profile] = await tx<{ n: number }[]>`
+      select count(*)::int n from trader_risk_account_profiles_v1
+      where organization_id = ${body.organizationId}::uuid and account_id = ${body.accountId} and content_digest = ${body.profileDigest}`;
+    if ((profile?.n ?? 0) !== 1) throw new RiskCurrentAccountRefusedV1("PROFILE_PROPOSAL_ABSENT");
+    const [held] = await tx<{ content_digest: string }[]>`
+      select content_digest from trader_risk_account_references_v1
+      where organization_id = ${body.organizationId}::uuid and account_id = ${body.accountId}
+        and profile_digest = ${body.profileDigest} and window_id = ${body.windowId}`;
+    if (held?.content_digest === contentDigest) {
+      return { decision: "RETAINED_NON_AUTHORITY" as const, referenceDigest: contentDigest, currentPointer: null, allowanceId: null, orderId: null };
+    }
+    if (held) throw new RiskCurrentAccountRefusedV1("REFERENCE_WINDOW");
+    const found = await tx<{ content_digest: string }[]>`
+      select content_digest from trader_risk_account_reference_members_v1
+      where organization_id = ${body.organizationId}::uuid and account_id = ${body.accountId}
+        and content_digest = any(${body.members}::text[])`;
+    assertReferenceMembersRetainedV1(body.members, found.map(row => row.content_digest));
+    await tx`insert into trader_risk_account_references_v1
+      (organization_id, account_id, content_digest, body_text, profile_digest, window_id)
+      values (${body.organizationId}::uuid, ${body.accountId}, ${contentDigest}, ${bodyText}, ${body.profileDigest}, ${body.windowId})`;
+    const [current] = await tx<{ n: number }[]>`
+      select count(*)::int n from trader_risk_account_current_v1
+      where organization_id = ${body.organizationId}::uuid and account_id = ${body.accountId}`;
+    if (current?.n !== 0) throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
+    return { decision: "RETAINED_NON_AUTHORITY" as const, referenceDigest: contentDigest, currentPointer: null, allowanceId: null, orderId: null };
+  });
+}
 
 /** Cooling comes from the sealed profile. A caller cannot supply a shorter wait. */
 export function coolingOffMsFromProfileBodyV1(bodyText: string): number {

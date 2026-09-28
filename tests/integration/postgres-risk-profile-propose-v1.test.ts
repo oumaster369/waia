@@ -1,14 +1,17 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { describe, expect, it } from "vitest";
-import { admitOpenProfileFrontierV1, cancelStoredProfileProposalV1, refuseProfileBackedExecutionV1, readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, reproposeStoredProfileV1, retainProposedRiskAccountProfileV1, revokeStoredProfileAuthorityV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
+import { admitOpenProfileFrontierV1, cancelStoredProfileProposalV1, refuseProfileBackedExecutionV1, readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, reproposeStoredProfileV1, retainProposedRiskAccountProfileV1, retainStoredRiskAccountReferenceV1, revokeStoredProfileAuthorityV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
 import { RiskCurrentAccountRefusedV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import {
   createRiskAccountProfileV1,
+  createRiskAccountReferenceV1,
   riskAccountDigestV1,
+  sealRiskAccountRecordV1,
   RISK_ACCOUNT_CHANNELS_V1,
   RISK_REFERENCE_METHOD_V1,
   type RiskAccountProfileDraftV1,
+  type RiskReferenceMemberV1,
 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -85,6 +88,22 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
       expect(await retainProposedRiskAccountProfileV1(sql, {
         profile, actorId: user!.id, auditId: audit!.id, commandId: proposeCommand,
       })).toMatchObject({ profileDigest: retained.profileDigest, action: "PROPOSE" });
+      const source = "00000000-0000-4000-8000-000000113502";
+      const members: RiskReferenceMemberV1[] = [0, 500].map((offset, slot) => sealRiskAccountRecordV1({
+        schemaVersion: "risk-reference-member/v1" as const, organizationId: org!.id, accountId, profileDigest: profile.contentDigest,
+        windowId: "proposal-window", slot, instrumentIdentityDigestHex: digest("BTC/USDT"), symbol: "BTC/USDT", baseAsset: "BTC",
+        quoteAsset: "USDT" as const, sourceId: source, sourceReportTimeUtc: new Date(Date.parse(start) + offset).toISOString(),
+        availableAtUtc: new Date(Date.parse(start) + offset).toISOString(), captureReceiptDigest: digest(`ref-capture-${slot}`),
+        storageBindingDigest: digest(`ref-storage-${slot}`), validationReceiptDigest: digest(`ref-validation-${slot}`),
+        rawBytesDigest: digest(`ref-raw-${slot}`), rawMemberPath: "tick" as const, decoderVersion: "htx-merged-lossless-scale8/v1",
+        normalizedInputDigest: digest(`ref-normal-${slot}`), gatewayReceiptDigest: digest(`ref-gateway-${slot}`),
+        observationId: digest(`ref-observation-${slot}`), observationContentDigest: digest(`ref-content-${slot}`),
+        trustAsOfReceiptId: digest(`ref-trust-${slot}`), bid: "9", ask: "10", last: "1000",
+      }));
+      const reference = createRiskAccountReferenceV1({ profile, windowId: "proposal-window", windowStartUtc: start, assembledAtUtc: new Date(Date.parse(start) + 1000).toISOString(), members });
+      await expect(retainStoredRiskAccountReferenceV1(sql, { reference, actorId: user!.id, auditId: audit!.id })).rejects.toThrow(/REFERENCE_MEMBERS/);
+      const [references] = await sql<{ n: number }[]>`select count(*)::int n from trader_risk_account_references_v1 where account_id = ${accountId}`;
+      expect(references?.n).toBe(0);
       const [afterReplay] = await sql<{ n: number }[]>`select count(*)::int n from trader_risk_account_profile_events_v1 where account_id = ${accountId}`;
       expect(afterReplay?.n).toBe(1);
       const [event] = await sql<{ action: string; n: number }[]>`select action, count(*)::int n

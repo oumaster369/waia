@@ -1,4 +1,4 @@
-import { admitFoldedSuffixV1, admitOpenProfileFrontierV1, assertProfileCoolingElapsedV1, coolingOffMsFromProfileBodyV1, assertAuditActorMatchesV1, decideProfileCommandReplayV1, decideRiskAccountProfileCommandV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
+import { admitFoldedSuffixV1, admitOpenProfileFrontierV1, assertProfileCoolingElapsedV1, coolingOffMsFromProfileBodyV1, assertAuditActorMatchesV1, assertReferenceMembersRetainedV1, decideProfileCommandReplayV1, decideRiskAccountProfileCommandV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
 import { classifyCurrentAccountRowV1 } from "@/lib/trader/risk/v2/risk-current-account-read-v1";
 import { describe, expect, it } from "vitest";
 import { createRealityProjectionV2, type RealityProjectionEntryV2 } from "@/lib/trader/reality/v2/contracts";
@@ -232,6 +232,9 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     assertAuditActorMatchesV1({ actorId: "a", organizationId: "o" }, { actorId: "a", organizationId: "o" });
     expect(() => assertAuditActorMatchesV1({ actorId: "other", organizationId: "o" }, { actorId: "a", organizationId: "o" })).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => assertAuditActorMatchesV1(null, { actorId: "a", organizationId: "o" })).toThrow(RiskCurrentAccountRefusedV1);
+    assertReferenceMembersRetainedV1(["m1", "m2"], ["m2", "m1"]);
+    expect(() => assertReferenceMembersRetainedV1(["m1"], [])).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => assertReferenceMembersRetainedV1(["m1", "m1"], ["m1"])).toThrow(RiskCurrentAccountRefusedV1);
   });
   it("observes a sealed Expected frontier without publishing a limit", () => {
     const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };
