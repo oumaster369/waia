@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A suffix event must say whether an inclusion was used. Omitting that field is refused. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "The terminal consumed list must repeat the inclusion answer. Hiding a held inclusion is refused. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null

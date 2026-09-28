@@ -775,7 +775,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   terminalReservationNotional: string;
   terminalStateVersion: string;
   terminalOpenAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; riskVerdictId: string; boundOrderId: null; boundOrderDigestHex: null }[];
-  terminalConsumedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; riskVerdictId: string; boundOrderId: string; boundOrderDigestHex: string }[];
+  terminalConsumedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; riskVerdictId: string; boundOrderId: string; boundOrderDigestHex: string; truthRecordId: string | null }[];
   organizationId: string;
   accountId: string;
   declaredMaxEvents: number;
@@ -801,7 +801,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   let reservation = nonnegative(input.predecessorReservationNotional);
   let pending = nonnegative(input.predecessorPendingExposureNotional);
   const open = new Map<string, { reserved: bigint; quantity: bigint; verdict: string }>();
-  const consumed = new Map<string, { reserved: bigint; quantity: bigint; verdict: string; orderId: string; orderDigest: string }>();
+  const consumed = new Map<string, { reserved: bigint; quantity: bigint; verdict: string; orderId: string; orderDigest: string; truth: string | null }>();
   const orderIds = new Set<string>();
   const orderDigests = new Set<string>();
   const verdictIds = new Set<string>();
@@ -834,8 +834,9 @@ export function foldExpectedEnforcementSuffixV1(input: {
       riskAccountDigestSchemaV1.parse(prior.boundOrderDigestHex);
       verdictIds.add(prior.riskVerdictId);
       orderIds.add(prior.boundOrderId);
+      if (prior.truthRecordId === undefined) refuse("EXPECTED_STATE");
       orderDigests.add(prior.boundOrderDigestHex);
-      consumed.set(prior.allowanceId, { reserved, quantity, verdict: prior.riskVerdictId, orderId: prior.boundOrderId, orderDigest: prior.boundOrderDigestHex });
+      consumed.set(prior.allowanceId, { reserved, quantity, verdict: prior.riskVerdictId, orderId: prior.boundOrderId, orderDigest: prior.boundOrderDigestHex, truth: prior.truthRecordId });
       explainedPending += reserved;
     } else if (prior.riskVerdictId !== null || prior.boundOrderId !== null || prior.boundOrderDigestHex !== null) refuse("EXPECTED_STATE");
   }
@@ -887,7 +888,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
         riskAccountDigestSchemaV1.parse(event.boundOrderDigestHex);
         orderIds.add(event.boundOrderId);
         orderDigests.add(event.boundOrderDigestHex);
-        consumed.set(event.allowanceId, { reserved, quantity, verdict: event.riskVerdictId, orderId: event.boundOrderId, orderDigest: event.boundOrderDigestHex });
+        consumed.set(event.allowanceId, { reserved, quantity, verdict: event.riskVerdictId, orderId: event.boundOrderId, orderDigest: event.boundOrderDigestHex, truth: event.truthRecordId });
       } else if (event.boundOrderId !== null || event.boundOrderDigestHex !== null) refuse("EXPECTED_STATE");
       open.delete(event.allowanceId);
       closed.add(event.allowanceId);
@@ -922,16 +923,16 @@ export function foldExpectedEnforcementSuffixV1(input: {
     const row = listed.get(id);
     if (row === undefined || row.reserved !== held.reserved || row.quantity !== held.quantity || row.verdict !== held.verdict) refuse("EXPECTED_OBLIGATION_IDENTITY");
   }
-  const listedConsumed = new Map<string, { reserved: bigint; quantity: bigint; verdict: string; orderId: string; orderDigest: string }>();
+  const listedConsumed = new Map<string, { reserved: bigint; quantity: bigint; verdict: string; orderId: string; orderDigest: string; truth: string | null }>();
   for (const row of input.terminalConsumedAllowances) {
-    if (!row.allowanceId || !row.riskVerdictId || !row.boundOrderId || listedConsumed.has(row.allowanceId) || open.has(row.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
+    if (!row.allowanceId || !row.riskVerdictId || !row.boundOrderId || row.truthRecordId === undefined || listedConsumed.has(row.allowanceId) || open.has(row.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
     riskAccountDigestSchemaV1.parse(row.boundOrderDigestHex);
-    listedConsumed.set(row.allowanceId, { reserved: nonnegative(row.reservedExposureNotional), quantity: positiveQuantity(row.quantity), verdict: row.riskVerdictId, orderId: row.boundOrderId, orderDigest: row.boundOrderDigestHex });
+    listedConsumed.set(row.allowanceId, { reserved: nonnegative(row.reservedExposureNotional), quantity: positiveQuantity(row.quantity), verdict: row.riskVerdictId, orderId: row.boundOrderId, orderDigest: row.boundOrderDigestHex, truth: row.truthRecordId });
   }
   if (listedConsumed.size !== consumed.size) refuse("EXPECTED_OBLIGATION_IDENTITY");
   for (const [id, held] of consumed) {
     const row = listedConsumed.get(id);
-    if (row === undefined || row.reserved !== held.reserved || row.quantity !== held.quantity || row.verdict !== held.verdict || row.orderId !== held.orderId || row.orderDigest !== held.orderDigest) refuse("EXPECTED_OBLIGATION_IDENTITY");
+    if (row === undefined || row.reserved !== held.reserved || row.quantity !== held.quantity || row.verdict !== held.verdict || row.orderId !== held.orderId || row.orderDigest !== held.orderDigest || row.truth !== held.truth) refuse("EXPECTED_OBLIGATION_IDENTITY");
   }
   if (sequence(input.terminalStateVersion) !== sequence(input.predecessorStateVersion) + BigInt(input.events.length)) {
     refuse("EXPECTED_SEQUENCE");
