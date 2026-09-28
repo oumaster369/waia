@@ -404,6 +404,7 @@ describe.skipIf(!enabled || !url)("DEE1122 native committed Execution report del
   ])("refuses stored noncanonical %s fill time without any Reality write", async (_name, time) => {
     const value = await fixture(); const { report } = await appendTimedFills(value, [time]);
     expect(report.rawObservation.trades).toEqual([expect.objectContaining({ executedAt: time })]);
+    expect(() => route(report)).toThrow("ExecutionReportV2 fill evidence is fail-uncertain");
     const before = await snapshot();
     expect(await catchUpExecutionRealityV2Postgres(db, value.input))
       .toMatchObject({ status: "FAILED", code: "DELIVERY_FAILED", newDeliveryCommitted: false });
@@ -411,11 +412,15 @@ describe.skipIf(!enabled || !url)("DEE1122 native committed Execution report del
     expect(await snapshot()).toEqual(before); expect(fetch).not.toHaveBeenCalled();
   });
   it("rolls back delivery when a source fill time is later than actual allocated knowledge", async () => {
-    const value = await fixture(); await appendTimedFills(value, ["2099-08-21T00:00:00.123Z"]);
+    const value = await fixture(); const { report } = await appendTimedFills(value, ["2099-08-21T00:00:00.123Z"]);
     const before = await snapshot();
     expect(await catchUpExecutionRealityV2Postgres(db, value.input))
       .toMatchObject({ status: "FAILED", code: "DELIVERY_FAILED", newDeliveryCommitted: false });
     expect(await listRealitySourceReportsV2(db, scope())).toHaveLength(0);
+    expect(await snapshot()).toEqual(before);
+    const future = route(report).find(d => d.primitiveAssertion?.kind === "FILL")!;
+    await expect(ingestRealitySourceReportV2Postgres(db, scope(), future))
+      .rejects.toThrow("knowledge time cannot precede source-asserted valid time");
     expect(await snapshot()).toEqual(before); expect(fetch).not.toHaveBeenCalled();
   });
 });
