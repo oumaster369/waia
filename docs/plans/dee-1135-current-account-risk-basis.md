@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "An issued predecessor obligation must keep its verdict id and the remaining order-binding fields. A changed verdict id is refused, and an unchanged obligation still publishes nothing. Do not invent caps or mark WP-1 complete."
+  nextAction: "The event head stays with its sequence and must change when the sequence advances. A rewritten or stale head is refused, and a consistent advance still publishes nothing. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

@@ -568,11 +568,12 @@ export function observeSealedExpectedFrontierV1(input: {
   const nextAdmission = sequence(expected.nextAdmissionSequence);
   const nextEvent = sequence(expected.nextEventSequence);
   const predecessor = input.predecessor ?? null;
+  let priorEvent: bigint | null = null;
   if (input.priorExternalDebtNotional != null && !predecessor) refuse("PREDECESSOR_SCOPE_OR_TIME");
   if (predecessor) {
     const priorState = sequence(predecessor.stateVersion);
     const priorAdmission = sequence(predecessor.nextAdmissionSequence);
-    const priorEvent = sequence(predecessor.nextEventSequence);
+    priorEvent = sequence(predecessor.nextEventSequence);
     if (stateVersion < priorState || nextAdmission < priorAdmission || nextEvent < priorEvent)
       refuse("PREDECESSOR_SCOPE_OR_TIME");
     if (predecessor.eventHeadDigest !== null) riskAccountDigestSchemaV1.parse(predecessor.eventHeadDigest);
@@ -587,6 +588,11 @@ export function observeSealedExpectedFrontierV1(input: {
   }
   if (expected.eventHeadDigest !== null) riskAccountDigestSchemaV1.parse(expected.eventHeadDigest);
   if ((nextEvent === 1n) !== (expected.eventHeadDigest === null)) refuse("EXPECTED_SEQUENCE");
+  if (predecessor && priorEvent !== null) {
+    const sameEvent = nextEvent === priorEvent;
+    const sameHead = expected.eventHeadDigest === predecessor.eventHeadDigest;
+    if (sameEvent !== sameHead) refuse("EXPECTED_SEQUENCE");
+  }
   const sums = sumExpectedObligationsV1(expected.obligations);
   if (sums.reservations !== nonnegative(expected.reservationNotional)) refuse("EXPECTED_RESERVATION_SUM");
   if (predecessor) {
