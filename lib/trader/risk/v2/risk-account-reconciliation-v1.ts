@@ -560,12 +560,15 @@ export function observeSealedExpectedFrontierV1(input: {
   predecessor?: RiskExpectedFrontierV1 | null;
   /** Null means prior accounting exposure is unattested. It is not read from the predecessor frontier. */
   priorReconciledExposureNotional?: string | null;
+  /** Null means the predecessor's external debt is unattested. It is not treated as zero. */
+  priorExternalDebtNotional?: string | null;
 }): ReturnType<typeof compareExpectedAccountFrontierV1> {
   const expected = input.expected;
   const stateVersion = sequence(expected.stateVersion);
   const nextAdmission = sequence(expected.nextAdmissionSequence);
   const nextEvent = sequence(expected.nextEventSequence);
   const predecessor = input.predecessor ?? null;
+  if (input.priorExternalDebtNotional != null && !predecessor) refuse("PREDECESSOR_SCOPE_OR_TIME");
   if (predecessor) {
     const priorState = sequence(predecessor.stateVersion);
     const priorAdmission = sequence(predecessor.nextAdmissionSequence);
@@ -576,6 +579,11 @@ export function observeSealedExpectedFrontierV1(input: {
     if ((priorEvent === 1n) !== (predecessor.eventHeadDigest === null)) refuse("EXPECTED_SEQUENCE");
     const priorSums = sumExpectedObligationsV1(predecessor.obligations);
     if (priorSums.reservations !== nonnegative(predecessor.reservationNotional)) refuse("EXPECTED_RESERVATION_SUM");
+    if (input.priorExternalDebtNotional != null) {
+      const priorPending = nonnegative(predecessor.pendingExposureNotional);
+      if (priorPending !== priorSums.consumedPending + nonnegative(input.priorExternalDebtNotional))
+        refuse("EXPECTED_PENDING_SUM");
+    }
   }
   if (expected.eventHeadDigest !== null) riskAccountDigestSchemaV1.parse(expected.eventHeadDigest);
   if ((nextEvent === 1n) !== (expected.eventHeadDigest === null)) refuse("EXPECTED_SEQUENCE");

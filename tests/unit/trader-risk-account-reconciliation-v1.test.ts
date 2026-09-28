@@ -339,5 +339,21 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
     }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
   });
+  it("does not treat an unattested predecessor debt as zero", () => {
+    const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };
+    const predecessor = { ...initialExpected(), pendingExposureNotional: "4" };
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, predecessor, priorExternalDebtNotional: "0",
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, priorExternalDebtNotional: "4",
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected, predecessor, priorExternalDebtNotional: "4",
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
 
 });

@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A predecessor obligation uses the same identity and reservation-sum rules. A valid predecessor still publishes nothing. Do not invent caps or mark WP-1 complete."
+  nextAction: "An unattested predecessor debt stays unknown and is not treated as zero. A supplied predecessor debt must match its pending sum, and a match still publishes nothing. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null
