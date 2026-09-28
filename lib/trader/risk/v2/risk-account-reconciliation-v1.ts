@@ -527,6 +527,8 @@ export function observeSealedExpectedFrontierV1(input: {
   priorReferenceDigest?: string | null;
   /** Null means no predecessor frontier is attested. Its notionals are not copied. */
   predecessor?: RiskExpectedFrontierV1 | null;
+  /** Null means prior accounting exposure is unattested. It is not read from the predecessor frontier. */
+  priorReconciledExposureNotional?: string | null;
 }): ReturnType<typeof compareExpectedAccountFrontierV1> {
   const expected = input.expected;
   const stateVersion = sequence(expected.stateVersion);
@@ -571,7 +573,9 @@ export function observeSealedExpectedFrontierV1(input: {
   if (priorReferenceDigest !== null) riskAccountDigestSchemaV1.parse(priorReferenceDigest);
   if (expected.obligations.length > 0 && priorReferenceDigest !== null && priorReferenceDigest !== referenceDigest)
     refuse("REFERENCE_DRIFT_WITH_OBLIGATIONS");
-  nonnegative(expected.reconciledExposureNotional);
+  const reconciled = nonnegative(expected.reconciledExposureNotional);
+  if (input.priorReconciledExposureNotional != null && reconciled !== nonnegative(input.priorReconciledExposureNotional))
+    refuse("PREDECESSOR_SCOPE_OR_TIME");
   const declaredPending = nonnegative(expected.pendingExposureNotional);
   if (input.externalDebtNotional !== null && declaredPending !== consumedPending + nonnegative(input.externalDebtNotional))
     refuse("EXPECTED_PENDING_SUM");

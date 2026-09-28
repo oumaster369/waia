@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "An Expected frontier that rewinds a predecessor sequence is refused. An equal sequence still publishes nothing, and predecessor notionals are not copied. Do not invent caps or mark WP-1 complete."
+  nextAction: "Attested prior accounting exposure must match the Expected frontier. A mismatch is refused, an unattested figure is not invented, and a match still publishes nothing. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null
