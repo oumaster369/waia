@@ -6,7 +6,7 @@ import { createRiskAccountProfileV1, createRiskAccountReferenceV1, riskAccountDi
   RISK_ACCOUNT_CHANNELS_V1, RISK_REFERENCE_METHOD_V1, RiskCurrentAccountRefusedV1, sealRiskAccountRecordV1,
   type RiskAccountProfileDraftV1, type RiskReferenceMemberV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import { availableRiskAccountQuantityV1, constructRiskAccountBasisV1, compareExpectedAccountFrontierV1,
-  admitCurrentAccountBasisV1, decideCurrentAccountBasisPublicationV1, holdUnpublishedInclusionsV1, observeSealedExpectedFrontierV1, retainObservedFrontierV1,
+  admitCurrentAccountBasisV1, authenticateExpectedEventSuffixV1, decideCurrentAccountBasisPublicationV1, holdUnpublishedInclusionsV1, observeSealedExpectedFrontierV1, retainObservedFrontierV1,
   type RiskAccountObligationV1, type RiskExpectedFrontierV1, type RiskIndependentInclusionV1 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
 
 // These pure values exercise arithmetic and refusal contracts only. No persisted authority,
@@ -443,6 +443,27 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       exposureDelta: "2", pendingDelta: "-1",
     });
     expect(() => admitOpenProfileFrontierV1({ storedAction: "CANCEL", observed })).toThrow(RiskCurrentAccountRefusedV1);
+  });
+  it("authenticates a gap-free Expected event suffix and refuses a gap or an undeclared length", () => {
+    const head = digest("suffix-event");
+    expect(authenticateExpectedEventSuffixV1({
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1", events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", declaredMaxEvents: 4,
+    })).toEqual({ decision: "AUTHENTICATED", eventCount: 0, currentPointer: null });
+    expect(authenticateExpectedEventSuffixV1({
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1",
+      events: [{ sequence: "1", previousDigest: null, contentDigest: head }],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", declaredMaxEvents: 4,
+    }).eventCount).toBe(1);
+    expect(() => authenticateExpectedEventSuffixV1({
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1",
+      events: [{ sequence: "2", previousDigest: null, contentDigest: head }],
+      terminalHeadDigest: head, terminalNextEventSequence: "3", declaredMaxEvents: 4,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => authenticateExpectedEventSuffixV1({
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1", events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", declaredMaxEvents: 0,
+    })).toThrow(RiskCurrentAccountRefusedV1);
   });
 
 });

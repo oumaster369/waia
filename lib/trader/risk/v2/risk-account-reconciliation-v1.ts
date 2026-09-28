@@ -668,3 +668,33 @@ export function holdUnpublishedInclusionsV1(input: {
   }
   return { disposition: "HELD_UNPUBLISHED", truthRecordIds: held, inclusionWrite: null, currentPointer: null };
 }
+
+/** Structural own-journal suffix. It does not recompute exposure and does not publish authority.
+ *  declaredMaxEvents is the caller's already declared work bound. There is no default.
+ */
+export function authenticateExpectedEventSuffixV1(input: {
+  predecessorHeadDigest: string | null;
+  predecessorNextEventSequence: string;
+  events: readonly { sequence: string; previousDigest: string | null; contentDigest: string }[];
+  terminalHeadDigest: string | null;
+  terminalNextEventSequence: string;
+  declaredMaxEvents: number;
+}): { decision: "AUTHENTICATED"; eventCount: number; currentPointer: null } {
+  if (!Number.isSafeInteger(input.declaredMaxEvents) || input.declaredMaxEvents < 1) refuse("SUFFIX_WORK_LIMIT");
+  if (input.events.length > input.declaredMaxEvents) refuse("SUFFIX_WORK_LIMIT");
+  let expectedSequence = sequence(input.predecessorNextEventSequence);
+  let previous = input.predecessorHeadDigest;
+  if (previous !== null) riskAccountDigestSchemaV1.parse(previous);
+  for (const event of input.events) {
+    if (sequence(event.sequence) !== expectedSequence) refuse("EXPECTED_SEQUENCE");
+    if (event.previousDigest !== previous) refuse("EXPECTED_SEQUENCE");
+    if (event.previousDigest !== null) riskAccountDigestSchemaV1.parse(event.previousDigest);
+    riskAccountDigestSchemaV1.parse(event.contentDigest);
+    previous = event.contentDigest;
+    expectedSequence += 1n;
+  }
+  if (sequence(input.terminalNextEventSequence) !== expectedSequence) refuse("EXPECTED_SEQUENCE");
+  if (input.terminalHeadDigest !== previous) refuse("EXPECTED_SEQUENCE");
+  if (input.terminalHeadDigest !== null) riskAccountDigestSchemaV1.parse(input.terminalHeadDigest);
+  return { decision: "AUTHENTICATED", eventCount: input.events.length, currentPointer: null };
+}
