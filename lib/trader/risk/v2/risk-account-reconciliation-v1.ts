@@ -740,7 +740,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   predecessorPendingExposureNotional: string;
   predecessorReservationNotional: string;
   predecessorStateVersion: string;
-  openedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string }[];
+  openedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; riskVerdictId: string }[];
   closedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; disposition: "CONSUMED" | "RELEASED"; truthRecordId?: string | null }[];
   events: readonly {
     sequence: string;
@@ -754,6 +754,9 @@ export function foldExpectedEnforcementSuffixV1(input: {
     allowanceId: string;
     reservedExposureNotional: string;
     quantity: string;
+    riskVerdictId: string;
+    boundOrderId: string | null;
+    boundOrderDigestHex: string | null;
     truthRecordId?: string | null;
   }[];
   alreadyDisposedTruthIds: readonly string[];
@@ -790,7 +793,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   }
   let reservation = nonnegative(input.predecessorReservationNotional);
   let pending = nonnegative(input.predecessorPendingExposureNotional);
-  const open = new Map<string, { reserved: bigint; quantity: bigint }>();
+  const open = new Map<string, { reserved: bigint; quantity: bigint; verdict: string }>();
   const consumed = new Map<string, { reserved: bigint; quantity: bigint }>();
   const closed = new Set<string>();
   const positiveQuantity = (value: string) => {
@@ -802,7 +805,8 @@ export function foldExpectedEnforcementSuffixV1(input: {
   for (const prior of input.openedAllowances) {
     if (!prior.allowanceId || open.has(prior.allowanceId) || closed.has(prior.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
     const reserved = nonnegative(prior.reservedExposureNotional);
-    open.set(prior.allowanceId, { reserved, quantity: positiveQuantity(prior.quantity) });
+    if (!prior.riskVerdictId) refuse("EXPECTED_OBLIGATION_IDENTITY");
+    open.set(prior.allowanceId, { reserved, quantity: positiveQuantity(prior.quantity), verdict: prior.riskVerdictId });
     explained += reserved;
   }
   let explainedPending = 0n;
@@ -833,6 +837,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
     }
   }
   const heldTruthRecordIds: string[] = [];
+  const orderIds = new Set<string>();
   let issued = 0n;
   for (const event of input.events) {
     if (!(ENFORCEMENT_SUFFIX_TYPES as readonly string[]).includes(event.type)) refuse("EXPECTED_STATE");
@@ -844,13 +849,19 @@ export function foldExpectedEnforcementSuffixV1(input: {
     if (event.type !== "ALLOWANCE_CONSUMED" && event.truthRecordId != null) refuse("EXPECTED_STATE");
     if (event.type === "ALLOWANCE_ISSUED") {
       if (open.has(event.allowanceId) || closed.has(event.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
-      open.set(event.allowanceId, { reserved, quantity: positiveQuantity(event.quantity) });
+      if (!event.riskVerdictId || event.boundOrderId !== null || event.boundOrderDigestHex !== null) refuse("EXPECTED_STATE");
+      open.set(event.allowanceId, { reserved, quantity: positiveQuantity(event.quantity), verdict: event.riskVerdictId });
       reservation += reserved;
       issued += 1n;
     } else {
       const held = open.get(event.allowanceId);
       const quantity = positiveQuantity(event.quantity);
-      if (held === undefined || held.reserved !== reserved || held.quantity !== quantity) refuse("EXPECTED_OBLIGATION_IDENTITY");
+      if (held === undefined || held.reserved !== reserved || held.quantity !== quantity || held.verdict !== event.riskVerdictId) refuse("EXPECTED_OBLIGATION_IDENTITY");
+      if (event.type === "ALLOWANCE_CONSUMED") {
+        if (!event.boundOrderId || event.boundOrderDigestHex === null || orderIds.has(event.boundOrderId)) refuse("EXPECTED_CONSUMED_STATE");
+        riskAccountDigestSchemaV1.parse(event.boundOrderDigestHex);
+        orderIds.add(event.boundOrderId);
+      } else if (event.boundOrderId !== null || event.boundOrderDigestHex !== null) refuse("EXPECTED_STATE");
       open.delete(event.allowanceId);
       closed.add(event.allowanceId);
       if (reservation < reserved) refuse("EXPECTED_RESERVATION_SUM");

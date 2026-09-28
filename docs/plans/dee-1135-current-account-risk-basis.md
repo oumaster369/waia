@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Each suffix event must name this account and the same state transition the enforcement writer already records. A foreign account or a mismatched transition is refused. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "A suffix event keeps the writer verdict, and only consumption carries an order binding. An issued event with an order, or a consumption without one, is refused. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
