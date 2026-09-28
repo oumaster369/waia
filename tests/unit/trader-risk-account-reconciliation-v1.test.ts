@@ -547,20 +547,22 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, truthRecordId: null }],
       terminalStateVersion: "2",
     })).toEqual({ decision: "AUTHENTICATED", eventCount: 1, notionalsVerified: true, heldTruthRecordIds: [], currentPointer: null });
+    // Deliberately invalid runtime input: an open terminal row must not name an inclusion.
     expect(() => foldExpectedEnforcementSuffixV1({
       ...base, events: [issued],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
       terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, truthRecordId: digest("open-inclusion") }],
       terminalStateVersion: "2",
-    })).toThrow(RiskCurrentAccountRefusedV1);
+    } as unknown as Parameters<typeof foldExpectedEnforcementSuffixV1>[0])).toThrow(RiskCurrentAccountRefusedV1);
+    // Deliberately invalid runtime input: an open terminal row must not carry an order binding.
     expect(() => foldExpectedEnforcementSuffixV1({
       ...base, events: [issued],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
       terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1"), truthRecordId: null }],
       terminalStateVersion: "2",
-    })).toThrow(RiskCurrentAccountRefusedV1);
+    } as unknown as Parameters<typeof foldExpectedEnforcementSuffixV1>[0])).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => foldExpectedEnforcementSuffixV1({
       ...base, events: [issued],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
@@ -631,6 +633,16 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
     })).toThrow(RiskCurrentAccountRefusedV1);
+    const { truthRecordId: _omittedTruth, ...issuedWithoutTruth } = issued;
+    void _omittedTruth;
+    // Deliberately invalid runtime input: an ISSUED event with truthRecordId omitted.
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issuedWithoutTruth],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, truthRecordId: null }],
+      terminalStateVersion: "2",
+    } as unknown as Parameters<typeof foldExpectedEnforcementSuffixV1>[0])).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => foldExpectedEnforcementSuffixV1({
       ...base, events: [{ ...issued, truthRecordId: digest("issued-inclusion-refused") }],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",

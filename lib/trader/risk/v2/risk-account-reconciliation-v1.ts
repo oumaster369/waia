@@ -788,7 +788,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   terminalPendingExposureNotional: string;
   terminalReservationNotional: string;
   terminalStateVersion: string;
-  terminalOpenAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; riskVerdictId: string; boundOrderId: string | null; boundOrderDigestHex: string | null; truthRecordId: string | null }[];
+  terminalOpenAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; riskVerdictId: string; boundOrderId: null; boundOrderDigestHex: null; truthRecordId: null }[];
   terminalConsumedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; riskVerdictId: string; boundOrderId: string; boundOrderDigestHex: string; truthRecordId: string | null }[];
   organizationId: string;
   accountId: string;
