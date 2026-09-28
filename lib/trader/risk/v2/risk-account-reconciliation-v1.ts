@@ -751,8 +751,11 @@ export function foldExpectedEnforcementSuffixV1(input: {
   terminalPendingExposureNotional: string;
   terminalReservationNotional: string;
   terminalOpenAllowances: readonly { allowanceId: string; reservedExposureNotional: string }[];
+  organizationId: string;
+  accountId: string;
   declaredMaxEvents: number;
 }): { decision: "AUTHENTICATED"; eventCount: number; notionalsVerified: true; heldTruthRecordIds: readonly string[]; currentPointer: null } {
+  if (input.organizationId.length === 0 || input.accountId.length === 0) refuse("SUFFIX_SCOPE_MISMATCH");
   authenticateExpectedEventSuffixV1({
     predecessorHeadDigest: input.predecessorHeadDigest,
     predecessorNextEventSequence: input.predecessorNextEventSequence,

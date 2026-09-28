@@ -10,7 +10,7 @@ import {
   readCurrentAccountAuthorityV1,
   type CurrentAccountAuthorityV1,
 } from "@/lib/trader/risk/v2/risk-current-account-read-v1";
-import { foldExpectedEnforcementSuffixV1 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
+import { foldExpectedEnforcementSuffixV1, holdUnpublishedInclusionsV1 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
 
 type FoldedSuffixInputV1 = Parameters<typeof foldExpectedEnforcementSuffixV1>[0];
 
@@ -388,15 +388,36 @@ export function admitOpenProfileFrontierV1(input: {
   };
 }
 
-/** A fully folded suffix still cannot issue. A structure-only suffix is not enough. */
+function sameAccountV1(suffix: FoldedSuffixInputV1, organizationId: string, accountId: string): void {
+  if (suffix.organizationId !== organizationId || suffix.accountId !== accountId) {
+    throw new RiskCurrentAccountRefusedV1("SUFFIX_SCOPE_MISMATCH");
+  }
+}
+
+/** A fully folded suffix still cannot issue. A structure-only suffix is not enough.
+ *  The account and the unpublished inclusion ids must be the ones the fold itself held.
+ */
 export function admitFoldedSuffixV1(input: {
   storedAction: Parameters<typeof admitOpenProfileFrontierV1>[0]["storedAction"];
   observed: Parameters<typeof admitOpenProfileFrontierV1>[0]["observed"];
+  account: { organizationId: string; accountId: string };
+  unpublishedTruthRecordIds: readonly string[];
   suffix: FoldedSuffixInputV1;
 }): ReturnType<typeof admitOpenProfileFrontierV1> {
+  sameAccountV1(input.suffix, input.account.organizationId, input.account.accountId);
   const folded = foldExpectedEnforcementSuffixV1(input.suffix);
   if (!folded.notionalsVerified || folded.currentPointer !== null) {
     throw new RiskCurrentAccountRefusedV1("SUFFIX_NOTIONALS_UNVERIFIED");
+  }
+  const held = holdUnpublishedInclusionsV1({
+    truthRecordIds: input.unpublishedTruthRecordIds,
+    alreadyDisposedTruthIds: input.suffix.alreadyDisposedTruthIds,
+  });
+  if (
+    held.truthRecordIds.length !== folded.heldTruthRecordIds.length ||
+    held.truthRecordIds.some((id, index) => id !== folded.heldTruthRecordIds[index])
+  ) {
+    throw new RiskCurrentAccountRefusedV1("INDEPENDENT_INCLUSION_IDENTITY");
   }
   const issue = admitOpenProfileFrontierV1({
     storedAction: input.storedAction,
@@ -415,6 +436,7 @@ export async function refuseProfileBackedExecutionV1(
     organizationId: string;
     accountId: string;
     observed: Parameters<typeof admitOpenProfileFrontierV1>[0]["observed"];
+    unpublishedTruthRecordIds: readonly string[];
     suffix: FoldedSuffixInputV1;
   },
 ): Promise<{
@@ -428,6 +450,7 @@ export async function refuseProfileBackedExecutionV1(
       };
   bind: Awaited<ReturnType<typeof gateCurrentAccountExecutionBindV1>>;
 }> {
+  sameAccountV1(input.suffix, input.organizationId, input.accountId);
   const folded = foldExpectedEnforcementSuffixV1(input.suffix);
   if (!folded.notionalsVerified || folded.currentPointer !== null) {
     throw new RiskCurrentAccountRefusedV1("SUFFIX_NOTIONALS_UNVERIFIED");
@@ -449,6 +472,8 @@ export async function refuseProfileBackedExecutionV1(
   const issue = admitFoldedSuffixV1({
     storedAction: stored.action,
     observed: input.observed,
+    account: { organizationId: input.organizationId, accountId: input.accountId },
+    unpublishedTruthRecordIds: input.unpublishedTruthRecordIds,
     suffix: input.suffix,
   });
   if (issue.allowanceId !== null || issue.orderId !== null) {

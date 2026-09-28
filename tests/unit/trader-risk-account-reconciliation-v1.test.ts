@@ -465,13 +465,18 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
       terminalOpenAllowances: [],
+      organizationId: org, accountId: "synthetic-spot",
       declaredMaxEvents: 4,
     };
-    expect(admitFoldedSuffixV1({ storedAction: "PROPOSE", observed, suffix })).toMatchObject({
+    const account = { organizationId: org, accountId: "synthetic-spot" };
+    expect(admitFoldedSuffixV1({ storedAction: "PROPOSE", observed, account, unpublishedTruthRecordIds: [], suffix })).toMatchObject({
       decision: "REFUSED", allowanceId: null, orderId: null,
     });
     expect(() => admitFoldedSuffixV1({
-      storedAction: "PROPOSE", observed, suffix: { ...suffix, terminalReconciledExposureNotional: "1" },
+      storedAction: "PROPOSE", observed, account, unpublishedTruthRecordIds: [], suffix: { ...suffix, terminalReconciledExposureNotional: "1" },
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => admitFoldedSuffixV1({
+      storedAction: "PROPOSE", observed, account: { ...account, accountId: "other-account" }, unpublishedTruthRecordIds: [], suffix,
     })).toThrow(RiskCurrentAccountRefusedV1);
   });
   it("authenticates a gap-free Expected event suffix and refuses a gap or an undeclared length", () => {
@@ -506,6 +511,7 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       predecessorHeadDigest: null, predecessorNextEventSequence: "1", predecessorNextAdmissionSequence: "1",
       predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0",
       openedAllowances: [], closedAllowances: [], alreadyDisposedTruthIds: [], terminalOpenAllowances: [],
+      organizationId: org, accountId: "synthetic-spot",
       declaredMaxEvents: 4,
     };
     const issued = { sequence: "1", previousDigest: null, contentDigest: head, type: "ALLOWANCE_ISSUED" as const, allowanceId: "allow-1", reservedExposureNotional: "10" };
@@ -590,6 +596,15 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       terminalHeadDigest: includedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
     }).heldTruthRecordIds).toEqual([inclusion]);
+    const includedSuffix = { ...base, events: included, terminalHeadDigest: includedHead, terminalNextEventSequence: "3",
+      terminalNextAdmissionSequence: "2", terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0" };
+    const account = { organizationId: org, accountId: "synthetic-spot" };
+    const observed = observeSealedExpectedFrontierV1({
+      expected: { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1" });
+    expect(admitFoldedSuffixV1({ storedAction: "PROPOSE", observed, account, unpublishedTruthRecordIds: [inclusion], suffix: includedSuffix })).toMatchObject({
+      decision: "REFUSED", allowanceId: null, orderId: null });
+    expect(() => admitFoldedSuffixV1({ storedAction: "PROPOSE", observed, account, unpublishedTruthRecordIds: [], suffix: includedSuffix })).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => foldExpectedEnforcementSuffixV1({
       ...base, alreadyDisposedTruthIds: [inclusion], events: included,
       terminalHeadDigest: includedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",

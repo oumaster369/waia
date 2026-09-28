@@ -138,19 +138,27 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
         terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
         terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
         terminalOpenAllowances: [],
+        organizationId: org!.id, accountId,
         declaredMaxEvents: 4,
       };
       await expect(refuseProfileBackedExecutionV1(sql, {
-        organizationId: org!.id, accountId, observed, suffix: { ...suffix, terminalReconciledExposureNotional: "1" },
+        organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [],
+        suffix: { ...suffix, accountId: "other-account" },
+      })).rejects.toThrow(/SUFFIX_SCOPE_MISMATCH/);
+      await expect(refuseProfileBackedExecutionV1(sql, {
+        organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [],
+        suffix: { ...suffix, terminalReconciledExposureNotional: "1" },
       })).rejects.toThrow(/SUFFIX_TERMINAL_MISMATCH/);
-      expect(await refuseProfileBackedExecutionV1(sql, { organizationId: org!.id, accountId, observed, suffix })).toEqual({
+      expect(await refuseProfileBackedExecutionV1(sql, {
+        organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [], suffix,
+      })).toEqual({
         issue: { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null, exposureDelta: "2", pendingDelta: "-1" },
         bind: { decision: "REFUSED", reason: "NO_CURRENT_POINTER", bindInvoked: false },
       });
       await cancelStoredProfileProposalV1(sql, {
         organizationId: org!.id, accountId, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
       });
-      expect(await refuseProfileBackedExecutionV1(sql, { organizationId: org!.id, accountId, observed, suffix })).toEqual({
+      expect(await refuseProfileBackedExecutionV1(sql, { organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [], suffix })).toEqual({
         issue: { decision: "REFUSED", reason: "PROFILE_PROPOSAL_NOT_OPEN", allowanceId: null, orderId: null },
         bind: { decision: "REFUSED", reason: "NO_CURRENT_POINTER", bindInvoked: false },
       });
