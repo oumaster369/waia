@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { describe, expect, it } from "vitest";
-import { admitOpenProfileFrontierV1, cancelStoredProfileProposalV1, readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, reproposeStoredProfileV1, retainProposedRiskAccountProfileV1, revokeStoredProfileAuthorityV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
+import { admitOpenProfileFrontierV1, cancelStoredProfileProposalV1, refuseProfileBackedExecutionV1, readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, reproposeStoredProfileV1, retainProposedRiskAccountProfileV1, revokeStoredProfileAuthorityV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
 import { RiskCurrentAccountRefusedV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import {
   createRiskAccountProfileV1,
@@ -130,6 +130,10 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
       expect(admitOpenProfileFrontierV1({ storedAction: stored.action, observed })).toEqual({
         decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
         exposureDelta: "2", pendingDelta: "-1",
+      });
+      expect(await refuseProfileBackedExecutionV1(sql, { organizationId: org!.id, accountId, observed })).toEqual({
+        issue: { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null, exposureDelta: "2", pendingDelta: "-1" },
+        bind: { decision: "REFUSED", reason: "NO_CURRENT_POINTER", bindInvoked: false },
       });
       const [after] = await sql<{ allowances: number; orders: number; current_rows: number }[]>`select
         (select count(*)::int from trader_risk_allowances_v2) as allowances,

@@ -384,3 +384,27 @@ export function admitOpenProfileFrontierV1(input: {
     pendingDelta: input.observed.pendingDelta,
   };
 }
+
+/** Open-proposal issue and current-account bind both refuse. Neither writes an order. */
+export async function refuseProfileBackedExecutionV1(
+  sql: postgres.Sql,
+  input: {
+    organizationId: string;
+    accountId: string;
+    observed: Parameters<typeof admitOpenProfileFrontierV1>[0]["observed"];
+  },
+): Promise<{
+  issue: ReturnType<typeof admitOpenProfileFrontierV1>;
+  bind: Awaited<ReturnType<typeof gateCurrentAccountExecutionBindV1>>;
+}> {
+  const stored = await readStoredProfileAuthorityV1(sql, input.organizationId, input.accountId);
+  const issue = admitOpenProfileFrontierV1({
+    storedAction: stored.action,
+    observed: input.observed,
+  });
+  const bind = await gateCurrentAccountExecutionBindV1(sql, input.organizationId, input.accountId);
+  if (issue.allowanceId !== null || issue.orderId !== null || bind.bindInvoked) {
+    throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
+  }
+  return { issue, bind };
+}
