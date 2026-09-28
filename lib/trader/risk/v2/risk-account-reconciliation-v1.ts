@@ -1,4 +1,4 @@
-import { formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
+import { formatDecimal, parseDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 import {
   validateRealityProjectionV2,
   type RealityProjectionV2,
@@ -467,4 +467,28 @@ export function decideCurrentAccountBasisPublicationV1(input: {
   void input.liveCapitalEnvelope;
   void input.sourceMethodQualified;
   return { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" };
+}
+
+/** Observed Expected versus Actual notionals. The delta is not a limit and cannot publish. */
+export function compareExpectedAccountFrontierV1(input: {
+  expectedExposureNotional: string;
+  expectedPendingNotional: string;
+  actualExposureNotional: string;
+  actualPendingNotional: string;
+  sourceMethodQualified: boolean;
+}): {
+  decision: "OBSERVED";
+  publication: { decision: "REFUSED"; reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" };
+  exposureDelta: string;
+  pendingDelta: string;
+} {
+  return {
+    decision: "OBSERVED",
+    publication: decideCurrentAccountBasisPublicationV1({
+      liveCapitalEnvelope: null,
+      sourceMethodQualified: input.sourceMethodQualified,
+    }),
+    exposureDelta: subtractDecimal(input.actualExposureNotional, input.expectedExposureNotional),
+    pendingDelta: subtractDecimal(input.actualPendingNotional, input.expectedPendingNotional),
+  };
 }

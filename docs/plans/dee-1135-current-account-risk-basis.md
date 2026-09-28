@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "C01 native baseline passed after the post-lock allowance expiry correction. Basis publication stays refused until a real LiveCapitalEnvelopeV2 producer exists. Do not invent caps or mark WP-1 complete."
+  nextAction: "Expected versus Actual notionals are observed and still cannot publish without LiveCapitalEnvelopeV2. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null
