@@ -603,7 +603,10 @@ export function observeSealedExpectedFrontierV1(input: {
           current.side !== prior.side || current.symbol !== prior.symbol || current.baseAsset !== prior.baseAsset ||
           current.instrumentIdentityDigest !== prior.instrumentIdentityDigest ||
           current.allowanceContentDigest !== prior.allowanceContentDigest ||
+          current.verdictId !== prior.verdictId ||
           current.verdictContentDigest !== prior.verdictContentDigest ||
+          current.pendingNotional !== prior.pendingNotional ||
+          current.orderBindingDigest !== prior.orderBindingDigest ||
           current.reservedNotional !== prior.reservedNotional || current.orderId !== null)
         refuse("EXPECTED_OBLIGATION_IDENTITY");
     }

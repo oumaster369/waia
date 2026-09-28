@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "An issued predecessor obligation must also keep its instrument, allowance, and verdict seals. A changed seal is refused, and an unchanged obligation still publishes nothing. Do not invent caps or mark WP-1 complete."
+  nextAction: "An issued predecessor obligation must keep its verdict id and the remaining order-binding fields. A changed verdict id is refused, and an unchanged obligation still publishes nothing. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null
