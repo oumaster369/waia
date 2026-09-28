@@ -3,8 +3,14 @@ import type postgres from "postgres";
 import type { SavedApplicationRequest } from "@/lib/trader/paper/research-application-v1/repository-postgres";
 import { pathToFileURL } from "node:url";
 
-export async function seedApplicationNative(client: postgres.Sql, organizationId: string, userId: string,
-  options: { against?: boolean; missing4h?: boolean; userAssignment?: boolean; hypothesisVersions?: number; priorOrdinal?: string; targetHypothesisBytes?: number; firstSourceSequence?: number } = {}) {
+type NativeSeedOptions = { against?: boolean; missing4h?: boolean; userAssignment?: boolean; hypothesisVersions?: number; priorOrdinal?: string; targetHypothesisBytes?: number; firstSourceSequence?: number };
+export async function seedApplicationNative(client: postgres.Sql, organizationId: string, userId: string, options: NativeSeedOptions = {}) {
+  return seedApplicationCore(client, organizationId, userId, options, false);
+}
+export async function seedSavedDomainApplicationNative(client: postgres.Sql, organizationId: string, userId: string, options: NativeSeedOptions = {}) {
+  return seedApplicationCore(client, organizationId, userId, options, true);
+}
+async function seedApplicationCore(client: postgres.Sql, organizationId: string, userId: string, options: NativeSeedOptions, savedDomain: boolean) {
   const { drizzle } = await import("drizzle-orm/postgres-js"); const schema = await import("@/db/schema.postgres");
   const { createPostgresMiMeasurementService } = await import("@/lib/trader/mi/measurement-service");
   const { createPostgresMiHypothesisService } = await import("@/lib/trader/mi/hypothesis-service");
@@ -14,15 +20,16 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
   const { APPLICATION_COMPUTATION_SOURCE_MANIFEST_DIGEST } = await import("@/lib/trader/paper/research-application-v1/computation-manifest");
   const research = await import("@/lib/trader/paper/research-understanding-v1/contract");
   const { createSavedResearchOwner } = await import("@/lib/trader/paper/research-understanding-v1/repository-postgres");
-  const { runSavedResearchLoop } = await import("@/lib/trader/paper/research-understanding-v1/run-saved-research-loop");
+  const { runSavedResearchLoop, runSavedDomainResearchLoop } = await import("@/lib/trader/paper/research-understanding-v1/run-saved-research-loop");
   const { researchProfileDefinition } = await import("./research-understanding-fixture");
   const { captureSession } = await import("@/lib/trader/paper/durable-noncapital/recorded-analysis-v1");
   const { normalizeMandatory } = await import("@/lib/trader/paper/durable-noncapital/normalize-mandatory-packet-v1");
   const normalization = await import("@/lib/trader/market-data/normalization/normalize-observation");
   const { intervalDurationMs } = await import("@/lib/trader/market-data/mtf/bar-interval-duration");
-  const { publishRecordedAnalysis } = await import("@/lib/trader/paper/durable-noncapital/repository-postgres-v1");
-  const { completeRecordedAnalysisPostgresV1 } = await import("@/lib/trader/runtime-v2/noncapital-cycle-owner-postgres-v2");
+  const { publishRecordedAnalysis, publishRecordedAcquisitionAnalysis } = await import("@/lib/trader/paper/durable-noncapital/repository-postgres-v1");
+  const { completeRecordedAnalysisPostgresV1, completeRecordedAcquisitionAnalysisPostgresV1 } = await import("@/lib/trader/runtime-v2/noncapital-cycle-owner-postgres-v2");
   const { claimRuntimeControlLeaseAtDatabaseTimeV2, readRuntimeDatabaseClockV2 } = await import("@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2");
+  const { claimRecordedAcquisitionWithinHeldTransactionV1 } = await import("@/lib/trader/runtime-authority/v2/noncapital-domain-lease-postgres-v1");
   const db = drizzle(client, { schema }); const context = { organizationId, userId };
   const researchContext = options.userAssignment ? context : { organizationId };
   const now = () => db.transaction(tx => readRuntimeDatabaseClockV2(tx));
@@ -31,8 +38,15 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
     for (;;) { const value = await now(); if (value > time) return value;
       if (performance.now() - start > 5000) throw new Error("FIXTURE_OBSERVED_CLOCK_DEADLINE"); }
   }
-  async function expiry() { await client`select pg_sleep(greatest(0,extract(epoch from valid_until_utc-clock_timestamp()))+0.02)
-    from trader_runtime_control_lease_heads_v2 where organization_id=${organizationId}::uuid`; }
+  async function expiry() {
+    if (savedDomain) {
+      await client`select pg_sleep(greatest(0,extract(epoch from valid_until_utc-clock_timestamp()))+0.02)
+        from trader_recorded_acquisition_lease_heads_v1 where organization_id=${organizationId}::uuid`;
+      await client`select pg_sleep(greatest(0,extract(epoch from valid_until_utc-clock_timestamp()))+0.02)
+        from trader_saved_research_lease_heads_v1 where organization_id=${organizationId}::uuid`;
+    } else await client`select pg_sleep(greatest(0,extract(epoch from valid_until_utc-clock_timestamp()))+0.02)
+      from trader_runtime_control_lease_heads_v2 where organization_id=${organizationId}::uuid`;
+  }
   const sourceService = createPostgresMiSourceProvenanceService(db);
   const admissions: Array<{ sourceId: string; contentDigest: string }> = [];
   for (const feedKind of ["ohlcv_bar", "quote_l1", "order_book_snapshot", "market_trades_snapshot"]) {
@@ -91,8 +105,11 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
   const request = { assignment: config, profile: { definition: profileDefinition }, range: { startSequence: config.firstSourceSequence, count: 2, leaseDurationMs: 1500 } };
   async function appendSourceThrough(last: number, sourceOptions: { missing4h?: boolean } = {}) {
     await expiry();
-    const holder = await claimRuntimeControlLeaseAtDatabaseTimeV2(db, { organizationId, runtimeInstanceId: `application-source-${packets.length}`, durationMs: 3000 });
-    if (!holder) throw new Error("FIXTURE_SOURCE_LEASE_BUSY");
+    const claim = { organizationId, runtimeInstanceId: `application-source-${packets.length}`, durationMs: 3000 };
+    const holder = savedDomain ? { domain: "RECORDED_ACQUISITION_V1" as const,
+      value: await db.transaction(tx => claimRecordedAcquisitionWithinHeldTransactionV1(tx, claim)) }
+      : { domain: "CAPITAL_LEGACY_V2" as const, value: await claimRuntimeControlLeaseAtDatabaseTimeV2(db, claim) };
+    if (!holder.value) throw new Error("FIXTURE_SOURCE_LEASE_BUSY");
     const first = packets.length;
     for (let sequence = first; sequence <= last; sequence++) {
       const missing4h = sourceOptions.missing4h ?? options.missing4h;
@@ -124,14 +141,18 @@ export async function seedApplicationNative(client: postgres.Sql, organizationId
           throw new Error(`FIXTURE_MANDATORY_LANE_NOT_FRESH:${sequence}:${interval}:${lane?.health}:${lane?.freshnessMs}`);
         }
       }
-      const packet = await publishRecordedAnalysis(client, session, holder, sequence, pit, normalized);
-      await completeRecordedAnalysisPostgresV1(client, session, holder, sequence); packets.push(packet);
+      const packet = holder.domain === "RECORDED_ACQUISITION_V1"
+        ? await publishRecordedAcquisitionAnalysis(client, session, holder.value, sequence, pit, normalized)
+        : await publishRecordedAnalysis(client, session, holder.value, sequence, pit, normalized);
+      if (holder.domain === "RECORDED_ACQUISITION_V1") await completeRecordedAcquisitionAnalysisPostgresV1(client, session, holder.value, sequence);
+      else await completeRecordedAnalysisPostgresV1(client, session, holder.value, sequence); packets.push(packet);
     }
     await expiry(); return first;
   }
   async function completeResearchRange(first: number, last: number) {
     const range = { ...request.range, startSequence: first, count: last - first + 1 };
-    const result = await runSavedResearchLoop(client, researchContext, { ...request, range });
+    const result = savedDomain ? await runSavedDomainResearchLoop(client, researchContext, { ...request, range })
+      : await runSavedResearchLoop(client, researchContext, { ...request, range });
     if (result.status !== "COMPLETE") throw new Error(`FIXTURE_RESEARCH_REFUSED:${result.status}`);
     for (let sequence = first; sequence <= last; sequence++) {
       const saved = await createSavedResearchOwner(client, researchContext, { ...request, range }).replay(sequence);

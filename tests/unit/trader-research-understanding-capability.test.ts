@@ -28,6 +28,16 @@ describe("saved research passive dependency boundaries", () => {
     for (const entry of inventory.entries) expect(createHash("sha256").update(readFileSync(entry.path)).digest("hex")).toBe(entry.sha256);
     expect(inventory.boundaries.sqliteRuntime).toContain("getDb is unreachable");
   }, 10000);
+  it("traces the fixed saved Understanding CLI without importing acquisition or application writers", () => {
+    const inventory = JSON.parse(execFileSync(process.execPath,
+      ["--import", "tsx", "scripts/trader/generate-research-understanding-manifest.ts", "--runtime", "--saved-domain"], { encoding: "utf8" }));
+    const paths: string[] = inventory.entries.map((entry: { path: string }) => entry.path);
+    expect(paths).toContain("scripts/trader/saved-research.ts");
+    expect(paths).toContain("lib/trader/paper/research-understanding-v1/completion-write-postgres.ts");
+    expect(paths).toContain("lib/trader/runtime-authority/v2/noncapital-domain-lease-postgres-v1.ts");
+    for (const entry of inventory.entries) expect(createHash("sha256").update(readFileSync(entry.path)).digest("hex")).toBe(entry.sha256);
+    expect(paths.join("\n")).not.toMatch(/paper-bar-close-loop|recorded-acquisition|run-recorded-paper-loop|noncapital-cycle-owner|research-application-v1\/repository/);
+  }, 10000);
   it("retains all seven period values, lookup errors and legacy function identities", () => {
     expect(legacySeconds).toBe(htxPeriodToSeconds); expect(legacyDuration).toBe(intervalDurationMs);
     for (const [period, seconds] of [["1min", 60], ["5min", 300], ["15min", 900], ["30min", 1800], ["60min", 3600], ["4hour", 14400], ["1day", 86400]] as const)

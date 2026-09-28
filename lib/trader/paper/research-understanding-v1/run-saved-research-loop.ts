@@ -8,7 +8,7 @@ import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import { claimBoundedResearchRuntimeControlLeaseV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
 import { RecordedAnalysisRefusal, assertEnvironment } from "../durable-noncapital/recorded-analysis-v1";
 import { ResearchRefusal } from "./contract";
-import { createSavedResearchOwner, type ResearchRequest } from "./repository-postgres";
+import { createSavedResearchOwner, createSavedDomainResearchOwner, type ResearchRequest } from "./repository-postgres";
 
 /** Saved source only. There is no provider, evaluator, capital or actor callback input. */
 export async function runSavedResearchLoop(pool: postgres.Sql, context: OrgContext, supplied: ResearchRequest) {
@@ -38,4 +38,9 @@ export async function runSavedResearchLoop(pool: postgres.Sql, context: OrgConte
     // Missing membership, unexpected SQL/persistence errors and implementation failures are not market UNAVAILABLE.
     throw error;
   }
+}
+
+/** Fixed saved-domain command; the original loop above retains legacy ownership. */
+export async function runSavedDomainResearchLoop(pool: postgres.Sql, context: OrgContext, supplied: ResearchRequest) {
+  assertEnvironment(); return createSavedDomainResearchOwner(pool, context, supplied).execute();
 }

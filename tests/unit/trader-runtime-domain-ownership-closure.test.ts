@@ -176,3 +176,67 @@ describe("fixed noncapital domain metadata and held lease boundaries", () => {
     ]);
   });
 });
+
+import ts from "typescript";
+import { storedApplicationCommandProfile, CURRENT_LEGACY_APPLICATION_COMMAND, CURRENT_SAVED_APPLICATION_COMMAND } from "@/lib/trader/paper/research-application-v1/replay-command-compatibility-v1";
+import { APPLICATION_COMPUTATION_SOURCE_MANIFEST_DIGEST } from "@/lib/trader/paper/research-application-v1/computation-manifest";
+import { COMPUTATION_SOURCE_MANIFEST_DIGEST } from "@/lib/trader/paper/research-understanding-v1/computation-manifest";
+import type { ResearchApplicationConfigurationV1 } from "@/lib/trader/paper/research-application-v1/contract";
+function functionText(file: string, name: string) {
+  const source = readFileSync(file, "utf8"), ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  const fn = ast.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name);
+  expect(fn, `${file}:${name}`).toBeDefined(); return { parameters: fn!.parameters.map(p => p.name.getText(ast)), body: fn!.body!.getText(ast) };
+}
+describe("fixed public callers and historical command representation", () => {
+  const configuration = { applicationComputationManifestDigest: APPLICATION_COMPUTATION_SOURCE_MANIFEST_DIGEST,
+    computationManifestDigest: COMPUTATION_SOURCE_MANIFEST_DIGEST } as ResearchApplicationConfigurationV1;
+  const historical = "5070c0aa8e42824892dd2915c5d70b21cac4e9a22aec5947a7255d62a3d8faf2";
+  it("admits exact stored legacy/current profiles independently for each artifact and rejects cross-domain stamps", () => {
+    for (const [ownershipDomain, commandManifestDigest] of [["CAPITAL_LEGACY_V2", historical],
+      ["CAPITAL_LEGACY_V2", CURRENT_LEGACY_APPLICATION_COMMAND], ["SAVED_RESEARCH_V1", CURRENT_SAVED_APPLICATION_COMMAND]])
+      expect(storedApplicationCommandProfile({ ownershipDomain }, { commandManifestDigest }, configuration)).toBe(commandManifestDigest);
+    for (const [ownershipDomain, commandManifestDigest] of [["SAVED_RESEARCH_V1", historical],
+      ["SAVED_RESEARCH_V1", CURRENT_LEGACY_APPLICATION_COMMAND], ["CAPITAL_LEGACY_V2", CURRENT_SAVED_APPLICATION_COMMAND],
+      ["CAPITAL_LEGACY_V2", "0".repeat(64)], ["RECORDED_ACQUISITION_V1", CURRENT_LEGACY_APPLICATION_COMMAND]])
+      expect(() => storedApplicationCommandProfile({ ownershipDomain }, { commandManifestDigest }, configuration)).toThrow(/APPLICATION_/);
+    expect(() => storedApplicationCommandProfile({}, { commandManifestDigest: historical }, configuration)).toThrow("APPLICATION_STORED_DOMAIN_INVALID");
+    expect(() => storedApplicationCommandProfile({ ownershipDomain: "CAPITAL_LEGACY_V2" }, { commandManifestDigest: historical },
+      { ...configuration, computationManifestDigest: "0".repeat(64) })).toThrow("APPLICATION_PURE_PROFILE_CONFLICT");
+  });
+  it.each([undefined, null, 1, true, {}, [], "A".repeat(64), "a".repeat(63)])("refuses malformed stored top-level command %j", commandManifestDigest => {
+    expect(() => storedApplicationCommandProfile({ ownershipDomain: "SAVED_RESEARCH_V1" }, { commandManifestDigest }, configuration))
+      .toThrow("APPLICATION_COMMAND_PROFILE_INVALID");
+  });
+  it("exposes only fixed named owner routes without an ownership selector or a replacement writer", () => {
+    const acquisition = "lib/trader/paper/durable-noncapital/run-recorded-paper-loop-postgres-v1.ts";
+    const app = "lib/trader/paper/research-application-v1/repository-postgres.ts";
+    for (const [file, oldName, newName, core, params, domain] of [
+      [acquisition, "runRecordedPaperLoopPostgres", "runRecordedAcquisitionLoopPostgres", "runRecordedLoopCore", ["pool", "input"], "RECORDED_ACQUISITION_V1"],
+      [app, "createSavedApplicationOwner", "createSavedDomainApplicationOwner", "createApplicationOwnerCore", ["pool", "context", "supplied"], "SAVED_RESEARCH_V1"],
+    ] as const) {
+      const old = functionText(file, oldName), current = functionText(file, newName);
+      expect(old.parameters).toEqual(params); expect(current.parameters).toEqual(params);
+      expect(old.body).toContain(core); expect(old.body).toContain('"CAPITAL_LEGACY_V2"');
+      expect(current.body).toContain(core); expect(current.body).toContain(`"${domain}"`);
+      expect(old.body + current.body).not.toMatch(/\.begin\(|\.transaction\(|\.insert\(|evaluate|callback/);
+    }
+    const saved = functionText("lib/trader/paper/research-understanding-v1/repository-postgres.ts", "createSavedDomainResearchOwner");
+    expect(saved.parameters).toEqual(["pool", "suppliedContext", "supplied"]);
+    expect(saved.body.match(/new HeldResearchAccounting\(/g)).toHaveLength(1);
+    expect(saved.body).toContain("claimSavedResearchWithinHeldTransactionV1(bound.executor");
+    expect(saved.body).toContain("bound.writeSavedDomainCompletion(prepared.prepared, selectedHolder)");
+    expect(saved.body).not.toMatch(/claimRuntimeControl|createSavedResearchOwner|runSavedResearchLoop|new ResearchReadBudget|persistInformationSufficiency|suppliedOutput|evaluator/);
+  });
+  it("refuses domain, holder, evaluator and mixed mode flags before any pool on the actual new CLIs", async () => {
+    const previous = process.env.WAIA_TRADER_CLI; process.env.WAIA_TRADER_CLI = "1";
+    try {
+      const { runSavedResearchCli } = await import("../../scripts/trader/saved-research");
+      const { runRecordedAcquisitionCli } = await import("../../scripts/trader/recorded-acquisition");
+      for (const flag of ["--domain=SAVED_RESEARCH_V1", "--holder=x", "--evaluator=x", "--actor=admin"])
+        await expect(runSavedResearchCli(["--saved-research-application", flag])).rejects.toThrow("APPLICATION_FLAGS_INVALID");
+      await expect(runSavedResearchCli(["--saved-research-application", "--saved-research-understanding"])).rejects.toThrow("APPLICATION_FLAGS_INVALID");
+      await expect(runSavedResearchCli([])).rejects.toThrow("SAVED_RESEARCH_MODE_REQUIRED");
+      await expect(runRecordedAcquisitionCli(["--durable-noncapital", "--domain=CAPITAL_LEGACY_V2"])).rejects.toThrow();
+    } finally { if (previous === undefined) delete process.env.WAIA_TRADER_CLI; else process.env.WAIA_TRADER_CLI = previous; }
+  });
+});

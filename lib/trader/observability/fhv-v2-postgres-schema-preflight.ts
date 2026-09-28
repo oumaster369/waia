@@ -44,6 +44,8 @@ export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 207 as const;
 // It preserves legacy mode, adds no required FHV table or scientific authority.
 // 0223 adds isolated non-capital saved research application sidecars. It leaves
 // the required historical prefix, tables and FHV authority unchanged.
+// 0224 adds current-account observation component records; 0225 adds fixed
+// noncapital lease attribution. Neither changes the required207 read frontier.
 const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag: string }[] = [
   { idx: 208, when: 1780000000208, tag: "0208_historical_terminal_receipts_v1" },
   { idx: 209, when: 1780000000209, tag: "0209_ai_twin_epistemic_persistence_v1" },
@@ -61,6 +63,8 @@ const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag:
   { idx: 221, when: 1780000000221, tag: "0221_trader_research_understanding_v1" },
   { idx: 222, when: 1780000000222, tag: "0222_trader_historical_reconciliation_v1" },
   { idx: 223, when: 1780000000223, tag: "0223_trader_research_application_v1" },
+  { idx: 224, when: 1780000000224, tag: "0224_trader_risk_current_account_basis" },
+  { idx: 225, when: 1780000000225, tag: "0225_trader_noncapital_domain_ownership_v1" },
 ];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [

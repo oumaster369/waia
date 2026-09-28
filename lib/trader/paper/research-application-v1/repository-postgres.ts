@@ -8,11 +8,13 @@ import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { assertOrgMembershipPostgres, type OrgContext } from "@/lib/waia-core/scope/org-context";
 import { requireServiceOrgContext } from "@/lib/trader/security/service-org-context";
 import { writeAuditLogPostgres } from "@/lib/waia-core/audit/write";
-import { prepareHeldResearchReplay, HeldResearchAccounting, captureResearchReplaySelector, type ResearchRequest } from "../research-understanding-v1/held-replay";
+import { prepareHeldResearchReplay, prepareHeldSavedDomainResearchReplay, HeldResearchAccounting, captureResearchReplaySelector, type ResearchRequest } from "../research-understanding-v1/held-replay";
 import { APPLICATION_AUTHORITY, APPLICATION_PURPOSE, APPLICATION_SERVICE_ACTOR, APPLICATION_LIMITS as L,
   captureApplicationConfigurationV1, ResearchApplicationRefusal, applicationDigest as digest, applicationBytes, applicationTime, requireApplication as check,
   type ResearchApplicationConfigurationV1, type ResearchApplicationRelationV1 } from "./contract";
-import { APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST } from "./computation-manifest";
+import { CURRENT_LEGACY_APPLICATION_COMMAND, CURRENT_SAVED_APPLICATION_COMMAND, storedApplicationCommandProfile } from "./replay-command-compatibility-v1";
+import { claimSavedResearchWithinHeldTransactionV1, lockSavedResearchOrganizationV1, assertSavedResearchHolderWithinHeldTransactionV1,
+  assertSavedApplicationRootsWithinHeldTransactionV1, type SavedResearchHolderV1 } from "@/lib/trader/runtime-authority/v2/noncapital-domain-lease-postgres-v1";
 import { assertCategoricalRegistrationV1, evaluateCategoricalApplicationMeaningV1, foldResearchApplicationRelationV1, selectResearchApplicationRelationV1 } from "./specification";
 import { readApplicationRows, admitApplicationWriteRow, readApplicationRegistration, applicationScope, decodeApplicationBody, type ApplicationExecutor, type ApplicationRow } from "./bounded-read-postgres";
 import { defineCanonicalMeasurementV1, identifyCanonicalMeasurementValueV1, type CanonicalMeasurementObservationLineageV1 } from "@/lib/trader/mi/measurement-lineage-v1";
@@ -29,10 +31,11 @@ export type SavedApplicationRequest = {
 type Bound = ReturnType<ReturnType<typeof prepareHeldResearchReplay>["bindHeld"]>;
 type Replay = NonNullable<Awaited<ReturnType<Bound["replay"]>>>;
 type Actor = { kind: "SERVICE" | "USER"; id: string };
-type Holder = DatabaseClockRuntimeHolderV2;
+type Holder = { domain: "CAPITAL_LEGACY_V2"; value: DatabaseClockRuntimeHolderV2 }
+  | { domain: "SAVED_RESEARCH_V1"; value: SavedResearchHolderV1 };
 const json = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const schemaVersion = (kind: string) => `waia.trader.research_application_${kind}.v1`;
-const common = { authority: APPLICATION_AUTHORITY, purpose: APPLICATION_PURPOSE, commandManifestDigest: APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST } as const;
+const common = (commandManifestDigest: string) => ({ authority: APPLICATION_AUTHORITY, purpose: APPLICATION_PURPOSE, commandManifestDigest } as const);
 const canonical = (value: unknown) => canonicalizeSemanticJsonString(value);
 const equal = (a: unknown, b: unknown, code: string) => check(digest(a) === digest(b), code);
 function bounded(value: unknown, maximum: number, code = "APPLICATION_OUTPUT_LIMIT"): void { check(applicationBytes(value) <= maximum, code); }
@@ -64,7 +67,7 @@ function sourcePin(r: Replay) { return { sourceSessionId: r.session.sessionId, s
     sourceId: v.receipt.sourceId, observationId: v.receipt.observationId, observationDigest: v.receipt.observationContentDigest,
     trustAsOfReceiptId: v.receipt.trustAsOfReceiptId })), selectedRevisions: r.revisions.map(v => ({ id: v.id, contentDigest: v.contentDigest,
       eventTime: v.eventTime, availableAt: v.availableAt, ingestTime: v.ingestTime })) }; }
-function featureWitness(r: Replay) {
+function featureWitness(r: Replay, command: string) {
   const inputs: Extract<CanonicalMeasurementObservationLineageV1, { observationSchemaVersion: "mi-canonical-pit-observation-v1" }>[] = [];
   for (const kind of ["ohlcv_bar", "quote_l1"] as const) {
     const index = r.packet.normalized.observations.findIndex(v => v.kind === kind && (kind !== "ohlcv_bar" || v.interval === "1m"));
@@ -77,7 +80,7 @@ function featureWitness(r: Replay) {
       observationKind: kind, observationSchemaVersion: "mi-canonical-pit-observation-v1", trustAsOfReceiptId: observation.trustAsOfReceiptId,
       trustRevisionId: observation.sourceTrustRevisionId, trustRevisionContentDigest: observation.sourceTrustContentDigest });
   }
-  const payload = { schemaVersion: schemaVersion("feature_witness"), ...common, packetDigest: r.packet.contentDigest,
+  const payload = { schemaVersion: schemaVersion("feature_witness"), ...common(command), packetDigest: r.packet.contentDigest,
     fullBarsDigest: digest(r.packet.normalized.captured.bars), quoteDigest: digest(r.packet.normalized.quote), features: r.output.features };
   bounded(payload, L.featureWitness);
   const definition = defineCanonicalMeasurementV1({ organizationId: r.session.organizationId, category: "feature_transform",
@@ -89,21 +92,21 @@ function featureWitness(r: Replay) {
 }
 type Witness = NonNullable<ReturnType<typeof featureWitness>>;
 function applicationBody(c: ResearchApplicationConfigurationV1, id: string, actor: Actor, p: Replay, a: Replay,
-  registration: Awaited<ReturnType<typeof readApplicationRegistration>>, recordedAt: string) {
-  const witnesses = [featureWitness(p), featureWitness(a)];
+  registration: Awaited<ReturnType<typeof readApplicationRegistration>>, recordedAt: string, command: string) {
+  const witnesses = [featureWitness(p, command), featureWitness(a, command)];
   let meaning = evaluateCategoricalApplicationMeaningV1({ previous: p.output, current: a.output });
   if (meaning.direction && witnesses.some(v => !v)) meaning = { ...meaning, disposition: "UNASSESSED_LINEAGE", direction: null, relationKind: null };
-  const evidenceBody = meaning.direction ? { schemaVersion: schemaVersion("evidence"), ...common, applicationId: id, assignmentDigest: digest(c),
+  const evidenceBody = meaning.direction ? { schemaVersion: schemaVersion("evidence"), ...common(command), applicationId: id, assignmentDigest: digest(c),
     hypothesisId: c.hypothesisId, hypothesisKey: c.hypothesisKey, hypothesisDefinitionDigest: c.hypothesisDefinitionDigest,
     direction: meaning.direction, confidenceState: "NOT_ASSESSED" as const, specification: c.specification, bridge: c.bridge,
     previous: sourcePin(p), current: sourcePin(a), eventTime: a.packet.analysisPitAnchor, recordedTime: recordedAt } : null;
   const evidence = evidenceBody ? { ...evidenceBody, id: digest(evidenceBody), contentDigest: digest(evidenceBody) } : null;
-  const relationBody = evidence && meaning.relationKind ? { schemaVersion: "waia.trader.research_application_relation.v1" as const, ...common,
+  const relationBody = evidence && meaning.relationKind ? { schemaVersion: "waia.trader.research_application_relation.v1" as const, ...common(command),
     organizationId: c.organizationId, symbol: c.symbol, applicationId: id, evidenceId: evidence.id, hypothesisId: c.hypothesisId,
     hypothesisKey: c.hypothesisKey, hypothesisDefinitionDigest: c.hypothesisDefinitionDigest, assignmentDigest: digest(c), version: 1 as const,
     eventTime: a.packet.analysisPitAnchor, recordedTime: recordedAt, verified: false as const, confidenceState: "NOT_ASSESSED" as const, relationKind: meaning.relationKind } : null;
   const relation: ResearchApplicationRelationV1 | null = relationBody ? { ...relationBody, id: digest(relationBody), contentDigest: digest(relationBody) } : null;
-  const value = { schemaVersion: schemaVersion("record"), ...common, organizationId: c.organizationId, applicationId: id, assignmentDigest: digest(c),
+  const value = { schemaVersion: schemaVersion("record"), ...common(command), organizationId: c.organizationId, applicationId: id, assignmentDigest: digest(c),
     configuration: c, actor, recordedAt, previous: sourcePin(p), current: sourcePin(a), registration: json(registration), meaning, evidence, relation, witnesses };
   bounded(value, L.application); return value;
 }
@@ -118,13 +121,23 @@ type ConsumptionBody = { schemaVersion: string; authority: typeof APPLICATION_AU
 
 /** One fixed invocation. Private transaction adapter has no callback injection into the public command. */
 export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgContext, supplied: SavedApplicationRequest) {
+  return createApplicationOwnerCore(pool, context, supplied, "CAPITAL_LEGACY_V2");
+}
+export function createSavedDomainApplicationOwner(pool: postgres.Sql, context: OrgContext, supplied: SavedApplicationRequest) {
+  return createApplicationOwnerCore(pool, context, supplied, "SAVED_RESEARCH_V1");
+}
+function createApplicationOwnerCore(pool: postgres.Sql, context: OrgContext, supplied: SavedApplicationRequest, domain: "CAPITAL_LEGACY_V2" | "SAVED_RESEARCH_V1") {
+  const command = domain === "SAVED_RESEARCH_V1" ? CURRENT_SAVED_APPLICATION_COMMAND : CURRENT_LEGACY_APPLICATION_COMMAND;
   const selected = captureSavedApplicationCommand(pool, context, supplied);
   const { config: c, request, applicationId: id, assignmentDigest } = selected;
   const accounting = new HeldResearchAccounting();
   const extra = accounting.budget(L.additionalAggregate);
   let holder: Holder | null = null;
+  let observedConfiguration = false, raceProbeUsed = false;
+  const rootInput = { organizationId: c.organizationId, assignmentDigest, applicationId: id,
+    researchSessionId: c.researchSessionId, researchAssignmentDigest: c.researchAssignmentDigest };
   async function transaction<T>(mode: "read committed" | "repeatable read" | "repeatable read read only", work: (bound: Bound) => Promise<T>): Promise<T> {
-    const prepared = prepareHeldResearchReplay(pool, accounting);
+    const prepared = domain === "SAVED_RESEARCH_V1" ? prepareHeldSavedDomainResearchReplay(pool, accounting) : prepareHeldResearchReplay(pool, accounting);
     accounting.reserveFinalization(1); accounting.beforeStatement(); // real driver's BEGIN
     const result = await pool.begin(`isolation level ${mode}`, async held => {
       try {
@@ -148,16 +161,29 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
   }
   async function current(bound: Bound): Promise<string> {
     check(holder, "APPLICATION_HOLDER_REQUIRED");
-    await lockRuntimeOrganizationV2(bound.executor, c.organizationId);
-    const now = await assertRuntimeDatabaseClockHolderV2(bound.executor, holder);
+    let now: string;
+    if (holder.domain === "SAVED_RESEARCH_V1") {
+      await lockSavedResearchOrganizationV1(bound.executor, c.organizationId);
+      now = await assertSavedResearchHolderWithinHeldTransactionV1(bound.executor, holder.value, accounting.noncapitalControls);
+    } else {
+      await lockRuntimeOrganizationV2(bound.executor, c.organizationId);
+      now = await assertRuntimeDatabaseClockHolderV2(bound.executor, holder.value);
+    }
     accounting.assertDeadline(); return now;
   }
   async function claim() {
     if (holder) return;
     try {
-      holder = await transaction("read committed", b => claimBoundedResearchRuntimeControlLeaseWithinHeldTransactionV2(b.executor,
-        { organizationId: c.organizationId, runtimeInstanceId: `research-application:${randomUUID()}`,
-          durationMs: request.research.range.leaseDurationMs }));
+      holder = await transaction("read committed", async b => {
+        const input = { organizationId: c.organizationId, runtimeInstanceId: `research-application:${randomUUID()}`,
+          durationMs: request.research.range.leaseDurationMs };
+        if (domain === "SAVED_RESEARCH_V1") {
+          const value = await claimSavedResearchWithinHeldTransactionV1(b.executor, input, accounting.noncapitalControls);
+          return value ? { domain, value } : null;
+        }
+        const value = await claimBoundedResearchRuntimeControlLeaseWithinHeldTransactionV2(b.executor, input);
+        return value ? { domain, value } : null;
+      });
     } catch (error) {
       // The owning claim promise has rejected: its real rollback precedes recovery.
       // Drizzle may wrap the PostgreSQL error once; no unrelated/unknown failure is swallowed.
@@ -168,8 +194,9 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
     }
     accounting.assertDeadline(); check(holder, "APPLICATION_LEASE_BUSY");
   }
-  const holderColumns = () => { check(holder, "APPLICATION_HOLDER_REQUIRED"); return { runtimeInstanceId: holder.runtimeInstanceId,
-    leaseEpoch: holder.leaseEpoch, leaseContentDigest: holder.leaseContentDigest }; };
+  const holderMetadata = () => { check(holder, "APPLICATION_HOLDER_REQUIRED"); return { runtimeInstanceId: holder.value.runtimeInstanceId,
+    leaseEpoch: holder.value.leaseEpoch, leaseContentDigest: holder.value.leaseContentDigest }; };
+  const holderColumns = () => ({ ...holderMetadata(), ownershipDomain: domain });
   async function snapshot(bound: Bound, sequence: number) {
     const r = await bound.replay(selected.context, { ...request.research,
       range: { ...request.research.range, startSequence: sequence, count: 1 } }, sequence);
@@ -202,7 +229,7 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
   async function audit(db: ApplicationExecutor, operation: "apply" | "availability" | "consume", body: { actor: Actor }, bodyDigest: string) {
     return writeAuditLogPostgres(db, { organizationId: c.organizationId, actorType: body.actor.kind === "USER" ? "user" : "service", actorId: body.actor.id,
       action: `trader.research_application.${operation}`, entityType: "trader_research_application", entityId: id,
-      metadata: { operation, applicationId: id, assignmentDigest, bodyDigest, actor: body.actor, holder: holderColumns() } });
+      metadata: { operation, applicationId: id, assignmentDigest, bodyDigest, actor: body.actor, holder: holderMetadata() } });
   }
   async function verifyAudit(db: ApplicationExecutor, operation: "apply" | "availability" | "consume", row: ApplicationRow, body: { actor: Actor }) {
     check(typeof row.auditId === "string", "APPLICATION_AUDIT_MISSING");
@@ -239,14 +266,24 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
     check(Number.isSafeInteger(row.leaseEpoch) && Number(row.leaseEpoch) > 0 && typeof row.runtimeInstanceId === "string" &&
       /^[0-9a-f]{64}$/.test(String(row.leaseContentDigest)), "APPLICATION_RECORDED_HOLDER_INVALID");
     equal(row, { organizationId: c.organizationId, contentDigest: digest(body), bodyJson: canonical(body),
-      runtimeInstanceId: row.runtimeInstanceId, leaseEpoch: row.leaseEpoch, leaseContentDigest: row.leaseContentDigest, ...fields }, "APPLICATION_PROJECTION_CONFLICT");
+      runtimeInstanceId: row.runtimeInstanceId, leaseEpoch: row.leaseEpoch, leaseContentDigest: row.leaseContentDigest, ownershipDomain: row.ownershipDomain, ...fields }, "APPLICATION_PROJECTION_CONFLICT");
   }
   async function assignment(db: ApplicationExecutor, activeActor: Actor, create: boolean) {
-    const body = { schemaVersion: schemaVersion("assignment"), ...common, organizationId: c.organizationId, configuration: c, actor: activeActor };
-    bounded(body, L.assignment);
     const existing = (await readApplicationRows(db, "assignment", applicationScope("assignment", c.organizationId, assignmentDigest), extra, { optional: true }))[0];
+    const stored = existing ? decodeApplicationBody(existing) : null;
+    const profile = existing ? storedApplicationCommandProfile(existing, stored, c) : command;
+    const body = { schemaVersion: schemaVersion("assignment"), ...common(profile), organizationId: c.organizationId, configuration: c, actor: activeActor };
+    bounded(body, L.assignment);
     if (existing) {
-      equal(decodeApplicationBody(existing), body, "APPLICATION_ASSIGNMENT_CONFLICT");
+      if (create) {
+        if (domain === "SAVED_RESEARCH_V1" && !observedConfiguration && !raceProbeUsed) {
+          raceProbeUsed = true;
+          check(request.operation !== "replay", "APPLICATION_OPERATION_MISSING");
+          await assertSavedApplicationRootsWithinHeldTransactionV1(db, rootInput, request.operation, accounting.noncapitalControls);
+        }
+        check(existing.ownershipDomain === domain, "ASSIGNMENT_DOMAIN_CONFLICT");
+      }
+      equal(stored, body, "APPLICATION_ASSIGNMENT_CONFLICT");
       projection(existing, body, { assignmentDigest, researchSessionId: c.researchSessionId, researchAssignmentDigest: c.researchAssignmentDigest });
     } else {
       check(create, "APPLICATION_ASSIGNMENT_MISSING");
@@ -267,7 +304,7 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
     const p = await snapshot(bound, request.previousSourceSequence), a = await snapshot(bound, request.currentSourceSequence);
     check(applicationTime(body.recordedAt) > applicationTime(a.packet.analysisPitAnchor), "APPLICATION_RECORDED_TIME_INVALID");
     const registry = await selectedRegistry(bound.executor, body.recordedAt, [p.packet.analysisPitAnchor, a.packet.analysisPitAnchor, body.recordedAt]);
-    const expected = applicationBody(c, id, activeActor, p, a, registry, body.recordedAt);
+    const expected = applicationBody(c, id, activeActor, p, a, registry, body.recordedAt, storedApplicationCommandProfile(row, body, c));
     equal(expected, body, "APPLICATION_REPLAY_CONFLICT");
     projection(row, body, { applicationId: id, assignmentDigest, previousSourceSequence: p.sourceSequence,
       currentSourceSequence: a.sourceSequence, recordedAt: body.recordedAt, auditId: row.auditId });
@@ -283,7 +320,7 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
     if (!row) return null;
     const body = decodeApplicationBody<AvailabilityBody>(row);
     check(applicationTime(body.availableAt) >= applicationTime(app.body.recordedAt), "APPLICATION_AVAILABILITY_TIME_INVALID");
-    equal(body, { schemaVersion: schemaVersion("availability"), ...common, organizationId: c.organizationId, applicationId: id,
+    equal(body, { schemaVersion: schemaVersion("availability"), ...common(storedApplicationCommandProfile(row, body, c)), organizationId: c.organizationId, applicationId: id,
       applicationDigest: app.row.contentDigest, availableAt: body.availableAt, actor: app.body.actor }, "APPLICATION_AVAILABILITY_CONFLICT");
     projection(row, body, { applicationId: id, applicationDigest: app.row.contentDigest, availableAt: body.availableAt, auditId: row.auditId });
     await verifyAudit(db, "availability", row, body); accounting.assertDeadline(); return { row, body };
@@ -296,14 +333,14 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
       consumption: consumption ?? null, consumptionDigest: consumption ? digest(consumption) : null };
   }
   async function consumeBody(bound: Bound, app: NonNullable<Awaited<ReturnType<typeof loadApplication>>>, available: NonNullable<Awaited<ReturnType<typeof loadAvailability>>>,
-    activeActor: Actor, recordedAt: string, sequence: number, previousConsumptionDigest: string | null) {
+    activeActor: Actor, recordedAt: string, sequence: number, previousConsumptionDigest: string | null, selectedCommand = command) {
     check(request.consumerSourceSequence !== undefined, "APPLICATION_CONSUMER_REQUIRED");
     const b = await snapshot(bound, request.consumerSourceSequence);
     check(applicationTime(recordedAt) >= applicationTime(b.packet.analysisPitAnchor), "APPLICATION_CONSUMPTION_TIME_INVALID");
     check(b.sourceSequence > app.a.sourceSequence && applicationTime(b.packet.analysisPitAnchor) > applicationTime(available.body.availableAt) &&
       applicationTime(b.packet.normalized.scheduledBarCloseTime) > applicationTime(app.a.packet.normalized.scheduledBarCloseTime), "APPLICATION_NOT_YET_AVAILABLE");
     const registry = await selectedRegistry(bound.executor, recordedAt, [b.packet.analysisPitAnchor, recordedAt]);
-    const body: ConsumptionBody = { schemaVersion: schemaVersion("consumption"), ...common, organizationId: c.organizationId,
+    const body: ConsumptionBody = { schemaVersion: schemaVersion("consumption"), ...common(selectedCommand), organizationId: c.organizationId,
       applicationId: id, applicationDigest: String(app.row.contentDigest), assignmentDigest, availabilityDigest: String(available.row.contentDigest),
       consumer: sourcePin(b), sequence, previousConsumptionDigest, actor: activeActor, recordedAt, registration: json(registry),
       fold: app.body.relation ? foldResearchApplicationRelationV1(app.body.relation) : null,
@@ -325,7 +362,8 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
     const body = decodeApplicationBody<ConsumptionBody>(row);
     check(safeSequence(body.sequence), "APPLICATION_CONSUMPTION_PREFIX_CONFLICT");
     await predecessor(bound.executor, body.sequence, body.previousConsumptionDigest);
-    const expected = await consumeBody(bound, app, available, activeActor, body.recordedAt, body.sequence, body.previousConsumptionDigest);
+    const expected = await consumeBody(bound, app, available, activeActor, body.recordedAt, body.sequence, body.previousConsumptionDigest,
+      storedApplicationCommandProfile(row, body, c));
     equal(body, expected.body, "APPLICATION_CONSUMPTION_REPLAY_CONFLICT");
     projection(row, body, { assignmentDigest, applicationId: id, applicationDigest: app.row.contentDigest, availabilityDigest: available.row.contentDigest,
       consumerSourceSessionId: c.sourceSessionId, consumerSourceSequence: request.consumerSourceSequence, sequence: body.sequence,
@@ -340,7 +378,13 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
       const finalKind = request.consumerSourceSequence === undefined ? "availability" : "consumption";
       const finalRow = (await readApplicationRows(bound.executor, finalKind,
         applicationScope(finalKind, c.organizationId, id, request.consumerSourceSequence), extra, { optional: true }))[0];
-      if (!finalRow) return null;
+      if (!finalRow) {
+        if (domain === "SAVED_RESEARCH_V1" && request.operation !== "replay") {
+          const roots = await assertSavedApplicationRootsWithinHeldTransactionV1(bound.executor, rootInput, request.operation, accounting.noncapitalControls);
+          observedConfiguration = Boolean(roots.configuration);
+        }
+        return null;
+      }
       const app = await loadApplication(bound, activeActor); check(app, "APPLICATION_DEPENDENCY_MISSING");
       const available = await loadAvailability(bound.executor, app); check(available, "APPLICATION_AVAILABILITY_MISSING");
       const consumption = finalKind === "consumption" ? await replayConsumption(bound, app, available, activeActor, finalRow) : undefined;
@@ -356,7 +400,7 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
       const recordedAt = await current(bound);
       check(applicationTime(recordedAt) > applicationTime(a.packet.analysisPitAnchor), "APPLICATION_RECORDED_TIME_INVALID");
       const registry = await selectedRegistry(bound.executor, recordedAt, [p.packet.analysisPitAnchor, a.packet.analysisPitAnchor, recordedAt]);
-      const body = applicationBody(c, id, activeActor, p, a, registry, recordedAt);
+      const body = applicationBody(c, id, activeActor, p, a, registry, recordedAt, command);
       await assignment(bound.executor, activeActor, true);
       await witnesses(bound.executor, body.witnesses, true);
       const auditId = await audit(bound.executor, "apply", body, digest(body));
@@ -374,7 +418,7 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
         await lockSources(bound.executor, [app.p, app.a]);
         const availableAt = await current(bound); // observed only AFTER reading the prior committed application
         check(applicationTime(availableAt) >= applicationTime(app.body.recordedAt), "APPLICATION_AVAILABILITY_TIME_INVALID");
-        const body: AvailabilityBody = { schemaVersion: schemaVersion("availability"), ...common, organizationId: c.organizationId, applicationId: id,
+        const body: AvailabilityBody = { schemaVersion: schemaVersion("availability"), ...common(command), organizationId: c.organizationId, applicationId: id,
           applicationDigest: String(app.row.contentDigest), availableAt, actor: activeActor };
         bounded(body, L.projection);
         const auditId = await audit(bound.executor, "availability", body, digest(body));
@@ -436,7 +480,8 @@ export function createSavedApplicationOwner(pool: postgres.Sql, context: OrgCont
     });
     if (prepared.outcome === "PREPARED") await transaction("read committed", bound => {
       check(holder, "APPLICATION_HOLDER_REQUIRED");
-      return bound.writeCompletion(prepared.prepared, holder);
+      return holder.domain === "SAVED_RESEARCH_V1" ? bound.writeSavedDomainCompletion(prepared.prepared, holder.value)
+        : bound.writeCompletion(prepared.prepared, holder.value);
     });
     // A committed B is a durable prefix. Consumption retains its existing writer,
     // holder checks and finalization; an error never fabricates an atomic rollback.

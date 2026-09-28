@@ -9,12 +9,15 @@ import { persistInformationSufficiencyReceiptWithinTransactionV2Postgres,
   requireInformationSufficiencyAuthorityWithinTransactionV2Postgres } from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-repository-postgres";
 import { lockRuntimeOrganizationV2, assertRuntimeDatabaseClockHolderV2,
   type DatabaseClockRuntimeHolderV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
+import { lockSavedResearchOrganizationV1, assertSavedResearchHolderWithinHeldTransactionV1,
+  type SavedResearchHolderV1 } from "@/lib/trader/runtime-authority/v2/noncapital-domain-lease-postgres-v1";
 import { copy, digest, seal } from "../durable-noncapital/recorded-analysis-v1";
 import { encodeBody } from "../durable-noncapital/recorded-source-read-validation-v1";
 import { check, bounded, RESEARCH_CONTRACT, LIMITS } from "./contract";
 import { ResearchReadBudget, readBoundedResearchCompletion, readBoundedResearchInputs,
   readBoundedResearchPredecessor, admitOptionalStoredReceipt } from "./bounded-source-postgres";
 import { readResearchAssignmentWithinHeldTransaction as readAssignment, readResearchSnapshotWithinHeldTransaction,
+  readSavedDomainResearchAssignmentWithinHeldTransaction, readSavedDomainResearchSnapshotWithinHeldTransaction,
   verifyResearchSnapshotComputed as verifyComputed, type CapturedResearchRequest, type ResearchCompletion,
   type HeldResearchAccounting } from "./held-replay";
 
@@ -31,7 +34,7 @@ function budget(lifetime: Lifetime, maximum: number) {
   return shared(lifetime)?.budget(maximum) ?? new ResearchReadBudget(maximum);
 }
 type Snapshot = NonNullable<Awaited<ReturnType<typeof readResearchSnapshotWithinHeldTransaction>>>;
-type Captured = { context: OrgContext; request: CapturedResearchRequest; sourceSequence: number; saved: Snapshot; lifetime: Lifetime };
+type Captured = { context: OrgContext; request: CapturedResearchRequest; sourceSequence: number; saved: Snapshot; lifetime: Lifetime; domain: "CAPITAL_LEGACY_V2" | "SAVED_RESEARCH_V1" };
 export type ResearchCompletionSnapshot = Readonly<{ kind: "FIXED_RESEARCH_SNAPSHOT" }>;
 export type PreparedResearchCompletion = Readonly<{ kind: "FIXED_RESEARCH_COMPLETION" }>;
 const snapshots = new WeakMap<ResearchCompletionSnapshot, Captured>();
@@ -40,12 +43,24 @@ const completions = new WeakMap<PreparedResearchCompletion, Captured & { complet
 /** Mint an opaque snapshot from the fixed reader. No output, evaluator or callback is supplied. */
 export async function captureFixedResearchCompletionSnapshot(db: WaiaPostgresDb, suppliedContext: OrgContext,
   suppliedRequest: CapturedResearchRequest, sourceSequence: number, lifetime: Lifetime): Promise<ResearchCompletionSnapshot> {
+  return captureSnapshotCore(db, suppliedContext, suppliedRequest, sourceSequence, lifetime, "CAPITAL_LEGACY_V2");
+}
+export async function captureFixedSavedDomainResearchCompletionSnapshot(db: WaiaPostgresDb, suppliedContext: OrgContext,
+  suppliedRequest: CapturedResearchRequest, sourceSequence: number, accounting: HeldResearchAccounting): Promise<ResearchCompletionSnapshot> {
+  return captureSnapshotCore(db, suppliedContext, suppliedRequest, sourceSequence, accounting, "SAVED_RESEARCH_V1");
+}
+async function captureSnapshotCore(db: WaiaPostgresDb, suppliedContext: OrgContext, suppliedRequest: CapturedResearchRequest,
+  sourceSequence: number, lifetime: Lifetime, domain: "CAPITAL_LEGACY_V2" | "SAVED_RESEARCH_V1") {
   lifetime.assertDeadline();
   const context = copy(suppliedContext), request = copy(suppliedRequest);
-  const saved = await readResearchSnapshotWithinHeldTransaction(db, context, request, sourceSequence, shared(lifetime));
+  const accounting = shared(lifetime);
+  if (domain === "SAVED_RESEARCH_V1") check(accounting, "SHARED_ACCOUNTING_REQUIRED");
+  const saved = domain === "SAVED_RESEARCH_V1"
+    ? await readSavedDomainResearchSnapshotWithinHeldTransaction(db, context, request, sourceSequence, accounting!)
+    : await readResearchSnapshotWithinHeldTransaction(db, context, request, sourceSequence, accounting);
   check(saved, "ASSIGNMENT_MISSING"); lifetime.assertDeadline();
   const handle = Object.freeze({ kind: "FIXED_RESEARCH_SNAPSHOT" as const });
-  snapshots.set(handle, { context, request, sourceSequence, saved, lifetime }); return handle;
+  snapshots.set(handle, { context, request, sourceSequence, saved, lifetime, domain }); return handle;
 }
 
 /** Fixed computation can run after the public owner's RR COMMIT, exactly as before extraction. */
@@ -100,16 +115,36 @@ async function admitCandidate(db: WaiaPostgresDb, kind: "completion" | "receipt"
 /** Fixed internal RC writer. A forged, reused or independently budgeted prepared handle refuses. */
 export async function writeFixedResearchCompletion(db: WaiaPostgresDb, prepared: PreparedResearchCompletion,
   suppliedHolder: DatabaseClockRuntimeHolderV2, lifetime: Lifetime) {
+  return writeCompletionCore(db, prepared, { domain: "CAPITAL_LEGACY_V2", holder: copy(suppliedHolder) }, lifetime);
+}
+export async function writeFixedSavedDomainResearchCompletion(db: WaiaPostgresDb, prepared: PreparedResearchCompletion,
+  holder: SavedResearchHolderV1, accounting: HeldResearchAccounting) {
+  return writeCompletionCore(db, prepared, { domain: "SAVED_RESEARCH_V1", holder }, accounting);
+}
+type CompletionLease = { domain: "CAPITAL_LEGACY_V2"; holder: DatabaseClockRuntimeHolderV2 }
+  | { domain: "SAVED_RESEARCH_V1"; holder: SavedResearchHolderV1 };
+async function completionCurrent(db: WaiaPostgresDb, lease: CompletionLease, lifetime: Lifetime) {
+  if (lease.domain === "SAVED_RESEARCH_V1") {
+    const accounting = shared(lifetime); check(accounting, "SHARED_ACCOUNTING_REQUIRED");
+    return assertSavedResearchHolderWithinHeldTransactionV1(db, lease.holder, accounting.noncapitalControls);
+  }
+  return assertRuntimeDatabaseClockHolderV2(db, lease.holder);
+}
+async function writeCompletionCore(db: WaiaPostgresDb, prepared: PreparedResearchCompletion, lease: CompletionLease, lifetime: Lifetime) {
   lifetime.assertDeadline();
   const captured = completions.get(prepared);
-  check(captured && captured.lifetime === lifetime, "RESEARCH_COMPLETION_HANDLE_INVALID"); completions.delete(prepared);
+  check(captured && captured.lifetime === lifetime && captured.domain === lease.domain, "RESEARCH_COMPLETION_HANDLE_INVALID"); completions.delete(prepared);
   const { context, request, sourceSequence, saved, completion } = captured, output = completion.output;
-  const holder = copy(suppliedHolder);
+  const holder = lease.holder;
   check(holder.organizationId === context.organizationId, "HOLDER_SCOPE_CONFLICT");
-  await lockRuntimeOrganizationV2(db, context.organizationId); await assertRuntimeDatabaseClockHolderV2(db, holder);
+  if (lease.domain === "SAVED_RESEARCH_V1") await lockSavedResearchOrganizationV1(db, context.organizationId);
+  else await lockRuntimeOrganizationV2(db, context.organizationId);
+  await completionCurrent(db, lease, lifetime);
   lifetime.assertDeadline();
   const inputBudget = budget(lifetime, LIMITS.inputAggregate);
-  const current = await readAssignment(db, context, request, inputBudget); check(current, "ASSIGNMENT_MISSING");
+  const current = lease.domain === "SAVED_RESEARCH_V1"
+    ? await readSavedDomainResearchAssignmentWithinHeldTransaction(db, context, request, inputBudget)
+    : await readAssignment(db, context, request, inputBudget); check(current, "ASSIGNMENT_MISSING");
   check(current.assignment.contentDigest === saved.assignment.contentDigest, "ASSIGNMENT_IDENTITY_CONFLICT");
   const already = await readBoundedResearchCompletion(db, current.assignment, current.profile, saved.sequence,
     shared(lifetime)?.budget(LIMITS.replayAggregate));
@@ -143,9 +178,9 @@ export async function writeFixedResearchCompletion(db: WaiaPostgresDb, prepared:
   await persistInformationSufficiencyReceiptWithinTransactionV2Postgres(db, context, output.receipt);
   await requireInformationSufficiencyAuthorityWithinTransactionV2Postgres(db, context, saved.profile, output.receipt);
   lifetime.assertDeadline();
-  const inserted = await db.insert(schema.traderResearchUnderstandingCompletionsV1).values(values)
+  const inserted = await db.insert(schema.traderResearchUnderstandingCompletionsV1).values({ ...values, ownershipDomain: lease.domain })
     .returning({ contentDigest: schema.traderResearchUnderstandingCompletionsV1.contentDigest });
   check(inserted.length === 1 && inserted[0]!.contentDigest === completion.contentDigest, "RESEARCH_FENCED_INSERT_REQUIRED");
-  await assertRuntimeDatabaseClockHolderV2(db, holder);
+  await completionCurrent(db, lease, lifetime);
   lifetime.assertDeadline(); return { outcome: "COMMITTED" as const, completion };
 }

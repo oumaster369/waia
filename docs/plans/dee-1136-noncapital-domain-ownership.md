@@ -15,15 +15,15 @@ linearStatusFlow:
   onMerge: Done
 state:
   status: approved
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3]
+  currentWorkPackage: WP-2
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: [WP-2, WP-3]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 8f92fb2ae3d30986821d3c3a19364fc24c55235a
+  lastValidationAt: "2026-09-28T00:10:48.757177Z"
   blockedReason: null
-  nextAction: "Implement WP-1 then WP-2 within the accepted41-path contract, freezing coherent boundaries for independent review. Root owns the already-delegated checked merge; native/host/publication actions remain separately coordinated."
+  nextAction: "Complete WP-2 within the accepted41-path contract, freezing coherent boundaries for independent review. Root owns the already-delegated checked merge; native/host/publication actions remain separately coordinated."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -227,3 +227,12 @@ On immutable16a24b178024d83f514fcaaf811b476bcc21d928, actual manifest checks/run
 Root's admitted follow-through `dee1135-root-plan-admission/dee1136-bounded-domain-scope-addendum.json`, SHAe4014941, adds exact map rows40–41 before their edits. The existing fixed application `common` projection omits ownershipDomain; exact write-key checking also excludes it. Carry that scalar through the same four bounded projections/candidate measurements so historical CAPITAL provenance and current SAVED profiles can be verified without an extra completed-replay probe. Preserve each original row cap,512/64MiB/4,000,000 budgets, query count, pure11/49 and all registration/source projections. Update only the related unit candidate/projection evidence; generate the actual resulting command identity. The closed map is now41 paths, with no other additional path granted. This does not retroactively change16a source evidence.
 
 The literal-brand correction is committed as5f5cacf5da6ffc47d69c33fe0e57e5c5870b2f78: exactly two `as const` annotations, preserving all other nonplan16a entries. The initial RED freeze is `e6f03d29443d4648e9a2c00ab83899fe1c7f21d71ba5fbd39cc1a528ac5d268c` (15 artifacts); source/native acceptance remains pending successor checks and independent review.
+
+
+## WP-1 acceptance and WP-2 source work
+
+Corrected immutable8f92 passed72 focused tests/3 files/0 skip, helper ESLint, typecheck and canon at00:10:31.930467–00:10:48.757177 UTC. The18-artifact correction freeze is251b213c9d9db2184889a32dc75cd33a252dc64b24420e87a433593f0d781bbf; the original16a compiler RED remains intact. Independent M02 reportd836b9257a8a568b3b73632410a1d06d7ca5d4cfc47c272b2ea7cb5076cc543e and seven-artifact freeze90d42ce0be60ed6f140f3bdba18d5d1596f05304ec01df58e4a142f044a8a770 accepted only the finite WP-1 source/readiness. Root adopted it in `dee1135-root-plan-admission/dee1136-wp1-independent-root-adoption.json` (de74f91d). WP-2 source is released under the same41-path contract; actual routes, historical replay, full226 native upgrade/fences and natural32 accounting remain unproved until their separate actual checks.
+
+The intermediate WP-2 source checkpoint adds both real fixed CLI routes, same private writers, fixed saved-domain replay/write handle binding, one invocation ledger and per-artifact exact current/historical command representation. Current generated application command inventories each contain95 actual paths; the pure11 declaration and all pure49 source bytes remain unchanged. Bootstrap/FHV compatibility now enumerates the full225 predecessor plus0225, with the original207/148 frontiers and27 seed intact. The strict native roster adds exactly the new domain file to the prior25.
+
+The new native file is authored but unexecuted and intentionally not yet the full WP-2 proof package. Its current cases cover actual three-domain claims, fixed acquisition/saved CLIs, configuration versus pair roots, legacy fact/write distinction, natural32 accounting, expiry, installed FK/fence catalog, actual uniqueness versus shape outcomes, three process-death prefixes, simulated-monotonic late ACK, induced513 and two suppressed-completion owners. Direct eight-affinity insertion controls, genuine two-version upgrade, remaining root races/malformed-row controls and full acceptance remain open. Intermediate source lint/compiler/focused units are separately attributed; no native or whole-package acceptance follows from this checkpoint.

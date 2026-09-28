@@ -32,13 +32,17 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
     await expect(prepareHistoricalReconciliationFixture(env)).rejects.toThrow("DEE1130_BOOTSTRAP_REFUSED");
     expect(postgres).not.toHaveBeenCalled();
   });
-  it("captures all224 actual source SQL files and exact seed bytes without any connection", () => {
+  it("captures all226 actual source SQL files and exact seed bytes without any connection", () => {
     const source = readBootstrapSources();
-    expect(source.migrations).toHaveLength(224);
+    expect(source.migrations).toHaveLength(226);
     expect(source.migrations.slice(0, 222).at(-1)!.entry.tag).toBe("0221_trader_research_understanding_v1");
     expect(source.migrations[222]!.entry.tag).toBe("0222_trader_historical_reconciliation_v1");
     expect(source.migrations[223]!.entry).toEqual({ idx: 223, version: "7", when: 1780000000223,
       tag: "0223_trader_research_application_v1", breakpoints: true });
+    expect(source.migrations[224]!.entry).toEqual({ idx: 224, version: "7", when: 1780000000224,
+      tag: "0224_trader_risk_current_account_basis", breakpoints: true });
+    expect(source.migrations[225]!.entry).toEqual({ idx: 225, version: "7", when: 1780000000225,
+      tag: "0225_trader_noncapital_domain_ownership_v1", breakpoints: true });
     for (const item of source.migrations) {
       expect(item.bytes).toEqual(readFileSync(`db/migrations_postgres/${item.entry.tag}.sql`));
       expect(item.identity.hash).toBe(createHash("sha256").update(item.bytes).digest("hex"));
@@ -67,7 +71,7 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
   it.each(["missing", "malformed", "idx", "tag", "when", "version", "breakpoints"] as const)(
     "refuses %s0223 without changing the retained222 prefix boundary", field => {
       const value = journal();
-      if (field === "missing") value.entries.pop();
+      if (field === "missing") value.entries.splice(223, 1);
       else if (field === "malformed") value.entries[223] = null;
       else if (field === "idx") value.entries[223].idx = 224;
       else if (field === "tag") value.entries[223].tag = "0223_unadmitted_application";
@@ -76,6 +80,18 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
       else value.entries[223].breakpoints = false;
       expect(() => assertBootstrapJournal(value)).toThrow("JOURNAL");
     });
+  it.each([224, 225])("refuses missing, duplicated, reordered or altered successor%s", index => {
+    for (const change of ["missing", "duplicate", "order", "tag", "when", "breakpoints"]) {
+      const value = journal();
+      if (change === "missing") value.entries.splice(index, 1);
+      else if (change === "duplicate") value.entries[index] = value.entries[index - 1];
+      else if (change === "order") [value.entries[index], value.entries[index - 1]] = [value.entries[index - 1], value.entries[index]];
+      else if (change === "tag") value.entries[index].tag += "_unadmitted";
+      else if (change === "when") value.entries[index].when++;
+      else value.entries[index].breakpoints = false;
+      expect(() => assertBootstrapJournal(value)).toThrow("JOURNAL");
+    }
+  });
   it("refuses any modified seed, including whitespace, without trusting row count", () => {
     const original = readBootstrapSources().seed;
     expect(() => assertPrefixSeed(original)).not.toThrow();
