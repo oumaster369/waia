@@ -502,3 +502,13 @@ export function retainObservedFrontierV1(
   }
   return { currentPointer: null, basisWrite: null, retention: "DELTA_ONLY" };
 }
+
+/** The only current-account issue entry. It cannot mint an allowance while publication is refused. */
+export function admitCurrentAccountBasisV1(
+  retained: ReturnType<typeof retainObservedFrontierV1>,
+): { decision: "REFUSED"; reason: "LIVE_CAPITAL_ENVELOPE_ABSENT"; allowanceId: null; orderId: null } {
+  if (retained.currentPointer !== null || retained.basisWrite !== null) {
+    throw new RiskCurrentAccountRefusedV1("LIVE_CAPITAL_ENVELOPE_ABSENT");
+  }
+  return { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null };
+}

@@ -4,7 +4,7 @@ import { createRiskAccountProfileV1, createRiskAccountReferenceV1, riskAccountDi
   RISK_ACCOUNT_CHANNELS_V1, RISK_REFERENCE_METHOD_V1, sealRiskAccountRecordV1,
   type RiskAccountProfileDraftV1, type RiskReferenceMemberV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import { availableRiskAccountQuantityV1, constructRiskAccountBasisV1, compareExpectedAccountFrontierV1,
-  decideCurrentAccountBasisPublicationV1, retainObservedFrontierV1,
+  admitCurrentAccountBasisV1, decideCurrentAccountBasisPublicationV1, retainObservedFrontierV1,
   type RiskAccountObligationV1, type RiskExpectedFrontierV1, type RiskIndependentInclusionV1 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
 
 // These pure values exercise arithmetic and refusal contracts only. No persisted authority,
@@ -181,6 +181,13 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       expectedExposureNotional: "10", expectedPendingNotional: "1",
       actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false,
     }))).toEqual({ currentPointer: null, basisWrite: null, retention: "DELTA_ONLY" });
+    const retained = retainObservedFrontierV1(compareExpectedAccountFrontierV1({
+      expectedExposureNotional: "10", expectedPendingNotional: "1",
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: true,
+    }));
+    expect(admitCurrentAccountBasisV1(retained)).toEqual({
+      decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
+    });
   });
 
 });

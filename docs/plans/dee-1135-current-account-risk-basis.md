@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Observed Expected versus Actual deltas are retained without a basis write or current pointer. Do not invent caps or mark WP-1 complete."
+  nextAction: "Current-account issue returns no allowance while the live envelope producer is absent. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null
