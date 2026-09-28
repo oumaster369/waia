@@ -276,20 +276,20 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
     console.info(JSON.stringify({ proof: "DEE1136_SIMULATED_LATE_ACK", actualBCommit: true, simulatedMonotonicMs: now, actualElapsed120sClaimed: false }));
   }, 45000);
   it("charges induced actual dispatch to the original ledger and reserves rollback for slot512", async () => {
-    const { input, b } = await composite(); let ledger: HeldResearchAccounting | undefined, invocations = 0, injected = 0;
+    const { input, b } = await composite(); const observed: { ledger?: HeldResearchAccounting } = {}; let invocations = 0, injected = 0;
     const originalBudget = HeldResearchAccounting.prototype.budget, originalBegin = client.begin.bind(client);
     vi.spyOn(HeldResearchAccounting.prototype, "budget").mockImplementation(function (this: HeldResearchAccounting, maximum) {
-      if (ledger && ledger !== this) throw new Error("DOMAIN_LEDGER_RESET"); ledger = this; return originalBudget.call(this, maximum);
+      if (observed.ledger && observed.ledger !== this) throw new Error("DOMAIN_LEDGER_RESET"); observed.ledger = this; return originalBudget.call(this, maximum);
     });
     const begin = vi.spyOn(client, "begin").mockImplementation(((options: string, callback: (held: postgres.TransactionSql) => Promise<unknown>) => originalBegin(options, async held => {
       if (++invocations === 4) {
-        expect(ledger).toBeDefined(); const bound = prepareHeldSavedDomainResearchReplay(client, ledger!).bindHeld(held);
-        while (ledger!.statements < 511) { await bound.executor.execute(sql`select 1 as dee1136_induced_dispatch`); injected++; }
+        expect(observed.ledger).toBeDefined(); const bound = prepareHeldSavedDomainResearchReplay(client, observed.ledger!).bindHeld(held);
+        while (observed.ledger!.statements < 511) { await bound.executor.execute(sql`select 1 as dee1136_induced_dispatch`); injected++; }
       }
       return callback(held);
     })) as typeof client.begin);
     trace.length = 0;
-    try { expect((await run(input)).status).toBe("STATEMENT_LIMIT_EXCEEDED"); expect(ledger!.statements).toBe(512);
+    try { expect((await run(input)).status).toBe("STATEMENT_LIMIT_EXCEEDED"); expect(observed.ledger!.statements).toBe(512);
       expect(trace).toHaveLength(512); expect(trace.at(-1)!.query.toLowerCase()).toBe("rollback"); }
     finally { begin.mockRestore(); vi.restoreAllMocks(); }
     expect(await savedCompletion(b)).toEqual([]); expect(await counts()).toEqual([1, 1, 1, 0]);
