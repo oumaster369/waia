@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Implement WP-1 then WP-2 within the accepted39-path contract, freezing coherent boundaries for independent review. Root owns the already-delegated checked merge; native/host/publication actions remain separately coordinated."
+  nextAction: "Implement WP-1 then WP-2 within the accepted41-path contract, freezing coherent boundaries for independent review. Root owns the already-delegated checked merge; native/host/publication actions remain separately coordinated."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -42,7 +42,7 @@ Root created this branch from checked main `82819a9581d09afb81eeeff4153abebbf59b
 
 Root selected isolated engineering after that component. **Before publication**, the full actual1135 predecessor must be checked into main, then normally merged/reconciled with this branch; rebind the complete integrated chain, actual generated identities and affected combined source/native/CI proof. A changed1135 schema requires real conflict/review work. No rebase/force-push, missing-chain acceptance or relabelled old results. Engineering does not wait for all1135 product semantics.
 
-Plan-only grant: external `parallel-runtime-owner/dee1135-root-plan-admission/dee1136-plan-grant.json`, SHA `2d1b24c10376267411c71201a79a33e3c0378805e4e9c3aeec54622427f2ced7`. The sole plan is committed before executable work. Root read the full213-line plan, accepted its technical design/39-path/WP boundaries and released WP-1→WP-2 source once the final plan checkpoint is posted; independent amendment closure is accepted as recorded below; this checkpoint runs no tests/DB and claims no new implementation validation.
+Plan-only grant: external `parallel-runtime-owner/dee1135-root-plan-admission/dee1136-plan-grant.json`, SHA `2d1b24c10376267411c71201a79a33e3c0378805e4e9c3aeec54622427f2ced7`. The sole plan is committed before executable work. Root read the full213-line plan, accepted its technical design/initial39-path/WP boundaries and released WP-1→WP-2 source once the final plan checkpoint is posted; independent amendment closure is accepted as recorded below; this checkpoint runs no tests/DB and claims no new implementation validation.
 
 ## Fixed routes and compatibility
 
@@ -166,6 +166,8 @@ Exactly38 nonplan paths plus this plan =39. Original37 concrete paths plus the r
 | `tests/integration/postgres-runtime-domain-ownership-v1.test.ts` (new) | Real two-domain/legacy/upgrade-relevant race/fence/native accounting proof described in PROOF-PLAN. |
 | `db/migrations_postgres/0225_trader_noncapital_domain_ownership_v1.sql` (new) | Exact hand-authored migration/constraints/backfill/fences after full225 predecessor. |
 | `docs/plans/dee-1136-noncapital-domain-ownership.md` (new) | Sole integration state, scope, evidence and publication metadata. |
+| 40 | `lib/trader/paper/research-application-v1/bounded-read-postgres.ts` | Add the exact ownershipDomain scalar to four fixed application read/candidate projections; preserve bounds, identities and statement count |
+| 41 | `tests/unit/research-application-v1-bounds.test.ts` | Update the exact candidate fixture and verify domain scalar read/write accounting and refusal controls |
 
 The #10/#31 application/root-helper responsibilities include the G01 third root and exact accounting; #32 and schema/migration include A01 positive shape versus profile membership; domain unit/native/helper paths carry their new controls. No change to old capital modules, original CLI, SQL0000..0224, pure members, canonical MI service/repository, Forecast/Decision/Risk/Execution/Guardian, scheduler or operator UI. Original application71 and Understanding24 native files remain byte-identical; their setup helper keeps the old default behavior while adding only named fixed-route support. Existing exact two MI service Measurement delegates remain the only application lineage calls, with no source/trust/Forecast authority.
 
@@ -217,3 +219,9 @@ No invented cadence, selector policy, lease handoff, financial/empirical thresho
 The first coherent source boundary adds0225/full226 journal registration, matching typed schema, fixed held acquisition/saved lease helpers and the bounded three-root/control-byte primitives. Six executable/test paths are changed inside the closed map; the application command declaration is regenerated from the actual schema bytes, with its93 paths and pure11/pure49 identities preserved. The new focused unit file checks the real compiled scalar-query boundary, configuration/pair distinction, foreign fact versus write-root admission, strict packet shape/byte charges, absence→presence, same-length content conflict, fixed-domain busy/claim behavior and exact persisted claim body. These assertions are authored, not yet executed. Existing wrappers/callers and prior native files are untouched at this boundary; WP-2 routes and compatibility remain open.
 
 New heads use INSERT only for the first epoch and an exact prior-digest UPDATE for a successor. This avoids PostgreSQL BEFORE INSERT first-epoch validation on an UPSERT candidate while retaining one guarded head-write statement and the traced12 inner/16 total claim count. Millisecond-exact stored timestamps positively match all sealed string projections. No SQL was applied, no behavior/native compatibility was inferred, and all225 predecessor migrations remain immutable. Independent source review and serial scoped checks precede acceptance of this boundary.
+
+## WP-1 retained RED and WP-2 projection follow-through
+
+On immutable16a24b178024d83f514fcaaf811b476bcc21d928, actual manifest checks/runtime inventory,72 focused tests/3 files/0 skip and four-path ESLint passed. Typecheck exited2 at00:07:11.312063 UTC with exactly two literal Symbol-brand inference errors (boolean versus true) in the new fixed helper; canon was not reached. External `dee1136-wp1-checks-16a24b17` retains all six raw logs/receipts and source identity. Correct only these two private brand annotations to `true as const`; no runtime/SQL semantics change. Scoped successor validation remains required.
+
+Root's admitted follow-through `dee1135-root-plan-admission/dee1136-bounded-domain-scope-addendum.json`, SHAe4014941, adds exact map rows40–41 before their edits. The existing fixed application `common` projection omits ownershipDomain; exact write-key checking also excludes it. Carry that scalar through the same four bounded projections/candidate measurements so historical CAPITAL provenance and current SAVED profiles can be verified without an extra completed-replay probe. Preserve each original row cap,512/64MiB/4,000,000 budgets, query count, pure11/49 and all registration/source projections. Update only the related unit candidate/projection evidence; generate the actual resulting command identity. The closed map is now41 paths, with no other additional path granted. This does not retroactively change16a source evidence.
