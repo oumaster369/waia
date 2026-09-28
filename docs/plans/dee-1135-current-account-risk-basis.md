@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "An open profile proposal refuses both issuance and execution bind. Neither writes an order. Do not mark WP-1 complete."
+  nextAction: "A cancelled profile proposal also refuses execution bind. Neither state writes an order. Do not mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

@@ -385,7 +385,7 @@ export function admitOpenProfileFrontierV1(input: {
   };
 }
 
-/** Open-proposal issue and current-account bind both refuse. Neither writes an order. */
+/** Issue and current-account bind both refuse. A closed proposal still does not invoke bind. */
 export async function refuseProfileBackedExecutionV1(
   sql: postgres.Sql,
   input: {
@@ -394,16 +394,35 @@ export async function refuseProfileBackedExecutionV1(
     observed: Parameters<typeof admitOpenProfileFrontierV1>[0]["observed"];
   },
 ): Promise<{
-  issue: ReturnType<typeof admitOpenProfileFrontierV1>;
+  issue:
+    | ReturnType<typeof admitOpenProfileFrontierV1>
+    | {
+        decision: "REFUSED";
+        reason: "PROFILE_PROPOSAL_NOT_OPEN";
+        allowanceId: null;
+        orderId: null;
+      };
   bind: Awaited<ReturnType<typeof gateCurrentAccountExecutionBindV1>>;
 }> {
   const stored = await readStoredProfileAuthorityV1(sql, input.organizationId, input.accountId);
+  const bind = await gateCurrentAccountExecutionBindV1(sql, input.organizationId, input.accountId);
+  if (bind.bindInvoked) throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
+  if (stored.action !== "PROPOSE") {
+    return {
+      issue: {
+        decision: "REFUSED",
+        reason: "PROFILE_PROPOSAL_NOT_OPEN",
+        allowanceId: null,
+        orderId: null,
+      },
+      bind,
+    };
+  }
   const issue = admitOpenProfileFrontierV1({
     storedAction: stored.action,
     observed: input.observed,
   });
-  const bind = await gateCurrentAccountExecutionBindV1(sql, input.organizationId, input.accountId);
-  if (issue.allowanceId !== null || issue.orderId !== null || bind.bindInvoked) {
+  if (issue.allowanceId !== null || issue.orderId !== null) {
     throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
   }
   return { issue, bind };

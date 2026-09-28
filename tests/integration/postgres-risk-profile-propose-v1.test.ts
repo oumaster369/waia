@@ -135,6 +135,13 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
         issue: { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null, exposureDelta: "2", pendingDelta: "-1" },
         bind: { decision: "REFUSED", reason: "NO_CURRENT_POINTER", bindInvoked: false },
       });
+      await cancelStoredProfileProposalV1(sql, {
+        organizationId: org!.id, accountId, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
+      });
+      expect(await refuseProfileBackedExecutionV1(sql, { organizationId: org!.id, accountId, observed })).toEqual({
+        issue: { decision: "REFUSED", reason: "PROFILE_PROPOSAL_NOT_OPEN", allowanceId: null, orderId: null },
+        bind: { decision: "REFUSED", reason: "NO_CURRENT_POINTER", bindInvoked: false },
+      });
       const [after] = await sql<{ allowances: number; orders: number; current_rows: number }[]>`select
         (select count(*)::int from trader_risk_allowances_v2) as allowances,
         (select count(*)::int from trader_orders) as orders,
