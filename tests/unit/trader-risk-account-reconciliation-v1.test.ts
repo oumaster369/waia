@@ -448,21 +448,25 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     const head = digest("suffix-event");
     expect(authenticateExpectedEventSuffixV1({
       predecessorHeadDigest: null, predecessorNextEventSequence: "1", events: [],
-      terminalHeadDigest: null, terminalNextEventSequence: "1", declaredMaxEvents: 4,
-    })).toEqual({ decision: "AUTHENTICATED", eventCount: 0, currentPointer: null });
+      terminalHeadDigest: null, terminalNextEventSequence: "1", declaredMaxEvents: 4, predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0", terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+    })).toEqual({ decision: "AUTHENTICATED", eventCount: 0, notionalsVerified: true, currentPointer: null });
     expect(authenticateExpectedEventSuffixV1({
       predecessorHeadDigest: null, predecessorNextEventSequence: "1",
       events: [{ sequence: "1", previousDigest: null, contentDigest: head }],
-      terminalHeadDigest: head, terminalNextEventSequence: "2", declaredMaxEvents: 4,
+      terminalHeadDigest: head, terminalNextEventSequence: "2", declaredMaxEvents: 4, predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0", terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
     }).eventCount).toBe(1);
     expect(() => authenticateExpectedEventSuffixV1({
       predecessorHeadDigest: null, predecessorNextEventSequence: "1",
       events: [{ sequence: "2", previousDigest: null, contentDigest: head }],
-      terminalHeadDigest: head, terminalNextEventSequence: "3", declaredMaxEvents: 4,
+      terminalHeadDigest: head, terminalNextEventSequence: "3", declaredMaxEvents: 4, predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0", terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
     })).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => authenticateExpectedEventSuffixV1({
       predecessorHeadDigest: null, predecessorNextEventSequence: "1", events: [],
-      terminalHeadDigest: null, terminalNextEventSequence: "1", declaredMaxEvents: 0,
+      terminalHeadDigest: null, terminalNextEventSequence: "1", declaredMaxEvents: 0, predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0", terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => authenticateExpectedEventSuffixV1({
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1", events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", declaredMaxEvents: 4, predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0", terminalReconciledExposureNotional: "1", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
     })).toThrow(RiskCurrentAccountRefusedV1);
   });
 

@@ -679,7 +679,13 @@ export function authenticateExpectedEventSuffixV1(input: {
   terminalHeadDigest: string | null;
   terminalNextEventSequence: string;
   declaredMaxEvents: number;
-}): { decision: "AUTHENTICATED"; eventCount: number; currentPointer: null } {
+  predecessorReconciledExposureNotional: string;
+  predecessorPendingExposureNotional: string;
+  predecessorReservationNotional: string;
+  terminalReconciledExposureNotional: string;
+  terminalPendingExposureNotional: string;
+  terminalReservationNotional: string;
+}): { decision: "AUTHENTICATED"; eventCount: number; notionalsVerified: boolean; currentPointer: null } {
   if (!Number.isSafeInteger(input.declaredMaxEvents) || input.declaredMaxEvents < 1) refuse("SUFFIX_WORK_LIMIT");
   if (input.events.length > input.declaredMaxEvents) refuse("SUFFIX_WORK_LIMIT");
   let expectedSequence = sequence(input.predecessorNextEventSequence);
@@ -696,5 +702,20 @@ export function authenticateExpectedEventSuffixV1(input: {
   if (sequence(input.terminalNextEventSequence) !== expectedSequence) refuse("EXPECTED_SEQUENCE");
   if (input.terminalHeadDigest !== previous) refuse("EXPECTED_SEQUENCE");
   if (input.terminalHeadDigest !== null) riskAccountDigestSchemaV1.parse(input.terminalHeadDigest);
-  return { decision: "AUTHENTICATED", eventCount: input.events.length, currentPointer: null };
+  const sameNotional = (left: string, right: string) => nonnegative(left) === nonnegative(right);
+  const notionalsVerified = input.events.length === 0;
+  if (notionalsVerified && !(
+    sameNotional(input.predecessorReconciledExposureNotional, input.terminalReconciledExposureNotional) &&
+    sameNotional(input.predecessorPendingExposureNotional, input.terminalPendingExposureNotional) &&
+    sameNotional(input.predecessorReservationNotional, input.terminalReservationNotional)
+  )) refuse("SUFFIX_TERMINAL_MISMATCH");
+  if (!notionalsVerified) {
+    nonnegative(input.predecessorReconciledExposureNotional);
+    nonnegative(input.predecessorPendingExposureNotional);
+    nonnegative(input.predecessorReservationNotional);
+    nonnegative(input.terminalReconciledExposureNotional);
+    nonnegative(input.terminalPendingExposureNotional);
+    nonnegative(input.terminalReservationNotional);
+  }
+  return { decision: "AUTHENTICATED", eventCount: input.events.length, notionalsVerified, currentPointer: null };
 }

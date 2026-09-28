@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "The Expected event suffix must be gap-free under a caller-declared work bound. An authenticated suffix still publishes no authority. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "An empty Expected suffix must keep the predecessor notionals. A non-empty suffix is structure-only until exposure is recomputed. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
