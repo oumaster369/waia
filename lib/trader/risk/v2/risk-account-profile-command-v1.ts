@@ -161,6 +161,81 @@ export async function readStoredProfileAuthorityV1(
   };
 }
 
+/** Closes an open proposal. The cancel event does not create a current pointer, allowance, or order. */
+export async function cancelStoredProfileProposalV1(
+  sql: postgres.Sql,
+  input: {
+    organizationId: string;
+    accountId: string;
+    actorId: string;
+    auditId: string;
+    commandId: string;
+  },
+): Promise<{
+  decision: "RETAINED_NON_AUTHORITY";
+  action: "CANCEL";
+  profileDigest: string;
+  currentPointer: null;
+  allowanceId: null;
+  orderId: null;
+}> {
+  const command = decideRiskAccountProfileCommandV1({
+    action: "CANCEL",
+    liveCapitalEnvelope: null,
+  });
+  if (command.action !== "CANCEL" || command.currentPointer !== null) {
+    throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
+  }
+  return sql.begin(async (tx) => {
+    const [head] = await tx<
+      { content_digest: string; event_sequence: string; profile_digest: string; action: string }[]
+    >`
+      select content_digest, event_sequence::text, profile_digest, action
+      from trader_risk_account_profile_events_v1
+      where organization_id = ${input.organizationId}::uuid and account_id = ${input.accountId}
+      order by event_sequence desc
+      limit 1
+      for update`;
+    if (!head) throw new RiskCurrentAccountRefusedV1("PROFILE_PROPOSAL_ABSENT");
+    if (head.action !== "PROPOSE")
+      throw new RiskCurrentAccountRefusedV1("PROFILE_PROPOSAL_NOT_OPEN");
+    const eventSequence = Number(head.event_sequence);
+    if (!Number.isSafeInteger(eventSequence) || eventSequence < 1) {
+      throw new RiskCurrentAccountRefusedV1("EXPECTED_SEQUENCE");
+    }
+    const eventBody = {
+      schemaVersion: "risk-account-profile-event/v1" as const,
+      organizationId: input.organizationId,
+      accountId: input.accountId,
+      profileDigest: head.profile_digest,
+      action: "CANCEL" as const,
+      actorId: input.actorId,
+      eventSequence: eventSequence + 1,
+      previousEventDigest: head.content_digest,
+      commandId: input.commandId,
+    };
+    const eventText = canonicalJsonString(eventBody);
+    const eventDigest = riskAccountDigestV1(eventBody);
+    await tx`insert into trader_risk_account_profile_events_v1
+      (organization_id, account_id, content_digest, body_text, command_id, profile_digest, event_sequence, previous_event_digest, action, actor_id, audit_id)
+      values (${input.organizationId}::uuid, ${input.accountId}, ${eventDigest}, ${eventText}, ${input.commandId}::uuid,
+        ${head.profile_digest}, ${eventSequence + 1}, ${head.content_digest}, 'CANCEL', ${input.actorId}::uuid, ${input.auditId}::uuid)`;
+    const [current] = await tx<
+      { n: number }[]
+    >`select count(*)::int n from trader_risk_account_current_v1
+      where organization_id = ${input.organizationId}::uuid and account_id = ${input.accountId}`;
+    if (current?.n !== 0) throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
+    return {
+      decision: "RETAINED_NON_AUTHORITY" as const,
+      action: "CANCEL" as const,
+      profileDigest: head.profile_digest,
+      currentPointer: null,
+      allowanceId: null,
+      orderId: null,
+    };
+  });
+}
+
 /** Reads the stored proposal, then refuses confirmation or activation without appending an event. */
 export async function refuseStoredProfileActivationV1(
   sql: postgres.Sql,

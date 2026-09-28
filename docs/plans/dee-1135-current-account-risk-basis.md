@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A stored profile proposal reads as no authority, and activation appends no event. Do not adopt its allocation figure or mark WP-1 complete."
+  nextAction: "An open profile proposal can be cancelled by a chained event. The cancel still publishes no authority. Do not adopt the allocation figure or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

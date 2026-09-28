@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { describe, expect, it } from "vitest";
-import { readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, retainProposedRiskAccountProfileV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
+import { cancelStoredProfileProposalV1, readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, retainProposedRiskAccountProfileV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
 import { RiskCurrentAccountRefusedV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import {
   createRiskAccountProfileV1,
@@ -87,6 +87,19 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
       const [still] = await sql<{ action: string; n: number }[]>`select action, count(*)::int n
         from trader_risk_account_profile_events_v1 where account_id = ${accountId} group by action`;
       expect(still).toEqual({ action: "PROPOSE", n: 1 });
+      const cancelled = await cancelStoredProfileProposalV1(sql, {
+        organizationId: org!.id, accountId, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
+      });
+      expect(cancelled).toMatchObject({ decision: "RETAINED_NON_AUTHORITY", action: "CANCEL", currentPointer: null, allowanceId: null, orderId: null });
+      expect(await readStoredProfileAuthorityV1(sql, org!.id, accountId)).toEqual({
+        action: "CANCEL", authority: "NONE", currentPointer: null, allocationCopied: false,
+      });
+      await expect(cancelStoredProfileProposalV1(sql, {
+        organizationId: org!.id, accountId, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
+      })).rejects.toBeInstanceOf(RiskCurrentAccountRefusedV1);
+      const chain = await sql<{ action: string }[]>`select action from trader_risk_account_profile_events_v1
+        where account_id = ${accountId} order by event_sequence`;
+      expect(chain.map(row => row.action)).toEqual(["PROPOSE", "CANCEL"]);
       const [after] = await sql<{ allowances: number; orders: number; current_rows: number }[]>`select
         (select count(*)::int from trader_risk_allowances_v2) as allowances,
         (select count(*)::int from trader_orders) as orders,
