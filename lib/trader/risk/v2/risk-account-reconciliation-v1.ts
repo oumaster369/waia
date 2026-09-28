@@ -768,13 +768,14 @@ export function foldExpectedEnforcementSuffixV1(input: {
   let reservation = nonnegative(input.predecessorReservationNotional);
   let pending = nonnegative(input.predecessorPendingExposureNotional);
   const open = new Map<string, bigint>();
+  const closed = new Set<string>();
   let issued = 0n;
   for (const event of input.events) {
     if (!(ENFORCEMENT_SUFFIX_TYPES as readonly string[]).includes(event.type)) refuse("EXPECTED_STATE");
     const reserved = nonnegative(event.reservedExposureNotional);
     if (!event.allowanceId) refuse("EXPECTED_OBLIGATION_IDENTITY");
     if (event.type === "ALLOWANCE_ISSUED") {
-      if (open.has(event.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
+      if (open.has(event.allowanceId) || closed.has(event.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
       open.set(event.allowanceId, reserved);
       reservation += reserved;
       issued += 1n;
@@ -782,6 +783,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
       const held = open.get(event.allowanceId);
       if (held === undefined || held !== reserved) refuse("EXPECTED_OBLIGATION_IDENTITY");
       open.delete(event.allowanceId);
+      closed.add(event.allowanceId);
       if (reservation < reserved) refuse("EXPECTED_RESERVATION_SUM");
       reservation -= reserved;
       if (event.type === "ALLOWANCE_CONSUMED") pending += reserved;
