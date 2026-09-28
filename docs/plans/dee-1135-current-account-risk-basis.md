@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A cancelled profile proposal also refuses execution bind. Neither state writes an order. Do not mark WP-1 complete."
+  nextAction: "Kept native inventory passed on this head: 11 Risk and 39 Execution, on a clone of the proof database. That does not complete WP-1. Positive issue stays blocked without a live capital envelope. Do not open or merge the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
