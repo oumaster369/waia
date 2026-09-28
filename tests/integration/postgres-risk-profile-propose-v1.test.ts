@@ -131,14 +131,18 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
         decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
         exposureDelta: "2", pendingDelta: "-1",
       });
-      expect(await refuseProfileBackedExecutionV1(sql, { organizationId: org!.id, accountId, observed })).toEqual({
+      const suffix = { decision: "AUTHENTICATED" as const, notionalsVerified: true, currentPointer: null };
+      await expect(refuseProfileBackedExecutionV1(sql, {
+        organizationId: org!.id, accountId, observed, suffix: { ...suffix, notionalsVerified: false },
+      })).rejects.toThrow(/SUFFIX_NOTIONALS_UNVERIFIED/);
+      expect(await refuseProfileBackedExecutionV1(sql, { organizationId: org!.id, accountId, observed, suffix })).toEqual({
         issue: { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null, exposureDelta: "2", pendingDelta: "-1" },
         bind: { decision: "REFUSED", reason: "NO_CURRENT_POINTER", bindInvoked: false },
       });
       await cancelStoredProfileProposalV1(sql, {
         organizationId: org!.id, accountId, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
       });
-      expect(await refuseProfileBackedExecutionV1(sql, { organizationId: org!.id, accountId, observed })).toEqual({
+      expect(await refuseProfileBackedExecutionV1(sql, { organizationId: org!.id, accountId, observed, suffix })).toEqual({
         issue: { decision: "REFUSED", reason: "PROFILE_PROPOSAL_NOT_OPEN", allowanceId: null, orderId: null },
         bind: { decision: "REFUSED", reason: "NO_CURRENT_POINTER", bindInvoked: false },
       });

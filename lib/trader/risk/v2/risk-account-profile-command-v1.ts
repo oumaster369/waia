@@ -394,21 +394,26 @@ export function admitFoldedSuffixV1(input: {
   if (input.suffix.decision !== "AUTHENTICATED" || input.suffix.currentPointer !== null) {
     throw new RiskCurrentAccountRefusedV1("EXPECTED_FRONTIER_UNOBSERVED");
   }
-  if (!input.suffix.notionalsVerified) throw new RiskCurrentAccountRefusedV1("SUFFIX_NOTIONALS_UNVERIFIED");
-  const issue = admitOpenProfileFrontierV1({ storedAction: input.storedAction, observed: input.observed });
+  if (!input.suffix.notionalsVerified)
+    throw new RiskCurrentAccountRefusedV1("SUFFIX_NOTIONALS_UNVERIFIED");
+  const issue = admitOpenProfileFrontierV1({
+    storedAction: input.storedAction,
+    observed: input.observed,
+  });
   if (issue.allowanceId !== null || issue.orderId !== null) {
     throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
   }
   return issue;
 }
 
-/** Issue and current-account bind both refuse. A closed proposal still does not invoke bind. */
+/** Issue and current-account bind both refuse. An unverified suffix never reaches bind. */
 export async function refuseProfileBackedExecutionV1(
   sql: postgres.Sql,
   input: {
     organizationId: string;
     accountId: string;
     observed: Parameters<typeof admitOpenProfileFrontierV1>[0]["observed"];
+    suffix: { decision: "AUTHENTICATED"; notionalsVerified: boolean; currentPointer: null };
   },
 ): Promise<{
   issue:
@@ -421,6 +426,13 @@ export async function refuseProfileBackedExecutionV1(
       };
   bind: Awaited<ReturnType<typeof gateCurrentAccountExecutionBindV1>>;
 }> {
+  if (
+    input.suffix.decision !== "AUTHENTICATED" ||
+    input.suffix.currentPointer !== null ||
+    !input.suffix.notionalsVerified
+  ) {
+    throw new RiskCurrentAccountRefusedV1("SUFFIX_NOTIONALS_UNVERIFIED");
+  }
   const stored = await readStoredProfileAuthorityV1(sql, input.organizationId, input.accountId);
   const bind = await gateCurrentAccountExecutionBindV1(sql, input.organizationId, input.accountId);
   if (bind.bindInvoked) throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
@@ -435,9 +447,10 @@ export async function refuseProfileBackedExecutionV1(
       bind,
     };
   }
-  const issue = admitOpenProfileFrontierV1({
+  const issue = admitFoldedSuffixV1({
     storedAction: stored.action,
     observed: input.observed,
+    suffix: input.suffix,
   });
   if (issue.allowanceId !== null || issue.orderId !== null) {
     throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");

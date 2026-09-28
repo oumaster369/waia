@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A fully folded suffix still cannot issue from an open proposal. A structure-only suffix is refused. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "Execution bind now requires a fully folded suffix and still does not run. An unverified suffix is refused first. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
