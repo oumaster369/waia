@@ -269,7 +269,9 @@ async function catalogPosture(sql: Sql) {
   // Stable semantic catalog fields only: no row contents, sequence values or catalog OIDs.
   return {
     relations: await sql`SELECT n.nspname,c.relname,c.relkind,c.relrowsecurity,c.relforcerowsecurity,
-      c.relacl::text AS acl,pg_get_userbyid(c.relowner) AS owner FROM pg_class c
+      c.relacl::text AS acl,pg_get_userbyid(c.relowner) AS owner,
+      (SELECT COALESCE(jsonb_agg(jsonb_build_object('column',a.attname,'acl',a.attacl::text) ORDER BY a.attnum),'[]'::jsonb)
+        FROM pg_attribute a WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped) AS column_acls FROM pg_class c
       JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname NOT LIKE 'pg_%'
       AND n.nspname<>'information_schema' ORDER BY n.nspname,c.relname,c.relkind`,
     policies: await sql`SELECT schemaname,tablename,policyname,permissive,roles,cmd,qual,with_check
