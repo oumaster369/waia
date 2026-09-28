@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { sql } from "drizzle-orm";
 import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { beforeAll, beforeEach, afterEach, afterAll, describe, expect, it, vi } from "vitest";
@@ -746,5 +747,83 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
     expect(await client`select rolname,rolsuper,rolbypassrls,rolcreaterole from pg_roles where rolname in ('anon','authenticated') order by rolname`).toEqual(roles);
     console.info(JSON.stringify({ proof: "DEE1136_BROWSER_DENY", tables: 5, roles: 2, globalRoleChanges: false }));
   }, 15000);
+  it("upgrades a 224-row legacy journal when a cycle runtime differs from its lease and reaches migration 0225", async () => {
+    const database = "waia_dee1147_legacy_holder";
+    const sideUrl = new URL(url!); sideUrl.pathname = `/${database}`;
+    const digest = "ab".repeat(32), alignedDigest = "cd".repeat(32);
+    const canonical = JSON.stringify({ schemaVersion: "waia.trader.noncapital_cycle_receipt.v2", result: { status: "NO_TRADE" } });
+    const userId = "00000000-0000-4000-8000-000000001147", organizationId = "00000000-0000-4000-8000-000000001148";
+    await client`select pg_terminate_backend(pid) from pg_stat_activity where datname=${database} and pid<>pg_backend_pid()`;
+    await client.unsafe(`drop database if exists ${database}`);
+    await client.unsafe(`create database ${database} template template0`);
+    const side = postgres(sideUrl.toString(), { max: 1, onnotice: () => {} });
+    try {
+      await side.unsafe(await readFile(path.join(process.cwd(), "scripts/postgres-validation/prelude-auth-stub.sql"), "utf8")).simple();
+      await applyLegacyJournal(sideUrl.toString(), 224);
+      const beforeJournal = await side`select count(*)::int n, max(created_at)::text last from drizzle.__drizzle_migrations`;
+      expect(beforeJournal).toEqual([{ n: 224, last: "1780000000223" }]);
+      await side`insert into auth.users(id) values(${userId}::uuid)`;
+      await side`insert into users(id,identity_label,email) values(${userId}::uuid,'DEE-1147','dee1147@waia.invalid')`;
+      await side`insert into organizations(id,owner_user_id,kind,name) values(${organizationId}::uuid,${userId}::uuid,'personal','DEE-1147')`;
+      await side`insert into trader_runtime_control_lease_epoch_history_v2(content_digest,organization_id,runtime_instance_id,lease_epoch,valid_until_utc,adjudicated_at_utc)
+        values(${digest},${organizationId}::uuid,'history-runtime',1,clock_timestamp()+interval '1 hour',clock_timestamp()),
+          (${alignedDigest},${organizationId}::uuid,'aligned-runtime',2,clock_timestamp()+interval '1 hour',clock_timestamp())`;
+      await side`insert into trader_runtime_control_lease_heads_v2(organization_id,runtime_instance_id,lease_epoch,content_digest,valid_until_utc)
+        values(${organizationId}::uuid,'cycle-runtime',1,${digest},clock_timestamp()+interval '1 hour')`;
+      await side`insert into trader_runtime_noncapital_cycles_v2(organization_id,account_id,symbol,bar_interval,pit_anchor,input_digest,content_digest,canonical_json,runtime_instance_id,lease_epoch,lease_content_digest,recorded_at_utc)
+        values(${organizationId}::uuid,'divergent','BTC/USDT','1m','2020-01-01T00:00:00Z',${"11".repeat(32)},${"22".repeat(32)},${canonical},'cycle-runtime',1,${digest},clock_timestamp())`;
+      await side`update trader_runtime_control_lease_heads_v2 set runtime_instance_id='aligned-runtime',lease_epoch=2,content_digest=${alignedDigest},valid_until_utc=clock_timestamp()+interval '1 hour' where organization_id=${organizationId}::uuid`;
+      await side`insert into trader_runtime_noncapital_cycles_v2(organization_id,account_id,symbol,bar_interval,pit_anchor,input_digest,content_digest,canonical_json,runtime_instance_id,lease_epoch,lease_content_digest,recorded_at_utc)
+        values(${organizationId}::uuid,'aligned','BTC/USDT','1m','2020-01-02T00:00:00Z',${"33".repeat(32)},${"44".repeat(32)},${canonical},'aligned-runtime',2,${alignedDigest},clock_timestamp())`;
+      const cyclesBefore = await side`select account_id,runtime_instance_id,lease_epoch,lease_content_digest,content_digest,canonical_json from trader_runtime_noncapital_cycles_v2 order by account_id`;
+      const historyBefore = await side`select runtime_instance_id,lease_epoch,content_digest from trader_runtime_control_lease_epoch_history_v2 order by lease_epoch`;
+      await applyLegacyJournal(sideUrl.toString(), 226);
+      const afterJournal = await side`select created_at::text from drizzle.__drizzle_migrations order by created_at`;
+      expect(afterJournal).toHaveLength(226);
+      expect(afterJournal.at(-1)).toEqual({ created_at: "1780000000225" });
+      expect(afterJournal.at(-2)).toEqual({ created_at: "1780000000224" });
+      const cyclesAfter = await side`select account_id,runtime_instance_id,lease_epoch,lease_content_digest,content_digest,canonical_json,ownership_domain from trader_runtime_noncapital_cycles_v2 order by account_id`;
+      expect(cyclesAfter.map(row => ({ account_id: row.account_id, runtime_instance_id: row.runtime_instance_id, lease_epoch: row.lease_epoch, lease_content_digest: row.lease_content_digest, content_digest: row.content_digest, canonical_json: row.canonical_json }))).toEqual(cyclesBefore);
+      expect(cyclesAfter.every(row => row.ownership_domain === "CAPITAL_LEGACY_V2")).toBe(true);
+      expect(await side`select runtime_instance_id,lease_epoch,content_digest from trader_runtime_control_lease_epoch_history_v2 order by lease_epoch`).toEqual(historyBefore);
+      const refs = await side`select runtime_instance_id,lease_epoch,lease_content_digest,capital_parent_digest from trader_runtime_ownership_refs_v1 where ownership_domain='CAPITAL_LEGACY_V2' order by lease_epoch`;
+      expect(refs).toEqual([{ runtime_instance_id: "history-runtime", lease_epoch: 1, lease_content_digest: digest, capital_parent_digest: digest },
+        { runtime_instance_id: "aligned-runtime", lease_epoch: 2, lease_content_digest: alignedDigest, capital_parent_digest: alignedDigest }]);
+      const divergence = await side`select receipt_table,receipt_runtime_instance_id,receipt_lease_epoch,lease_runtime_instance_id,lease_epoch,lease_content_digest from trader_runtime_legacy_holder_divergence_v1 order by receipt_key`;
+      expect(divergence).toEqual([{ receipt_table: "trader_runtime_noncapital_cycles_v2", receipt_runtime_instance_id: "cycle-runtime", receipt_lease_epoch: 1,
+        lease_runtime_instance_id: "history-runtime", lease_epoch: 1, lease_content_digest: digest }]);
+      const holder = await side`select convalidated,pg_get_constraintdef(oid) definition from pg_constraint where conname='noncapital_receipt_holder_0'`;
+      expect(holder).toHaveLength(1); expect(holder[0]!.convalidated).toBe(true);
+      expect(holder[0]!.definition).toContain("ownership_domain"); expect(holder[0]!.definition).not.toContain("runtime_instance_id");
+      await expect(side`update trader_runtime_noncapital_cycles_v2 set account_id=account_id where account_id='divergent'`).rejects.toThrow("RUNTIME_AUTHORITY_V2_APPEND_ONLY");
+      await expect(side`insert into trader_runtime_legacy_holder_divergence_v1(divergence_id,receipt_table,receipt_key,organization_id,receipt_runtime_instance_id,receipt_lease_epoch,lease_content_digest,lease_runtime_instance_id,lease_epoch)
+        values(${"ab".repeat(32)},'trader_runtime_noncapital_cycles_v2','closed',${organizationId}::uuid,'cycle-runtime',1,${digest},'history-runtime',1)`).rejects.toThrow("LEGACY_HOLDER_DIVERGENCE_CLOSED");
+      await side`update trader_runtime_control_lease_heads_v2 set runtime_instance_id='cycle-runtime',lease_epoch=1,content_digest=${digest},valid_until_utc=clock_timestamp()+interval '1 hour' where organization_id=${organizationId}::uuid`;
+      await expect(side`insert into trader_runtime_noncapital_cycles_v2(organization_id,account_id,symbol,bar_interval,pit_anchor,input_digest,content_digest,canonical_json,runtime_instance_id,lease_epoch,lease_content_digest,recorded_at_utc)
+        values(${organizationId}::uuid,'rejected','BTC/USDT','1m','2020-01-03T00:00:00Z',${"55".repeat(32)},${"66".repeat(32)},${canonical},'cycle-runtime',1,${digest},clock_timestamp())`).rejects.toThrow("NONCAPITAL_RECEIPT_HOLDER_REFUSED");
+      expect(await side`select runtime_instance_id from trader_runtime_noncapital_cycles_v2 where account_id='divergent'`).toEqual([{ runtime_instance_id: "cycle-runtime" }]);
+      expect(Number((await side`select count(*)::int n from trader_runtime_noncapital_cycles_v2`)[0]!.n)).toBe(2);
+      console.info(JSON.stringify({ proof: "DEE1147_LEGACY_HOLDER_DIVERGENCE", journalBefore: 224, journalAfter: 226, migration: "1780000000225", holderRewritten: false, historyDropped: false }));
+    } finally {
+      await side.end({ timeout: 5 });
+      await client`select pg_terminate_backend(pid) from pg_stat_activity where datname=${database} and pid<>pg_backend_pid()`;
+      await client.unsafe(`drop database if exists ${database}`);
+    }
+  }, 420000);
 
 });
+
+async function applyLegacyJournal(databaseUrl: string, entryCount: number) {
+  const source = path.join(process.cwd(), "db/migrations_postgres");
+  const journal = JSON.parse(await readFile(path.join(source, "meta/_journal.json"), "utf8")) as { entries: Array<{ tag: string }> };
+  const entries = journal.entries.slice(0, entryCount);
+  const directory = await mkdtemp(path.join(tmpdir(), "dee1147-journal-"));
+  try {
+    await mkdir(path.join(directory, "meta"));
+    await writeFile(path.join(directory, "meta/_journal.json"), JSON.stringify({ ...journal, entries }));
+    await Promise.all(entries.map(async entry => writeFile(path.join(directory, `${entry.tag}.sql`), await readFile(path.join(source, `${entry.tag}.sql`)))));
+    const connection = postgres(databaseUrl, { max: 1, onnotice: () => {} });
+    try { await migrate(drizzle(connection), { migrationsFolder: directory }); }
+    finally { await connection.end({ timeout: 5 }); }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+}

@@ -4742,12 +4742,28 @@ export const traderRuntimeOwnershipRefsV1 = pgTable("trader_runtime_ownership_re
   index("noncapital_ref_acquisition_idx").on(t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.acquisitionParentDigest).where(sql`${t.acquisitionParentDigest} IS NOT NULL`),
   index("noncapital_ref_research_idx").on(t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.researchParentDigest).where(sql`${t.researchParentDigest} IS NOT NULL`),
 ]);
+/** Closed record of pre-0225 receipts whose stored holder differs from the historical lease. Neither holder is rewritten. */
+export const traderRuntimeLegacyHolderDivergenceV1 = pgTable("trader_runtime_legacy_holder_divergence_v1", {
+  divergenceId: text("divergence_id").primaryKey(),
+  receiptTable: text("receipt_table").notNull(),
+  receiptKey: text("receipt_key").notNull(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+  receiptRuntimeInstanceId: text("receipt_runtime_instance_id").notNull(),
+  receiptLeaseEpoch: integer("receipt_lease_epoch").notNull(),
+  leaseContentDigest: text("lease_content_digest").notNull(),
+  leaseRuntimeInstanceId: text("lease_runtime_instance_id").notNull(),
+  leaseEpoch: integer("lease_epoch").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+}, t => [unique("legacy_holder_divergence_receipt").on(t.receiptTable, t.organizationId, t.receiptKey),
+  check("legacy_holder_divergence_distinct", sql`(${t.receiptRuntimeInstanceId} IS DISTINCT FROM ${t.leaseRuntimeInstanceId} OR ${t.receiptLeaseEpoch} IS DISTINCT FROM ${t.leaseEpoch}) IS TRUE`),
+  foreignKey({ name: "legacy_holder_divergence_lease", columns: [t.organizationId, t.leaseRuntimeInstanceId, t.leaseEpoch, t.leaseContentDigest],
+    foreignColumns: [traderRuntimeControlLeaseEpochHistoryV2.organizationId, traderRuntimeControlLeaseEpochHistoryV2.runtimeInstanceId,
+      traderRuntimeControlLeaseEpochHistoryV2.leaseEpoch, traderRuntimeControlLeaseEpochHistoryV2.contentDigest] })]);
 type OwnershipColumns = { ownershipDomain: PgColumn; organizationId: PgColumn; runtimeInstanceId: PgColumn; leaseEpoch: PgColumn; leaseContentDigest: PgColumn };
 function noncapitalReceiptOwnership(t: OwnershipColumns, number: number, domain: "RECORDED_ACQUISITION_V1" | "SAVED_RESEARCH_V1") { return [
   check(`noncapital_receipt_domain_${number}`, sql`${t.ownershipDomain} IN ('CAPITAL_LEGACY_V2',${sql.raw(`'${domain}'`)})`),
-  foreignKey({ name: `noncapital_receipt_holder_${number}`, columns: [t.ownershipDomain, t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.leaseContentDigest],
-    foreignColumns: [traderRuntimeOwnershipRefsV1.ownershipDomain, traderRuntimeOwnershipRefsV1.organizationId, traderRuntimeOwnershipRefsV1.runtimeInstanceId,
-      traderRuntimeOwnershipRefsV1.leaseEpoch, traderRuntimeOwnershipRefsV1.leaseContentDigest] }),
+  foreignKey({ name: `noncapital_receipt_holder_${number}`, columns: [t.ownershipDomain, t.organizationId, t.leaseContentDigest],
+    foreignColumns: [traderRuntimeOwnershipRefsV1.ownershipDomain, traderRuntimeOwnershipRefsV1.organizationId, traderRuntimeOwnershipRefsV1.leaseContentDigest] }),
   index(`noncapital_receipt_holder_${number}_idx`).on(t.ownershipDomain, t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.leaseContentDigest),
 ]; }
 function savedCommandProfile(t: { ownershipDomain: PgColumn; bodyJson: PgColumn }, number: number) { return check(`noncapital_command_profile_${number}`,
