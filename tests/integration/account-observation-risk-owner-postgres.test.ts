@@ -51,10 +51,16 @@ function watch<T>(promise: Promise<T>) {
 async function entered<T>(barrier: ReturnType<typeof gate>, work: ReturnType<typeof watch<T>>) {
   let timer!: ReturnType<typeof setTimeout>;
   try {
-    await Promise.race([barrier.promise, work.outcome.then(result => {
+    const winner = await Promise.race([
+      barrier.promise.then(() => ({ kind: "BARRIER" as const })),
+      work.outcome.then(result => ({ kind: "OWNER" as const, result })),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("CONTROLLED_BARRIER_NOT_REACHED")), 5000); }),
+    ]);
+    if (winner.kind === "OWNER") {
+      const result = winner.result;
       receipt("failed-before-barrier", result.status === "rejected" ? errorShape(result.reason) : { status: result.status });
       throw new Error("OWNER_SETTLED_BEFORE_CONTROLLED_BARRIER");
-    }), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("CONTROLLED_BARRIER_NOT_REACHED")), 5000); })]);
+    }
   } finally { clearTimeout(timer); }
 }
 function rejected<T>(stage: string, result: Awaited<ReturnType<typeof watch<T>>["outcome"]>) {
