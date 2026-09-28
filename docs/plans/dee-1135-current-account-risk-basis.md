@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Attested prior accounting exposure must match the Expected frontier. A mismatch is refused, an unattested figure is not invented, and a match still publishes nothing. Do not invent caps or mark WP-1 complete."
+  nextAction: "An Expected obligation whose symbol does not match its base asset is refused. A matching BTC/USDT obligation still publishes nothing. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

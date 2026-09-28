@@ -551,6 +551,9 @@ export function observeSealedExpectedFrontierV1(input: {
     for (const value of [obligation.allowanceContentDigest, obligation.verdictContentDigest, obligation.instrumentIdentityDigest])
       riskAccountDigestSchemaV1.parse(value);
     if (nonnegative(obligation.quantity) === 0n) refuse("EXPECTED_OBLIGATION_IDENTITY");
+    if (!/^[A-Z0-9]{1,24}$/.test(obligation.baseAsset) || obligation.baseAsset === "USDT" ||
+        obligation.symbol !== `${obligation.baseAsset}/USDT`)
+      refuse("EXPECTED_OBLIGATION_IDENTITY");
     if (obligation.state === "ISSUED") {
       if (obligation.orderId !== null || obligation.orderBindingDigest !== null || nonnegative(obligation.pendingNotional) !== 0n)
         refuse("EXPECTED_ISSUED_STATE");
