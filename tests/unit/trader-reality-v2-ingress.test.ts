@@ -58,6 +58,24 @@ function admittedDrafts(route: ReturnType<typeof routeRealityIngressV2>) {
   return route.drafts;
 }
 
+function executionFills(times: readonly unknown[]) {
+  return createExecutionReportV2({
+    executionReportId: "00000000-0000-4000-8000-000000067904",
+    organizationId: ORG, accountId: ACCOUNT,
+    executionAttemptId: "00000000-0000-4000-8000-000000067902",
+    executionAttemptContentDigestHex: DIGEST_A,
+    reportSequence: "1", source: "CONNECTOR", venueOrderId: order.orderId,
+    observedAtUtc: context.validAtUtc, previousReportDigestHex: null,
+    reportType: "FILL_REPORT_OBSERVED",
+    rawObservation: { order, trades: times.map((time, index) => ({
+      tradeId: `trade-time-${index}`, orderId: order.orderId, clientOrderId: order.clientOrderId,
+      symbol: order.symbol, side: order.side, price: "25000",
+      quantity: times.length === 2 ? "0.0005" : "0.001", fee: "0.025", feeAsset: "USDT",
+      ...(time === undefined ? {} : { executedAt: time }),
+    })) },
+  });
+}
+
 describe("Reality V2 exhaustive ingress routing (DEE-679)", () => {
   it("admits exactly the four raw HTX spot REST classes with digest-only lineage", () => {
     const routes = [
@@ -139,6 +157,55 @@ describe("Reality V2 exhaustive ingress routing (DEE-679)", () => {
     }));
     expect(fillDrafts.map((draft) => draft.primitiveAssertion?.kind)).toEqual(["ORDER", "FILL"]);
     fillDrafts.map(seal).forEach(assertRealitySourceReportAdmissionV2);
+  });
+
+  it("preserves each venue fill time independently of report observation and Reality knowledge", () => {
+    const times = ["2026-08-22T09:59:58.123Z", "2026-08-22T09:59:59.456Z"];
+    const report = executionFills(times);
+    const original = JSON.stringify(report);
+    const drafts = admittedDrafts(routeRealityIngressV2({ kind: "EXECUTION_REPORT_V2", report }));
+    const fills = drafts.filter(draft => draft.primitiveAssertion?.kind === "FILL");
+    expect(fills.map(draft => draft.validAtUtc)).toEqual(times);
+    expect(drafts.find(draft => draft.primitiveAssertion?.kind === "ORDER")?.validAtUtc)
+      .toBe(report.observedAtUtc);
+    expect(fills.map(draft => draft.primitiveAssertion)).toEqual(times.map((_, index) => ({
+      kind: "FILL", venueTradeId: `trade-time-${index}`, venueOrderId: order.orderId,
+      symbol: order.symbol, side: order.side, quantity: "0.0005", price: "25000",
+      feeAmount: "0.025", feeAsset: "USDT", settlementStatus: "OBSERVED",
+    })));
+    const sealed = fills.map(seal);
+    expect(sealed.map(value => value.validAtUtc)).toEqual(times);
+    expect(sealed.map(value => value.knowledgeAtUtc)).toEqual(times.map(() => "2026-08-22T10:00:01.000Z"));
+    expect(fills.map(seal)).toEqual(sealed);
+    expect(JSON.stringify(report)).toBe(original);
+  });
+
+  it.each([
+    ["missing", undefined], ["null", null], ["empty", ""], ["number", 123],
+    ["malformed", "not-a-time"], ["normalized calendar", "2026-02-30T10:00:00.000Z"],
+    ["offset form", "2026-08-22T11:59:59.000+02:00"],
+    ["missing milliseconds", "2026-08-22T09:59:59Z"],
+    ["submillisecond precision", "2026-08-22T09:59:59.123456Z"],
+    ["leading whitespace", " 2026-08-22T09:59:59.000Z"],
+  ])("refuses %s fill time without substituting report observation", (_name, time) => {
+    const report = executionFills([time]);
+    expect(() => routeRealityIngressV2({ kind: "EXECUTION_REPORT_V2", report }))
+      .toThrow("ExecutionReportV2 fill evidence is fail-uncertain");
+  });
+
+  it("keeps knowledge-before-valid rejection and event observation timing", () => {
+    const report = executionFills(["2026-08-22T10:00:02.000Z"]);
+    const drafts = admittedDrafts(routeRealityIngressV2({ kind: "EXECUTION_REPORT_V2", report }));
+    const fill = drafts.find(draft => draft.primitiveAssertion?.kind === "FILL")!;
+    expect(() => seal(fill)).toThrow("knowledge time cannot precede source-asserted valid time");
+    const { contentDigestHex, schemaVersion, ...draft } = report;
+    const event = createExecutionReportV2({ ...draft, reportType: "VENUE_STATUS_OBSERVED", rawObservation: {} });
+    expect(event.schemaVersion).toBe(schemaVersion);
+    expect(event.contentDigestHex).not.toBe(contentDigestHex);
+    const events = admittedDrafts(routeRealityIngressV2({ kind: "EXECUTION_REPORT_V2", report: event }));
+    expect(events).toHaveLength(1);
+    expect(events[0].primitiveAssertion?.kind).toBe("VENUE_EVENT");
+    expect(events[0].validAtUtc).toBe(event.observedAtUtc);
   });
 
   it("returns explicit digest receipts for every excluded source class", () => {
