@@ -1,4 +1,6 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -13,6 +15,7 @@ import { appendRealitySourceObservationV2FromWriter, appendObservedRealityTruthV
   listRealitySourceReportsV2, listTruthRecordsV2, listRealityEventsV2, lockRealityScopeV2,
   readLatestRealityProjectionV2 } from "@/lib/trader/reality/v2/repository-postgres";
 import { persistDeliveryAttempt } from "../helpers/execution-reality-delivery-fixture";
+import { adaptExecutionReportV2ToReality as baseline828Adapter } from "../fixtures/reality/execution-reality-adapter-82819a95";
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
@@ -73,6 +76,25 @@ describe.skipIf(!enabled || !url)("DEE1122 native committed Execution report del
       accountId: value.accountId, executionAttemptId: value.attempt.executionAttemptId, executionReportId: randomUUID(),
       reportType: "ATTEMPT_BOUND", source: "EXECUTION", rawObservation, observedAtUtc: "2026-08-21T00:00:00.002Z",
     });
+  }
+  async function appendTimedFills(value: Awaited<ReturnType<typeof fixture>>, times: readonly string[]) {
+    const bound = await append(value);
+    const started = await executionRepository.appendExecutionReportV2Postgres(db, { organizationId: org }, {
+      accountId: value.accountId, executionAttemptId: value.attempt.executionAttemptId, executionReportId: randomUUID(),
+      reportType: "SUBMIT_STARTED", source: "EXECUTION", rawObservation: {}, observedAtUtc: "2026-08-21T00:00:00.003Z",
+    });
+    const order = { orderId: "local-time-venue-id", clientOrderId: value.attempt.clientOrderId,
+      symbol: "BTCUSDT", side: "buy", type: "limit", price: "25000", quantity: "0.001", filledQuantity: "0.001", status: "filled" };
+    const report = await executionRepository.appendExecutionReportV2Postgres(db, { organizationId: org }, {
+      accountId: value.accountId, executionAttemptId: value.attempt.executionAttemptId, executionReportId: randomUUID(),
+      reportType: "FILL_REPORT_OBSERVED", source: "CONNECTOR", venueOrderId: order.orderId,
+      rawObservation: { order, trades: times.map((executedAt, index) => ({
+        tradeId: `local-time-trade-${index}`, orderId: order.orderId, clientOrderId: order.clientOrderId,
+        symbol: "BTCUSDT", side: "buy", price: "25000", quantity: times.length === 2 ? "0.0005" : "0.001",
+        fee: "0.025", feeAsset: "USDT", executedAt,
+      })) }, observedAtUtc: "2026-08-21T00:00:01.000Z",
+    });
+    return { report, reports: [bound, started, report] };
   }
   const route = (report: Awaited<ReturnType<typeof append>>) => {
     const result = routeRealityIngressV2({ kind: "EXECUTION_REPORT_V2", report });
@@ -315,7 +337,85 @@ describe.skipIf(!enabled || !url)("DEE1122 native committed Execution report del
     expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED", selectedReports: 3, selectedDrafts: 4 });
     const truths = await listTruthRecordsV2(db, scope()); expect(truths.filter((t) => t.primitiveAssertion.kind === "FILL")).toHaveLength(1);
     expect(truths.find((t) => t.primitiveAssertion.kind === "FILL")!.primitiveAssertion).toMatchObject({ settlementStatus: "OBSERVED", feeAmount: "0" });
+    expect(truths.find((t) => t.primitiveAssertion.kind === "FILL")!.validAtUtc).toBe("2026-08-21T00:00:00.004Z");
     expect(truths.some((t) => t.primitiveAssertion.kind === "REALIZED_CASHFLOW")).toBe(false);
     expect((await readLatestRealityProjectionV2(db, scope()))!.uncertainties).toHaveLength(0);
+  });
+  it("preserves two distinct venue times through durable sources, truths, projection and fresh replay", async () => {
+    const value = await fixture();
+    const times = ["2026-08-21T00:00:00.123Z", "2026-08-21T00:00:00.456Z"];
+    const { report } = await appendTimedFills(value, times); const before = await snapshot();
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
+      status: "DELIVERED", selectedReports: 3, selectedDrafts: 5, newSources: 5, newEvents: 5,
+    });
+    const sources = await listRealitySourceReportsV2(db, scope());
+    const truths = await listTruthRecordsV2(db, scope());
+    const projection = await readLatestRealityProjectionV2(db, scope());
+    for (const [index, time] of times.entries()) {
+      const source = sources.find(s => s.primitiveAssertion?.kind === "FILL" && s.primitiveAssertion.venueTradeId === `local-time-trade-${index}`)!;
+      expect(source.validAtUtc).toBe(time);
+      expect(source.knowledgeAtUtc > report.observedAtUtc).toBe(true);
+      expect(source.lineage).toMatchObject({ executionReportId: report.executionReportId, executionReportDigestHex: report.contentDigestHex });
+      expect(source.primitiveAssertion).toMatchObject({ quantity: "0.0005", feeAmount: "0.025", feeAsset: "USDT", settlementStatus: "OBSERVED" });
+      const truth = truths.find(t => t.sourceReportId === source.sourceReportId)!;
+      expect(truth).toMatchObject({ validAtUtc: time, knowledgeAtUtc: source.knowledgeAtUtc, primitiveAssertion: source.primitiveAssertion });
+      expect(projection!.stableEntries.find(e => e.sourceReportId === source.sourceReportId)).toMatchObject({
+        truthRecordId: truth.truthRecordId, validAtUtc: time, knowledgeAtUtc: source.knowledgeAtUtc, primitiveAssertion: source.primitiveAssertion,
+      });
+    }
+    expect(sources.find(s => s.primitiveAssertion?.kind === "ORDER")!.validAtUtc).toBe(report.observedAtUtc);
+    const after = await snapshot(); expect(financialSnapshot(after)).toEqual(financialSnapshot(before));
+    const fresh = postgres(url!, { max: 1 });
+    try {
+      expect(await catchUpExecutionRealityV2Postgres(drizzle(fresh, { schema: pgSchema }) as WaiaPostgresDb, value.input))
+        .toMatchObject({ status: "DELIVERED", newSources: 0, existingSources: 5, newEvents: 0 });
+    } finally { await fresh.end({ timeout: 5 }); }
+    const replay = await child(["--organization-id", org, "--account-id", value.accountId, "--execution-attempt-id", value.attempt.executionAttemptId]);
+    expect(replay.status, replay.err).toBe(0);
+    expect(JSON.parse(replay.out)).toMatchObject({ result: { status: "DELIVERED", newSources: 0 }, cleanup: "CLOSED" });
+    expect(await snapshot()).toEqual(after); expect(fetch).not.toHaveBeenCalled();
+  });
+  it("refuses reinterpretation of genuine baseline828 fill rows and preserves all immutable history", async () => {
+    // Byte-for-byte original adapter, not the corrected mapper with a substituted timestamp.
+    const baselineBytes = readFileSync(resolve(process.cwd(), "tests/fixtures/reality/execution-reality-adapter-82819a95.ts"));
+    expect(createHash("sha256").update(baselineBytes).digest("hex"))
+      .toBe("4560258f04cbe8ba89e256b4138acfcb0022fe01086252f070ded419f079c0f3");
+    const value = await fixture(); const time = "2026-08-21T00:00:00.123Z";
+    const { report, reports } = await appendTimedFills(value, [time]);
+    for (const stored of reports) for (const draft of baseline828Adapter(stored)) {
+      await ingestRealitySourceReportV2Postgres(db, scope(), draft);
+    }
+    const old = (await listRealitySourceReportsV2(db, scope())).find(s => s.primitiveAssertion?.kind === "FILL")!;
+    expect(old.validAtUtc).toBe(report.observedAtUtc); expect(old.validAtUtc).not.toBe(time);
+    const before = await snapshot();
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
+      status: "REFUSED", code: "SOURCE_BINDING_INVALID", newDeliveryCommitted: false,
+    });
+    expect(await snapshot()).toEqual(before);
+    const corrected = route(report).find(d => d.primitiveAssertion?.kind === "FILL")!;
+    await expect(ingestRealitySourceReportV2Postgres(db, scope(), corrected))
+      .rejects.toThrow("immutable Reality lineage was reinterpreted with different semantics");
+    expect(await snapshot()).toEqual(before); expect(fetch).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["offset", "2026-08-21T02:00:00.123+02:00"],
+    ["missing milliseconds", "2026-08-21T00:00:00Z"],
+    ["submillisecond", "2026-08-21T00:00:00.123456Z"],
+  ])("refuses stored noncanonical %s fill time without any Reality write", async (_name, time) => {
+    const value = await fixture(); const { report } = await appendTimedFills(value, [time]);
+    expect(report.rawObservation.trades).toEqual([expect.objectContaining({ executedAt: time })]);
+    const before = await snapshot();
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input))
+      .toMatchObject({ status: "FAILED", code: "DELIVERY_FAILED", newDeliveryCommitted: false });
+    expect(await listRealitySourceReportsV2(db, scope())).toHaveLength(0);
+    expect(await snapshot()).toEqual(before); expect(fetch).not.toHaveBeenCalled();
+  });
+  it("rolls back delivery when a source fill time is later than actual allocated knowledge", async () => {
+    const value = await fixture(); await appendTimedFills(value, ["2099-08-21T00:00:00.123Z"]);
+    const before = await snapshot();
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input))
+      .toMatchObject({ status: "FAILED", code: "DELIVERY_FAILED", newDeliveryCommitted: false });
+    expect(await listRealitySourceReportsV2(db, scope())).toHaveLength(0);
+    expect(await snapshot()).toEqual(before); expect(fetch).not.toHaveBeenCalled();
   });
 });
