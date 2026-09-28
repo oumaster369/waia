@@ -803,6 +803,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   const open = new Map<string, { reserved: bigint; quantity: bigint; verdict: string }>();
   const consumed = new Map<string, { reserved: bigint; quantity: bigint; verdict: string; orderId: string; orderDigest: string }>();
   const orderIds = new Set<string>();
+  const orderDigests = new Set<string>();
   const verdictIds = new Set<string>();
   const closed = new Set<string>();
   const positiveQuantity = (value: string) => {
@@ -827,10 +828,11 @@ export function foldExpectedEnforcementSuffixV1(input: {
     const quantity = positiveQuantity(prior.quantity);
     closed.add(prior.allowanceId);
     if (prior.disposition === "CONSUMED") {
-      if (!prior.riskVerdictId || verdictIds.has(prior.riskVerdictId) || !prior.boundOrderId || prior.boundOrderDigestHex === null || orderIds.has(prior.boundOrderId)) refuse("EXPECTED_CONSUMED_STATE");
+      if (!prior.riskVerdictId || verdictIds.has(prior.riskVerdictId) || !prior.boundOrderId || prior.boundOrderDigestHex === null || orderIds.has(prior.boundOrderId) || orderDigests.has(prior.boundOrderDigestHex)) refuse("EXPECTED_CONSUMED_STATE");
       riskAccountDigestSchemaV1.parse(prior.boundOrderDigestHex);
       verdictIds.add(prior.riskVerdictId);
       orderIds.add(prior.boundOrderId);
+      orderDigests.add(prior.boundOrderDigestHex);
       consumed.set(prior.allowanceId, { reserved, quantity, verdict: prior.riskVerdictId, orderId: prior.boundOrderId, orderDigest: prior.boundOrderDigestHex });
       explainedPending += reserved;
     } else if (prior.riskVerdictId !== null || prior.boundOrderId !== null || prior.boundOrderDigestHex !== null) refuse("EXPECTED_STATE");
@@ -877,9 +879,10 @@ export function foldExpectedEnforcementSuffixV1(input: {
       const quantity = positiveQuantity(event.quantity);
       if (held === undefined || held.reserved !== reserved || held.quantity !== quantity || held.verdict !== event.riskVerdictId) refuse("EXPECTED_OBLIGATION_IDENTITY");
       if (event.type === "ALLOWANCE_CONSUMED") {
-        if (!event.boundOrderId || event.boundOrderDigestHex === null || orderIds.has(event.boundOrderId)) refuse("EXPECTED_CONSUMED_STATE");
+        if (!event.boundOrderId || event.boundOrderDigestHex === null || orderIds.has(event.boundOrderId) || orderDigests.has(event.boundOrderDigestHex)) refuse("EXPECTED_CONSUMED_STATE");
         riskAccountDigestSchemaV1.parse(event.boundOrderDigestHex);
         orderIds.add(event.boundOrderId);
+        orderDigests.add(event.boundOrderDigestHex);
         consumed.set(event.allowanceId, { reserved, quantity, verdict: event.riskVerdictId, orderId: event.boundOrderId, orderDigest: event.boundOrderDigestHex });
       } else if (event.boundOrderId !== null || event.boundOrderDigestHex !== null) refuse("EXPECTED_STATE");
       open.delete(event.allowanceId);
