@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Issue and bind accept a suffix only for the same account, and only with the inclusion ids the fold itself held. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "The suffix keeps each allowance quantity unchanged from issue through close and through the terminal open list. A zero or substituted quantity is refused. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null

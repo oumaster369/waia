@@ -732,7 +732,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   predecessorReconciledExposureNotional: string;
   predecessorPendingExposureNotional: string;
   predecessorReservationNotional: string;
-  openedAllowances: readonly { allowanceId: string; reservedExposureNotional: string }[];
+  openedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string }[];
   closedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; disposition: "CONSUMED" | "RELEASED"; truthRecordId?: string | null }[];
   events: readonly {
     sequence: string;
@@ -741,6 +741,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
     type: (typeof ENFORCEMENT_SUFFIX_TYPES)[number];
     allowanceId: string;
     reservedExposureNotional: string;
+    quantity: string;
     truthRecordId?: string | null;
   }[];
   alreadyDisposedTruthIds: readonly string[];
@@ -750,7 +751,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   terminalReconciledExposureNotional: string;
   terminalPendingExposureNotional: string;
   terminalReservationNotional: string;
-  terminalOpenAllowances: readonly { allowanceId: string; reservedExposureNotional: string }[];
+  terminalOpenAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string }[];
   organizationId: string;
   accountId: string;
   declaredMaxEvents: number;
@@ -775,13 +776,18 @@ export function foldExpectedEnforcementSuffixV1(input: {
   }
   let reservation = nonnegative(input.predecessorReservationNotional);
   let pending = nonnegative(input.predecessorPendingExposureNotional);
-  const open = new Map<string, bigint>();
+  const open = new Map<string, { reserved: bigint; quantity: bigint }>();
   const closed = new Set<string>();
+  const positiveQuantity = (value: string) => {
+    const quantity = nonnegative(value);
+    if (quantity === 0n) refuse("EXPECTED_OBLIGATION_IDENTITY");
+    return quantity;
+  };
   let explained = 0n;
   for (const prior of input.openedAllowances) {
     if (!prior.allowanceId || open.has(prior.allowanceId) || closed.has(prior.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
     const reserved = nonnegative(prior.reservedExposureNotional);
-    open.set(prior.allowanceId, reserved);
+    open.set(prior.allowanceId, { reserved, quantity: positiveQuantity(prior.quantity) });
     explained += reserved;
   }
   let explainedPending = 0n;
@@ -816,12 +822,13 @@ export function foldExpectedEnforcementSuffixV1(input: {
     if (event.type !== "ALLOWANCE_CONSUMED" && event.truthRecordId != null) refuse("EXPECTED_STATE");
     if (event.type === "ALLOWANCE_ISSUED") {
       if (open.has(event.allowanceId) || closed.has(event.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
-      open.set(event.allowanceId, reserved);
+      open.set(event.allowanceId, { reserved, quantity: positiveQuantity(event.quantity) });
       reservation += reserved;
       issued += 1n;
     } else {
       const held = open.get(event.allowanceId);
-      if (held === undefined || held !== reserved) refuse("EXPECTED_OBLIGATION_IDENTITY");
+      const quantity = positiveQuantity(event.quantity);
+      if (held === undefined || held.reserved !== reserved || held.quantity !== quantity) refuse("EXPECTED_OBLIGATION_IDENTITY");
       open.delete(event.allowanceId);
       closed.add(event.allowanceId);
       if (reservation < reserved) refuse("EXPECTED_RESERVATION_SUM");
@@ -844,14 +851,15 @@ export function foldExpectedEnforcementSuffixV1(input: {
   if (reservation !== nonnegative(input.terminalReservationNotional) || pending !== nonnegative(input.terminalPendingExposureNotional)) {
     refuse("SUFFIX_TERMINAL_MISMATCH");
   }
-  const listed = new Map<string, bigint>();
+  const listed = new Map<string, { reserved: bigint; quantity: bigint }>();
   for (const row of input.terminalOpenAllowances) {
     if (!row.allowanceId || listed.has(row.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
-    listed.set(row.allowanceId, nonnegative(row.reservedExposureNotional));
+    listed.set(row.allowanceId, { reserved: nonnegative(row.reservedExposureNotional), quantity: positiveQuantity(row.quantity) });
   }
   if (listed.size !== open.size) refuse("EXPECTED_OBLIGATION_IDENTITY");
-  for (const [id, reserved] of open) {
-    if (listed.get(id) !== reserved) refuse("EXPECTED_OBLIGATION_IDENTITY");
+  for (const [id, held] of open) {
+    const row = listed.get(id);
+    if (row === undefined || row.reserved !== held.reserved || row.quantity !== held.quantity) refuse("EXPECTED_OBLIGATION_IDENTITY");
   }
   return { decision: "AUTHENTICATED", eventCount: input.events.length, notionalsVerified: true, heldTruthRecordIds, currentPointer: null };
 }
