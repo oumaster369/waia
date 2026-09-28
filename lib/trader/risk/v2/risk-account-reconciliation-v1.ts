@@ -750,6 +750,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   terminalReconciledExposureNotional: string;
   terminalPendingExposureNotional: string;
   terminalReservationNotional: string;
+  terminalOpenAllowances: readonly { allowanceId: string; reservedExposureNotional: string }[];
   declaredMaxEvents: number;
 }): { decision: "AUTHENTICATED"; eventCount: number; notionalsVerified: true; heldTruthRecordIds: readonly string[]; currentPointer: null } {
   authenticateExpectedEventSuffixV1({
@@ -839,6 +840,15 @@ export function foldExpectedEnforcementSuffixV1(input: {
   }
   if (reservation !== nonnegative(input.terminalReservationNotional) || pending !== nonnegative(input.terminalPendingExposureNotional)) {
     refuse("SUFFIX_TERMINAL_MISMATCH");
+  }
+  const listed = new Map<string, bigint>();
+  for (const row of input.terminalOpenAllowances) {
+    if (!row.allowanceId || listed.has(row.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
+    listed.set(row.allowanceId, nonnegative(row.reservedExposureNotional));
+  }
+  if (listed.size !== open.size) refuse("EXPECTED_OBLIGATION_IDENTITY");
+  for (const [id, reserved] of open) {
+    if (listed.get(id) !== reserved) refuse("EXPECTED_OBLIGATION_IDENTITY");
   }
   return { decision: "AUTHENTICATED", eventCount: input.events.length, notionalsVerified: true, heldTruthRecordIds, currentPointer: null };
 }

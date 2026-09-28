@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Issue and bind run the suffix fold themselves. A caller cannot assert that notionals were verified. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "The folded suffix must name the same open allowances it still holds. A reservation sum without those identities is refused. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null

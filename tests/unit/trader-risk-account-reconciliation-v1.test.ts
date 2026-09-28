@@ -449,6 +449,7 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       openedAllowances: [], closedAllowances: [], alreadyDisposedTruthIds: [], events: [],
       terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+      terminalOpenAllowances: [],
       declaredMaxEvents: 4,
     };
     expect(admitFoldedSuffixV1({ storedAction: "PROPOSE", observed, suffix })).toMatchObject({
@@ -489,7 +490,7 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     const base = {
       predecessorHeadDigest: null, predecessorNextEventSequence: "1", predecessorNextAdmissionSequence: "1",
       predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0",
-      openedAllowances: [], closedAllowances: [], alreadyDisposedTruthIds: [],
+      openedAllowances: [], closedAllowances: [], alreadyDisposedTruthIds: [], terminalOpenAllowances: [],
       declaredMaxEvents: 4,
     };
     const issued = { sequence: "1", previousDigest: null, contentDigest: head, type: "ALLOWANCE_ISSUED" as const, allowanceId: "allow-1", reservedExposureNotional: "10" };
@@ -497,6 +498,7 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       ...base, events: [issued],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10" }],
     })).toEqual({ decision: "AUTHENTICATED", eventCount: 1, notionalsVerified: true, heldTruthRecordIds: [], currentPointer: null });
     const consumedHead = digest("fold-consumed");
     expect(foldExpectedEnforcementSuffixV1({
