@@ -492,3 +492,13 @@ export function compareExpectedAccountFrontierV1(input: {
     pendingDelta: subtractDecimal(input.actualPendingNotional, input.expectedPendingNotional),
   };
 }
+
+/** An observed delta is retained in memory only. It does not write a basis or the current pointer. */
+export function retainObservedFrontierV1(
+  comparison: ReturnType<typeof compareExpectedAccountFrontierV1>,
+): { currentPointer: null; basisWrite: null; retention: "DELTA_ONLY" } {
+  if (comparison.publication.reason !== "LIVE_CAPITAL_ENVELOPE_ABSENT") {
+    throw new RiskCurrentAccountRefusedV1("LIVE_CAPITAL_ENVELOPE_ABSENT");
+  }
+  return { currentPointer: null, basisWrite: null, retention: "DELTA_ONLY" };
+}
