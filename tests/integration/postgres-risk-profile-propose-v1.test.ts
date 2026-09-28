@@ -72,6 +72,10 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
         values (${randomUUID()}::uuid, 'service', ${user!.id}, 'trader.risk_account_profile.propose',
           'trader.risk_account_profile', ${accountId}, ${org!.id}::uuid, '{}'::jsonb)
         returning id`;
+      await expect(retainProposedRiskAccountProfileV1(sql, {
+        profile: createRiskAccountProfileV1(proposalDraft(org!.id, `${accountId}-actor`)),
+        actorId: randomUUID(), auditId: audit!.id, commandId: randomUUID(),
+      })).rejects.toThrow(/PROFILE_AUDIT_ACTOR/);
       const profile = createRiskAccountProfileV1(proposalDraft(org!.id, accountId));
       const proposeCommand = randomUUID();
       const retained = await retainProposedRiskAccountProfileV1(sql, {

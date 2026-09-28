@@ -107,6 +107,7 @@ export async function retainProposedRiskAccountProfileV1(
   const eventDigest = riskAccountDigestV1(eventBody);
   let replayDigest: string | null = null;
   await sql.begin(async (tx) => {
+    await requireMatchingAuditActorV1(tx as unknown as postgres.Sql, input.auditId, input.actorId, profile.organizationId);
     const [stored] = await tx<{ action: string; profile_digest: string; actor_id: string }[]>`
       select action, profile_digest, actor_id::text as actor_id
       from trader_risk_account_profile_events_v1
@@ -175,6 +176,26 @@ export function decideProfileCommandReplayV1(
   return "REPLAY";
 }
 
+
+/** The actor is the audit row's actor. A command cannot name a different person or organization. */
+export function assertAuditActorMatchesV1(
+  audit: { actorId: string | null; organizationId: string | null } | null,
+  expected: { actorId: string; organizationId: string },
+): void {
+  if (!audit?.actorId || audit.actorId !== expected.actorId || audit.organizationId !== expected.organizationId) {
+    throw new RiskCurrentAccountRefusedV1("PROFILE_AUDIT_ACTOR");
+  }
+}
+
+async function requireMatchingAuditActorV1(tx: postgres.Sql, auditId: string, actorId: string, organizationId: string): Promise<void> {
+  const [audit] = await tx<{ actor_id: string | null; organization_id: string | null }[]>`
+    select actor_id, organization_id::text as organization_id from audit_logs where id = ${auditId}::uuid`;
+  assertAuditActorMatchesV1(
+    audit ? { actorId: audit.actor_id, organizationId: audit.organization_id } : null,
+    { actorId, organizationId },
+  );
+}
+
 const STORED_PROFILE_ACTIONS = ["PROPOSE", "CANCEL", "REVOKE", "CONFIRM", "ACTIVATE"] as const;
 
 /** A stored profile, including its allocation figure, never becomes trading authority. */
@@ -237,6 +258,7 @@ export async function cancelStoredProfileProposalV1(
     throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
   }
   return sql.begin(async (tx) => {
+    await requireMatchingAuditActorV1(tx as unknown as postgres.Sql, input.auditId, input.actorId, input.organizationId);
     const [stored] = await tx<{ action: string; profile_digest: string; actor_id: string }[]>`
       select action, profile_digest, actor_id::text as actor_id
       from trader_risk_account_profile_events_v1
@@ -342,6 +364,7 @@ export async function reproposeStoredProfileV1(
       limit 1
       for update of e`;
     if (!head) throw new RiskCurrentAccountRefusedV1("PROFILE_PROPOSAL_ABSENT");
+    await requireMatchingAuditActorV1(tx as unknown as postgres.Sql, input.auditId, input.actorId, input.organizationId);
     const [storedPropose] = await tx<{ action: string; profile_digest: string; actor_id: string }[]>`
       select action, profile_digest, actor_id::text as actor_id
       from trader_risk_account_profile_events_v1

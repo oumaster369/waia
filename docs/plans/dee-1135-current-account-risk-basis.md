@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "The same profile command returns the stored event and does not append a second one. A command reused for a different action conflicts. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "Profile commands use the audit row actor and organization. A different actor is refused before a write. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
