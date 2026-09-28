@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A consumed Expected obligation now requires a real order-binding digest and a unique order id before observation. Publication stays refused. Do not invent caps or mark WP-1 complete."
+  nextAction: "An Expected obligation with zero quantity or a non-digest instrument identity is refused before observation. Publication stays refused. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null
