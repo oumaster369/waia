@@ -4,7 +4,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import * as schema from "@/db/schema.postgres";
 import { runWaiaPostgresTransaction, type WaiaPostgresDb, type WaiaPostgresTransactionCallback } from "@/db/waia-postgres-transaction";
-import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
+import { canonicalJsonString } from "@/lib/trader/research/digest";
 import { sameObservationBinding } from "@/lib/trader/account-observation/validation";
 import type { HtxAccountAcquisitionGetTransport } from "@/lib/trader/account-observation/htx-get-transport";
 import { decodeHtxReferenceJsonV1, type PrivateRawObjectStoreV1 } from "@/lib/trader/mi/htx-reference-quote-collector-v1";

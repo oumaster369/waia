@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createHash } from "node:crypto";
-import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
+import { canonicalJsonString } from "@/lib/trader/research/digest";
 import { decodeHtxReferenceJsonV1 } from "@/lib/trader/mi/htx-reference-quote-collector-v1";
 import { formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
 import { observationBindingSchema } from "@/lib/trader/account-observation/validation";

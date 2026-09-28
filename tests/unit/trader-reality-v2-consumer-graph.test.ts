@@ -31,7 +31,9 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         // the HTX public ticker host. None admit Reality or place orders.
         // DEE-1122 pins six DB-only delivery/ownership/equivalence files.
         // DEE-1130 adds one excluded historical reconciliation projector.
-        consumers: 141,
+        // DEE-1135 pins the HTX account acquisition spec and its PostgreSQL journal
+        // on the existing Reality boundary.
+        consumers: 143,
         // DEE-1099 adds one read of freshly validated account permissions,
         // not a financial observation or a venue effect.
         connectorReferences: 26,
