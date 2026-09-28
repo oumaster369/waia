@@ -334,10 +334,10 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       expected, predecessor: { ...initialExpected(), reservationNotional: "1" },
       actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
     })).toThrow(RiskCurrentAccountRefusedV1);
-    expect(observeSealedExpectedFrontierV1({
+    expect(() => observeSealedExpectedFrontierV1({
       expected, predecessor: { ...initialExpected(), reservationNotional: "10", obligations: [obligation("allow-1", "1", "BUY")] },
       actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
-    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+    })).toThrow(RiskCurrentAccountRefusedV1);
   });
   it("does not treat an unattested predecessor debt as zero", () => {
     const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };
@@ -374,6 +374,26 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     expect(observeSealedExpectedFrontierV1({
       expected: { ...base, obligations: [fresh] }, predecessor,
       actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+      referenceDigest: digest("ref-1"),
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
+  it("keeps an issued predecessor obligation on the current frontier", () => {
+    const issued = obligation("allow-1", "1", "BUY");
+    const predecessor = { ...initialExpected(), reservationNotional: "10", obligations: [issued] };
+    const carried = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1",
+      reservationNotional: "10", obligations: [issued] };
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" }, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...carried, obligations: [{ ...issued, quantity: "2" }] }, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+      referenceDigest: digest("ref-1"),
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected: carried, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
       referenceDigest: digest("ref-1"),
     }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
   });

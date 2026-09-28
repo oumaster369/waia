@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A current obligation cannot repeat a consumed predecessor allowance or order. A distinct order still publishes nothing. Do not invent caps or mark WP-1 complete."
+  nextAction: "An issued predecessor obligation must remain on the current frontier with the same quantity, side, symbol, and reservation. Dropping or resizing it is refused, and keeping it still publishes nothing. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null
