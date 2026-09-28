@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: 8f92fb2ae3d30986821d3c3a19364fc24c55235a
   lastValidationAt: "2026-09-28T00:10:48.757177Z"
   blockedReason: null
-  nextAction: "Complete WP-2 within the accepted41-path contract, freezing coherent boundaries for independent review. Root owns the already-delegated checked merge; native/host/publication actions remain separately coordinated."
+  nextAction: "Complete WP-2 within the accepted42-path contract, freezing coherent boundaries for independent review. Root owns the already-delegated checked merge; native/host/publication actions remain separately coordinated."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -168,6 +168,7 @@ Exactly40 nonplan paths plus this plan =41. The initial39-path map and two expli
 | `docs/plans/dee-1136-noncapital-domain-ownership.md` (new) | Sole integration state, scope, evidence and publication metadata. |
 | `lib/trader/paper/research-application-v1/bounded-read-postgres.ts` | Add the exact ownershipDomain scalar to four fixed application read/candidate projections; preserve bounds, identities and statement count |
 | `tests/unit/research-application-v1-bounds.test.ts` | Update the exact candidate fixture and verify domain scalar read/write accounting and refusal controls |
+| `tests/unit/postgres-capital-proof-guard.test.ts` | Preserve the independent prior25 roster and every rejection control while adding the actual domain suite26 |
 
 The #10/#31 application/root-helper responsibilities include the G01 third root and exact accounting; #32 and schema/migration include A01 positive shape versus profile membership; domain unit/native/helper paths carry their new controls. No change to old capital modules, original CLI, SQL0000..0224, pure members, canonical MI service/repository, Forecast/Decision/Risk/Execution/Guardian, scheduler or operator UI. Original application71 and Understanding24 native files remain byte-identical; their setup helper keeps the old default behavior while adding only named fixed-route support. Existing exact two MI service Measurement delegates remain the only application lineage calls, with no source/trust/Forecast authority.
 
@@ -231,8 +232,15 @@ The literal-brand correction is committed as5f5cacf5da6ffc47d69c33fe0e57e5c5870b
 
 ## WP-1 acceptance and WP-2 source work
 
-Corrected immutable8f92 passed72 focused tests/3 files/0 skip, helper ESLint, typecheck and canon at00:10:31.930467–00:10:48.757177 UTC. The18-artifact correction freeze is251b213c9d9db2184889a32dc75cd33a252dc64b24420e87a433593f0d781bbf; the original16a compiler RED remains intact. Independent M02 reportd836b9257a8a568b3b73632410a1d06d7ca5d4cfc47c272b2ea7cb5076cc543e and seven-artifact freeze90d42ce0be60ed6f140f3bdba18d5d1596f05304ec01df58e4a142f044a8a770 accepted only the finite WP-1 source/readiness. Root adopted it in `dee1135-root-plan-admission/dee1136-wp1-independent-root-adoption.json` (de74f91d). WP-2 source is released under the same41-path contract; actual routes, historical replay, full226 native upgrade/fences and natural32 accounting remain unproved until their separate actual checks.
+Corrected immutable8f92 passed72 focused tests/3 files/0 skip, helper ESLint, typecheck and canon at00:10:31.930467–00:10:48.757177 UTC. The18-artifact correction freeze is251b213c9d9db2184889a32dc75cd33a252dc64b24420e87a433593f0d781bbf; the original16a compiler RED remains intact. Independent M02 reportd836b9257a8a568b3b73632410a1d06d7ca5d4cfc47c272b2ea7cb5076cc543e and seven-artifact freeze90d42ce0be60ed6f140f3bdba18d5d1596f05304ec01df58e4a142f044a8a770 accepted only the finite WP-1 source/readiness. Root adopted it in `dee1135-root-plan-admission/dee1136-wp1-independent-root-adoption.json` (de74f91d). WP-2 source is released under the same42-path contract; actual routes, historical replay, full226 native upgrade/fences and natural32 accounting remain unproved until their separate actual checks.
 
 The intermediate WP-2 source checkpoint adds both real fixed CLI routes, same private writers, fixed saved-domain replay/write handle binding, one invocation ledger and per-artifact exact current/historical command representation. Current generated application command inventories each contain95 actual paths; the pure11 declaration and all pure49 source bytes remain unchanged. Bootstrap/FHV compatibility now enumerates the full225 predecessor plus0225, with the original207/148 frontiers and27 seed intact. The strict native roster adds exactly the new domain file to the prior25.
 
 The new native file is authored but unexecuted and intentionally not yet the full WP-2 proof package. Its current cases cover actual three-domain claims, fixed acquisition/saved CLIs, configuration versus pair roots, legacy fact/write distinction, natural32 accounting, expiry, installed FK/fence catalog, actual uniqueness versus shape outcomes, three process-death prefixes, simulated-monotonic late ACK, induced513 and two suppressed-completion owners. Direct eight-affinity insertion controls, genuine two-version upgrade, remaining root races/malformed-row controls and full acceptance remain open. Intermediate source lint/compiler/focused units are separately attributed; no native or whole-package acceptance follows from this checkpoint.
+
+
+## Intermediate WP-2 retained checks and exact roster follow-through
+
+Immutable1e941fb94134a7394da24a3fb4a6314710b8eefe scoped ESLint stopped at one native observer `no-this-alias` error at00:45:03.880884 UTC. Narrow test-only610d9bb8 corrected that observer; its scoped ESLint passed, then typecheck stopped at00:46:14.239047 UTC with captured-profile/public-selector typing mismatches and missing native helper control-ledger arguments. Units had not run. Both raw packages remain under `dee1136-wp2-intermediate-1e941fb9` and `dee1136-wp2-observer-correction-610d9bb8`. Correction c2d6ca94 derives the held public selector from the already-captured exact profile id/digest, retains the private definition for assignment creation, and supplies the actual native control ledger; no cast, pure/cap change or WP-1 core edit.
+
+Root admission `dee1135-root-plan-admission/dee1136-capital-guard-scope-addendum.json`, SHA717bd0c90cbb7ddbafca0c00c5c00e8f0879d95019d7aa9fede8d190d67b23e0, adds the exact42nd path before editing it. The independent capital proof guard unit still enumerates25 while the actual admitted roster is old25+domain26. Add that suite and update its positive title/count; preserve all old suites and missing/skipped/failed/empty/duplicate controls, extended to the new suite. No proof gate, test filtering, runtime policy or native grant changes.
