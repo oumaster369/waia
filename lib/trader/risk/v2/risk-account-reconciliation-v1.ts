@@ -757,6 +757,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
     riskVerdictId: string;
     boundOrderId: string | null;
     boundOrderDigestHex: string | null;
+    reasonCode: string | null;
     truthRecordId?: string | null;
   }[];
   alreadyDisposedTruthIds: readonly string[];
@@ -847,6 +848,8 @@ export function foldExpectedEnforcementSuffixV1(input: {
     if (event.organizationId !== input.organizationId || event.accountId !== input.accountId) refuse("SUFFIX_SCOPE_MISMATCH");
     const transition = ENFORCEMENT_TRANSITION[event.type];
     if (event.fromState !== transition.fromState || event.toState !== transition.toState) refuse("EXPECTED_STATE");
+    const reasonRequired = event.type === "ALLOWANCE_REVOKED" || event.type === "ALLOWANCE_EXPIRED" || event.type === "CONSUMPTION_REFUSED";
+    if (reasonRequired ? !event.reasonCode : event.reasonCode !== null) refuse("EXPECTED_STATE");
     const reserved = nonnegative(event.reservedExposureNotional);
     if (!event.allowanceId) refuse("EXPECTED_OBLIGATION_IDENTITY");
     if (event.type !== "ALLOWANCE_CONSUMED" && event.truthRecordId != null) refuse("EXPECTED_STATE");

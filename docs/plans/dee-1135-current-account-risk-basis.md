@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A consumed predecessor order stays used. The suffix cannot bind that order again, and the terminal consumed list must repeat it. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "Issue and consumption carry no reason code. Revoke, expiry, and consumption refusal must name one. A reason on an issue is refused. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
