@@ -768,7 +768,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   terminalPendingExposureNotional: string;
   terminalReservationNotional: string;
   terminalStateVersion: string;
-  terminalOpenAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string }[];
+  terminalOpenAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; riskVerdictId: string }[];
   terminalConsumedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; riskVerdictId: string; boundOrderId: string; boundOrderDigestHex: string }[];
   organizationId: string;
   accountId: string;
@@ -891,15 +891,15 @@ export function foldExpectedEnforcementSuffixV1(input: {
   if (reservation !== nonnegative(input.terminalReservationNotional) || pending !== nonnegative(input.terminalPendingExposureNotional)) {
     refuse("SUFFIX_TERMINAL_MISMATCH");
   }
-  const listed = new Map<string, { reserved: bigint; quantity: bigint }>();
+  const listed = new Map<string, { reserved: bigint; quantity: bigint; verdict: string }>();
   for (const row of input.terminalOpenAllowances) {
-    if (!row.allowanceId || listed.has(row.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
-    listed.set(row.allowanceId, { reserved: nonnegative(row.reservedExposureNotional), quantity: positiveQuantity(row.quantity) });
+    if (!row.allowanceId || !row.riskVerdictId || listed.has(row.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
+    listed.set(row.allowanceId, { reserved: nonnegative(row.reservedExposureNotional), quantity: positiveQuantity(row.quantity), verdict: row.riskVerdictId });
   }
   if (listed.size !== open.size) refuse("EXPECTED_OBLIGATION_IDENTITY");
   for (const [id, held] of open) {
     const row = listed.get(id);
-    if (row === undefined || row.reserved !== held.reserved || row.quantity !== held.quantity) refuse("EXPECTED_OBLIGATION_IDENTITY");
+    if (row === undefined || row.reserved !== held.reserved || row.quantity !== held.quantity || row.verdict !== held.verdict) refuse("EXPECTED_OBLIGATION_IDENTITY");
   }
   const listedConsumed = new Map<string, { reserved: bigint; quantity: bigint; verdict: string; orderId: string; orderDigest: string }>();
   for (const row of input.terminalConsumedAllowances) {

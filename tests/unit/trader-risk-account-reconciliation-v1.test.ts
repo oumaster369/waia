@@ -525,6 +525,13 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       terminalStateVersion: "2",
     })).toEqual({ decision: "AUTHENTICATED", eventCount: 1, notionalsVerified: true, heldTruthRecordIds: [], currentPointer: null });
     expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-other" }],
+      terminalStateVersion: "2",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
       ...base, events: [{ ...issued, accountId: "other-account" }],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
@@ -674,13 +681,13 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       ...base, events: [{ ...issued, quantity: "0" }],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
-      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "0" }],
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "0", riskVerdictId: "verdict-allow-1" }],
     })).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => foldExpectedEnforcementSuffixV1({
       ...base, events: [issued],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
-      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "2" }],
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "2", riskVerdictId: "verdict-allow-1" }],
     })).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => foldExpectedEnforcementSuffixV1({
       ...base, predecessorPendingExposureNotional: "10",

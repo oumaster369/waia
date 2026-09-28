@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A consumed predecessor keeps its verdict through the terminal list. A substituted verdict is refused. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "An open allowance must repeat its verdict on the terminal list. A substituted verdict is refused. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
