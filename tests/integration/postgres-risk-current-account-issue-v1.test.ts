@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   admitCurrentAccountBasisV1,
   compareExpectedAccountFrontierV1,
+  holdUnpublishedInclusionsV1,
   observeSealedExpectedFrontierV1,
   retainObservedFrontierV1,
 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
@@ -102,6 +103,20 @@ describe.skipIf(!enabled)("current-account issue writes no authority", () => {
         (select count(*)::int from trader_risk_allowances_v2) as allowances,
         (select count(*)::int from trader_orders) as orders,
         (select count(*)::int from trader_risk_account_current_v1) as current_rows`).toEqual(before);
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+  });
+  it("holds an inclusion unpublished and writes no inclusion row", async () => {
+    const sql = postgres(url!, { max: 1 });
+    try {
+      const [before] = await sql`select count(*)::int n from trader_risk_account_inclusions_v1`;
+      const id = "ab".repeat(32);
+      expect(holdUnpublishedInclusionsV1({ truthRecordIds: [id], alreadyDisposedTruthIds: [] })).toEqual({
+        disposition: "HELD_UNPUBLISHED", truthRecordIds: [id], inclusionWrite: null, currentPointer: null,
+      });
+      const [after] = await sql`select count(*)::int n from trader_risk_account_inclusions_v1`;
+      expect(after!.n).toBe(before!.n);
     } finally {
       await sql.end({ timeout: 5 });
     }

@@ -6,7 +6,7 @@ import { createRiskAccountProfileV1, createRiskAccountReferenceV1, riskAccountDi
   RISK_ACCOUNT_CHANNELS_V1, RISK_REFERENCE_METHOD_V1, RiskCurrentAccountRefusedV1, sealRiskAccountRecordV1,
   type RiskAccountProfileDraftV1, type RiskReferenceMemberV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import { availableRiskAccountQuantityV1, constructRiskAccountBasisV1, compareExpectedAccountFrontierV1,
-  admitCurrentAccountBasisV1, decideCurrentAccountBasisPublicationV1, observeSealedExpectedFrontierV1, retainObservedFrontierV1,
+  admitCurrentAccountBasisV1, decideCurrentAccountBasisPublicationV1, holdUnpublishedInclusionsV1, observeSealedExpectedFrontierV1, retainObservedFrontierV1,
   type RiskAccountObligationV1, type RiskExpectedFrontierV1, type RiskIndependentInclusionV1 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
 
 // These pure values exercise arithmetic and refusal contracts only. No persisted authority,
@@ -227,6 +227,14 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false,
       externalDebtNotional: "1",
     }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
+  it("holds a new inclusion unpublished and refuses a repeated truth record", () => {
+    const id = digest("inclusion-once");
+    expect(holdUnpublishedInclusionsV1({ truthRecordIds: [id], alreadyDisposedTruthIds: [] })).toEqual({
+      disposition: "HELD_UNPUBLISHED", truthRecordIds: [id], inclusionWrite: null, currentPointer: null,
+    });
+    expect(() => holdUnpublishedInclusionsV1({ truthRecordIds: [id], alreadyDisposedTruthIds: [id] })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => holdUnpublishedInclusionsV1({ truthRecordIds: [id, id], alreadyDisposedTruthIds: [] })).toThrow(RiskCurrentAccountRefusedV1);
   });
 
 });

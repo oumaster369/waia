@@ -557,3 +557,29 @@ export function observeSealedExpectedFrontierV1(input: {
     sourceMethodQualified: input.sourceMethodQualified,
   });
 }
+
+/** One-use inclusion identities are held unpublished. A repeated truth record is refused.
+ *  Nothing here writes an inclusion row or a current pointer.
+ */
+export function holdUnpublishedInclusionsV1(input: {
+  truthRecordIds: readonly string[];
+  alreadyDisposedTruthIds: readonly string[];
+}): {
+  disposition: "HELD_UNPUBLISHED";
+  truthRecordIds: readonly string[];
+  inclusionWrite: null;
+  currentPointer: null;
+} {
+  const seen = new Set<string>();
+  const take = (id: string) => {
+    if (!riskAccountDigestSchemaV1.safeParse(id).success || seen.has(id)) refuse("INDEPENDENT_INCLUSION_IDENTITY");
+    seen.add(id);
+  };
+  for (const id of input.alreadyDisposedTruthIds) take(id);
+  const held: string[] = [];
+  for (const id of input.truthRecordIds) {
+    take(id);
+    held.push(id);
+  }
+  return { disposition: "HELD_UNPUBLISHED", truthRecordIds: held, inclusionWrite: null, currentPointer: null };
+}
