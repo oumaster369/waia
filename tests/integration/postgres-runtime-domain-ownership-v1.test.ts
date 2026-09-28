@@ -7,6 +7,7 @@ import path from "node:path";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
+import { canonicalizeSemanticJsonString } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { beforeAll, beforeEach, afterEach, afterAll, describe, expect, it, vi } from "vitest";
 import * as schema from "@/db/schema.postgres";
 import { seedWp13User } from "./wp13-intelligence-test-helpers";
@@ -17,7 +18,8 @@ import { runSavedDomainResearchLoop } from "@/lib/trader/paper/research-understa
 import { createSavedResearchOwner } from "@/lib/trader/paper/research-understanding-v1/repository-postgres";
 import { HeldResearchAccounting, prepareHeldSavedDomainResearchReplay } from "@/lib/trader/paper/research-understanding-v1/held-replay";
 import { claimRecordedAcquisitionWithinHeldTransactionV1, claimSavedResearchWithinHeldTransactionV1,
-  assertSavedResearchHolderWithinHeldTransactionV1, lockSavedResearchOrganizationV1 } from "@/lib/trader/runtime-authority/v2/noncapital-domain-lease-postgres-v1";
+  assertSavedResearchHolderWithinHeldTransactionV1, lockSavedResearchOrganizationV1,
+  assertRecordedAcquisitionHolderWithinHeldTransactionV1, lockRecordedAcquisitionOrganizationV1 } from "@/lib/trader/runtime-authority/v2/noncapital-domain-lease-postgres-v1";
 import { claimRuntimeControlLeaseAtDatabaseTimeV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
 import type { SavedApplicationRequest } from "@/lib/trader/paper/research-application-v1/repository-postgres";
 
@@ -37,7 +39,7 @@ function worker(route: "saved" | "acquisition", args: string[], holdAfterResult 
       WAIA_DB_BACKEND: "postgres", WAIA_POSTGRES_PER_REQUEST_CLIENT: "true", DATABASE_URL_POSTGRES: url,
       WAIA_DOMAIN_TEST_PAYLOAD: JSON.stringify({ route, args, holdAfterResult }) }, stdio: ["ignore", "pipe", "pipe"] });
   children.add(child); let buffer = "", errors = "";
-  const result = new Promise<{ event: string; result: Result; message?: string; fetches: number; forbidden: string[] }>((resolve, reject) => {
+  const result = new Promise<{ event: string; result: Result; message?: string; fetches: number; forbidden: string[]; observationalImports: string[]; transport: Array<{ method: string; host: string; path: string; authenticated: boolean }> }>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("DOMAIN_CHILD_TIMEOUT")), 125000);
     child.stdout!.on("data", chunk => { buffer += String(chunk); const lines = buffer.split("\n"); buffer = lines.pop()!;
       for (const line of lines) { let value; try { value = JSON.parse(line); } catch { continue; }
@@ -84,11 +86,11 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
     return { f, applied, b, input };
   }
   async function clearFault() {
-    for (const table of [completionTable, consumptionTable]) await client.unsafe(`drop trigger if exists ${fault} on ${table}`);
+    for (const table of [completionTable, ...applicationTables]) await client.unsafe(`drop trigger if exists ${fault} on ${table}`);
     await client.unsafe(`drop function if exists ${fault}()`);
   }
   async function faultAt(table: string, body: string) {
-    expect([completionTable, consumptionTable]).toContain(table);
+    expect([completionTable, ...applicationTables]).toContain(table);
     await client.unsafe(`create function ${fault}() returns trigger language plpgsql as $$ begin if NEW.organization_id='${organizationId}'::uuid then ${body} end if; return NEW; end $$`);
     await client.unsafe(`create trigger ${fault} before insert on ${table} for each row execute function ${fault}()`);
   }
@@ -105,27 +107,39 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
 
   it("allows three same-org fixed owners concurrently and keeps same-domain busy without touching capital history", async () => {
     const old = await claimRuntimeControlLeaseAtDatabaseTimeV2(db(), { organizationId, runtimeInstanceId: "capital", durationMs: 30000 }); expect(old).not.toBeNull();
-    const before = await capital(), history = await records("trader_runtime_control_lease_history_v2");
+    const before = await capital(), history = await records("trader_runtime_control_lease_epoch_history_v2");
     const [a, r] = await Promise.all([claim("acquisition", 30000), claim("saved", 30000)]); expect(a).not.toBeNull(); expect(r).not.toBeNull();
     expect(await claim("acquisition")).toBeNull(); expect(await claim("saved")).toBeNull();
-    expect(await capital()).toEqual(before); expect(await records("trader_runtime_control_lease_history_v2")).toEqual(history);
+    expect(await capital()).toEqual(before); expect(await records("trader_runtime_control_lease_epoch_history_v2")).toEqual(history);
     const refs = await records("trader_runtime_ownership_refs_v1"); expect(refs).toHaveLength(3);
     expect(refs.map(row => row.value.ownership_domain).sort()).toEqual(["CAPITAL_LEGACY_V2", "RECORDED_ACQUISITION_V1", "SAVED_RESEARCH_V1"]);
     console.info(JSON.stringify({ proof: "DEE1136_THREE_DOMAINS", refs: refs.length, capitalUnchanged: true }));
   }, 15000);
   it("executes the real recorded acquisition CLI through inert public GET transport and persists four acquisition receipts", async () => {
     const before = await capital();
+    const authorityTables = ["trader_runtime_authority_assessments_v2", "trader_risk_allowances_v2", "trader_execution_plans_v2", "trader_execution_attempts_v2", "trader_orders"];
+    const authorityBefore = await Promise.all(authorityTables.map(records));
     const event = await worker("acquisition", ["--durable-noncapital", `--org-id=${organizationId}`, "--account-key=synthetic", "--symbol=BTC/USDT",
       "--session-id=fixed-acquisition", `--release-sha=${"a".repeat(40)}`, "--start-sequence=0", "--max-cycles=1", "--max-packet-bytes=2000000",
       "--max-bars-per-interval=1000", "--lease-duration-ms=30000"]).result;
     expect(event.event, event.message).toBe("result"); expect(event.result.status).toBe("COMPLETE"); expect(event.fetches).toBeGreaterThan(0); expect(event.forbidden).toEqual([]);
     for (const table of receiptTables.slice(0, 4)) { const rows = await records(table); expect(rows).toHaveLength(1); expect(rows[0]!.value.ownership_domain).toBe("RECORDED_ACQUISITION_V1"); }
-    expect(await capital()).toEqual(before);
+    expect(await capital()).toEqual(before); expect(await Promise.all(authorityTables.map(records))).toEqual(authorityBefore);
+    expect(event.observationalImports.sort()).toEqual(["lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1.ts",
+      "lib/trader/intelligence/evaluation-cycle.ts", "lib/trader/execution/v2/execution-admission-proof-v2.ts"].sort());
+    expect(event.transport).toHaveLength(8); expect(event.transport.every(t => t.method === "GET" && t.host === "api.huobi.pro" && !t.authenticated)).toBe(true);
+    const [cycle] = await records(receiptTables[0]!); expect(JSON.parse(cycle!.value.canonical_json).result.status).toBe("NO_TRADE");
+    const [companion] = await records(receiptTables[3]!); const output = JSON.parse(companion!.value.body_json).output;
+    expect(output.authority).toBe("OBSERVATIONAL_ONLY");
+    for (const key of ["understandingArtifact", "canonicalRuntimeIntelligenceState", "intelligenceCycleBundle", "forecastDecisionBundle"])
+      expect(output.evaluation[key]).toBeUndefined();
+    console.info(JSON.stringify({ proof: "DEE1136_ACQUISITION_BOUNDARY", publicGetCalls: event.transport.length, noAuthorityEffects: true, observationalImports: event.observationalImports }));
   }, 45000);
   it("executes fixed saved CLI complete-consumer with one holder then replays all ten typed receipt relationships read-only", async () => {
     const { f, input, applied, b } = await composite(); f.application.research.range = input.research.range;
     const before = await capital(), event = await worker("saved", await argsFor(f, "complete-consumer", b)).result;
     expect(event.event, event.message).toBe("result"); expect(event.fetches).toBe(0); expect(event.forbidden).toEqual([]);
+    expect(event.transport).toEqual([]); expect(event.observationalImports).toEqual([]);
     const result = complete(event.result); expect(result.application).toEqual(applied.application); expect(result.consumption?.selection?.selectedRelations).toHaveLength(1);
     const [completion] = await savedCompletion(b), [consumption] = await records(consumptionTable);
     for (const key of ["runtime_instance_id", "lease_epoch", "lease_content_digest", "ownership_domain"]) expect(completion![key]).toBe(consumption!.value[key]);
@@ -163,6 +177,73 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
     expect(await records("trader_saved_research_lease_history_v1")).toEqual(before); expect(await savedCompletion(2)).toEqual([]);
     expect((await counts()).slice(0, 3)).toEqual([1, 1, 1]);
   }, 45000);
+  it("replays an initially complete foreign final with no root probe or SAVED claim", async () => {
+    const f = await seedApplicationNative(client, organizationId, userId);
+    const legacy = complete(await runSavedApplication(client, { organizationId }, f.application));
+    const prior = await Promise.all([...applicationTables, "audit_logs", "trader_runtime_control_lease_epoch_history_v2"].map(records));
+    trace.length = 0; const replay = complete(await run(f.application)); const queries = [...trace];
+    expect(replay.application).toEqual(legacy.application); expect(replay.availability).toEqual(legacy.availability); expect(replay.outcome).toBe("REPLAYED");
+    expect(queries.map(q => q.query).join("\n")).not.toMatch(/selected_roots|pg_advisory|for update|insert into/i);
+    expect(await records("trader_saved_research_lease_history_v1")).toEqual([]);
+    expect(await Promise.all([...applicationTables, "audit_logs", "trader_runtime_control_lease_epoch_history_v2"].map(records))).toEqual(prior);
+  }, 45000);
+  it.each(["configuration", "pair"] as const)("refuses a genuine late legacy%s root after the first RR probe and accounts for the committed SAVED claim", async root => {
+    const f = await fixture(); if (root === "configuration") await f.appendThrough(3);
+    const input = { ...f.application, previousSourceSequence: root === "configuration" ? 2 : 0, currentSourceSequence: root === "configuration" ? 3 : 1 };
+    const peer = postgres(url!, { max: 1 }), original = client.begin.bind(client); let first = true, foreign: unknown[] = [];
+    const priorHistory = await records("trader_saved_research_lease_history_v1");
+    const begin = vi.spyOn(client, "begin").mockImplementation(((options: string, callback: (held: postgres.TransactionSql) => Promise<unknown>) =>
+      original(options, callback).then(async value => {
+        if (first) { first = false; complete(await runSavedApplication(peer, { organizationId }, f.application));
+          foreign = await Promise.all([...applicationTables, "audit_logs"].map(records)); }
+        return value;
+      })) as typeof client.begin);
+    trace.length = 0;
+    try { expect((await run(input)).status).toBe("ASSIGNMENT_DOMAIN_CONFLICT"); }
+    finally { begin.mockRestore(); await peer.end({ timeout: 3 }); }
+    expect(trace.filter(q => q.query.includes("selected_roots"))).toHaveLength(2);
+    expect(await Promise.all([...applicationTables, "audit_logs"].map(records))).toEqual(foreign);
+    expect((await records("trader_saved_research_lease_history_v1")).length).toBe(priorHistory.length + 1);
+    expect((await records(applicationTables[1]!)).every(row => row.value.ownership_domain === "CAPITAL_LEGACY_V2")).toBe(true);
+    console.info(JSON.stringify({ proof: "DEE1136_OBSERVED_ROOT_RACE", root, probes: 2, foreignRowsUnchanged: true, committedSavedClaim: true }));
+  }, 60000);
+  it("accepts a genuine compatible SAVED pair appearing after the first probe with at most one charged re-probe", async () => {
+    const f = await fixture(), peer = postgres(url!, { max: 1 }), original = client.begin.bind(client); let first = true, saved: unknown[] = [];
+    const begin = vi.spyOn(client, "begin").mockImplementation(((options: string, callback: (held: postgres.TransactionSql) => Promise<unknown>) =>
+      original(options, callback).then(async value => {
+        if (first) { first = false; complete(await runSavedDomainApplication(peer, { organizationId }, f.application));
+          saved = await Promise.all([...applicationTables, "audit_logs"].map(records)); await f.expiry(); }
+        return value;
+      })) as typeof client.begin);
+    trace.length = 0;
+    try { complete(await run(f.application)); }
+    finally { begin.mockRestore(); await peer.end({ timeout: 3 }); }
+    expect(trace.filter(q => q.query.includes("selected_roots"))).toHaveLength(2);
+    expect(await Promise.all([...applicationTables, "audit_logs"].map(records))).toEqual(saved);
+  }, 60000);
+  it("preserves actual uniqueness refusal for a configuration committed outside the existing RR snapshot", async () => {
+    const f = await fixture(); await f.appendThrough(3);
+    const input = { ...f.application, research: { ...f.application.research, range: { ...f.application.research.range, leaseDurationMs: 30000 } },
+      previousSourceSequence: 2, currentSourceSequence: 3 };
+    await faultAt(applicationTables[0]!, "IF NEW.ownership_domain='SAVED_RESEARCH_V1' THEN PERFORM pg_sleep(8); END IF;");
+    const peer = postgres(url!, { max: 1 }); trace.length = 0;
+    const pending = run(input).then(value => ({ value, error: null }), error => ({ value: null, error }));
+    let pid: number | null = null;
+    try {
+      const deadline = performance.now() + 15000;
+      while (performance.now() < deadline) {
+        const rows = await peer`select pid from pg_stat_activity where datname=current_database() and wait_event='PgSleep'
+          and query like '%insert into "trader_research_application_assignments_v1"%' and pid<>pg_backend_pid()`;
+        if (rows.length) { pid = Number(rows[0]!.pid); break; } await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      expect(pid).not.toBeNull(); complete(await runSavedApplication(peer, { organizationId }, f.application));
+      const retained = await Promise.all([...applicationTables, "audit_logs"].map(records));
+      const result = await pending; expect(errorCode(result.error)).toBe("23505");
+      expect(trace.filter(q => q.query.includes("selected_roots"))).toHaveLength(1);
+      expect(await Promise.all([...applicationTables, "audit_logs"].map(records))).toEqual(retained);
+      console.info(JSON.stringify({ proof: "DEE1136_INVISIBLE_ROOT_RACE", sqlstate: errorCode(result.error), probes: 1, actualServerWait: true, foreignRowsUnchanged: true }));
+    } finally { await pending; await peer.end({ timeout: 3 }); }
+  }, 60000);
   it("uses one natural32-history ledger with bounded control, candidate bytes and actual submitted SQL", async () => {
     const { f, b, input } = await composite({ hypothesisVersions: 32, priorOrdinal: "p".repeat(60000) }, 3);
     const ledgers: HeldResearchAccounting[] = [], original = HeldResearchAccounting.prototype.budget;
@@ -189,6 +270,10 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
       await lockSavedResearchOrganizationV1(tx, organizationId);
       return assertSavedResearchHolderWithinHeldTransactionV1(tx, first as NonNullable<Awaited<ReturnType<typeof claimSavedResearchWithinHeldTransactionV1>>>, new HeldResearchAccounting().noncapitalControls);
     })).rejects.toThrow();
+    if (domain === "acquisition") await expect(db().transaction(async tx => {
+      await lockRecordedAcquisitionOrganizationV1(tx, organizationId);
+      return assertRecordedAcquisitionHolderWithinHeldTransactionV1(tx, first as NonNullable<Awaited<ReturnType<typeof claimRecordedAcquisitionWithinHeldTransactionV1>>>);
+    })).rejects.toThrow("RUNTIME_CONTROL_LEASE_STALE_HOLDER");
     expect(await capital()).toEqual([]);
   }, 15000);
   it("rejects a real claim whose deferred COMMIT crosses expiry and retains no head/history/reference", async () => {
@@ -304,4 +389,88 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
     expect(await records("trader_information_sufficiency_receipt_v2")).toEqual(receipts); expect(await counts()).toEqual([1, 1, 1, 0]);
     await clearFault(); await f.expiry(); complete(await run(input));
   }, 45000);
+  it.each(applicationTables.map((table, index) => [table, index] as const))("rejects every malformed SAVED top-level command in%s with a valid raw body hash", async (table, index) => {
+    const { input } = await composite(); complete(await run(input));
+    const before = await records(table); expect(before).toHaveLength(1);
+    const row = before[0]!.value as Record<string, unknown>, body = JSON.parse(String(row.body_json));
+    const malformed: unknown[] = [undefined, null, 7, true, {}, [], "short", "A".repeat(64), "5070c0aa8e42824892dd2915c5d70b21cac4e9a22aec5947a7255d62a3d8faf2"];
+    for (const value of malformed) {
+      const changed = { ...body }; if (value === undefined) delete changed.commandManifestDigest; else changed.commandManifestDigest = value;
+      const raw = canonicalizeSemanticJsonString(changed), contentDigest = createHash("sha256").update(raw).digest("hex");
+      const candidate = { ...row, body_json: raw, content_digest: contentDigest };
+      expect((await client`select encode(sha256(convert_to(${raw},'UTF8')),'hex') digest`)[0]!.digest).toBe(contentDigest);
+      const failure = await client.begin(async held => {
+        // The actual body-hash/audit verifier runs before CHECK enforcement.
+        // A fresh matching audit keeps this negative focused on command shape.
+        if (row.audit_id) {
+          const audit = (await held`select to_jsonb(a) value from audit_logs a where id=${String(row.audit_id)}::uuid`)[0]!.value;
+          const id = randomUUID(); candidate.audit_id = id;
+          await held`insert into audit_logs select (jsonb_populate_record(null::audit_logs,${JSON.stringify({ ...audit, id,
+            metadata_json: { ...audit.metadata_json, bodyDigest: contentDigest } })}::jsonb)).*`;
+        }
+        await held.unsafe(`insert into ${table} select (jsonb_populate_record(null::${table},$1::jsonb)).*`, [JSON.stringify(candidate)]);
+      }).then(() => null, error => error);
+      expect(errorCode(failure)).toBe("23514"); expect(failure.constraint_name).toBe(`noncapital_command_profile_${index}`);
+      expect(await records(table)).toEqual(before);
+    }
+    console.info(JSON.stringify({ proof: "DEE1136_SAVED_COMMAND_SHAPE", table, controls: malformed.length, rawHashValid: true, priorRowsUnchanged: true }));
+  }, 60000);
+
+  it.each(["application", "availability", "completion", "consumption"] as const)("reaches immediate%s affinity with a real rolled-back producer candidate and a valid alternate holder", async stage => {
+    const table = stage === "application" ? applicationTables[1]! : stage === "availability" ? applicationTables[2]!
+      : stage === "completion" ? completionTable : consumptionTable;
+    let input: SavedApplicationRequest;
+    if (stage === "application") {
+      const f = await fixture(); complete(await run(f.application)); await f.expiry(); await f.appendThrough(3);
+      input = { ...f.application, previousSourceSequence: 2, currentSourceSequence: 3 };
+    } else if (stage === "availability") input = (await fixture()).application;
+    else input = (await composite()).input;
+    await faultAt(table, "RAISE EXCEPTION 'DEE1136_CAPTURE_CANDIDATE';");
+    trace.length = 0;
+    const outcome = await run(input).then(() => null, error => error); expect(errorCode(outcome)).toBe("P0001");
+    const candidate = trace.find(q => q.query.startsWith(`insert into "${table}"`)); expect(candidate).toBeDefined();
+    const position = trace.indexOf(candidate!), transactionStart = trace.slice(0, position).findLastIndex(q => /^begin /i.test(q.query));
+    expect(transactionStart).toBeGreaterThanOrEqual(0);
+    const dependencies = trace.slice(transactionStart + 1, position).filter(q => /^insert into /i.test(q.query));
+    const dependencyTables = dependencies.map(q => /^insert into "([^"]+)"/.exec(q.query)?.[1]);
+    expect(dependencyTables.every(name => ["audit_logs", "trader_information_sufficiency_receipt_v2",
+      "trader_mi_canonical_measurement_definition_v1", "trader_mi_canonical_measurement_value_v1",
+      "trader_mi_canonical_measurement_value_input_v1"].includes(name!))).toBe(true);
+    if (stage === "completion") expect(dependencyTables).toContain("trader_information_sufficiency_receipt_v2");
+    else expect(dependencyTables).toContain("audit_logs");
+    await clearFault(); const before = await records(table), receiptsBefore = await records("trader_information_sufficiency_receipt_v2");
+    const holder = await claimRuntimeControlLeaseAtDatabaseTimeV2(db(), { organizationId, runtimeInstanceId: "affinity-control-capital", durationMs: 30000 });
+    expect(holder).not.toBeNull();
+    const parsed = /^insert into "[^"]+" \(([^)]+)\) values \(([^)]+)\)/.exec(candidate!.query); expect(parsed).not.toBeNull();
+    const columns = parsed![1]!.split(",").map(value => value.trim().replaceAll('"', ""));
+    const values = parsed![2]!.split(",").map(value => value.trim()), parameters = [...candidate!.params];
+    for (const [column, value] of Object.entries({ ownership_domain: "CAPITAL_LEGACY_V2", runtime_instance_id: holder!.runtimeInstanceId,
+      lease_epoch: holder!.leaseEpoch, lease_content_digest: holder!.leaseContentDigest })) {
+      const field = columns.indexOf(column); expect(field).toBeGreaterThanOrEqual(0);
+      const placeholder = /^\$(\d+)$/.exec(values[field]!); expect(placeholder).not.toBeNull(); parameters[Number(placeholder![1]) - 1] = value;
+    }
+    // No public-owner guard is bypassed: its genuine valid SAVED candidate was
+    // observed before an explicit test fault. Only the direct SQL negative uses
+    // a separately valid CAPITAL holder against that immutable SAVED parent.
+    const failure = await client.begin(async held => {
+      for (const dependency of dependencies) {
+        const params = dependency.params.map(value => {
+          if (!dependency.query.startsWith('insert into "audit_logs"') || typeof value !== "string") return value;
+          let decoded; try { decoded = JSON.parse(value); } catch { return value; }
+          if (!decoded || typeof decoded !== "object" || !decoded.holder) return value;
+          return JSON.stringify({ ...decoded, holder: { runtimeInstanceId: holder!.runtimeInstanceId,
+            leaseEpoch: holder!.leaseEpoch, leaseContentDigest: holder!.leaseContentDigest } });
+        });
+        await held.unsafe(dependency.query, params as Parameters<postgres.TransactionSql["unsafe"]>[1]);
+      }
+      await held.unsafe(candidate!.query, parameters as Parameters<postgres.TransactionSql["unsafe"]>[1]);
+    }).then(() => null, error => error);
+    expect(errorCode(failure)).toBe("23503");
+    const expected = stage === "application" ? ["noncapital_affinity_4"] : stage === "availability" ? ["noncapital_affinity_5"]
+      : stage === "completion" ? ["noncapital_affinity_3"] : ["noncapital_affinity_6", "noncapital_affinity_7"];
+    expect(expected).toContain(failure.constraint_name);
+    expect(await records(table)).toEqual(before); expect(await records("trader_information_sufficiency_receipt_v2")).toEqual(receiptsBefore);
+    console.info(JSON.stringify({ proof: "DEE1136_IMMEDIATE_AFFINITY", stage, sqlstate: errorCode(failure), constraint: failure.constraint_name, rolledBack: true }));
+  }, 60000);
+
 });

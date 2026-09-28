@@ -227,6 +227,46 @@ describe("fixed public callers and historical command representation", () => {
     expect(saved.body).toContain("bound.writeSavedDomainCompletion(prepared.prepared, selectedHolder)");
     expect(saved.body).not.toMatch(/claimRuntimeControl|createSavedResearchOwner|runSavedResearchLoop|new ResearchReadBudget|persistInformationSufficiency|suppliedOutput|evaluator/);
   });
+  it("keeps one charged unexpected-root gate on both write entry paths while completed replay remains separate", () => {
+    const file = "lib/trader/paper/research-application-v1/repository-postgres.ts", text = readFileSync(file, "utf8");
+    const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+    const functions = new Map<string, ts.FunctionDeclaration>();
+    function visit(node: ts.Node) { if (ts.isFunctionDeclaration(node) && node.name) functions.set(node.name.text, node); ts.forEachChild(node, visit); }
+    visit(source);
+    const body = (name: string) => functions.get(name)!.body!.getText(source);
+    const gate = body("recheckUnexpectedRoot");
+    expect(gate).toContain('domain !== "SAVED_RESEARCH_V1" || !unexpected || raceProbeUsed');
+    expect(gate).toContain("raceProbeUsed = true");
+    expect(gate.match(/assertSavedApplicationRootsWithinHeldTransactionV1\(/g)).toHaveLength(1);
+    expect(gate).toContain("accounting.noncapitalControls"); expect(gate).not.toMatch(/transaction\(|new |while|for \(/);
+    const apply = body("apply"), assignment = body("assignment"), initial = body("completed");
+    expect(apply).toContain("await recheckUnexpectedRoot(bound.executor, !observedApplication)");
+    expect(apply).toContain('check(existing.row.ownershipDomain === domain, "APPLICATION_DOMAIN_CONFLICT")');
+    const branch = functions.get("apply")!.body!.getText(source).slice(apply.indexOf("if (existing)"), apply.indexOf("const p ="));
+    expect(branch.indexOf("recheckUnexpectedRoot")).toBeLessThan(branch.indexOf("return;"));
+    expect(assignment).toContain("await recheckUnexpectedRoot(db, !observedConfiguration)");
+    expect(initial).toContain("observedApplication = Boolean(roots.application)");
+    expect(initial).toContain("if (!finalRow)"); expect(initial).not.toContain("recheckUnexpectedRoot");
+    expect(body("consume") + body("completeConsumer")).not.toContain("recheckUnexpectedRoot");
+    expect(text.match(/new HeldResearchAccounting\(/g)).toHaveLength(1);
+  });
+  it("admits only three exact observational imports for acquisition and leaves saved capability absence strict", () => {
+    const file = "tests/helpers/noncapital-domain-process.ts", text = readFileSync(file, "utf8");
+    const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+    const names = source.statements.filter(ts.isVariableStatement).flatMap(statement => [...statement.declarationList.declarations]);
+    const declaration = names.find(value => value.name.getText(source) === "acquisitionObservationalImports")!;
+    expect(declaration.initializer && ts.isArrayLiteralExpression(declaration.initializer)
+      ? declaration.initializer.elements.map(value => ts.isStringLiteral(value) ? value.text : null) : null).toEqual([
+      "lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1.ts", "lib/trader/intelligence/evaluation-cycle.ts",
+      "lib/trader/execution/v2/execution-admission-proof-v2.ts",
+    ]);
+    expect(text).toContain('input.route === "acquisition" && acquisitionObservationalImports.includes(file)');
+    expect(text).toContain('input.route === "saved" && /market-data-gateway|htx-bar-poll-source/');
+    expect(text).toContain('if (input.route !== "acquisition") throw new Error("SAVED_DOMAIN_NETWORK_FORBIDDEN")');
+    expect(text).toContain('method !== "GET"'); expect(text).toContain('url.hostname !== "api.huobi.pro"');
+    expect(text).toContain('throw new Error("DOMAIN_PUBLIC_GET_ONLY")');
+    expect(text).not.toMatch(/originalFetch|fetchImpl:|live.*key/i);
+  });
   it("refuses domain, holder, evaluator and mixed mode flags before any pool on the actual new CLIs", async () => {
     const previous = process.env.WAIA_TRADER_CLI; process.env.WAIA_TRADER_CLI = "1";
     try {

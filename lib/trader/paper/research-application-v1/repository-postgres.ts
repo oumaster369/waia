@@ -133,7 +133,7 @@ function createApplicationOwnerCore(pool: postgres.Sql, context: OrgContext, sup
   const accounting = new HeldResearchAccounting();
   const extra = accounting.budget(L.additionalAggregate);
   let holder: Holder | null = null;
-  let observedConfiguration = false, raceProbeUsed = false;
+  let observedConfiguration = false, observedApplication = false, raceProbeUsed = false;
   const rootInput = { organizationId: c.organizationId, assignmentDigest, applicationId: id,
     researchSessionId: c.researchSessionId, researchAssignmentDigest: c.researchAssignmentDigest };
   async function transaction<T>(mode: "read committed" | "repeatable read" | "repeatable read read only", work: (bound: Bound) => Promise<T>): Promise<T> {
@@ -268,6 +268,12 @@ function createApplicationOwnerCore(pool: postgres.Sql, context: OrgContext, sup
     equal(row, { organizationId: c.organizationId, contentDigest: digest(body), bodyJson: canonical(body),
       runtimeInstanceId: row.runtimeInstanceId, leaseEpoch: row.leaseEpoch, leaseContentDigest: row.leaseContentDigest, ownershipDomain: row.ownershipDomain, ...fields }, "APPLICATION_PROJECTION_CONFLICT");
   }
+  async function recheckUnexpectedRoot(db: ApplicationExecutor, unexpected: boolean) {
+    if (domain !== "SAVED_RESEARCH_V1" || !unexpected || raceProbeUsed) return;
+    raceProbeUsed = true;
+    check(request.operation !== "replay", "APPLICATION_OPERATION_MISSING");
+    await assertSavedApplicationRootsWithinHeldTransactionV1(db, rootInput, request.operation, accounting.noncapitalControls);
+  }
   async function assignment(db: ApplicationExecutor, activeActor: Actor, create: boolean) {
     const existing = (await readApplicationRows(db, "assignment", applicationScope("assignment", c.organizationId, assignmentDigest), extra, { optional: true }))[0];
     const stored = existing ? decodeApplicationBody(existing) : null;
@@ -276,11 +282,7 @@ function createApplicationOwnerCore(pool: postgres.Sql, context: OrgContext, sup
     bounded(body, L.assignment);
     if (existing) {
       if (create) {
-        if (domain === "SAVED_RESEARCH_V1" && !observedConfiguration && !raceProbeUsed) {
-          raceProbeUsed = true;
-          check(request.operation !== "replay", "APPLICATION_OPERATION_MISSING");
-          await assertSavedApplicationRootsWithinHeldTransactionV1(db, rootInput, request.operation, accounting.noncapitalControls);
-        }
+        await recheckUnexpectedRoot(db, !observedConfiguration);
         check(existing.ownershipDomain === domain, "ASSIGNMENT_DOMAIN_CONFLICT");
       }
       equal(stored, body, "APPLICATION_ASSIGNMENT_CONFLICT");
@@ -381,7 +383,7 @@ function createApplicationOwnerCore(pool: postgres.Sql, context: OrgContext, sup
       if (!finalRow) {
         if (domain === "SAVED_RESEARCH_V1" && request.operation !== "replay") {
           const roots = await assertSavedApplicationRootsWithinHeldTransactionV1(bound.executor, rootInput, request.operation, accounting.noncapitalControls);
-          observedConfiguration = Boolean(roots.configuration);
+          observedConfiguration = Boolean(roots.configuration); observedApplication = Boolean(roots.application);
         }
         return null;
       }
@@ -394,7 +396,12 @@ function createApplicationOwnerCore(pool: postgres.Sql, context: OrgContext, sup
   async function apply() {
     await transaction("repeatable read", async bound => {
       const activeActor = await actor(bound.executor); await current(bound);
-      const existing = await loadApplication(bound, activeActor); if (existing) return;
+      const existing = await loadApplication(bound, activeActor);
+      if (existing) {
+        await recheckUnexpectedRoot(bound.executor, !observedApplication);
+        if (domain === "SAVED_RESEARCH_V1") check(existing.row.ownershipDomain === domain, "APPLICATION_DOMAIN_CONFLICT");
+        return;
+      }
       const p = await snapshot(bound, request.previousSourceSequence), a = await snapshot(bound, request.currentSourceSequence);
       await lockSources(bound.executor, [p, a]);
       const recordedAt = await current(bound);

@@ -334,7 +334,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/paper/research-application-v1/repository-postgres.ts",
-    "sha256": "b237328099f2d5fc8f5c91e6de9c332b1cbd2b2783a9e3f7a7f0913e8f5411ae"
+    "sha256": "8c9171a5fd978ab0f57456d1453a6a49f448a4696cb8dc914b9aceae7d8315ce"
   },
   {
     "path": "lib/trader/paper/research-application-v1/run-saved-application.ts",
@@ -429,7 +429,7 @@ export const APPLICATION_COMMAND_SOURCE_MANIFEST = [
     "sha256": "b9c7a037abdf66c51e1b0e152ed8ba3d71625b69a295b90747be40b9a15ca145"
   }
 ] as const;
-export const APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "9f8e2656e42d8bc87db378b177e3994e274ae4ebbdc188b73cb992b89a95df1d";
+export const APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "09317437cb9f09c072ec6d8c189f0c1d7fc978d7dfb68a37ff451d7ed3d6ff4e";
 export const SAVED_DOMAIN_APPLICATION_COMMAND_SOURCE_MANIFEST = [
   {
     "path": "db/client.ts",
@@ -717,7 +717,7 @@ export const SAVED_DOMAIN_APPLICATION_COMMAND_SOURCE_MANIFEST = [
   },
   {
     "path": "lib/trader/paper/research-application-v1/repository-postgres.ts",
-    "sha256": "b237328099f2d5fc8f5c91e6de9c332b1cbd2b2783a9e3f7a7f0913e8f5411ae"
+    "sha256": "8c9171a5fd978ab0f57456d1453a6a49f448a4696cb8dc914b9aceae7d8315ce"
   },
   {
     "path": "lib/trader/paper/research-application-v1/run-saved-application.ts",
@@ -812,4 +812,4 @@ export const SAVED_DOMAIN_APPLICATION_COMMAND_SOURCE_MANIFEST = [
     "sha256": "451a5f9f4c4218a58eb3aab53d96ec47610fb78c592ea85f81369468b9ee93eb"
   }
 ] as const;
-export const SAVED_DOMAIN_APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "1960183debe74d0b48ce5816e4add02d9ce577b3f1713d8c846b55069e75ff23";
+export const SAVED_DOMAIN_APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST = "960c06343159a3c848af0c387117fa2d886c3a4ed2016f3e1d5a0fef161cfabe";
