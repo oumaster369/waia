@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "An unattested predecessor debt stays unknown and is not treated as zero. A supplied predecessor debt must match its pending sum, and a match still publishes nothing. Do not invent caps or mark WP-1 complete."
+  nextAction: "A current obligation cannot repeat a consumed predecessor allowance or order. A distinct order still publishes nothing. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

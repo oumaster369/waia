@@ -589,6 +589,14 @@ export function observeSealedExpectedFrontierV1(input: {
   if ((nextEvent === 1n) !== (expected.eventHeadDigest === null)) refuse("EXPECTED_SEQUENCE");
   const sums = sumExpectedObligationsV1(expected.obligations);
   if (sums.reservations !== nonnegative(expected.reservationNotional)) refuse("EXPECTED_RESERVATION_SUM");
+  if (predecessor) {
+    const priorConsumedAllowances = new Set(predecessor.obligations.filter(row => row.state === "CONSUMED").map(row => row.allowanceId));
+    const priorOrderIds = new Set(predecessor.obligations.flatMap(row => row.orderId ? [row.orderId] : []));
+    for (const obligation of expected.obligations) {
+      if (priorConsumedAllowances.has(obligation.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
+      if (obligation.orderId && priorOrderIds.has(obligation.orderId)) refuse("EXPECTED_CONSUMED_STATE");
+    }
+  }
   const referenceDigest = input.referenceDigest ?? null;
   const priorReferenceDigest = input.priorReferenceDigest ?? null;
   if (expected.obligations.length > 0 && referenceDigest === null) refuse("REFERENCE_CURRENTNESS");

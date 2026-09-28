@@ -355,5 +355,27 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
     }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
   });
+  it("refuses a current obligation that repeats a consumed predecessor order", () => {
+    const consumed = { ...obligation("allow-1", "1", "BUY"), state: "CONSUMED" as const, orderId: "order-1",
+      orderBindingDigest: digest("bind-1"), pendingNotional: "1", reservedNotional: "0" };
+    const predecessor = { ...initialExpected(), pendingExposureNotional: "1", obligations: [consumed] };
+    const base = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...base, obligations: [consumed] }, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+      referenceDigest: digest("ref-1"),
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...base, obligations: [{ ...consumed, allowanceId: "allow-3" }] }, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+      referenceDigest: digest("ref-1"),
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    const fresh = { ...consumed, allowanceId: "allow-2", orderId: "order-2" };
+    expect(observeSealedExpectedFrontierV1({
+      expected: { ...base, obligations: [fresh] }, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+      referenceDigest: digest("ref-1"),
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
 
 });
