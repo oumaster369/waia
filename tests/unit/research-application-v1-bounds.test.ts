@@ -96,13 +96,13 @@ describe("actual held dispatch and invocation accounting", () => {
 import { readApplicationRows, applicationScope, decodeApplicationBody } from "@/lib/trader/paper/research-application-v1/bounded-read-postgres";
 import { ResearchApplicationRefusal, applicationDigest } from "@/lib/trader/paper/research-application-v1/contract";
 function applicationTransport(replies: unknown[][]) {
-  const trace: string[] = [];
-  const client = { savepoint() { throw new Error("SAVEPOINT_FORBIDDEN"); }, unsafe(query: string) {
-    trace.push(query); return Object.assign(Promise.resolve(replies[trace.length - 1] ?? []), { values: async () => [] });
+  const trace: string[] = [], parameters: unknown[][] = [];
+  const client = { savepoint() { throw new Error("SAVEPOINT_FORBIDDEN"); }, unsafe(query: string, params: unknown[] = []) {
+    trace.push(query); parameters.push([...params]); return Object.assign(Promise.resolve(replies[trace.length - 1] ?? []), { values: async () => [] });
   } } as unknown as postgres.TransactionSql;
   const pool = { begin() { throw new Error("ROOT_BEGIN_FORBIDDEN"); }, options: { parsers: {}, serializers: {} } } as unknown as postgres.Sql;
   const accounting = new HeldResearchAccounting();
-  return { trace, accounting, db: prepareHeldResearchReplay(pool, accounting).bindHeld(client).executor,
+  return { trace, parameters, accounting, db: prepareHeldResearchReplay(pool, accounting).bindHeld(client).executor,
     budget: accounting.budget(APPLICATION_LIMITS.additionalAggregate) };
 }
 const applicationOrg = "00000000-0000-4000-8000-000000000001";
@@ -176,7 +176,8 @@ describe("full physical candidate projection admission", () => {
     await admitApplicationWriteRow(f.db, "assignment", row, f.budget);
     expect(f.accounting.inputs.total).toBe(65536); expect(f.trace).toHaveLength(1);
     expect(f.trace[0]).toContain("octet_length(jsonb_build_object(");
-    expect(f.trace[0]).toContain("ownershipDomain");
+    const domainKey = f.parameters[0]!.indexOf("ownershipDomain");
+    expect(domainKey).toBeGreaterThan(1); expect(f.parameters[0]![domainKey + 1]).toBe("CAPITAL_LEGACY_V2");
     expect(f.trace[0]).toContain("::uuid"); expect(f.trace[0]).toContain("::integer");
     expect(f.trace[0]).not.toMatch(/insert|select bounded_row\.\*/);
   });
