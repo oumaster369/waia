@@ -20,6 +20,7 @@ import {
   parseDecimal,
 } from "@/lib/trader/risk/numeric";
 import {
+  assessIssuedAllowanceReplayV1,
   calculateRiskAdmissionV2,
   type RiskAccountAccountingV2,
 } from "./risk-admission-service-v2";
@@ -619,6 +620,21 @@ export async function admitRiskAllowanceV2Postgres(
       ) {
         throw new RiskV2PersistenceConflictError("Risk admission idempotency key conflict");
       }
+      const replay = assessIssuedAllowanceReplayV1({
+        killState: state.killState,
+        stateRealitySnapshotId: state.realitySnapshotId,
+        stateRealityContentDigestHex: state.realityContentDigestHex,
+        stateReconciliationAuthorityDigestHex: state.reconciliationAuthorityDigestHex,
+        verdictRealitySnapshotId: input.verdict.reality.snapshotId,
+        verdictRealityContentDigestHex: input.verdict.reality.contentDigestHex,
+        verdictReconciliationAuthorityDigestHex: input.verdict.reality.reconciliationAuthorityDigestHex,
+        accounting: state.accounting,
+        requestedReservationNotional: reservationNotional,
+        posture: state.posture,
+        strictExposureReduction,
+        reconciliationStatus: state.reconciliationStatus,
+      });
+      if (replay.decision === "REFUSED") throw new RiskV2AdmissionRefusedError(replay.reason);
       return { verdict, allowance, insertedNew: false };
     }
 
