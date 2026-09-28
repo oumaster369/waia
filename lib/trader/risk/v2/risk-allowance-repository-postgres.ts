@@ -394,6 +394,17 @@ async function durableTransactionTime(ex: Pick<RiskTx, "execute">): Promise<Date
   return durable;
 }
 
+/** Wall clock after the account/allowance locks. transaction_timestamp() stays at
+ * transaction start and would admit a bind that waited across allowance expiry. */
+async function freshEligibilityTime(ex: Pick<RiskTx, "execute">): Promise<Date> {
+  const rows = await ex.execute<{ durable_at: Date | string }>(
+    sql`select date_trunc('milliseconds', clock_timestamp()) as durable_at`,
+  );
+  const durable = new Date(rows[0]!.durable_at);
+  if (!Number.isFinite(durable.getTime())) throw new RiskV2PersistenceConflictError();
+  return durable;
+}
+
 async function lockAccountState(
   ex: Pick<RiskTx, "select">,
   organizationId: string,
@@ -1187,7 +1198,7 @@ export async function consumeRiskAllowanceForOrderV2FromTransaction(
   if (!verdictRows[0]) throw new RiskV2PersistenceConflictError("allowance verdict missing");
   const verdict = verdictFromRow(verdictRows[0]);
   const allowance = allowanceAuthorityFromRow(row, verdict);
-  const durableAt = await durableTransactionTime(tx);
+  const durableAt = await freshEligibilityTime(tx);
   if (row.lifecycleState === "CONSUMED") {
     let bindingDigest: string;
     try {
