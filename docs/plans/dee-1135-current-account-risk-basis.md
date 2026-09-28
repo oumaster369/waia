@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Kept native inventory passed on this head: 11 Risk and 39 Execution, on a clone of the proof database. That does not complete WP-1. Positive issue stays blocked without a live capital envelope. Do not open or merge the PR yet."
+  nextAction: "Kept native inventory passed on this head: 11 Risk, 39 Execution, and the DEE-1135 file 15/15 (10 observation plus 5 C01) on database clones. That does not complete WP-1. Positive issue stays blocked without a live capital envelope. Do not open or merge the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
