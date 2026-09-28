@@ -103,6 +103,10 @@ export async function retainProposedRiskAccountProfileV1(
   const eventText = canonicalJsonString(eventBody);
   const eventDigest = riskAccountDigestV1(eventBody);
   await sql.begin(async (tx) => {
+    const [existing] = await tx<{ n: number }[]>`
+      select count(*)::int n from trader_risk_account_profile_events_v1
+      where organization_id = ${profile.organizationId}::uuid and account_id = ${profile.accountId}`;
+    if ((existing?.n ?? 0) > 0) throw new RiskCurrentAccountRefusedV1("PROFILE_PROPOSAL_EXISTS");
     await tx`insert into trader_risk_account_profiles_v1
       (organization_id, account_id, content_digest, body_text, actor_id, audit_id)
       values (${profile.organizationId}::uuid, ${profile.accountId}, ${contentDigest}, ${profileText}, ${input.actorId}::uuid, ${input.auditId}::uuid)`;

@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A cancelled proposal can be reopened for the same sealed profile and still publishes no authority. A different profile digest is refused. Do not mark WP-1 complete."
+  nextAction: "The first proposal insert refuses an account that already has a profile event chain. Reopening stays on the chained path. Do not mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

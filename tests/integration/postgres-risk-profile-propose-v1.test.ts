@@ -119,6 +119,12 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
       const reopenedChain = await sql<{ action: string }[]>`select action from trader_risk_account_profile_events_v1
         where account_id = ${accountId} order by event_sequence`;
       expect(reopenedChain.map(row => row.action)).toEqual(["PROPOSE", "CANCEL", "PROPOSE"]);
+      await expect(retainProposedRiskAccountProfileV1(sql, {
+        profile, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
+      })).rejects.toThrow(/PROFILE_PROPOSAL_EXISTS/);
+      const afterRepeat = await sql<{ action: string }[]>`select action from trader_risk_account_profile_events_v1
+        where account_id = ${accountId} order by event_sequence`;
+      expect(afterRepeat.map(row => row.action)).toEqual(["PROPOSE", "CANCEL", "PROPOSE"]);
       const [after] = await sql<{ allowances: number; orders: number; current_rows: number }[]>`select
         (select count(*)::int from trader_risk_allowances_v2) as allowances,
         (select count(*)::int from trader_orders) as orders,
