@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Current-account admission takes owned authority and cannot be given a RECONCILED status. Issuance stays refused. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "Cancel and repropose wait for the sealed profile cooling period, measured by the database clock. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null

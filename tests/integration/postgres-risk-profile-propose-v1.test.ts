@@ -163,6 +163,22 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
         issue: { decision: "REFUSED", reason: "PROFILE_PROPOSAL_NOT_OPEN", allowanceId: null, orderId: null },
         bind: { decision: "REFUSED", reason: "NO_CURRENT_POINTER", bindInvoked: false },
       });
+      const coolId = `${accountId}-cool`;
+      const coolDraft = proposalDraft(org!.id, coolId);
+      coolDraft.governance = { coolingOffMs: 60_000, reviewReason: coolDraft.governance.reviewReason };
+      const [coolAudit] = await sql<{ id: string }[]>`insert into audit_logs
+        (id, actor_type, actor_id, action, entity_type, entity_id, organization_id, metadata_json)
+        values (${randomUUID()}::uuid, 'service', ${user!.id}, 'trader.risk_account_profile.propose',
+          'trader.risk_account_profile', ${coolId}, ${org!.id}::uuid, '{}'::jsonb)
+        returning id`;
+      await retainProposedRiskAccountProfileV1(sql, {
+        profile: createRiskAccountProfileV1(coolDraft), actorId: user!.id, auditId: coolAudit!.id, commandId: randomUUID(),
+      });
+      await expect(cancelStoredProfileProposalV1(sql, {
+        organizationId: org!.id, accountId: coolId, actorId: user!.id, auditId: coolAudit!.id, commandId: randomUUID(),
+      })).rejects.toThrow(/PROFILE_COOLING_OFF/);
+      const [coolEvents] = await sql<{ n: number }[]>`select count(*)::int n from trader_risk_account_profile_events_v1 where account_id = ${coolId}`;
+      expect(coolEvents?.n).toBe(1);
       const [after] = await sql<{ allowances: number; orders: number; current_rows: number }[]>`select
         (select count(*)::int from trader_risk_allowances_v2) as allowances,
         (select count(*)::int from trader_orders) as orders,

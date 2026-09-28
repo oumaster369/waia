@@ -132,6 +132,27 @@ export async function retainProposedRiskAccountProfileV1(
   };
 }
 
+
+/** Cooling comes from the sealed profile. A caller cannot supply a shorter wait. */
+export function coolingOffMsFromProfileBodyV1(bodyText: string): number {
+  let coolingOffMs: unknown;
+  try {
+    coolingOffMs = JSON.parse(bodyText)?.governance?.coolingOffMs;
+  } catch {
+    throw new RiskCurrentAccountRefusedV1("PROFILE_SEAL");
+  }
+  if (typeof coolingOffMs !== "number" || !Number.isInteger(coolingOffMs) || coolingOffMs < 1) {
+    throw new RiskCurrentAccountRefusedV1("PROFILE_SEAL");
+  }
+  return coolingOffMs;
+}
+
+export function assertProfileCoolingElapsedV1(coolingOffMs: number, previousEventAtMs: number, nowMs: number): void {
+  if (!Number.isFinite(previousEventAtMs) || !Number.isFinite(nowMs) || nowMs - previousEventAtMs < coolingOffMs) {
+    throw new RiskCurrentAccountRefusedV1("PROFILE_COOLING_OFF");
+  }
+}
+
 const STORED_PROFILE_ACTIONS = ["PROPOSE", "CANCEL", "REVOKE", "CONFIRM", "ACTIVATE"] as const;
 
 /** A stored profile, including its allocation figure, never becomes trading authority. */
@@ -195,17 +216,21 @@ export async function cancelStoredProfileProposalV1(
   }
   return sql.begin(async (tx) => {
     const [head] = await tx<
-      { content_digest: string; event_sequence: string; profile_digest: string; action: string }[]
+      { content_digest: string; event_sequence: string; profile_digest: string; action: string; created_at: Date | string; body_text: string }[]
     >`
-      select content_digest, event_sequence::text, profile_digest, action
-      from trader_risk_account_profile_events_v1
-      where organization_id = ${input.organizationId}::uuid and account_id = ${input.accountId}
-      order by event_sequence desc
+      select e.content_digest, e.event_sequence::text, e.profile_digest, e.action, e.created_at, p.body_text
+      from trader_risk_account_profile_events_v1 e
+      join trader_risk_account_profiles_v1 p
+        on p.organization_id = e.organization_id and p.account_id = e.account_id and p.content_digest = e.profile_digest
+      where e.organization_id = ${input.organizationId}::uuid and e.account_id = ${input.accountId}
+      order by e.event_sequence desc
       limit 1
-      for update`;
+      for update of e`;
     if (!head) throw new RiskCurrentAccountRefusedV1("PROFILE_PROPOSAL_ABSENT");
     if (head.action !== "PROPOSE")
       throw new RiskCurrentAccountRefusedV1("PROFILE_PROPOSAL_NOT_OPEN");
+    const [cancelClock] = await tx<{ now: Date | string }[]>`select date_trunc('milliseconds', clock_timestamp()) as now`;
+    assertProfileCoolingElapsedV1(coolingOffMsFromProfileBodyV1(head.body_text), new Date(head.created_at).getTime(), new Date(cancelClock?.now ?? "").getTime());
     const eventSequence = Number(head.event_sequence);
     if (!Number.isSafeInteger(eventSequence) || eventSequence < 1) {
       throw new RiskCurrentAccountRefusedV1("EXPECTED_SEQUENCE");
@@ -271,19 +296,23 @@ export async function reproposeStoredProfileV1(
   }
   return sql.begin(async (tx) => {
     const [head] = await tx<
-      { content_digest: string; event_sequence: string; profile_digest: string; action: string }[]
+      { content_digest: string; event_sequence: string; profile_digest: string; action: string; created_at: Date | string; body_text: string }[]
     >`
-      select content_digest, event_sequence::text, profile_digest, action
-      from trader_risk_account_profile_events_v1
-      where organization_id = ${input.organizationId}::uuid and account_id = ${input.accountId}
-      order by event_sequence desc
+      select e.content_digest, e.event_sequence::text, e.profile_digest, e.action, e.created_at, p.body_text
+      from trader_risk_account_profile_events_v1 e
+      join trader_risk_account_profiles_v1 p
+        on p.organization_id = e.organization_id and p.account_id = e.account_id and p.content_digest = e.profile_digest
+      where e.organization_id = ${input.organizationId}::uuid and e.account_id = ${input.accountId}
+      order by e.event_sequence desc
       limit 1
-      for update`;
+      for update of e`;
     if (!head) throw new RiskCurrentAccountRefusedV1("PROFILE_PROPOSAL_ABSENT");
     if (head.action !== "CANCEL")
       throw new RiskCurrentAccountRefusedV1("PROFILE_PROPOSAL_NOT_CANCELLED");
     if (head.profile_digest !== input.profileDigest)
       throw new RiskCurrentAccountRefusedV1("PROFILE_DIGEST_MISMATCH");
+    const [reproposeClock] = await tx<{ now: Date | string }[]>`select date_trunc('milliseconds', clock_timestamp()) as now`;
+    assertProfileCoolingElapsedV1(coolingOffMsFromProfileBodyV1(head.body_text), new Date(head.created_at).getTime(), new Date(reproposeClock?.now ?? "").getTime());
     const eventSequence = Number(head.event_sequence);
     if (!Number.isSafeInteger(eventSequence) || eventSequence < 1) {
       throw new RiskCurrentAccountRefusedV1("EXPECTED_SEQUENCE");
