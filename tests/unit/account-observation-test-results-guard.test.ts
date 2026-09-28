@@ -12,6 +12,7 @@ const required = [
   "trader-account-observation-postgres.test.ts",
   "account-observation-reader-postgres.test.ts",
   "account-observation-credential-postgres.test.ts",
+  "account-observation-risk-owner-postgres.test.ts",
 ];
 const passed = () => required.map((file) => ({
   name: `/workspace/tests/integration/${file}`, status: "passed",
@@ -25,11 +26,11 @@ function run(report: unknown) { return runBody(JSON.stringify(report)); }
 afterAll(() => { rmSync(directory, { recursive: true, force: true }); });
 
 describe("mandatory PostgreSQL 17 account observation executed proof", () => {
-  it("accepts all four actually executed suites in any report order", () => {
+  it("accepts all five actually executed suites in any report order", () => {
     for (const testResults of [passed(), passed().reverse()]) {
       const result = run({ testResults });
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("4 account observation suites, no skipped tests");
+      expect(result.stdout).toContain("5 account observation suites, no skipped tests");
     }
   });
 

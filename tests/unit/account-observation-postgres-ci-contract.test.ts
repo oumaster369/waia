@@ -9,6 +9,7 @@ const suites = [
   "tests/integration/trader-account-observation-postgres.test.ts",
   "tests/integration/account-observation-reader-postgres.test.ts",
   "tests/integration/account-observation-credential-postgres.test.ts",
+  "tests/integration/account-observation-risk-owner-postgres.test.ts",
 ];
 const resultPath = ".tmp/account-observation-postgres-results.json";
 const guardPath = "scripts/postgres-validation/assert-account-observation-test-results.mjs";
@@ -54,7 +55,7 @@ describe("account observation PostgreSQL CI contract", () => {
       .toBe("e85758d52b4ee3b7ca1f6993ad31be8a336695bdfb49aa47d63fe55612daa250");
   });
 
-  it("runs all four real suites serially on a separate synthetic PostgreSQL 17 service", () => {
+  it("runs all five real suites serially on a separate synthetic PostgreSQL 17 service", () => {
     const block = requireEnforcedObservationJob(workflow);
     for (const expected of ["image: postgres:17-alpine", "- 55460:5432",
       "POSTGRES_USER: waia_local_admin", "POSTGRES_PASSWORD: local_validation_only",
@@ -106,6 +107,16 @@ describe("account observation PostgreSQL CI contract", () => {
       "scripts/trader/account-observation-collector-host.ts",
       "scripts/ops/account-observation-provision-collection-state-v1.ts",
       "scripts/ops/provision-account-observation-logins.mjs",
+      "lib/trader/risk/v2/**",
+      "lib/trader/risk/numeric.ts",
+      "lib/trader/reality/v2/**",
+      "lib/trader/mi/**",
+      "lib/trader/paper/serialize-paper-evaluation-export.ts",
+      "lib/waia-core/**",
+      "db/waia-postgres-transaction.ts",
+      "tests/unit/trader-htx-account-acquisition-v1.test.ts",
+      "tests/unit/trader-risk-account-source-profile-v1.test.ts",
+      "tests/unit/trader-risk-account-reconciliation-v1.test.ts",
       "lib/trader/credentials/**", "lib/trader/security/**",
       "services/ai-trader-account-observation-host/**",
       "components/trader/account-observation/**", "app/api/trader/account-observation/**",
