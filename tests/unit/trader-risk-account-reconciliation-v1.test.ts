@@ -1,4 +1,4 @@
-import { admitFoldedSuffixV1, admitOpenProfileFrontierV1, assertProfileCoolingElapsedV1, coolingOffMsFromProfileBodyV1, decideRiskAccountProfileCommandV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
+import { admitFoldedSuffixV1, admitOpenProfileFrontierV1, assertProfileCoolingElapsedV1, coolingOffMsFromProfileBodyV1, decideProfileCommandReplayV1, decideRiskAccountProfileCommandV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
 import { classifyCurrentAccountRowV1 } from "@/lib/trader/risk/v2/risk-current-account-read-v1";
 import { describe, expect, it } from "vitest";
 import { createRealityProjectionV2, type RealityProjectionEntryV2 } from "@/lib/trader/reality/v2/contracts";
@@ -226,6 +226,9 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     expect(() => coolingOffMsFromProfileBodyV1("{")).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => assertProfileCoolingElapsedV1(1, 0, 0)).toThrow(RiskCurrentAccountRefusedV1);
     assertProfileCoolingElapsedV1(1, 0, 1);
+    expect(decideProfileCommandReplayV1(null, { action: "PROPOSE", profileDigest: "p", actorId: "a" })).toBe("ABSENT");
+    expect(decideProfileCommandReplayV1({ action: "PROPOSE", profileDigest: "p", actorId: "a" }, { action: "PROPOSE", profileDigest: "p", actorId: "a" })).toBe("REPLAY");
+    expect(decideProfileCommandReplayV1({ action: "PROPOSE", profileDigest: "p", actorId: "a" }, { action: "CANCEL", profileDigest: null, actorId: "a" })).toBe("CONFLICT");
   });
   it("observes a sealed Expected frontier without publishing a limit", () => {
     const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };

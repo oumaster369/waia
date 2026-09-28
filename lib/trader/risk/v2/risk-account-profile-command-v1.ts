@@ -105,7 +105,18 @@ export async function retainProposedRiskAccountProfileV1(
   };
   const eventText = canonicalJsonString(eventBody);
   const eventDigest = riskAccountDigestV1(eventBody);
+  let replayDigest: string | null = null;
   await sql.begin(async (tx) => {
+    const [stored] = await tx<{ action: string; profile_digest: string; actor_id: string }[]>`
+      select action, profile_digest, actor_id::text as actor_id
+      from trader_risk_account_profile_events_v1
+      where organization_id = ${profile.organizationId}::uuid and account_id = ${profile.accountId} and command_id = ${input.commandId}::uuid`;
+    const replay = decideProfileCommandReplayV1(
+      stored ? { action: stored.action, profileDigest: stored.profile_digest, actorId: stored.actor_id } : null,
+      { action: "PROPOSE", profileDigest: contentDigest, actorId: input.actorId },
+    );
+    if (replay === "CONFLICT") throw new RiskCurrentAccountRefusedV1("PROFILE_COMMAND_CONFLICT");
+    if (replay === "REPLAY") { replayDigest = stored!.profile_digest; return; }
     const [existing] = await tx<{ n: number }[]>`
       select count(*)::int n from trader_risk_account_profile_events_v1
       where organization_id = ${profile.organizationId}::uuid and account_id = ${profile.accountId}`;
@@ -125,7 +136,7 @@ export async function retainProposedRiskAccountProfileV1(
   return {
     decision: "RETAINED_NON_AUTHORITY",
     action: "PROPOSE",
-    profileDigest: contentDigest,
+    profileDigest: replayDigest ?? contentDigest,
     currentPointer: null,
     allowanceId: null,
     orderId: null,
@@ -151,6 +162,17 @@ export function assertProfileCoolingElapsedV1(coolingOffMs: number, previousEven
   if (!Number.isFinite(previousEventAtMs) || !Number.isFinite(nowMs) || nowMs - previousEventAtMs < coolingOffMs) {
     throw new RiskCurrentAccountRefusedV1("PROFILE_COOLING_OFF");
   }
+}
+
+
+export function decideProfileCommandReplayV1(
+  stored: { action: string; profileDigest: string; actorId: string } | null,
+  expected: { action: string; profileDigest: string | null; actorId: string },
+): "ABSENT" | "REPLAY" | "CONFLICT" {
+  if (!stored) return "ABSENT";
+  if (stored.action !== expected.action || stored.actorId !== expected.actorId) return "CONFLICT";
+  if (expected.profileDigest !== null && stored.profileDigest !== expected.profileDigest) return "CONFLICT";
+  return "REPLAY";
 }
 
 const STORED_PROFILE_ACTIONS = ["PROPOSE", "CANCEL", "REVOKE", "CONFIRM", "ACTIVATE"] as const;
@@ -215,6 +237,19 @@ export async function cancelStoredProfileProposalV1(
     throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
   }
   return sql.begin(async (tx) => {
+    const [stored] = await tx<{ action: string; profile_digest: string; actor_id: string }[]>`
+      select action, profile_digest, actor_id::text as actor_id
+      from trader_risk_account_profile_events_v1
+      where organization_id = ${input.organizationId}::uuid and account_id = ${input.accountId} and command_id = ${input.commandId}::uuid`;
+    const replay = decideProfileCommandReplayV1(
+      stored ? { action: stored.action, profileDigest: stored.profile_digest, actorId: stored.actor_id } : null,
+      { action: "CANCEL", profileDigest: null, actorId: input.actorId },
+    );
+    if (replay === "CONFLICT") throw new RiskCurrentAccountRefusedV1("PROFILE_COMMAND_CONFLICT");
+    if (replay === "REPLAY") return {
+      decision: "RETAINED_NON_AUTHORITY" as const, action: "CANCEL" as const, profileDigest: stored!.profile_digest,
+      currentPointer: null, allowanceId: null, orderId: null,
+    };
     const [head] = await tx<
       { content_digest: string; event_sequence: string; profile_digest: string; action: string; created_at: Date | string; body_text: string }[]
     >`
@@ -307,6 +342,19 @@ export async function reproposeStoredProfileV1(
       limit 1
       for update of e`;
     if (!head) throw new RiskCurrentAccountRefusedV1("PROFILE_PROPOSAL_ABSENT");
+    const [storedPropose] = await tx<{ action: string; profile_digest: string; actor_id: string }[]>`
+      select action, profile_digest, actor_id::text as actor_id
+      from trader_risk_account_profile_events_v1
+      where organization_id = ${input.organizationId}::uuid and account_id = ${input.accountId} and command_id = ${input.commandId}::uuid`;
+    const replay = decideProfileCommandReplayV1(
+      storedPropose ? { action: storedPropose.action, profileDigest: storedPropose.profile_digest, actorId: storedPropose.actor_id } : null,
+      { action: "PROPOSE", profileDigest: input.profileDigest, actorId: input.actorId },
+    );
+    if (replay === "CONFLICT") throw new RiskCurrentAccountRefusedV1("PROFILE_COMMAND_CONFLICT");
+    if (replay === "REPLAY") return {
+      decision: "RETAINED_NON_AUTHORITY" as const, action: "PROPOSE" as const, profileDigest: storedPropose!.profile_digest,
+      currentPointer: null, allowanceId: null, orderId: null,
+    };
     if (head.action !== "CANCEL")
       throw new RiskCurrentAccountRefusedV1("PROFILE_PROPOSAL_NOT_CANCELLED");
     if (head.profile_digest !== input.profileDigest)

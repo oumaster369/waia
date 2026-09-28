@@ -73,10 +73,16 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
           'trader.risk_account_profile', ${accountId}, ${org!.id}::uuid, '{}'::jsonb)
         returning id`;
       const profile = createRiskAccountProfileV1(proposalDraft(org!.id, accountId));
+      const proposeCommand = randomUUID();
       const retained = await retainProposedRiskAccountProfileV1(sql, {
-        profile, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
+        profile, actorId: user!.id, auditId: audit!.id, commandId: proposeCommand,
       });
       expect(retained).toMatchObject({ decision: "RETAINED_NON_AUTHORITY", action: "PROPOSE", currentPointer: null, allowanceId: null, orderId: null });
+      expect(await retainProposedRiskAccountProfileV1(sql, {
+        profile, actorId: user!.id, auditId: audit!.id, commandId: proposeCommand,
+      })).toMatchObject({ profileDigest: retained.profileDigest, action: "PROPOSE" });
+      const [afterReplay] = await sql<{ n: number }[]>`select count(*)::int n from trader_risk_account_profile_events_v1 where account_id = ${accountId}`;
+      expect(afterReplay?.n).toBe(1);
       const [event] = await sql<{ action: string; n: number }[]>`select action, count(*)::int n
         from trader_risk_account_profile_events_v1 where account_id = ${accountId} group by action`;
       expect(event).toEqual({ action: "PROPOSE", n: 1 });
