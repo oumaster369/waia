@@ -312,5 +312,17 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
     }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
   });
+  it("refuses a predecessor whose event head disagrees with its sequence", () => {
+    const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1",
+      nextEventSequence: "2", eventHeadDigest: digest("head") };
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, predecessor: { ...initialExpected(), nextEventSequence: "2" },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected, predecessor: { ...initialExpected(), nextEventSequence: "2", eventHeadDigest: digest("prior-head") },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
 
 });

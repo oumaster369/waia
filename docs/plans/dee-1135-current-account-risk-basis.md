@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "The first Expected event cannot carry a head, and a later event cannot omit one. A consistent head still publishes nothing. Do not invent caps or mark WP-1 complete."
+  nextAction: "A predecessor frontier must tie its own event head to its sequence. A consistent predecessor still publishes nothing. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

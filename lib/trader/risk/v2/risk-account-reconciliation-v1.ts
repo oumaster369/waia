@@ -535,11 +535,15 @@ export function observeSealedExpectedFrontierV1(input: {
   const nextAdmission = sequence(expected.nextAdmissionSequence);
   const nextEvent = sequence(expected.nextEventSequence);
   const predecessor = input.predecessor ?? null;
-  if (predecessor && (
-    stateVersion < sequence(predecessor.stateVersion) ||
-    nextAdmission < sequence(predecessor.nextAdmissionSequence) ||
-    nextEvent < sequence(predecessor.nextEventSequence)
-  )) refuse("PREDECESSOR_SCOPE_OR_TIME");
+  if (predecessor) {
+    const priorState = sequence(predecessor.stateVersion);
+    const priorAdmission = sequence(predecessor.nextAdmissionSequence);
+    const priorEvent = sequence(predecessor.nextEventSequence);
+    if (stateVersion < priorState || nextAdmission < priorAdmission || nextEvent < priorEvent)
+      refuse("PREDECESSOR_SCOPE_OR_TIME");
+    if (predecessor.eventHeadDigest !== null) riskAccountDigestSchemaV1.parse(predecessor.eventHeadDigest);
+    if ((priorEvent === 1n) !== (predecessor.eventHeadDigest === null)) refuse("EXPECTED_SEQUENCE");
+  }
   if (expected.eventHeadDigest !== null) riskAccountDigestSchemaV1.parse(expected.eventHeadDigest);
   if ((nextEvent === 1n) !== (expected.eventHeadDigest === null)) refuse("EXPECTED_SEQUENCE");
   const allowanceIds = new Set<string>();
