@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "An open terminal row cannot name an inclusion. Only a consumed row can. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "Current-account admission takes owned authority and cannot be given a RECONCILED status. Issuance stays refused. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null

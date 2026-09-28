@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { assessIssuedAllowanceReplayV1, calculateRiskAdmissionV2 } from "@/lib/trader/risk/v2/risk-admission-service-v2";
+import { assessIssuedAllowanceReplayV1, calculateCurrentAccountRiskAdmissionV1, calculateRiskAdmissionV2 } from "@/lib/trader/risk/v2/risk-admission-service-v2";
 import {
   createRiskAllowanceV2,
   validateRiskAllowanceV2,
@@ -163,5 +163,24 @@ describe("RiskAllowanceV2", () => {
     expect(assessIssuedAllowanceReplayV1({ ...current, reconciliationStatus: "STALE" })).toEqual({
       decision: "REFUSED", reason: "RECONCILIATION_NOT_CURRENT",
     });
+  });
+
+  it("refuses current-account admission from owned authority without a reconciliation status", () => {
+    const accounting = {
+      reconciledExposureNotional: "40",
+      worstCasePendingExposureNotional: "20",
+      outstandingReservationNotional: "10",
+      exposureLimitNotional: "100",
+    };
+    const request = { accounting, requestedReservationNotional: "1", posture: "NORMAL" as const, strictExposureReduction: false };
+    for (const authority of [
+      { current: false as const, reason: "NO_CURRENT_POINTER" as const },
+      { current: false as const, reason: "BASIS_ABSENT" as const },
+      { current: false as const, reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" as const, basisDigest: "ab".repeat(32) },
+    ]) {
+      expect(calculateCurrentAccountRiskAdmissionV1({ ...request, authority })).toMatchObject({
+        status: "REFUSED", reason: "RECONCILIATION_NOT_CURRENT", basisDiagnostic: authority.reason,
+      });
+    }
   });
 });

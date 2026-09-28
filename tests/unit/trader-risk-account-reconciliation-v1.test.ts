@@ -202,7 +202,11 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       expectedExposureNotional: "10", expectedPendingNotional: "1",
       actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: true,
     }));
-    expect(admitCurrentAccountBasisV1(retained)).toEqual({
+    expect(admitCurrentAccountBasisV1(retained, {
+      authority: { current: false, reason: "NO_CURRENT_POINTER" },
+      accounting: { reconciledExposureNotional: "10", worstCasePendingExposureNotional: "1", outstandingReservationNotional: "0", exposureLimitNotional: "1000" },
+      requestedReservationNotional: "1", posture: "NORMAL", strictExposureReduction: false,
+    })).toEqual({
       decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
     });
   });
