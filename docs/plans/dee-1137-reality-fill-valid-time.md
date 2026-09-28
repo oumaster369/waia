@@ -14,16 +14,16 @@ linearStatusFlow:
   onPrOpened: In Review
   onMerge: Done
 state:
-  status: approved
-  currentWorkPackage: WP-1
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2]
+  status: in-progress
+  currentWorkPackage: WP-2
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: [WP-2]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 02653262858ee75eae814c8c7382b6a10e9f2bb1
+  lastValidationAt: "2026-09-28T00:25:06.656Z"
   blockedReason: null
-  nextAction: "Reproduce asymmetric fill timing in focused units, correct only FILL mapping, then independently review and qualify actual durable delivery and historical conflict."
+  nextAction: "Complete independent native-outcome and plan-only carry review, publish the one integration PR, then require all exact-head CI and fresh checked-merge admission. No deployment or trading activation follows."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -77,4 +77,17 @@ No whole audit, scientific or live readiness follows from this correction. Core 
 
 The original adapter at plan-first commit `436468b5b1a7ea6285c88d659e4f711ad9815bd9` passed the four existing focused cases and failed all twelve new asymmetric/malformed/knowledge-time cases. With the correction, the same full focused file passed 16/16 with no skips. Final scoped lint, typecheck and Execution graph passed; the Reality graph initially correctly rejected the changed content digest and passed after the scope-admitted mechanical update preserving both path sets/counts/digests and all rules. The first canonical-plan check exposed missing recognized work-package headings; those headings are corrected here. Original failed outputs remain retained, including the earlier test-only lint warnings fixed before final lint.
 
-These checks were executed against recorded work-in-progress bytes on the plan-first head, with per-file before/after digests, and are not an immutable-head or native attestation. External raw results and receipts are under audit evidence `evidence/dee-1137/`. Independent source review, native delivery/control proof, final full readiness and exact-head CI remain open. No source-history rewrite, deployment, live request or whole-issue completion is claimed.
+These checks were executed against recorded work-in-progress bytes on the plan-first head, with per-file before/after digests, and are not an immutable-head or native attestation. External raw results and receipts are under audit evidence `evidence/dee-1137/`. This was the initial source checkpoint; the subsequent immutable-source review, native proof and readiness below supersede its pending work. Exact-head CI remains open. No source-history rewrite, deployment, live request or whole-issue completion is claimed.
+
+
+## Immutable-source readiness and native evidence — 2026-09-28 UTC
+
+Independent source review accepted `5f217d87c87c1e8e5808391ffeb273c70e5fe830`, REPORT `a7d5dfc29c17af73b8fb0aec0cce50f08e4d382f6c1e7c5dc7338d5eebedad13` and 61-artifact manifest `cfca4209e13b89d6170df768e8b3976f196589bd81a9c41db6afe799c81cefca`. The later native fixture/control source is exact `02653262858ee75eae814c8c7382b6a10e9f2bb1`, tree `edbe1995f71b8116d6b1afdaa2e1d42a4e999328`; production, focused-unit and inventory bytes are preserved from the source review. Its exact original828 fixture SHA is `4560258f04cbe8ba89e256b4138acfcb0022fe01086252f070ded419f079c0f3`.
+
+On026, scoped lint/compiler passed at00:08:42UTC. Full lint/build/governance passed00:14:27–00:15:27UTC. The source and unchanged relevant validation inputs were captured before and after each command. Canon and both consumer graphs also passed on the recorded same source bytes. No complete local unit rerun substituted for authoritative CI.
+
+The independent 67-artifact native-source/runner review, manifest `e71666a8abf898b20acad7887be680c3a5e2b68f32afd7d5e37c0947fbbd5d84`, accepted only a separate root-controlled attempt. It identified stale companion prose and incomplete failure-finalization evidence in unexecuted runner drafts; both were corrected and originals preserved before any native grant. Final runner SHA `e1f8b5dc8f600b279bf24128fbfc067b5060dc76828deea2e1856c62cb20b506` binds fixed loopback PostgreSQL16.14, a single absent database name, full224 original migration chain, exactly six source paths, all tracked source identities, whole41 registrations, bounded command/process cleanup and unchanged role/catalog posture.
+
+One admitted synthetic attempt ran the entire delivery file: **41 passed, zero failures, zero skips**, actual00:24:58.817–00:25:06.656UTC, terminal exit0. The new cases prove distinct fill times through actual stored Execution reports, Reality source/truth/projection and fresh-client/CLI replay; genuine original828 mapping through the unchanged writer followed by `SOURCE_BINDING_INVALID` catch-up and direct immutable-lineage refusal; actual stored noncanonical timestamp refusals; and future source-time rollback at the existing knowledge-time rule. No old case was removed. Native event-time preservation is not separately claimed; unchanged source and focused controls cover the non-fill boundary.
+
+All224 actual migration hash/when rows, all5533 tracked Git entries, roles and database posture matched before/after. Every cleanup phase succeeded and final other clients were zero. The synthetic database and raw evidence are retained. The 19-artifact result seal is `005c57f6763dd29e09f9b94fd209f26fbb647aa273b8112deb7c242677c41f9e` under external `evidence/dee-1137/native-preparation/results-0010`. Root verification does not replace independent outcome review, which is the remaining prepublication gate. This plan-only successor carries the five non-plan changed files unchanged; it does not relabel026 execution as a run on the successor commit. Final exact-head CI and checked merge remain required. The correction supplies no history repair, scientific acceptance or live enablement.
