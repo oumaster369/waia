@@ -139,6 +139,7 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
         terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
         terminalOpenAllowances: [], terminalConsumedAllowances: [],
         organizationId: org!.id, accountId,
+        predecessorStateVersion: "1", terminalStateVersion: "1",
         declaredMaxEvents: 4,
       };
       await expect(refuseProfileBackedExecutionV1(sql, {

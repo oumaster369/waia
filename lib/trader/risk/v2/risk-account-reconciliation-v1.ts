@@ -732,6 +732,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   predecessorReconciledExposureNotional: string;
   predecessorPendingExposureNotional: string;
   predecessorReservationNotional: string;
+  predecessorStateVersion: string;
   openedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string }[];
   closedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; disposition: "CONSUMED" | "RELEASED"; truthRecordId?: string | null }[];
   events: readonly {
@@ -751,6 +752,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   terminalReconciledExposureNotional: string;
   terminalPendingExposureNotional: string;
   terminalReservationNotional: string;
+  terminalStateVersion: string;
   terminalOpenAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string }[];
   terminalConsumedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string }[];
   organizationId: string;
@@ -877,6 +879,9 @@ export function foldExpectedEnforcementSuffixV1(input: {
   for (const [id, held] of consumed) {
     const row = listedConsumed.get(id);
     if (row === undefined || row.reserved !== held.reserved || row.quantity !== held.quantity) refuse("EXPECTED_OBLIGATION_IDENTITY");
+  }
+  if (sequence(input.terminalStateVersion) !== sequence(input.predecessorStateVersion) + BigInt(input.events.length)) {
+    refuse("EXPECTED_SEQUENCE");
   }
   return { decision: "AUTHENTICATED", eventCount: input.events.length, notionalsVerified: true, heldTruthRecordIds, currentPointer: null };
 }

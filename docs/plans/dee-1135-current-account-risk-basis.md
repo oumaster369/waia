@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A consumed allowance must appear on the terminal consumed list with the same quantity. Issued-allowance replay must recheck current authority before it returns the stored row. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "Suffix state version advances once per enforcement event, matching the existing account writer. A skipped version is refused. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
