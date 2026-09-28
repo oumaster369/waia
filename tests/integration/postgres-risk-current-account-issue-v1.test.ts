@@ -84,7 +84,16 @@ describe.skipIf(!enabled)("current-account issue writes no authority", () => {
           reconciledExposureNotional: "10", pendingExposureNotional: "1", reservationNotional: "0", obligations: [],
         },
         actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false,
+        externalDebtNotional: null,
       });
+      expect(() => observeSealedExpectedFrontierV1({
+        expected: {
+          stateVersion: "1", nextAdmissionSequence: "1", nextEventSequence: "1", eventHeadDigest: null,
+          reconciledExposureNotional: "10", pendingExposureNotional: "1", reservationNotional: "0", obligations: [],
+        },
+        actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false,
+        externalDebtNotional: "0",
+      })).toThrow();
       expect(observed.publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
       expect(admitCurrentAccountBasisV1(retainObservedFrontierV1(observed))).toEqual({
         decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,

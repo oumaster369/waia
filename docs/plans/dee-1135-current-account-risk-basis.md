@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A sealed Expected frontier can be observed against Actual and still publishes nothing. A reservation sum that does not match the obligations is refused. Do not invent caps or mark WP-1 complete."
+  nextAction: "Unattested external debt stays unknown and is not treated as zero. A supplied debt must match the pending sum, and the observation still publishes nothing. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

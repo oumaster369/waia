@@ -519,6 +519,8 @@ export function observeSealedExpectedFrontierV1(input: {
   actualExposureNotional: string;
   actualPendingNotional: string;
   sourceMethodQualified: boolean;
+  /** Null means the external debt is unattested. It is not treated as zero. */
+  externalDebtNotional: string | null;
 }): ReturnType<typeof compareExpectedAccountFrontierV1> {
   const expected = input.expected;
   sequence(expected.stateVersion);
@@ -526,7 +528,7 @@ export function observeSealedExpectedFrontierV1(input: {
   sequence(expected.nextEventSequence);
   if (expected.eventHeadDigest !== null) riskAccountDigestSchemaV1.parse(expected.eventHeadDigest);
   const allowanceIds = new Set<string>();
-  let reservations = 0n;
+  let reservations = 0n, consumedPending = 0n;
   for (const obligation of expected.obligations) {
     if (allowanceIds.has(obligation.allowanceId) || !["BUY", "SELL"].includes(obligation.side))
       refuse("EXPECTED_OBLIGATION_IDENTITY");
@@ -537,13 +539,16 @@ export function observeSealedExpectedFrontierV1(input: {
       reservations += nonnegative(obligation.reservedNotional);
     } else if (obligation.state === "CONSUMED") {
       if (!obligation.orderId || !obligation.orderBindingDigest) refuse("EXPECTED_CONSUMED_STATE");
+      consumedPending += nonnegative(obligation.pendingNotional);
     } else refuse("EXPECTED_STATE");
     if (obligation.side === "SELL" && (nonnegative(obligation.reservedNotional) !== 0n || nonnegative(obligation.pendingNotional) !== 0n))
       refuse("REDUCTION_ACCOUNTING");
   }
   if (reservations !== nonnegative(expected.reservationNotional)) refuse("EXPECTED_RESERVATION_SUM");
   nonnegative(expected.reconciledExposureNotional);
-  nonnegative(expected.pendingExposureNotional);
+  const declaredPending = nonnegative(expected.pendingExposureNotional);
+  if (input.externalDebtNotional !== null && declaredPending !== consumedPending + nonnegative(input.externalDebtNotional))
+    refuse("EXPECTED_PENDING_SUM");
   return compareExpectedAccountFrontierV1({
     expectedExposureNotional: expected.reconciledExposureNotional,
     expectedPendingNotional: expected.pendingExposureNotional,

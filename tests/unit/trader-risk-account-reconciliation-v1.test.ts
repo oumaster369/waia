@@ -208,6 +208,7 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };
     expect(observeSealedExpectedFrontierV1({
       expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: true,
+      externalDebtNotional: null,
     })).toEqual({
       decision: "OBSERVED",
       publication: { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" },
@@ -216,7 +217,16 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     expect(() => observeSealedExpectedFrontierV1({
       expected: { ...expected, reservationNotional: "1" },
       actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false,
+      externalDebtNotional: null,
     })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false,
+      externalDebtNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false,
+      externalDebtNotional: "1",
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
   });
 
 });
