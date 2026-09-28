@@ -521,42 +521,42 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       ...base, events: [issued],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
-      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1" }],
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1") }],
       terminalStateVersion: "2",
     })).toEqual({ decision: "AUTHENTICATED", eventCount: 1, notionalsVerified: true, heldTruthRecordIds: [], currentPointer: null });
     expect(() => foldExpectedEnforcementSuffixV1({
       ...base, events: [{ ...issued, accountId: "other-account" }],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
-      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1" }],
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1") }],
       terminalStateVersion: "2",
     })).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => foldExpectedEnforcementSuffixV1({
       ...base, events: [{ ...issued, boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1") }],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
-      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1" }],
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1") }],
       terminalStateVersion: "2",
     })).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => foldExpectedEnforcementSuffixV1({
       ...base, events: [{ ...issued, toState: "CONSUMED" }],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
-      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1" }],
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1") }],
       terminalStateVersion: "2",
     })).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => foldExpectedEnforcementSuffixV1({
       ...base, events: [issued],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
-      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1" }],
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1") }],
     })).toThrow(RiskCurrentAccountRefusedV1);
     const consumedHead = digest("fold-consumed");
     expect(foldExpectedEnforcementSuffixV1({
       ...base, events: [issued, { sequence: "2", previousDigest: head, contentDigest: consumedHead, type: "ALLOWANCE_CONSUMED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "CONSUMED", allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1") }],
       terminalHeadDigest: consumedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
-      terminalConsumedAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1" }],
+      terminalConsumedAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1") }],
       terminalStateVersion: "3",
     }).eventCount).toBe(2);
     const renewHead = digest("fold-renew");
@@ -579,22 +579,22 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       events: [{ sequence: "1", previousDigest: null, contentDigest: priorHead, type: "ALLOWANCE_CONSUMED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "CONSUMED", allowanceId: "allow-prior", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-prior", boundOrderId: "order-allow-prior", boundOrderDigestHex: digest("order-allow-prior") }],
       terminalHeadDigest: priorHead, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "1",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
-      terminalConsumedAllowances: [{ allowanceId: "allow-prior", reservedExposureNotional: "10", quantity: "1" }],
+      terminalConsumedAllowances: [{ allowanceId: "allow-prior", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-prior", boundOrderDigestHex: digest("order-allow-prior") }],
       terminalStateVersion: "2",
     }).eventCount).toBe(1);
     expect(() => foldExpectedEnforcementSuffixV1({
-      ...base, closedAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "0", quantity: "1", disposition: "RELEASED" }],
+      ...base, closedAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "0", quantity: "1", disposition: "RELEASED", boundOrderId: null, boundOrderDigestHex: null }],
       events: [issued],
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
     })).toThrow(RiskCurrentAccountRefusedV1);
     expect(foldExpectedEnforcementSuffixV1({
       ...base, predecessorPendingExposureNotional: "10",
-      closedAllowances: [{ allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", disposition: "CONSUMED" }],
+      closedAllowances: [{ allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-old", boundOrderDigestHex: digest("order-allow-old"), disposition: "CONSUMED" }],
       events: [],
       terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
-      terminalConsumedAllowances: [{ allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1" }],
+      terminalConsumedAllowances: [{ allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-old", boundOrderDigestHex: digest("order-allow-old") }],
     }).eventCount).toBe(0);
     expect(() => foldExpectedEnforcementSuffixV1({
       ...base, predecessorPendingExposureNotional: "10",
@@ -607,7 +607,7 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     expect(() => foldExpectedEnforcementSuffixV1({
       ...base, predecessorReservationNotional: "10", predecessorPendingExposureNotional: "10",
       openedAllowances: [{ allowanceId: "allow-2", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-2" }],
-      closedAllowances: [{ allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", disposition: "CONSUMED", truthRecordId: priorTruth }],
+      closedAllowances: [{ allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-old", boundOrderDigestHex: digest("order-allow-old"), disposition: "CONSUMED", truthRecordId: priorTruth }],
       events: [{ sequence: "1", previousDigest: null, contentDigest: reuseHead, type: "ALLOWANCE_CONSUMED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "CONSUMED", allowanceId: "allow-2", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-2", boundOrderId: "order-allow-2", boundOrderDigestHex: digest("order-allow-2"), truthRecordId: priorTruth }],
       terminalHeadDigest: reuseHead, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "1",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "20", terminalReservationNotional: "0",
@@ -631,12 +631,12 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       ...base, events: included,
       terminalHeadDigest: includedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
-      terminalConsumedAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1" }],
+      terminalConsumedAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1") }],
       terminalStateVersion: "3",
     }).heldTruthRecordIds).toEqual([inclusion]);
     const includedSuffix = { ...base, events: included, terminalHeadDigest: includedHead, terminalNextEventSequence: "3",
       terminalNextAdmissionSequence: "2", terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
-      terminalConsumedAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1" }],
+      terminalConsumedAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1") }],
       terminalStateVersion: "3" };
     const account = { organizationId: org, accountId: "synthetic-spot" };
     const observed = observeSealedExpectedFrontierV1({
@@ -669,11 +669,20 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     })).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => foldExpectedEnforcementSuffixV1({
       ...base, predecessorPendingExposureNotional: "10",
-      closedAllowances: [{ allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", disposition: "CONSUMED" }],
+      closedAllowances: [{ allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-old", boundOrderDigestHex: digest("order-allow-old"), disposition: "CONSUMED" }],
       events: [],
       terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
-      terminalConsumedAllowances: [{ allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "2" }],
+      terminalConsumedAllowances: [{ allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "2", boundOrderId: "order-allow-old", boundOrderDigestHex: digest("order-allow-old") }],
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, predecessorReservationNotional: "10", predecessorPendingExposureNotional: "10",
+      openedAllowances: [{ allowanceId: "allow-prior", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-prior" }],
+      closedAllowances: [{ allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-prior", boundOrderDigestHex: digest("order-allow-prior"), disposition: "CONSUMED" }],
+      events: [{ sequence: "1", previousDigest: null, contentDigest: priorHead, type: "ALLOWANCE_CONSUMED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "CONSUMED", allowanceId: "allow-prior", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-prior", boundOrderId: "order-allow-prior", boundOrderDigestHex: digest("order-allow-prior") }],
+      terminalHeadDigest: priorHead, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "1",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "20", terminalReservationNotional: "0",
+      terminalStateVersion: "2",
     })).toThrow(RiskCurrentAccountRefusedV1);
   });
 
