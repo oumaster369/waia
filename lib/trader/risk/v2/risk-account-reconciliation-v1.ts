@@ -719,3 +719,79 @@ export function authenticateExpectedEventSuffixV1(input: {
   }
   return { decision: "AUTHENTICATED", eventCount: input.events.length, notionalsVerified, currentPointer: null };
 }
+
+const ENFORCEMENT_SUFFIX_TYPES = ["ALLOWANCE_ISSUED", "ALLOWANCE_CONSUMED", "ALLOWANCE_REVOKED", "ALLOWANCE_EXPIRED"] as const;
+
+/** Recomputes reservation and pending from the existing enforcement effects.
+ *  These events do not change reconciled exposure. A match still publishes nothing.
+ */
+export function foldExpectedEnforcementSuffixV1(input: {
+  predecessorHeadDigest: string | null;
+  predecessorNextEventSequence: string;
+  predecessorNextAdmissionSequence: string;
+  predecessorReconciledExposureNotional: string;
+  predecessorPendingExposureNotional: string;
+  predecessorReservationNotional: string;
+  events: readonly {
+    sequence: string;
+    previousDigest: string | null;
+    contentDigest: string;
+    type: (typeof ENFORCEMENT_SUFFIX_TYPES)[number];
+    allowanceId: string;
+    reservedExposureNotional: string;
+  }[];
+  terminalHeadDigest: string | null;
+  terminalNextEventSequence: string;
+  terminalNextAdmissionSequence: string;
+  terminalReconciledExposureNotional: string;
+  terminalPendingExposureNotional: string;
+  terminalReservationNotional: string;
+  declaredMaxEvents: number;
+}): { decision: "AUTHENTICATED"; eventCount: number; notionalsVerified: true; currentPointer: null } {
+  authenticateExpectedEventSuffixV1({
+    predecessorHeadDigest: input.predecessorHeadDigest,
+    predecessorNextEventSequence: input.predecessorNextEventSequence,
+    events: input.events,
+    terminalHeadDigest: input.terminalHeadDigest,
+    terminalNextEventSequence: input.terminalNextEventSequence,
+    declaredMaxEvents: input.declaredMaxEvents,
+    predecessorReconciledExposureNotional: input.predecessorReconciledExposureNotional,
+    predecessorPendingExposureNotional: input.predecessorPendingExposureNotional,
+    predecessorReservationNotional: input.predecessorReservationNotional,
+    terminalReconciledExposureNotional: input.terminalReconciledExposureNotional,
+    terminalPendingExposureNotional: input.terminalPendingExposureNotional,
+    terminalReservationNotional: input.terminalReservationNotional,
+  });
+  if (nonnegative(input.predecessorReconciledExposureNotional) !== nonnegative(input.terminalReconciledExposureNotional)) {
+    refuse("SUFFIX_TERMINAL_MISMATCH");
+  }
+  let reservation = nonnegative(input.predecessorReservationNotional);
+  let pending = nonnegative(input.predecessorPendingExposureNotional);
+  const open = new Map<string, bigint>();
+  let issued = 0n;
+  for (const event of input.events) {
+    if (!(ENFORCEMENT_SUFFIX_TYPES as readonly string[]).includes(event.type)) refuse("EXPECTED_STATE");
+    const reserved = nonnegative(event.reservedExposureNotional);
+    if (!event.allowanceId) refuse("EXPECTED_OBLIGATION_IDENTITY");
+    if (event.type === "ALLOWANCE_ISSUED") {
+      if (open.has(event.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
+      open.set(event.allowanceId, reserved);
+      reservation += reserved;
+      issued += 1n;
+    } else {
+      const held = open.get(event.allowanceId);
+      if (held === undefined || held !== reserved) refuse("EXPECTED_OBLIGATION_IDENTITY");
+      open.delete(event.allowanceId);
+      if (reservation < reserved) refuse("EXPECTED_RESERVATION_SUM");
+      reservation -= reserved;
+      if (event.type === "ALLOWANCE_CONSUMED") pending += reserved;
+    }
+  }
+  if (sequence(input.terminalNextAdmissionSequence) !== sequence(input.predecessorNextAdmissionSequence) + issued) {
+    refuse("EXPECTED_SEQUENCE");
+  }
+  if (reservation !== nonnegative(input.terminalReservationNotional) || pending !== nonnegative(input.terminalPendingExposureNotional)) {
+    refuse("SUFFIX_TERMINAL_MISMATCH");
+  }
+  return { decision: "AUTHENTICATED", eventCount: input.events.length, notionalsVerified: true, currentPointer: null };
+}

@@ -6,7 +6,7 @@ import { createRiskAccountProfileV1, createRiskAccountReferenceV1, riskAccountDi
   RISK_ACCOUNT_CHANNELS_V1, RISK_REFERENCE_METHOD_V1, RiskCurrentAccountRefusedV1, sealRiskAccountRecordV1,
   type RiskAccountProfileDraftV1, type RiskReferenceMemberV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import { availableRiskAccountQuantityV1, constructRiskAccountBasisV1, compareExpectedAccountFrontierV1,
-  admitCurrentAccountBasisV1, authenticateExpectedEventSuffixV1, decideCurrentAccountBasisPublicationV1, holdUnpublishedInclusionsV1, observeSealedExpectedFrontierV1, retainObservedFrontierV1,
+  admitCurrentAccountBasisV1, authenticateExpectedEventSuffixV1, decideCurrentAccountBasisPublicationV1, foldExpectedEnforcementSuffixV1, holdUnpublishedInclusionsV1, observeSealedExpectedFrontierV1, retainObservedFrontierV1,
   type RiskAccountObligationV1, type RiskExpectedFrontierV1, type RiskIndependentInclusionV1 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
 
 // These pure values exercise arithmetic and refusal contracts only. No persisted authority,
@@ -467,6 +467,32 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     expect(() => authenticateExpectedEventSuffixV1({
       predecessorHeadDigest: null, predecessorNextEventSequence: "1", events: [],
       terminalHeadDigest: null, terminalNextEventSequence: "1", declaredMaxEvents: 4, predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0", terminalReconciledExposureNotional: "1", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+  });
+
+  it("folds issued then consumed enforcement into pending and refuses a stale reservation", () => {
+    const head = digest("fold-event");
+    const base = {
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1", predecessorNextAdmissionSequence: "1",
+      predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0",
+      declaredMaxEvents: 4,
+    };
+    const issued = { sequence: "1", previousDigest: null, contentDigest: head, type: "ALLOWANCE_ISSUED" as const, allowanceId: "allow-1", reservedExposureNotional: "10" };
+    expect(foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+    })).toEqual({ decision: "AUTHENTICATED", eventCount: 1, notionalsVerified: true, currentPointer: null });
+    const consumedHead = digest("fold-consumed");
+    expect(foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued, { sequence: "2", previousDigest: head, contentDigest: consumedHead, type: "ALLOWANCE_CONSUMED", allowanceId: "allow-1", reservedExposureNotional: "10" }],
+      terminalHeadDigest: consumedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+    }).eventCount).toBe(2);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
     })).toThrow(RiskCurrentAccountRefusedV1);
   });
 

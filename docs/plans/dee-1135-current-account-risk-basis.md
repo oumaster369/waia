@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "An empty Expected suffix must keep the predecessor notionals. A non-empty suffix is structure-only until exposure is recomputed. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "Enforcement suffix events now recompute reservation and pending. Reconciled exposure stays unchanged. A matching fold still publishes nothing. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
