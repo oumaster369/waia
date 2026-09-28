@@ -690,12 +690,18 @@ export function authenticateExpectedEventSuffixV1(input: {
   if (input.events.length > input.declaredMaxEvents) refuse("SUFFIX_WORK_LIMIT");
   let expectedSequence = sequence(input.predecessorNextEventSequence);
   let previous = input.predecessorHeadDigest;
-  if (previous !== null) riskAccountDigestSchemaV1.parse(previous);
+  const seenDigests = new Set<string>();
+  if (previous !== null) {
+    riskAccountDigestSchemaV1.parse(previous);
+    seenDigests.add(previous);
+  }
   for (const event of input.events) {
     if (sequence(event.sequence) !== expectedSequence) refuse("EXPECTED_SEQUENCE");
     if (event.previousDigest !== previous) refuse("EXPECTED_SEQUENCE");
     if (event.previousDigest !== null) riskAccountDigestSchemaV1.parse(event.previousDigest);
     riskAccountDigestSchemaV1.parse(event.contentDigest);
+    if (seenDigests.has(event.contentDigest)) refuse("EXPECTED_SEQUENCE");
+    seenDigests.add(event.contentDigest);
     previous = event.contentDigest;
     expectedSequence += 1n;
   }

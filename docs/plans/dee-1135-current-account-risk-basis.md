@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "An open terminal row cannot carry an order. Only consumption binds an order. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "Each suffix event digest must be new. A digest that repeats the predecessor or an earlier event is refused. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null

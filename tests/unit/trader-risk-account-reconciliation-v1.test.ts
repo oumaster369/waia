@@ -491,6 +491,12 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       events: [{ sequence: "1", previousDigest: null, contentDigest: head }],
       terminalHeadDigest: head, terminalNextEventSequence: "2", declaredMaxEvents: 4, predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0", terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
     }).eventCount).toBe(1);
+    const second = digest("suffix-event-2");
+    expect(() => authenticateExpectedEventSuffixV1({
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1",
+      events: [{ sequence: "1", previousDigest: null, contentDigest: head }, { sequence: "2", previousDigest: head, contentDigest: second }, { sequence: "3", previousDigest: second, contentDigest: head }],
+      terminalHeadDigest: head, terminalNextEventSequence: "4", declaredMaxEvents: 4, predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0", terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => authenticateExpectedEventSuffixV1({
       predecessorHeadDigest: null, predecessorNextEventSequence: "1",
       events: [{ sequence: "2", previousDigest: null, contentDigest: head }],
