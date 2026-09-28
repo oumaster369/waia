@@ -774,7 +774,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   terminalPendingExposureNotional: string;
   terminalReservationNotional: string;
   terminalStateVersion: string;
-  terminalOpenAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; riskVerdictId: string; boundOrderId: null; boundOrderDigestHex: null }[];
+  terminalOpenAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; riskVerdictId: string; boundOrderId: null; boundOrderDigestHex: null; truthRecordId: null }[];
   terminalConsumedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; riskVerdictId: string; boundOrderId: string; boundOrderDigestHex: string; truthRecordId: string | null }[];
   organizationId: string;
   accountId: string;
@@ -915,7 +915,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   const listed = new Map<string, { reserved: bigint; quantity: bigint; verdict: string }>();
   for (const row of input.terminalOpenAllowances) {
     if (!row.allowanceId || !row.riskVerdictId || listed.has(row.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
-    if (row.boundOrderId !== null || row.boundOrderDigestHex !== null) refuse("EXPECTED_STATE");
+    if (row.boundOrderId !== null || row.boundOrderDigestHex !== null || row.truthRecordId !== null) refuse("EXPECTED_STATE");
     listed.set(row.allowanceId, { reserved: nonnegative(row.reservedExposureNotional), quantity: positiveQuantity(row.quantity), verdict: row.riskVerdictId });
   }
   if (listed.size !== open.size) refuse("EXPECTED_OBLIGATION_IDENTITY");

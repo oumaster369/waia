@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "The terminal consumed list must repeat the inclusion answer. Hiding a held inclusion is refused. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "An open terminal row cannot name an inclusion. Only a consumed row can. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
