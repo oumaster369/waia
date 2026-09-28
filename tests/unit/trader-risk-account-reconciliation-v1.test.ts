@@ -3,7 +3,7 @@ import { createRealityProjectionV2, type RealityProjectionEntryV2 } from "@/lib/
 import { createRiskAccountProfileV1, createRiskAccountReferenceV1, riskAccountDigestV1,
   RISK_ACCOUNT_CHANNELS_V1, RISK_REFERENCE_METHOD_V1, sealRiskAccountRecordV1,
   type RiskAccountProfileDraftV1, type RiskReferenceMemberV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
-import { availableRiskAccountQuantityV1, constructRiskAccountBasisV1,
+import { availableRiskAccountQuantityV1, constructRiskAccountBasisV1, decideCurrentAccountBasisPublicationV1,
   type RiskAccountObligationV1, type RiskExpectedFrontierV1, type RiskIndependentInclusionV1 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
 
 // These pure values exercise arithmetic and refusal contracts only. No persisted authority,
@@ -155,5 +155,11 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       .toThrow("REFERENCE_DRIFT_WITH_OBLIGATIONS");
     expect(() => constructRiskAccountBasisV1({ ...input, predecessor: prior,
       expected: { ...expected, reconciledExposureNotional: "0" } })).toThrow("PREDECESSOR_SCOPE_OR_TIME");
+  });
+  it("refuses basis publication while the live capital envelope producer is absent", () => {
+    expect(decideCurrentAccountBasisPublicationV1({ liveCapitalEnvelope: null, sourceMethodQualified: false }))
+      .toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+    expect(decideCurrentAccountBasisPublicationV1({ liveCapitalEnvelope: null, sourceMethodQualified: true }))
+      .toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
   });
 });
