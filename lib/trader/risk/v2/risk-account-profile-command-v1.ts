@@ -351,21 +351,36 @@ export async function revokeStoredProfileAuthorityV1(
   throw new RiskCurrentAccountRefusedV1("PROFILE_AUTHORITY_ABSENT");
 }
 
-/** An open proposal plus an observed frontier still cannot issue an allowance or an order. */
+/** An open proposal plus an observed frontier still cannot issue an allowance or an order.
+ *  A caller-supplied publication flag is not authority.
+ */
 export function admitOpenProfileFrontierV1(input: {
   storedAction: "PROPOSE" | "CANCEL" | "REVOKE" | "CONFIRM" | "ACTIVATE" | "ABSENT";
+  observed: {
+    decision: string;
+    publication: { decision: string; reason: string };
+    exposureDelta: string;
+    pendingDelta: string;
+  };
 }): {
   decision: "REFUSED";
   reason: "LIVE_CAPITAL_ENVELOPE_ABSENT";
   allowanceId: null;
   orderId: null;
+  exposureDelta: string;
+  pendingDelta: string;
 } {
   if (input.storedAction !== "PROPOSE")
     throw new RiskCurrentAccountRefusedV1("PROFILE_PROPOSAL_NOT_OPEN");
+  if (input.observed.decision !== "OBSERVED")
+    throw new RiskCurrentAccountRefusedV1("EXPECTED_FRONTIER_UNOBSERVED");
+  void input.observed.publication;
   return {
     decision: "REFUSED",
     reason: "LIVE_CAPITAL_ENVELOPE_ABSENT",
     allowanceId: null,
     orderId: null,
+    exposureDelta: input.observed.exposureDelta,
+    pendingDelta: input.observed.pendingDelta,
   };
 }

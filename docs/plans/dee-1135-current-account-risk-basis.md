@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "An open profile proposal cannot issue an allowance from an observed frontier. A cancelled proposal is not an open issuer. Do not mark WP-1 complete."
+  nextAction: "An observed frontier is required to refuse issuance, and a caller publication flag is ignored. Do not mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

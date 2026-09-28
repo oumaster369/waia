@@ -428,10 +428,21 @@ describe("current-account pure arithmetic and refusal values, without durable ad
   });
 
   it("refuses to issue from an open profile proposal", () => {
-    expect(admitOpenProfileFrontierV1({ storedAction: "PROPOSE" })).toEqual({
-      decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
+    const observed = observeSealedExpectedFrontierV1({
+      expected: { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
     });
-    expect(() => admitOpenProfileFrontierV1({ storedAction: "CANCEL" })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(admitOpenProfileFrontierV1({ storedAction: "PROPOSE", observed })).toEqual({
+      decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
+      exposureDelta: "2", pendingDelta: "-1",
+    });
+    expect(admitOpenProfileFrontierV1({
+      storedAction: "PROPOSE", observed: { ...observed, publication: { decision: "PUBLISHED", reason: "OK" } },
+    })).toEqual({
+      decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
+      exposureDelta: "2", pendingDelta: "-1",
+    });
+    expect(() => admitOpenProfileFrontierV1({ storedAction: "CANCEL", observed })).toThrow(RiskCurrentAccountRefusedV1);
   });
 
 });

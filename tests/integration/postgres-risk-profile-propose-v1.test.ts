@@ -126,8 +126,10 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
         where account_id = ${accountId} order by event_sequence`;
       expect(afterRepeat.map(row => row.action)).toEqual(["PROPOSE", "CANCEL", "PROPOSE"]);
       const stored = await readStoredProfileAuthorityV1(sql, org!.id, accountId);
-      expect(admitOpenProfileFrontierV1({ storedAction: stored.action })).toEqual({
+      const observed = { decision: "OBSERVED", publication: { decision: "PUBLISHED", reason: "OK" }, exposureDelta: "2", pendingDelta: "-1" };
+      expect(admitOpenProfileFrontierV1({ storedAction: stored.action, observed })).toEqual({
         decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
+        exposureDelta: "2", pendingDelta: "-1",
       });
       const [after] = await sql<{ allowances: number; orders: number; current_rows: number }[]>`select
         (select count(*)::int from trader_risk_allowances_v2) as allowances,
