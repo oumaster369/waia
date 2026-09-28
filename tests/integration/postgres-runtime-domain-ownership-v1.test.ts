@@ -64,9 +64,9 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
   const fixture = (options: Parameters<typeof seedSavedDomainApplicationNative>[3] = {}) => seedSavedDomainApplicationNative(client, organizationId, userId, options);
   const run = (input: SavedApplicationRequest) => runSavedDomainApplication(client, { organizationId }, input);
   const records = (table: string) => client.unsafe(`select to_jsonb(t) value from ${table} t where organization_id=$1::uuid order by to_jsonb(t)::text`, [organizationId]);
-  const claim = (kind: "saved" | "acquisition", durationMs = 3000) => db().transaction(tx => kind === "saved"
-    ? claimSavedResearchWithinHeldTransactionV1(tx, { organizationId, runtimeInstanceId: randomUUID(), durationMs })
-    : claimRecordedAcquisitionWithinHeldTransactionV1(tx, { organizationId, runtimeInstanceId: randomUUID(), durationMs }));
+  const claim = (kind: "saved" | "acquisition", durationMs = 3000) => db().transaction(async tx => kind === "saved"
+    ? await claimSavedResearchWithinHeldTransactionV1(tx, { organizationId, runtimeInstanceId: randomUUID(), durationMs }, new HeldResearchAccounting().noncapitalControls)
+    : await claimRecordedAcquisitionWithinHeldTransactionV1(tx, { organizationId, runtimeInstanceId: randomUUID(), durationMs }));
   const capital = () => records("trader_runtime_control_lease_heads_v2");
   async function counts() { return Promise.all(applicationTables.map(async table => Number((await client.unsafe(`select count(*)::int n from ${table} where organization_id=$1::uuid`, [organizationId]))[0]!.n))); }
   async function savedCompletion(sequence: number) { return client`select * from trader_research_understanding_completions_v1 where organization_id=${organizationId}::uuid and source_sequence=${sequence}`; }
@@ -187,13 +187,13 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
     const successor = await claim(domain, 3000); expect(successor?.leaseEpoch).toBe(first!.leaseEpoch + 1);
     if (domain === "saved") await expect(db().transaction(async tx => {
       await lockSavedResearchOrganizationV1(tx, organizationId);
-      return assertSavedResearchHolderWithinHeldTransactionV1(tx, first as NonNullable<Awaited<ReturnType<typeof claimSavedResearchWithinHeldTransactionV1>>>);
+      return assertSavedResearchHolderWithinHeldTransactionV1(tx, first as NonNullable<Awaited<ReturnType<typeof claimSavedResearchWithinHeldTransactionV1>>>, new HeldResearchAccounting().noncapitalControls);
     })).rejects.toThrow();
     expect(await capital()).toEqual([]);
   }, 15000);
   it("rejects a real claim whose deferred COMMIT crosses expiry and retains no head/history/reference", async () => {
     await expect(db().transaction(async tx => {
-      expect(await claimSavedResearchWithinHeldTransactionV1(tx, { organizationId, runtimeInstanceId: "expired-before-commit", durationMs: 500 })).not.toBeNull();
+      expect(await claimSavedResearchWithinHeldTransactionV1(tx, { organizationId, runtimeInstanceId: "expired-before-commit", durationMs: 500 }, new HeldResearchAccounting().noncapitalControls)).not.toBeNull();
       await tx.execute(sql`select pg_sleep(0.7)`);
     })).rejects.toThrow();
     expect(await records("trader_saved_research_lease_history_v1")).toEqual([]);

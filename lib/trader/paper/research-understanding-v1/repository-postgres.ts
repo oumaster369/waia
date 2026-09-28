@@ -155,6 +155,10 @@ export function createSavedResearchOwner(pool: postgres.Sql, suppliedContext: Or
  * one actual dispatch/input/deadline ledger. Old public APIs above stay legacy. */
 export function createSavedDomainResearchOwner(pool: postgres.Sql, suppliedContext: OrgContext, supplied: ResearchRequest) {
   const { context, request } = captureResearchCommand(pool, suppliedContext, supplied);
+  // Held replay accepts only the strict public selector. The captured definition
+  // remains private for assignment creation; subsequent reads pin its exact seal.
+  const replayRequest: ResearchRequest = { assignment: request.assignment, range: request.range, profile: "body" in request.profile
+    ? { id: request.profile.body.id, contentDigest: request.profile.body.contentDigest } : request.profile };
   const accounting = new HeldResearchAccounting();
   type Bound = ReturnType<ReturnType<typeof prepareHeldSavedDomainResearchReplay>["bindHeld"]>;
   let holder: SavedResearchHolderV1 | null = null, assignmentReady = false;
@@ -179,7 +183,7 @@ export function createSavedDomainResearchOwner(pool: postgres.Sql, suppliedConte
       for (let offset = 0; offset < request.range.count; offset++) {
         const sourceSequence = request.range.startSequence + offset;
         const inspected = await transaction("repeatable read read only", async bound => {
-          const replayed = await bound.replay(context, request, sourceSequence);
+          const replayed = await bound.replay(context, replayRequest, sourceSequence);
           if (replayed) return { replayed, observedAssignment: null };
           if (holder) return { replayed: null, observedAssignment: null };
           const saved = await readAssignment(bound.executor as WaiaPostgresDb, context, request, accounting.budget(LIMITS.inputAggregate));
@@ -202,7 +206,7 @@ export function createSavedDomainResearchOwner(pool: postgres.Sql, suppliedConte
               { domain: "SAVED_RESEARCH_V1", holder: selectedHolder, lifetime: accounting }, !inspected.observedAssignment));
             assignmentReady = true;
           }
-          const prepared = await transaction("repeatable read read only", bound => bound.prepareCompletion(context, request, sourceSequence));
+          const prepared = await transaction("repeatable read read only", bound => bound.prepareCompletion(context, replayRequest, sourceSequence));
           if (prepared.outcome === "REPLAYED") result = { outcome: prepared.outcome, completion: prepared.completion };
           else {
             const selectedHolder = holder;
