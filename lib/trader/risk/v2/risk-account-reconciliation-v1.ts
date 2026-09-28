@@ -733,7 +733,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   predecessorPendingExposureNotional: string;
   predecessorReservationNotional: string;
   openedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string }[];
-  closedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; disposition: "CONSUMED" | "RELEASED"; truthRecordId?: string | null }[];
+  closedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; disposition: "CONSUMED" | "RELEASED"; truthRecordId?: string | null }[];
   events: readonly {
     sequence: string;
     previousDigest: string | null;
@@ -752,6 +752,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   terminalPendingExposureNotional: string;
   terminalReservationNotional: string;
   terminalOpenAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string }[];
+  terminalConsumedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string }[];
   organizationId: string;
   accountId: string;
   declaredMaxEvents: number;
@@ -777,6 +778,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   let reservation = nonnegative(input.predecessorReservationNotional);
   let pending = nonnegative(input.predecessorPendingExposureNotional);
   const open = new Map<string, { reserved: bigint; quantity: bigint }>();
+  const consumed = new Map<string, { reserved: bigint; quantity: bigint }>();
   const closed = new Set<string>();
   const positiveQuantity = (value: string) => {
     const quantity = nonnegative(value);
@@ -795,8 +797,12 @@ export function foldExpectedEnforcementSuffixV1(input: {
     if (!prior.allowanceId || open.has(prior.allowanceId) || closed.has(prior.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
     if (prior.disposition !== "CONSUMED" && prior.disposition !== "RELEASED") refuse("EXPECTED_STATE");
     const reserved = nonnegative(prior.reservedExposureNotional);
+    const quantity = positiveQuantity(prior.quantity);
     closed.add(prior.allowanceId);
-    if (prior.disposition === "CONSUMED") explainedPending += reserved;
+    if (prior.disposition === "CONSUMED") {
+      consumed.set(prior.allowanceId, { reserved, quantity });
+      explainedPending += reserved;
+    }
   }
   if (explained !== reservation || explainedPending !== pending) refuse("EXPECTED_RESERVATION_SUM");
   const disposed = new Set<string>();
@@ -835,6 +841,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
       reservation -= reserved;
       if (event.type === "ALLOWANCE_CONSUMED") {
         pending += reserved;
+        consumed.set(event.allowanceId, { reserved, quantity });
         if (event.truthRecordId != null) {
           if (!riskAccountDigestSchemaV1.safeParse(event.truthRecordId).success || disposed.has(event.truthRecordId)) {
             refuse("INDEPENDENT_INCLUSION_IDENTITY");
@@ -859,6 +866,16 @@ export function foldExpectedEnforcementSuffixV1(input: {
   if (listed.size !== open.size) refuse("EXPECTED_OBLIGATION_IDENTITY");
   for (const [id, held] of open) {
     const row = listed.get(id);
+    if (row === undefined || row.reserved !== held.reserved || row.quantity !== held.quantity) refuse("EXPECTED_OBLIGATION_IDENTITY");
+  }
+  const listedConsumed = new Map<string, { reserved: bigint; quantity: bigint }>();
+  for (const row of input.terminalConsumedAllowances) {
+    if (!row.allowanceId || listedConsumed.has(row.allowanceId) || open.has(row.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
+    listedConsumed.set(row.allowanceId, { reserved: nonnegative(row.reservedExposureNotional), quantity: positiveQuantity(row.quantity) });
+  }
+  if (listedConsumed.size !== consumed.size) refuse("EXPECTED_OBLIGATION_IDENTITY");
+  for (const [id, held] of consumed) {
+    const row = listedConsumed.get(id);
     if (row === undefined || row.reserved !== held.reserved || row.quantity !== held.quantity) refuse("EXPECTED_OBLIGATION_IDENTITY");
   }
   return { decision: "AUTHENTICATED", eventCount: input.events.length, notionalsVerified: true, heldTruthRecordIds, currentPointer: null };
