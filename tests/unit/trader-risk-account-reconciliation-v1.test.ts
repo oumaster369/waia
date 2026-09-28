@@ -1,8 +1,9 @@
+import { decideRiskAccountProfileCommandV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
 import { classifyCurrentAccountRowV1 } from "@/lib/trader/risk/v2/risk-current-account-read-v1";
 import { describe, expect, it } from "vitest";
 import { createRealityProjectionV2, type RealityProjectionEntryV2 } from "@/lib/trader/reality/v2/contracts";
 import { createRiskAccountProfileV1, createRiskAccountReferenceV1, riskAccountDigestV1,
-  RISK_ACCOUNT_CHANNELS_V1, RISK_REFERENCE_METHOD_V1, sealRiskAccountRecordV1,
+  RISK_ACCOUNT_CHANNELS_V1, RISK_REFERENCE_METHOD_V1, RiskCurrentAccountRefusedV1, sealRiskAccountRecordV1,
   type RiskAccountProfileDraftV1, type RiskReferenceMemberV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import { availableRiskAccountQuantityV1, constructRiskAccountBasisV1, compareExpectedAccountFrontierV1,
   admitCurrentAccountBasisV1, decideCurrentAccountBasisPublicationV1, retainObservedFrontierV1,
@@ -196,6 +197,12 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     expect(classifyCurrentAccountRowV1({ basis_digest: "ab".repeat(32) })).toEqual({
       current: false, reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", basisDigest: "ab".repeat(32),
     });
+  });
+  it("keeps profile propose non-authoritative and refuses activation", () => {
+    expect(decideRiskAccountProfileCommandV1({ action: "PROPOSE", liveCapitalEnvelope: null })).toEqual({
+      decision: "NON_AUTHORITY", action: "PROPOSE", currentPointer: null, basisWrite: null, allowanceId: null, orderId: null,
+    });
+    expect(() => decideRiskAccountProfileCommandV1({ action: "ACTIVATE", liveCapitalEnvelope: null })).toThrow(RiskCurrentAccountRefusedV1);
   });
 
 });

@@ -6,6 +6,7 @@ import {
   retainObservedFrontierV1,
 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
 import { readCurrentAccountAuthorityV1 } from "@/lib/trader/risk/v2/risk-current-account-read-v1";
+import { gateCurrentAccountExecutionBindV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
 
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 const enabled =
@@ -53,6 +54,18 @@ describe.skipIf(!enabled)("current-account issue writes no authority", () => {
       expect(count!.n).toBe(0);
       expect(await readCurrentAccountAuthorityV1(sql, "00000000-0000-4000-8000-000000113501", "missing-account"))
         .toEqual({ current: false, reason: "NO_CURRENT_POINTER" });
+      const before = await sql`select
+        (select count(*)::int from trader_risk_allowances_v2) as allowances,
+        (select count(*)::int from trader_orders) as orders,
+        (select count(*)::int from trader_risk_account_current_v1) as current_rows,
+        (select count(*)::int from trader_risk_account_profile_events_v1) as events`;
+      expect(await gateCurrentAccountExecutionBindV1(sql, "00000000-0000-4000-8000-000000113501", "missing-account"))
+        .toEqual({ decision: "REFUSED", reason: "NO_CURRENT_POINTER", bindInvoked: false });
+      expect(await sql`select
+        (select count(*)::int from trader_risk_allowances_v2) as allowances,
+        (select count(*)::int from trader_orders) as orders,
+        (select count(*)::int from trader_risk_account_current_v1) as current_rows,
+        (select count(*)::int from trader_risk_account_profile_events_v1) as events`).toEqual(before);
     } finally {
       await sql.end({ timeout: 5 });
     }
