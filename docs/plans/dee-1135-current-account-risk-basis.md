@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Suffix state version advances once per enforcement event, matching the existing account writer. A skipped version is refused. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "Each suffix event must name this account and the same state transition the enforcement writer already records. A foreign account or a mismatched transition is refused. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null

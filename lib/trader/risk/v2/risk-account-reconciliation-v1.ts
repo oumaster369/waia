@@ -721,6 +721,13 @@ export function authenticateExpectedEventSuffixV1(input: {
 }
 
 const ENFORCEMENT_SUFFIX_TYPES = ["ALLOWANCE_ISSUED", "ALLOWANCE_CONSUMED", "ALLOWANCE_REVOKED", "ALLOWANCE_EXPIRED", "CONSUMPTION_REFUSED"] as const;
+const ENFORCEMENT_TRANSITION = {
+  ALLOWANCE_ISSUED: { fromState: null, toState: "ISSUED" },
+  ALLOWANCE_CONSUMED: { fromState: "ISSUED", toState: "CONSUMED" },
+  ALLOWANCE_REVOKED: { fromState: "ISSUED", toState: "REVOKED" },
+  ALLOWANCE_EXPIRED: { fromState: "ISSUED", toState: "EXPIRED" },
+  CONSUMPTION_REFUSED: { fromState: "ISSUED", toState: "REVOKED" },
+} as const;
 
 /** Recomputes reservation and pending from the existing enforcement effects.
  *  These events do not change reconciled exposure. A match still publishes nothing.
@@ -740,6 +747,10 @@ export function foldExpectedEnforcementSuffixV1(input: {
     previousDigest: string | null;
     contentDigest: string;
     type: (typeof ENFORCEMENT_SUFFIX_TYPES)[number];
+    organizationId: string;
+    accountId: string;
+    fromState: "ISSUED" | "CONSUMED" | "REVOKED" | "EXPIRED" | null;
+    toState: "ISSUED" | "CONSUMED" | "REVOKED" | "EXPIRED" | null;
     allowanceId: string;
     reservedExposureNotional: string;
     quantity: string;
@@ -825,6 +836,9 @@ export function foldExpectedEnforcementSuffixV1(input: {
   let issued = 0n;
   for (const event of input.events) {
     if (!(ENFORCEMENT_SUFFIX_TYPES as readonly string[]).includes(event.type)) refuse("EXPECTED_STATE");
+    if (event.organizationId !== input.organizationId || event.accountId !== input.accountId) refuse("SUFFIX_SCOPE_MISMATCH");
+    const transition = ENFORCEMENT_TRANSITION[event.type];
+    if (event.fromState !== transition.fromState || event.toState !== transition.toState) refuse("EXPECTED_STATE");
     const reserved = nonnegative(event.reservedExposureNotional);
     if (!event.allowanceId) refuse("EXPECTED_OBLIGATION_IDENTITY");
     if (event.type !== "ALLOWANCE_CONSUMED" && event.truthRecordId != null) refuse("EXPECTED_STATE");
