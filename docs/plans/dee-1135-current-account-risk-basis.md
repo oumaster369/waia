@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A consumed, revoked, expired, or refused allowance cannot be issued again in the same suffix. The fold still publishes nothing. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "The suffix fold now starts from the predecessor open and closed allowances. A closed predecessor allowance cannot be reissued, and consuming an open one moves its reservation into pending. The fold still publishes nothing. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
