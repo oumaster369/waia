@@ -669,6 +669,19 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
       terminalStateVersion: "3",
     }).eventCount).toBe(2);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued, { sequence: "2", previousDigest: head, contentDigest: refusedHead, type: "CONSUMPTION_REFUSED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "REVOKED", allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, reasonCode: "ALLOWANCE_EXPIRED" }],
+      terminalHeadDigest: refusedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+      terminalStateVersion: "3",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    const expiredHead = digest("fold-expired");
+    expect(foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued, { sequence: "2", previousDigest: head, contentDigest: expiredHead, type: "ALLOWANCE_EXPIRED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "EXPIRED", allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, reasonCode: "ALLOWANCE_EXPIRED" }],
+      terminalHeadDigest: expiredHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+      terminalStateVersion: "3",
+    }).eventCount).toBe(2);
     const inclusion = digest("suffix-inclusion");
     const includedHead = digest("fold-included");
     const included = [issued, { sequence: "2", previousDigest: head, contentDigest: includedHead, type: "ALLOWANCE_CONSUMED" as const, organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED" as const, toState: "CONSUMED" as const, allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1"), reasonCode: null, truthRecordId: inclusion }];

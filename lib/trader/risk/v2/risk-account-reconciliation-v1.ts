@@ -859,6 +859,8 @@ export function foldExpectedEnforcementSuffixV1(input: {
     if (event.fromState !== transition.fromState || event.toState !== transition.toState) refuse("EXPECTED_STATE");
     const reasonRequired = event.type === "ALLOWANCE_REVOKED" || event.type === "ALLOWANCE_EXPIRED" || event.type === "CONSUMPTION_REFUSED";
     if (reasonRequired ? !event.reasonCode : event.reasonCode !== null) refuse("EXPECTED_STATE");
+    if (event.type === "ALLOWANCE_EXPIRED" && event.reasonCode !== "ALLOWANCE_EXPIRED") refuse("EXPECTED_STATE");
+    if (event.type === "CONSUMPTION_REFUSED" && event.reasonCode === "ALLOWANCE_EXPIRED") refuse("EXPECTED_STATE");
     const reserved = nonnegative(event.reservedExposureNotional);
     if (!event.allowanceId) refuse("EXPECTED_OBLIGATION_IDENTITY");
     if (event.type !== "ALLOWANCE_CONSUMED" && event.truthRecordId != null) refuse("EXPECTED_STATE");

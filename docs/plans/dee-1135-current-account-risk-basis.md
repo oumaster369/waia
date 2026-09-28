@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Each issued allowance takes a fresh verdict. A verdict already held by an open or consumed allowance is refused. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "Expiry uses the writer reason ALLOWANCE_EXPIRED. A consumption refusal cannot borrow that reason. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
