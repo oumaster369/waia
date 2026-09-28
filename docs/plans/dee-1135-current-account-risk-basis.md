@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "An Expected obligation whose symbol does not match its base asset is refused. A matching BTC/USDT obligation still publishes nothing. Do not invent caps or mark WP-1 complete."
+  nextAction: "The first Expected event cannot carry a head, and a later event cannot omit one. A consistent head still publishes nothing. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

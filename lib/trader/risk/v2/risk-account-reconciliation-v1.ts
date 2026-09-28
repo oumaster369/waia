@@ -541,6 +541,7 @@ export function observeSealedExpectedFrontierV1(input: {
     nextEvent < sequence(predecessor.nextEventSequence)
   )) refuse("PREDECESSOR_SCOPE_OR_TIME");
   if (expected.eventHeadDigest !== null) riskAccountDigestSchemaV1.parse(expected.eventHeadDigest);
+  if ((nextEvent === 1n) !== (expected.eventHeadDigest === null)) refuse("EXPECTED_SEQUENCE");
   const allowanceIds = new Set<string>();
   const orderIds = new Set<string>();
   let reservations = 0n, consumedPending = 0n;
