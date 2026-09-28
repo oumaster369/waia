@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { describe, expect, it } from "vitest";
-import { retainProposedRiskAccountProfileV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
+import { readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, retainProposedRiskAccountProfileV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
+import { RiskCurrentAccountRefusedV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import {
   createRiskAccountProfileV1,
   riskAccountDigestV1,
@@ -79,6 +80,13 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
       const [event] = await sql<{ action: string; n: number }[]>`select action, count(*)::int n
         from trader_risk_account_profile_events_v1 where account_id = ${accountId} group by action`;
       expect(event).toEqual({ action: "PROPOSE", n: 1 });
+      expect(await readStoredProfileAuthorityV1(sql, org!.id, accountId)).toEqual({
+        action: "PROPOSE", authority: "NONE", currentPointer: null, allocationCopied: false,
+      });
+      await expect(refuseStoredProfileActivationV1(sql, { organizationId: org!.id, accountId, action: "ACTIVATE" })).rejects.toBeInstanceOf(RiskCurrentAccountRefusedV1);
+      const [still] = await sql<{ action: string; n: number }[]>`select action, count(*)::int n
+        from trader_risk_account_profile_events_v1 where account_id = ${accountId} group by action`;
+      expect(still).toEqual({ action: "PROPOSE", n: 1 });
       const [after] = await sql<{ allowances: number; orders: number; current_rows: number }[]>`select
         (select count(*)::int from trader_risk_allowances_v2) as allowances,
         (select count(*)::int from trader_orders) as orders,

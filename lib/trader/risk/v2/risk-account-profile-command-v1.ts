@@ -124,3 +124,49 @@ export async function retainProposedRiskAccountProfileV1(
     orderId: null,
   };
 }
+
+const STORED_PROFILE_ACTIONS = ["PROPOSE", "CANCEL", "REVOKE", "CONFIRM", "ACTIVATE"] as const;
+
+/** A stored profile, including its allocation figure, never becomes trading authority. */
+export async function readStoredProfileAuthorityV1(
+  sql: postgres.Sql,
+  organizationId: string,
+  accountId: string,
+): Promise<{
+  action: (typeof STORED_PROFILE_ACTIONS)[number] | "ABSENT";
+  authority: "NONE";
+  currentPointer: null;
+  allocationCopied: false;
+}> {
+  const [row] = await sql<{ action: string; approved_notional: string | null }[]>`
+    select e.action, p.body_text::jsonb #>> '{allocation,approvedNotional}' as approved_notional
+    from trader_risk_account_profile_events_v1 e
+    join trader_risk_account_profiles_v1 p
+      on p.organization_id = e.organization_id
+     and p.account_id = e.account_id
+     and p.content_digest = e.profile_digest
+    where e.organization_id = ${organizationId}::uuid and e.account_id = ${accountId}
+    order by e.event_sequence desc
+    limit 1`;
+  void row?.approved_notional;
+  const action = row?.action;
+  if (!(STORED_PROFILE_ACTIONS as readonly string[]).includes(action ?? "")) {
+    return { action: "ABSENT", authority: "NONE", currentPointer: null, allocationCopied: false };
+  }
+  return {
+    action: action as (typeof STORED_PROFILE_ACTIONS)[number],
+    authority: "NONE",
+    currentPointer: null,
+    allocationCopied: false,
+  };
+}
+
+/** Reads the stored proposal, then refuses confirmation or activation without appending an event. */
+export async function refuseStoredProfileActivationV1(
+  sql: postgres.Sql,
+  input: { organizationId: string; accountId: string; action: "CONFIRM" | "ACTIVATE" },
+): Promise<never> {
+  await readStoredProfileAuthorityV1(sql, input.organizationId, input.accountId);
+  decideRiskAccountProfileCommandV1({ action: input.action, liveCapitalEnvelope: null });
+  throw new RiskCurrentAccountRefusedV1("LIVE_CAPITAL_ENVELOPE_ABSENT");
+}
