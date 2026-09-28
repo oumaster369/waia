@@ -131,10 +131,17 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
         decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
         exposureDelta: "2", pendingDelta: "-1",
       });
-      const suffix = { decision: "AUTHENTICATED" as const, notionalsVerified: true, currentPointer: null };
+      const suffix = {
+        predecessorHeadDigest: null, predecessorNextEventSequence: "1", predecessorNextAdmissionSequence: "1",
+        predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0",
+        openedAllowances: [], closedAllowances: [], alreadyDisposedTruthIds: [], events: [],
+        terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
+        terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+        declaredMaxEvents: 4,
+      };
       await expect(refuseProfileBackedExecutionV1(sql, {
-        organizationId: org!.id, accountId, observed, suffix: { ...suffix, notionalsVerified: false },
-      })).rejects.toThrow(/SUFFIX_NOTIONALS_UNVERIFIED/);
+        organizationId: org!.id, accountId, observed, suffix: { ...suffix, terminalReconciledExposureNotional: "1" },
+      })).rejects.toThrow(/SUFFIX_TERMINAL_MISMATCH/);
       expect(await refuseProfileBackedExecutionV1(sql, { organizationId: org!.id, accountId, observed, suffix })).toEqual({
         issue: { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null, exposureDelta: "2", pendingDelta: "-1" },
         bind: { decision: "REFUSED", reason: "NO_CURRENT_POINTER", bindInvoked: false },

@@ -10,6 +10,9 @@ import {
   readCurrentAccountAuthorityV1,
   type CurrentAccountAuthorityV1,
 } from "@/lib/trader/risk/v2/risk-current-account-read-v1";
+import { foldExpectedEnforcementSuffixV1 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
+
+type FoldedSuffixInputV1 = Parameters<typeof foldExpectedEnforcementSuffixV1>[0];
 
 const NON_AUTHORITY_ACTIONS = ["PROPOSE", "CANCEL", "REVOKE"] as const;
 const ACTIVATION_ACTIONS = ["CONFIRM", "ACTIVATE"] as const;
@@ -389,13 +392,12 @@ export function admitOpenProfileFrontierV1(input: {
 export function admitFoldedSuffixV1(input: {
   storedAction: Parameters<typeof admitOpenProfileFrontierV1>[0]["storedAction"];
   observed: Parameters<typeof admitOpenProfileFrontierV1>[0]["observed"];
-  suffix: { decision: "AUTHENTICATED"; notionalsVerified: boolean; currentPointer: null };
+  suffix: FoldedSuffixInputV1;
 }): ReturnType<typeof admitOpenProfileFrontierV1> {
-  if (input.suffix.decision !== "AUTHENTICATED" || input.suffix.currentPointer !== null) {
-    throw new RiskCurrentAccountRefusedV1("EXPECTED_FRONTIER_UNOBSERVED");
-  }
-  if (!input.suffix.notionalsVerified)
+  const folded = foldExpectedEnforcementSuffixV1(input.suffix);
+  if (!folded.notionalsVerified || folded.currentPointer !== null) {
     throw new RiskCurrentAccountRefusedV1("SUFFIX_NOTIONALS_UNVERIFIED");
+  }
   const issue = admitOpenProfileFrontierV1({
     storedAction: input.storedAction,
     observed: input.observed,
@@ -413,7 +415,7 @@ export async function refuseProfileBackedExecutionV1(
     organizationId: string;
     accountId: string;
     observed: Parameters<typeof admitOpenProfileFrontierV1>[0]["observed"];
-    suffix: { decision: "AUTHENTICATED"; notionalsVerified: boolean; currentPointer: null };
+    suffix: FoldedSuffixInputV1;
   },
 ): Promise<{
   issue:
@@ -426,11 +428,8 @@ export async function refuseProfileBackedExecutionV1(
       };
   bind: Awaited<ReturnType<typeof gateCurrentAccountExecutionBindV1>>;
 }> {
-  if (
-    input.suffix.decision !== "AUTHENTICATED" ||
-    input.suffix.currentPointer !== null ||
-    !input.suffix.notionalsVerified
-  ) {
+  const folded = foldExpectedEnforcementSuffixV1(input.suffix);
+  if (!folded.notionalsVerified || folded.currentPointer !== null) {
     throw new RiskCurrentAccountRefusedV1("SUFFIX_NOTIONALS_UNVERIFIED");
   }
   const stored = await readStoredProfileAuthorityV1(sql, input.organizationId, input.accountId);
