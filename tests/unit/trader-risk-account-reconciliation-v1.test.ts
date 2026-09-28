@@ -73,6 +73,14 @@ function obligation(id: string, quantity: string, side: "BUY" | "SELL" = "SELL")
     instrumentIdentityDigest: digest("BTC/USDT"), symbol: "BTC/USDT", baseAsset: "BTC", side, quantity,
     reservedNotional: side === "BUY" ? "10" : "0", pendingNotional: "0", state: "ISSUED", orderId: null, orderBindingDigest: null };
 }
+function basisHolding(obligations: RiskAccountObligationV1[]) {
+  const input = fixture(), prior = constructRiskAccountBasisV1(input);
+  const reservation = obligations.reduce((sum, row) => sum + Number(row.reservedNotional), 0);
+  return constructRiskAccountBasisV1({ ...input, predecessor: prior, publishedAtUtc: time(3),
+    expected: { ...prior.expected, stateVersion: "2", nextAdmissionSequence: "2", nextEventSequence: "2",
+      eventHeadDigest: digest("held"), reconciledExposureNotional: prior.accounting.reconciledExposureNotional,
+      pendingExposureNotional: prior.externalDebtNotional, reservationNotional: String(reservation), obligations } });
+}
 
 describe("current-account pure arithmetic and refusal values, without durable admission authority", () => {
   it("charges the entire declared external positive window and independently reduces guaranteed inventory", () => {
@@ -103,22 +111,29 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     expect(() => constructRiskAccountBasisV1({ ...input, predecessor: prior, expected: prior.expected,
       reality: projection("2.1", "100", time(3)), publishedAtUtc: time(4) })).toThrow("STANDING_DIVERGENCE");
   });
-  it("charges other SELL obligations, ignores pending BUY as guaranteed inventory and exempts only the exact own SELL once", () => {
-    const basis = constructRiskAccountBasisV1(fixture()), own = obligation("own", "0.4"), other = obligation("other", "0.3");
-    const obligations = [own, other, obligation("buy", "100", "BUY")];
-    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations })).toBe("0.6");
-    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations,
-      own: { allowanceId: own.allowanceId, allowanceContentDigest: own.allowanceContentDigest,
-        orderId: null, quantity: "0.4" } })).toBe("1");
-    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations,
-      own: { allowanceId: "own", allowanceContentDigest: digest("forged"), orderId: null, quantity: "0.4" } })).toThrow("OWN_OBLIGATION_MISMATCH");
-    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations: [own, own] })).toThrow("DUPLICATE_OBLIGATION");
+  it("reads sealed obligations, exempts only the exact own SELL, and ignores a BUY as inventory", () => {
+    const own = obligation("own", "0.4"), sibling = obligation("sibling", "0.8");
+    const basis = basisHolding([own, sibling, obligation("buy", "100", "BUY")]);
+    const exact = { allowanceId: own.allowanceId, allowanceContentDigest: own.allowanceContentDigest, orderId: null, quantity: "0.4" };
+    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC" })).toBe("0.1");
+    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC", own: exact })).toBe("0.5");
+    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC", own: exact })).toBe("0.5");
+    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC",
+      own: { ...exact, allowanceContentDigest: digest("forged") } })).toThrow("OWN_OBLIGATION_MISMATCH");
+    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC",
+      own: { ...exact, quantity: "0.1" } })).toThrow("OWN_OBLIGATION_MISMATCH");
+    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC",
+      own: { ...exact, orderId: "other-order" } })).toThrow("OWN_OBLIGATION_MISMATCH");
+    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC",
+      own: { allowanceId: "buy", allowanceContentDigest: digest("buy"), orderId: null, quantity: "100" } })).toThrow("OWN_OBLIGATION_MISSING");
   });
-  it("floors depleted inventory at zero and never exempts a sibling or nonexistent own identity", () => {
-    const basis = constructRiskAccountBasisV1(fixture());
-    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations: [obligation("other", "2")] })).toBe("0");
-    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations: [obligation("other", "1")],
-      own: { allowanceId: "missing", allowanceContentDigest: digest("missing"), orderId: null, quantity: "1" } })).toThrow("OWN_OBLIGATION_MISSING");
+  it("floors two competing reductions and still charges the sibling when one identity is rechecked", () => {
+    const basis = basisHolding([obligation("a", "0.8"), obligation("b", "0.8")]);
+    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC" })).toBe("0");
+    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC",
+      own: { allowanceId: "a", allowanceContentDigest: digest("a"), orderId: null, quantity: "0.8" } })).toBe("0.5");
+    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC",
+      own: { allowanceId: "missing", allowanceContentDigest: digest("missing"), orderId: null, quantity: "0.8" } })).toThrow("OWN_OBLIGATION_MISSING");
   });
   it("only releases the exact consumed charge after a matching independently settled fill and actual balance comparison", () => {
     const input = fixture(), prior = constructRiskAccountBasisV1(input);

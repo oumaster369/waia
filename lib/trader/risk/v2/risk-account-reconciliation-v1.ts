@@ -422,11 +422,11 @@ export function constructRiskAccountBasisV1(input: {
   });
 }
 
-/** Exact identity exception only: its own already counted obligation is not charged twice. */
+/** Exact identity exception only: its own already counted obligation is not charged twice.
+ *  Obligations come from the sealed basis. A caller cannot omit a sibling reduction. */
 export function availableRiskAccountQuantityV1(input: {
   basis: RiskAccountBasisV1;
   asset: string;
-  obligations: readonly RiskAccountObligationV1[];
   own?: {
     allowanceId: string;
     allowanceContentDigest: string;
@@ -440,7 +440,7 @@ export function availableRiskAccountQuantityV1(input: {
   let lower = nonnegative(asset.guaranteedLowerQuantity),
     ownMatched = false;
   const seen = new Set<string>();
-  for (const obligation of input.obligations) {
+  for (const obligation of input.basis.expected.obligations) {
     if (seen.has(obligation.allowanceId)) refuse("DUPLICATE_OBLIGATION");
     seen.add(obligation.allowanceId);
     if (obligation.side !== "SELL" || obligation.baseAsset !== input.asset) continue;

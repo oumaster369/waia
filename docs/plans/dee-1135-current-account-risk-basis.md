@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "The folded suffix must name the same open allowances it still holds. A reservation sum without those identities is refused. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "Available quantity reads the sealed basis obligations. A caller cannot drop a sibling reduction or borrow the own exception with a partial quantity. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
