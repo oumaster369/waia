@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A new allowance must advance the admission sequence. Reusing the old sequence for a new allowance is refused, and an advanced sequence still publishes nothing. Do not invent caps or mark WP-1 complete."
+  nextAction: "A profile proposal can be retained without a current pointer. The stored allocation figure is not an adopted cap. Do not activate it or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

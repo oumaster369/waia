@@ -1,5 +1,11 @@
 import type postgres from "postgres";
-import { RiskCurrentAccountRefusedV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
+import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
+import {
+  parseRiskAccountProfileV1,
+  riskAccountDigestV1,
+  RiskCurrentAccountRefusedV1,
+  type RiskAccountProfileV1,
+} from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
 import {
   readCurrentAccountAuthorityV1,
   type CurrentAccountAuthorityV1,
@@ -57,4 +63,64 @@ export async function gateCurrentAccountExecutionBindV1(
 }> {
   const authority = await readCurrentAccountAuthorityV1(sql, organizationId, accountId);
   return { decision: "REFUSED", reason: authority.reason, bindInvoked: false };
+}
+
+/** Stores a proposal only. The profile allocation is not copied into a current pointer, allowance, or order. */
+export async function retainProposedRiskAccountProfileV1(
+  sql: postgres.Sql,
+  input: { profile: RiskAccountProfileV1; actorId: string; auditId: string; commandId: string },
+): Promise<{
+  decision: "RETAINED_NON_AUTHORITY";
+  action: "PROPOSE";
+  profileDigest: string;
+  currentPointer: null;
+  allowanceId: null;
+  orderId: null;
+}> {
+  const command = decideRiskAccountProfileCommandV1({
+    action: "PROPOSE",
+    liveCapitalEnvelope: null,
+  });
+  if (command.action !== "PROPOSE" || command.currentPointer !== null) {
+    throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
+  }
+  const profile = parseRiskAccountProfileV1(input.profile);
+  const { contentDigest, ...profileBody } = profile;
+  const profileText = canonicalJsonString(profileBody);
+  if (contentDigest !== riskAccountDigestV1(profileBody))
+    throw new RiskCurrentAccountRefusedV1("PROFILE_SEAL");
+  const eventBody = {
+    schemaVersion: "risk-account-profile-event/v1" as const,
+    organizationId: profile.organizationId,
+    accountId: profile.accountId,
+    profileDigest: contentDigest,
+    action: "PROPOSE" as const,
+    actorId: input.actorId,
+    eventSequence: 1,
+    previousEventDigest: null,
+    commandId: input.commandId,
+  };
+  const eventText = canonicalJsonString(eventBody);
+  const eventDigest = riskAccountDigestV1(eventBody);
+  await sql.begin(async (tx) => {
+    await tx`insert into trader_risk_account_profiles_v1
+      (organization_id, account_id, content_digest, body_text, actor_id, audit_id)
+      values (${profile.organizationId}::uuid, ${profile.accountId}, ${contentDigest}, ${profileText}, ${input.actorId}::uuid, ${input.auditId}::uuid)`;
+    await tx`insert into trader_risk_account_profile_events_v1
+      (organization_id, account_id, content_digest, body_text, command_id, profile_digest, event_sequence, previous_event_digest, action, actor_id, audit_id)
+      values (${profile.organizationId}::uuid, ${profile.accountId}, ${eventDigest}, ${eventText}, ${input.commandId}::uuid, ${contentDigest}, 1, null, 'PROPOSE', ${input.actorId}::uuid, ${input.auditId}::uuid)`;
+    const [current] = await tx<
+      { n: number }[]
+    >`select count(*)::int n from trader_risk_account_current_v1
+      where organization_id = ${profile.organizationId}::uuid and account_id = ${profile.accountId}`;
+    if (current?.n !== 0) throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
+  });
+  return {
+    decision: "RETAINED_NON_AUTHORITY",
+    action: "PROPOSE",
+    profileDigest: contentDigest,
+    currentPointer: null,
+    allowanceId: null,
+    orderId: null,
+  };
 }
