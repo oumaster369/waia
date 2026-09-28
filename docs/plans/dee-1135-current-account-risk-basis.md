@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Each consumed order keeps a unique binding digest. A second order cannot reuse it. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "Predecessor allowances must name this account. A row from another account is refused. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null

@@ -746,8 +746,8 @@ export function foldExpectedEnforcementSuffixV1(input: {
   predecessorPendingExposureNotional: string;
   predecessorReservationNotional: string;
   predecessorStateVersion: string;
-  openedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; riskVerdictId: string }[];
-  closedAllowances: readonly { allowanceId: string; reservedExposureNotional: string; quantity: string; disposition: "CONSUMED" | "RELEASED"; riskVerdictId: string | null; boundOrderId: string | null; boundOrderDigestHex: string | null; truthRecordId?: string | null }[];
+  openedAllowances: readonly { organizationId: string; accountId: string; allowanceId: string; reservedExposureNotional: string; quantity: string; riskVerdictId: string }[];
+  closedAllowances: readonly { organizationId: string; accountId: string; allowanceId: string; reservedExposureNotional: string; quantity: string; disposition: "CONSUMED" | "RELEASED"; riskVerdictId: string | null; boundOrderId: string | null; boundOrderDigestHex: string | null; truthRecordId?: string | null }[];
   events: readonly {
     sequence: string;
     previousDigest: string | null;
@@ -813,6 +813,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   };
   let explained = 0n;
   for (const prior of input.openedAllowances) {
+    if (prior.organizationId !== input.organizationId || prior.accountId !== input.accountId) refuse("SUFFIX_SCOPE_MISMATCH");
     if (!prior.allowanceId || open.has(prior.allowanceId) || closed.has(prior.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
     const reserved = nonnegative(prior.reservedExposureNotional);
     if (!prior.riskVerdictId || verdictIds.has(prior.riskVerdictId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
@@ -822,6 +823,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
   }
   let explainedPending = 0n;
   for (const prior of input.closedAllowances) {
+    if (prior.organizationId !== input.organizationId || prior.accountId !== input.accountId) refuse("SUFFIX_SCOPE_MISMATCH");
     if (!prior.allowanceId || open.has(prior.allowanceId) || closed.has(prior.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
     if (prior.disposition !== "CONSUMED" && prior.disposition !== "RELEASED") refuse("EXPECTED_STATE");
     const reserved = nonnegative(prior.reservedExposureNotional);
