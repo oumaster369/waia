@@ -265,7 +265,40 @@ async function loginPosture(sql: Sql) {
     FROM pg_roles login WHERE login.rolname IN
     ('waia_account_observer_login','waia_account_observation_reader_login','waia_account_observation_credential_login') ORDER BY login.rolname`;
 }
+async function catalogPosture(sql: Sql) {
+  // Stable semantic catalog fields only: no row contents, sequence values or catalog OIDs.
+  return {
+    relations: await sql`SELECT n.nspname,c.relname,c.relkind,c.relrowsecurity,c.relforcerowsecurity,
+      c.relacl::text AS acl,pg_get_userbyid(c.relowner) AS owner FROM pg_class c
+      JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname NOT LIKE 'pg_%'
+      AND n.nspname<>'information_schema' ORDER BY n.nspname,c.relname,c.relkind`,
+    policies: await sql`SELECT schemaname,tablename,policyname,permissive,roles,cmd,qual,with_check
+      FROM pg_policies ORDER BY schemaname,tablename,policyname`,
+    triggers: await sql`SELECT n.nspname,c.relname,t.tgname,t.tgenabled,t.tgisinternal,
+      pg_get_triggerdef(t.oid) AS definition FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
+      JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname NOT LIKE 'pg_%'
+      AND n.nspname<>'information_schema' ORDER BY n.nspname,c.relname,t.tgname`,
+    functions: await sql`SELECT n.nspname,p.proname,pg_get_function_identity_arguments(p.oid) AS arguments,
+      pg_get_userbyid(p.proowner) AS owner,p.proacl::text AS acl,p.prosecdef,p.proconfig,
+      pg_get_functiondef(p.oid) AS definition FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname NOT LIKE 'pg_%' AND n.nspname<>'information_schema' AND p.prokind IN ('f','p')
+      ORDER BY n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)`,
+    schemas: await sql`SELECT nspname,nspacl::text AS acl,pg_get_userbyid(nspowner) AS owner
+      FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname<>'information_schema' ORDER BY nspname`,
+    defaults: await sql`SELECT pg_get_userbyid(d.defaclrole) AS role,n.nspname,d.defaclobjtype,d.defaclacl::text AS acl
+      FROM pg_default_acl d LEFT JOIN pg_namespace n ON n.oid=d.defaclnamespace
+      ORDER BY pg_get_userbyid(d.defaclrole),n.nspname,d.defaclobjtype`,
+    constraints: await sql`SELECT n.nspname,COALESCE(c.relname,ty.typname) AS relation,k.conname,k.contype,
+      k.condeferrable,k.condeferred,k.convalidated,k.connoinherit,pg_get_constraintdef(k.oid,true) AS definition
+      FROM pg_constraint k JOIN pg_namespace n ON n.oid=k.connamespace LEFT JOIN pg_class c ON c.oid=k.conrelid
+      LEFT JOIN pg_type ty ON ty.oid=k.contypid WHERE n.nspname NOT LIKE 'pg_%' AND n.nspname<>'information_schema'
+      ORDER BY n.nspname,COALESCE(c.relname,ty.typname),k.conname`,
+    indexes: await sql`SELECT schemaname,tablename,indexname,tablespace,indexdef FROM pg_indexes
+      WHERE schemaname NOT LIKE 'pg_%' AND schemaname<>'information_schema' ORDER BY schemaname,tablename,indexname`,
+  };
+}
 let initialPosture: Awaited<ReturnType<typeof loginPosture>>;
+let initialCatalog: Awaited<ReturnType<typeof catalogPosture>>;
 
 describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational owner", () => {
   beforeAll(async () => {
@@ -324,6 +357,8 @@ describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational
           receipt("actual-runtime-probe", { purpose, login, pid: client.pid });
         } finally { await close(client); }
       }
+      initialCatalog = await catalogPosture(owner.sql);
+      receipt("catalog-posture-before", { digest: hash(canonicalJsonString(initialCatalog)), catalog: initialCatalog });
     } finally { await close(root); }
     controller = await connect(adminUrl, "controller");
     actorId = randomUUID(); auditId = randomUUID(); sourceId = randomUUID();
@@ -343,6 +378,11 @@ describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational
   });
   afterAll(async () => {
     try {
+      if (initialCatalog && owner && !owner.closed) {
+        const finalCatalog = await catalogPosture(owner.sql);
+        receipt("catalog-posture-after", { digest: hash(canonicalJsonString(finalCatalog)), catalog: finalCatalog });
+        expect(finalCatalog).toEqual(initialCatalog);
+      }
       if (initialPosture && owner && !owner.closed) {
         const finalPosture = await loginPosture(owner.sql); receipt("preserved-login-posture", finalPosture);
         expect(finalPosture).toEqual(initialPosture);
