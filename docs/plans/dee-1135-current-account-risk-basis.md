@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Author exactly five C01 baseline native schedules beside the unchanged ten acquisition cases, preserving production and 39+11 registrations; freeze source/checks and a whole-file15 runner for independent review before any separate database admission."
+  nextAction: "Five C01 baseline schedules are authored beside the unchanged ten acquisition cases; await independent source review plus a separate fresh-database native grant. Do not treat this as WP-1 complete or as native execution."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -365,4 +365,4 @@ The five schedules are initial bind across allowance-only expiry, exact unsubmit
 
 This phase supplies baseline observations and exact classifications, not a production correction. Expired-before-start binder refusal rolls back Risk's tentative expiry/release within its outer transaction, unlike the standalone Risk refusal owner. Exact replay must not transfer accounting twice. The positive case must call only an inert counter once and refuse already-started repeat dispatch. Invalid timing or missing server wait is a harness/inconclusive failure, never a reproduced defect. Preserve observed rows and clients; separately reviewed whole225-chain/fresh database runner and one root native grant precede any run. Production repair and later Expected/issuer/currentness slices remain ungranted.
 
-Current source stays on its known accepted828 integration; remotely accepted4a69 is not silently merged or treated as locally synchronized. Only scoped non-DB source checks may run after explicit LOCALHEAVY handoff. No database, native, host, credentials, activation, push or PR permission follows this source admission.
+This session explicitly merged `origin/main` `4a69df9d` (DEE-1137) into the worktree branch; merge parents include `c77effea` and `4a69df9d`. Five C01 schedules are now authored in `tests/integration/postgres-risk-account-reconciliation-v1.test.ts` beside the unchanged ten acquisition bodies (prospective whole-file15). WP-1 remains incomplete; no native/database execution is claimed. Only scoped non-DB source checks may run after explicit LOCALHEAVY handoff. No database, native, host, credentials, activation, push or PR permission follows this source admission.
