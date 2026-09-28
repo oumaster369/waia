@@ -764,7 +764,7 @@ export function foldExpectedEnforcementSuffixV1(input: {
     boundOrderId: string | null;
     boundOrderDigestHex: string | null;
     reasonCode: string | null;
-    truthRecordId?: string | null;
+    truthRecordId: string | null;
   }[];
   alreadyDisposedTruthIds: readonly string[];
   terminalHeadDigest: string | null;
@@ -868,7 +868,8 @@ export function foldExpectedEnforcementSuffixV1(input: {
     if (event.type === "CONSUMPTION_REFUSED" && event.reasonCode === "ALLOWANCE_EXPIRED") refuse("EXPECTED_STATE");
     const reserved = nonnegative(event.reservedExposureNotional);
     if (!event.allowanceId) refuse("EXPECTED_OBLIGATION_IDENTITY");
-    if (event.type !== "ALLOWANCE_CONSUMED" && event.truthRecordId != null) refuse("EXPECTED_STATE");
+    if (event.truthRecordId === undefined) refuse("EXPECTED_STATE");
+    if (event.type !== "ALLOWANCE_CONSUMED" && event.truthRecordId !== null) refuse("EXPECTED_STATE");
     if (event.type === "ALLOWANCE_ISSUED") {
       if (open.has(event.allowanceId) || closed.has(event.allowanceId)) refuse("EXPECTED_OBLIGATION_IDENTITY");
       if (!event.riskVerdictId || event.boundOrderId !== null || event.boundOrderDigestHex !== null) refuse("EXPECTED_STATE");
