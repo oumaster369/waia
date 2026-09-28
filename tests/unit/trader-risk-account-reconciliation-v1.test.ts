@@ -494,6 +494,12 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
     })).toThrow(RiskCurrentAccountRefusedV1);
+    const refusedHead = digest("fold-refused");
+    expect(foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued, { sequence: "2", previousDigest: head, contentDigest: refusedHead, type: "CONSUMPTION_REFUSED", allowanceId: "allow-1", reservedExposureNotional: "10" }],
+      terminalHeadDigest: refusedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+    }).eventCount).toBe(2);
   });
 
 });

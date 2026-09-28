@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Enforcement suffix events now recompute reservation and pending. Reconciled exposure stays unchanged. A matching fold still publishes nothing. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "A refused consumption releases reservation and does not add pending. The fold still publishes nothing. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null

@@ -720,7 +720,7 @@ export function authenticateExpectedEventSuffixV1(input: {
   return { decision: "AUTHENTICATED", eventCount: input.events.length, notionalsVerified, currentPointer: null };
 }
 
-const ENFORCEMENT_SUFFIX_TYPES = ["ALLOWANCE_ISSUED", "ALLOWANCE_CONSUMED", "ALLOWANCE_REVOKED", "ALLOWANCE_EXPIRED"] as const;
+const ENFORCEMENT_SUFFIX_TYPES = ["ALLOWANCE_ISSUED", "ALLOWANCE_CONSUMED", "ALLOWANCE_REVOKED", "ALLOWANCE_EXPIRED", "CONSUMPTION_REFUSED"] as const;
 
 /** Recomputes reservation and pending from the existing enforcement effects.
  *  These events do not change reconciled exposure. A match still publishes nothing.
