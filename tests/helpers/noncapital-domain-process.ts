@@ -26,6 +26,9 @@ const acquisitionObservationalImports = [
   "lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1.ts",
   "lib/trader/intelligence/evaluation-cycle.ts",
   "lib/trader/execution/v2/execution-admission-proof-v2.ts",
+  "lib/trader/execution/order-repository.types.ts",
+  "lib/trader/execution/cost-model.ts",
+  "lib/trader/execution/htr-historical-cost-model-authority.ts",
 ];
 async function main() {
   if (input.route !== "saved" && input.route !== "acquisition") throw new Error("DOMAIN_TEST_ROUTE_INVALID");

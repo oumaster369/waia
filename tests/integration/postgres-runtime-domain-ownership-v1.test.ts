@@ -136,7 +136,9 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
     for (const table of receiptTables.slice(0, 4)) { const rows = await records(table); expect(rows).toHaveLength(1); expect(rows[0]!.value.ownership_domain).toBe("RECORDED_ACQUISITION_V1"); }
     expect(await capital()).toEqual(before); expect(await Promise.all(authorityTables.map(records))).toEqual(authorityBefore);
     expect(event.observationalImports.sort()).toEqual(["lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1.ts",
-      "lib/trader/intelligence/evaluation-cycle.ts", "lib/trader/execution/v2/execution-admission-proof-v2.ts"].sort());
+      "lib/trader/intelligence/evaluation-cycle.ts", "lib/trader/execution/v2/execution-admission-proof-v2.ts",
+      "lib/trader/execution/order-repository.types.ts", "lib/trader/execution/cost-model.ts",
+      "lib/trader/execution/htr-historical-cost-model-authority.ts"].sort());
     expect(event.transport).toHaveLength(8); expect(event.transport.every(t => t.method === "GET" && t.host === "api.huobi.pro" && !t.authenticated)).toBe(true);
     const [cycle] = await records(receiptTables[0]!); expect(JSON.parse(cycle!.value.canonical_json).result.status).toBe("NO_TRADE");
     const [companion] = await records(receiptTables[3]!); const output = JSON.parse(companion!.value.body_json).output;
@@ -407,7 +409,9 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
     const refs = await client`select conname,convalidated,condeferrable,pg_get_constraintdef(oid) definition from pg_constraint
       where conname like 'noncapital_receipt_holder_%' or conname like 'noncapital_affinity_%' order by conname`;
     expect(refs.filter(row => row.conname.startsWith("noncapital_receipt_holder_"))).toHaveLength(10);
-    expect(refs.filter(row => row.conname.startsWith("noncapital_affinity_"))).toHaveLength(8);
+    expect(refs.filter(row => /^noncapital_affinity_[0-7]$/.test(row.conname))).toHaveLength(8);
+    expect(refs.filter(row => row.conname.startsWith("noncapital_affinity_parent_")).map(row => row.conname).sort())
+      .toEqual([0, 1, 2, 3, 4, 5, 7].map(n => `noncapital_affinity_parent_${n}`));
     expect(refs.every(row => row.convalidated && !row.condeferrable && row.definition.includes("ownership_domain"))).toBe(true);
     const actualFences = await client`select c.relname,t.tgdeferrable,t.tginitdeferred from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_proc p on p.oid=t.tgfoid
       where c.relname=any(${receiptTables}) and p.proname in ('trader_runtime_noncapital_cycles_v2_fence','trader_recorded_analysis_v1_fence')`;
