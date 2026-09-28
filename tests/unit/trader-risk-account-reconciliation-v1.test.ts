@@ -578,6 +578,21 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
       terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null }],
     })).toThrow(RiskCurrentAccountRefusedV1);
+    const reusedVerdict = digest("fold-reused-verdict");
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued, { ...issued, sequence: "2", previousDigest: head, contentDigest: reusedVerdict, allowanceId: "allow-2" }],
+      terminalHeadDigest: reusedVerdict, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "3",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "20",
+      terminalStateVersion: "3",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, predecessorReservationNotional: "10",
+      openedAllowances: [{ allowanceId: "allow-prior", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1" }],
+      events: [issued],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "20",
+      terminalStateVersion: "2",
+    })).toThrow(RiskCurrentAccountRefusedV1);
     const consumedHead = digest("fold-consumed");
     expect(foldExpectedEnforcementSuffixV1({
       ...base, events: [issued, { sequence: "2", previousDigest: head, contentDigest: consumedHead, type: "ALLOWANCE_CONSUMED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "CONSUMED", allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1"), reasonCode: null }],
