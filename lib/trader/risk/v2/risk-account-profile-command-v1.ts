@@ -385,6 +385,23 @@ export function admitOpenProfileFrontierV1(input: {
   };
 }
 
+/** A fully folded suffix still cannot issue. A structure-only suffix is not enough. */
+export function admitFoldedSuffixV1(input: {
+  storedAction: Parameters<typeof admitOpenProfileFrontierV1>[0]["storedAction"];
+  observed: Parameters<typeof admitOpenProfileFrontierV1>[0]["observed"];
+  suffix: { decision: "AUTHENTICATED"; notionalsVerified: boolean; currentPointer: null };
+}): ReturnType<typeof admitOpenProfileFrontierV1> {
+  if (input.suffix.decision !== "AUTHENTICATED" || input.suffix.currentPointer !== null) {
+    throw new RiskCurrentAccountRefusedV1("EXPECTED_FRONTIER_UNOBSERVED");
+  }
+  if (!input.suffix.notionalsVerified) throw new RiskCurrentAccountRefusedV1("SUFFIX_NOTIONALS_UNVERIFIED");
+  const issue = admitOpenProfileFrontierV1({ storedAction: input.storedAction, observed: input.observed });
+  if (issue.allowanceId !== null || issue.orderId !== null) {
+    throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
+  }
+  return issue;
+}
+
 /** Issue and current-account bind both refuse. A closed proposal still does not invoke bind. */
 export async function refuseProfileBackedExecutionV1(
   sql: postgres.Sql,

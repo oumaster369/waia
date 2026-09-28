@@ -1,4 +1,4 @@
-import { admitOpenProfileFrontierV1, decideRiskAccountProfileCommandV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
+import { admitFoldedSuffixV1, admitOpenProfileFrontierV1, decideRiskAccountProfileCommandV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
 import { classifyCurrentAccountRowV1 } from "@/lib/trader/risk/v2/risk-current-account-read-v1";
 import { describe, expect, it } from "vitest";
 import { createRealityProjectionV2, type RealityProjectionEntryV2 } from "@/lib/trader/reality/v2/contracts";
@@ -443,6 +443,18 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       exposureDelta: "2", pendingDelta: "-1",
     });
     expect(() => admitOpenProfileFrontierV1({ storedAction: "CANCEL", observed })).toThrow(RiskCurrentAccountRefusedV1);
+    const suffix = foldExpectedEnforcementSuffixV1({
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1", predecessorNextAdmissionSequence: "1",
+      predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0",
+      openedAllowances: [], closedAllowances: [], alreadyDisposedTruthIds: [], events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+      declaredMaxEvents: 4,
+    });
+    expect(admitFoldedSuffixV1({ storedAction: "PROPOSE", observed, suffix })).toMatchObject({
+      decision: "REFUSED", allowanceId: null, orderId: null,
+    });
+    expect(() => admitFoldedSuffixV1({ storedAction: "PROPOSE", observed, suffix: { ...suffix, notionalsVerified: false } })).toThrow(RiskCurrentAccountRefusedV1);
   });
   it("authenticates a gap-free Expected event suffix and refuses a gap or an undeclared length", () => {
     const head = digest("suffix-event");

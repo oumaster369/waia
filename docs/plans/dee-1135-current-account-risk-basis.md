@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "A predecessor consumed allowance can already hold an inclusion identity. Reusing it in the suffix is refused. The fold still publishes nothing. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "A fully folded suffix still cannot issue from an open proposal. A structure-only suffix is refused. Do not mark WP-1 complete or open the PR yet."
 provenance:
   createdFrom: chat
   gapRegistry: null
