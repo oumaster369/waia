@@ -271,5 +271,16 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       referenceDigest: digest("ref-1"), priorReferenceDigest: digest("ref-1"),
     }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
   });
+  it("refuses an Expected frontier that rewinds a predecessor sequence", () => {
+    const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, predecessor: { ...initialExpected(), stateVersion: "2" },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected, predecessor: initialExpected(),
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
 
 });

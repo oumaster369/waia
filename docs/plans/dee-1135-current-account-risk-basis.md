@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Outstanding Expected obligations refuse a missing reference and a drifted predecessor reference. A matching reference still publishes nothing. Do not invent caps or mark WP-1 complete."
+  nextAction: "An Expected frontier that rewinds a predecessor sequence is refused. An equal sequence still publishes nothing, and predecessor notionals are not copied. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

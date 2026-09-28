@@ -525,11 +525,19 @@ export function observeSealedExpectedFrontierV1(input: {
   referenceDigest?: string | null;
   /** Null means no predecessor reference is attested, not that it matches. */
   priorReferenceDigest?: string | null;
+  /** Null means no predecessor frontier is attested. Its notionals are not copied. */
+  predecessor?: RiskExpectedFrontierV1 | null;
 }): ReturnType<typeof compareExpectedAccountFrontierV1> {
   const expected = input.expected;
-  sequence(expected.stateVersion);
-  sequence(expected.nextAdmissionSequence);
-  sequence(expected.nextEventSequence);
+  const stateVersion = sequence(expected.stateVersion);
+  const nextAdmission = sequence(expected.nextAdmissionSequence);
+  const nextEvent = sequence(expected.nextEventSequence);
+  const predecessor = input.predecessor ?? null;
+  if (predecessor && (
+    stateVersion < sequence(predecessor.stateVersion) ||
+    nextAdmission < sequence(predecessor.nextAdmissionSequence) ||
+    nextEvent < sequence(predecessor.nextEventSequence)
+  )) refuse("PREDECESSOR_SCOPE_OR_TIME");
   if (expected.eventHeadDigest !== null) riskAccountDigestSchemaV1.parse(expected.eventHeadDigest);
   const allowanceIds = new Set<string>();
   const orderIds = new Set<string>();
