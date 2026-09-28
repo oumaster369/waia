@@ -241,24 +241,35 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       orderBindingDigest: digest("bind-1"), pendingNotional: "1", reservedNotional: "0" };
     const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1", obligations: [consumed] };
     expect(observeSealedExpectedFrontierV1({
-      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0", referenceDigest: digest("ref-1"), priorReferenceDigest: null,
     }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
     expect(() => observeSealedExpectedFrontierV1({
       expected: { ...expected, obligations: [{ ...consumed, orderBindingDigest: "not-a-digest" }] },
-      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0", referenceDigest: digest("ref-1"), priorReferenceDigest: null,
     })).toThrow();
     expect(() => observeSealedExpectedFrontierV1({
       expected: { ...expected, obligations: [consumed, { ...consumed, allowanceId: "allow-2" }] },
-      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0", referenceDigest: digest("ref-1"), priorReferenceDigest: null,
     })).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => observeSealedExpectedFrontierV1({
       expected: { ...expected, obligations: [{ ...consumed, quantity: "0" }] },
-      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0", referenceDigest: digest("ref-1"), priorReferenceDigest: null,
     })).toThrow(RiskCurrentAccountRefusedV1);
     expect(() => observeSealedExpectedFrontierV1({
       expected: { ...expected, obligations: [{ ...consumed, instrumentIdentityDigest: "not-a-digest" }] },
-      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0", referenceDigest: digest("ref-1"), priorReferenceDigest: null,
     })).toThrow();
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+      referenceDigest: digest("ref-1"), priorReferenceDigest: digest("ref-2"),
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+      referenceDigest: digest("ref-1"), priorReferenceDigest: digest("ref-1"),
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
   });
 
 });

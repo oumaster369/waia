@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "An Expected obligation with zero quantity or a non-digest instrument identity is refused before observation. Publication stays refused. Do not invent caps or mark WP-1 complete."
+  nextAction: "Outstanding Expected obligations refuse a missing reference and a drifted predecessor reference. A matching reference still publishes nothing. Do not invent caps or mark WP-1 complete."
 provenance:
   createdFrom: chat
   gapRegistry: null

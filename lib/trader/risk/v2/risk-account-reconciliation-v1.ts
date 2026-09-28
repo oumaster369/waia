@@ -521,6 +521,10 @@ export function observeSealedExpectedFrontierV1(input: {
   sourceMethodQualified: boolean;
   /** Null means the external debt is unattested. It is not treated as zero. */
   externalDebtNotional: string | null;
+  /** Required once any obligation remains. Null is not a reference. */
+  referenceDigest?: string | null;
+  /** Null means no predecessor reference is attested, not that it matches. */
+  priorReferenceDigest?: string | null;
 }): ReturnType<typeof compareExpectedAccountFrontierV1> {
   const expected = input.expected;
   sequence(expected.stateVersion);
@@ -552,6 +556,13 @@ export function observeSealedExpectedFrontierV1(input: {
       refuse("REDUCTION_ACCOUNTING");
   }
   if (reservations !== nonnegative(expected.reservationNotional)) refuse("EXPECTED_RESERVATION_SUM");
+  const referenceDigest = input.referenceDigest ?? null;
+  const priorReferenceDigest = input.priorReferenceDigest ?? null;
+  if (expected.obligations.length > 0 && referenceDigest === null) refuse("REFERENCE_CURRENTNESS");
+  if (referenceDigest !== null) riskAccountDigestSchemaV1.parse(referenceDigest);
+  if (priorReferenceDigest !== null) riskAccountDigestSchemaV1.parse(priorReferenceDigest);
+  if (expected.obligations.length > 0 && priorReferenceDigest !== null && priorReferenceDigest !== referenceDigest)
+    refuse("REFERENCE_DRIFT_WITH_OBLIGATIONS");
   nonnegative(expected.reconciledExposureNotional);
   const declaredPending = nonnegative(expected.pendingExposureNotional);
   if (input.externalDebtNotional !== null && declaredPending !== consumedPending + nonnegative(input.externalDebtNotional))
