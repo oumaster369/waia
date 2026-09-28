@@ -151,12 +151,12 @@ async function claim(tx: Executor, input: ClaimInput, domain: Domain, control?: 
 }
 export async function claimRecordedAcquisitionWithinHeldTransactionV1(tx: Executor, supplied: ClaimInput): Promise<RecordedAcquisitionHolderV1 | null> {
   const holder = await claim(tx, capture(supplied, 2_147_483_647), "RECORDED_ACQUISITION_V1");
-  return holder && Object.freeze({ ...holder, ownershipDomain: "RECORDED_ACQUISITION_V1", [acquisitionBrand]: true });
+  return holder && Object.freeze({ ...holder, ownershipDomain: "RECORDED_ACQUISITION_V1", [acquisitionBrand]: true as const });
 }
 export async function claimSavedResearchWithinHeldTransactionV1(tx: Executor, supplied: ClaimInput,
   control: NoncapitalControlReadBudget): Promise<SavedResearchHolderV1 | null> {
   const holder = await claim(tx, capture(supplied, 120_000), "SAVED_RESEARCH_V1", control);
-  return holder && Object.freeze({ ...holder, ownershipDomain: "SAVED_RESEARCH_V1", [savedBrand]: true });
+  return holder && Object.freeze({ ...holder, ownershipDomain: "SAVED_RESEARCH_V1", [savedBrand]: true as const });
 }
 
 type RootKind = "APPLICATION_ASSIGNMENT" | "APPLICATION" | "UNDERSTANDING_ASSIGNMENT";
