@@ -31,7 +31,7 @@
     ],
     "expectedFileCount": 157,
     "sortedPathDigestHex": "8a920eb50ee18138ca1dfeebfc02532822407beb2aaf4d98a14587f94dfc2aaf",
-    "sortedContentDigestHex": "1211d9689319434a7470b3ab8006813d1b6a13e08f48da729fa41f42bf927f52"
+    "sortedContentDigestHex": "ced27ddc11fa1d73d2397a36cca30cbcbf6a3095a7b19ce924dc933a6f6fd60f"
   },
   "sourceRules": [
     {
@@ -93,7 +93,8 @@
     "roots": ["lib", "app", "scripts"],
     "productionExtensions": [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
     "additionalFiles": [
-      "lib/trader/execution/index.ts", "lib/trader/execution/v2/index.ts",
+      "lib/trader/execution/index.ts",
+      "lib/trader/execution/v2/index.ts",
       "lib/trader/reality/v2/execution-report-delivery-cli.ts",
       "lib/trader/reality/v2/source-equivalence.ts",
       "lib/trader/reality/v2/ingest-postgres.ts",
