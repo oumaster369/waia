@@ -44,6 +44,7 @@ import {
   type RiskVerdictV2Draft,
 } from "./risk-verdict-contract-v2";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
+import { enforcingKillSwitchCoversAccountV2 } from "@/lib/trader/risk/kill-switch/project-onto-risk-accounts-v2";
 import {
   accountingCappedByLiveCapitalEnvelopeV2,
   assertNotionalWithinLiveCapitalLimitV2,
@@ -566,6 +567,9 @@ export async function admitRiskAllowanceV2Postgres(
   }
   const outcome = await runWaiaPostgresTransaction(db, async (tx) => {
     const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
+    if (await enforcingKillSwitchCoversAccountV2(tx, scoped.organizationId)) {
+      throw new RiskV2AdmissionRefusedError("KILL_SWITCH_TRIPPED");
+    }
     const strictExposureReduction = deriveStrictExposureReductionV2({
       state,
       verdict: input.verdict,
@@ -1184,6 +1188,9 @@ export async function terminalizeIssuedAllowanceIfBindWouldRefuseV2(
 ): Promise<IssuedAllowanceBindPreflightV2 | null> {
   const scoped = requireOrgContext(context.organizationId);
   const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
+  if (await enforcingKillSwitchCoversAccountV2(tx, scoped.organizationId)) {
+    throw new RiskV2AdmissionRefusedError("KILL_SWITCH_TRIPPED");
+  }
   const rows = await tx
     .select()
     .from(pgSchema.traderRiskAllowancesV2)
@@ -1392,6 +1399,9 @@ export async function revalidateConsumedRiskAllowanceForExecutionV2(
 ): Promise<void> {
   const scoped = requireOrgContext(context.organizationId);
   const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
+  if (await enforcingKillSwitchCoversAccountV2(tx, scoped.organizationId)) {
+    throw new RiskV2AdmissionRefusedError("KILL_SWITCH_TRIPPED");
+  }
   const rows = await tx
     .select()
     .from(pgSchema.traderRiskAllowancesV2)

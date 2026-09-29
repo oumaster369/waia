@@ -19,6 +19,8 @@ import {
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { divideDecimal } from "@/lib/trader/risk/numeric";
+import { createPostgresKillSwitchService } from "@/lib/trader/risk/kill-switch";
+import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
 import {
   deleteLiveCapitalEnvelopeRows,
@@ -1168,5 +1170,34 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
         admission({ accountId: "capital-mismatch", identity: 912, reservation: "1" }),
       ),
     ).rejects.toMatchObject({ reason: "LIVE_CAPITAL_LIMIT_MISMATCH" });
+  });
+
+  it("DEE-1151 projects an org kill-switch trip onto the account V2 reads", async () => {
+    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("kill-project"));
+    const service = createPostgresKillSwitchService(db);
+    try {
+      await service.trip(
+        { actorType: "service", actorId: null },
+        requireOrgContext(orgA),
+        { scopeType: "organization", organizationId: orgA },
+        { scopeType: "organization", scopeRef: null, switchType: "EMERGENCY_STOP" },
+        { enforcementMode: "REJECT", origin: "manual", reason: "dee-1151 projection" },
+      );
+      const [row] = await sqlClient<{ kill_state: string; posture: string }[]>`
+        select kill_state, posture from trader_risk_account_state_v2
+        where organization_id = ${orgA}::uuid and account_id = 'kill-project'`;
+      expect(row).toEqual({ kill_state: "TRIPPED", posture: "KILLED" });
+      await expect(
+        admitRiskAllowanceV2Postgres(
+          db,
+          { organizationId: orgA },
+          admission({ accountId: "kill-project", identity: 913, reservation: "1" }),
+        ),
+      ).rejects.toMatchObject({ reason: "KILL_SWITCH_TRIPPED" });
+    } finally {
+      await sqlClient`
+        delete from trader_kill_switches
+        where organization_id = ${orgA}::uuid`;
+    }
   });
 });

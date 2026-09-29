@@ -6,6 +6,7 @@ import { and, eq, inArray, isNull, or } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import { projectKillSwitchOntoRiskAccountsV2 } from "@/lib/trader/risk/kill-switch/project-onto-risk-accounts-v2";
 import type {
   InsertKillSwitchRowInput,
   KillSwitchListFilter,
@@ -167,6 +168,9 @@ export async function insertKillSwitchRowPostgres(
   if (!row) {
     throw new Error("[trader] kill switch insert failed");
   }
+  if (row.state === "ACTIVE" || row.state === "CLEARING" || row.state === "INACTIVE") {
+    await projectKillSwitchOntoRiskAccountsV2(ex as WaiaPostgresDb, target, row.state);
+  }
   return row;
 }
 
@@ -215,5 +219,9 @@ export async function updateKillSwitchRowWithVersionPostgres(
     )
     .returning();
 
-  return updatedRows[0] ? mapRow(updatedRows[0]) : null;
+  const updated = updatedRows[0] ? mapRow(updatedRows[0]) : null;
+  if (updated && (updated.state === "ACTIVE" || updated.state === "CLEARING" || updated.state === "INACTIVE")) {
+    await projectKillSwitchOntoRiskAccountsV2(ex as WaiaPostgresDb, target, updated.state);
+  }
+  return updated;
 }
