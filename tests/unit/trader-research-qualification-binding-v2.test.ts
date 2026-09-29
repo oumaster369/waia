@@ -13,6 +13,11 @@ import {
   type QualificationRecordV2,
 } from "@/lib/trader/research-v2/qualification-records-v2";
 import { buildHumanPromotionProposalV2 } from "@/lib/trader/research-v2/human-promotion-proposal-v2";
+import {
+  STRATEGY_ADMISSION_SPEC_SHA256,
+  admissionDateNets,
+  countsForDateNets,
+} from "./strategy-admission-date-nets";
 
 function reseal<T extends { contentDigestHex: string }>(value: T): T {
   const { contentDigestHex, ...body } = value;
@@ -73,14 +78,15 @@ function fixture() {
     netEconomicResult: "1",
     maxDrawdown: "-1",
     tailEventCount: 1,
-    sampleSize: 8,
+    ...countsForDateNets(admissionDateNets(2022, "0.01")),
     incumbentComparisonDigestHex: "c".repeat(64),
   };
   const qualificationInput = {
     candidate,
     partition: "DEVELOPMENT" as const,
     evaluation,
-    verdict: "QUALIFIED" as const,
+    specSha256: STRATEGY_ADMISSION_SPEC_SHA256,
+    declaredFamilySize: 1,
   };
   const development = recordQualificationV2(qualificationInput);
   const walkForward = recordQualificationV2({
@@ -90,7 +96,6 @@ function fixture() {
   });
   const rejected = recordQualificationV2({
     ...qualificationInput,
-    verdict: "REJECTED",
     failureReasons: ["FAILED"],
   });
   const input = { proposalId: "proposal", candidate, hypothesis, memory, development, walkForward };
@@ -233,13 +238,13 @@ describe("DEE-1107 exact research qualification bindings", () => {
     );
   });
 
-  it.each(["UNKNOWN", "", null, undefined])(
-    "rejects unknown verdict %s before qualification",
+  it.each(["QUALIFIED", "REJECTED", "UNKNOWN", "", null, undefined])(
+    "refuses caller verdict %s before qualification",
     (verdict) => {
       const { qualificationInput } = fixture();
-      expect(() =>
-        recordQualificationV2({ ...qualificationInput, verdict: verdict as never }),
-      ).toThrow("QUALIFICATION_VERDICT_INVALID");
+      expect(() => recordQualificationV2({ ...qualificationInput, verdict } as never)).toThrow(
+        "QUALIFICATION_VERDICT_NOT_ACCEPTED_FROM_CALLER",
+      );
     },
   );
   it.each(["UNKNOWN", "", null, undefined])(

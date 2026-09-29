@@ -45,6 +45,24 @@ export function buildDiscoveryRunRecord(
   };
 }
 
+export function resolveDiscoveryRunExitCode(input: {
+  enabled: boolean;
+  barsCount: number;
+  closedTradeCount: number;
+  result: Pick<DiscoveryEvolutionPassResult, "reason" | "skipped" | "status">;
+}): number {
+  if (
+    input.result.reason === "research_v2_admission_incomplete" ||
+    input.result.reason === "research_v2_outcomes_required"
+  ) {
+    return 1;
+  }
+  if (input.enabled && (input.barsCount === 0 || input.closedTradeCount === 0)) {
+    return 1;
+  }
+  return 0;
+}
+
 export function printDiscoveryRunUsage(): void {
   console.log(`M8 discovery evolution orchestrator (operator-invoked, default disabled)
 
@@ -116,6 +134,8 @@ async function main(): Promise<void> {
   const context = requireOrgContext(orgId);
   const db = getPostgresDrizzle();
 
+  const bars: [] = [];
+  const closedTrades: [] = [];
   const result = await runDiscoveryEvolutionPass(db, {
     runContext: {
       schemaVersion: DISCOVERY_SCHEMA_VERSION,
@@ -140,12 +160,21 @@ async function main(): Promise<void> {
       enabled,
       campaignId,
     },
-    bars: [],
-    closedTrades: [],
+    bars,
+    closedTrades,
   });
 
   const record = buildDiscoveryRunRecord(result, { runId: campaignId });
   console.log(`${LOG_PREFIX} record`, JSON.stringify(record, null, 2));
+  const exitCode = resolveDiscoveryRunExitCode({
+    enabled,
+    barsCount: bars.length,
+    closedTradeCount: closedTrades.length,
+    result,
+  });
+  if (exitCode !== 0) {
+    process.exitCode = exitCode;
+  }
 }
 
 if (process.env.WAIA_TRADER_CLI === "1") {

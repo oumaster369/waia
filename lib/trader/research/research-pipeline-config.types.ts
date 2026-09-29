@@ -24,6 +24,8 @@ export type ResearchPipelineBacktestOptions = {
   /** Required digest before blind holdout when set via M9 campaign CLI. */
   operatorBlindAuthorization?: string;
   blindAuthorizationScope?: M9BlindAuthorizationScope;
+  /** When true, the DEE-540 gate refuses before any blind-tail backtest. */
+  officialHoldoutAccessRequested?: boolean;
   validationArtifactSink?: ResearchValidationBacktestArtifactSink;
   /** Optional replay provider sidecar for tier-2 cross-venue/crowd/global in M9 artifacts. */
   providerSidecar?: ReplayProviderSidecar;

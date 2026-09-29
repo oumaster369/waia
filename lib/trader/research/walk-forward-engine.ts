@@ -6,9 +6,13 @@ import type { Bar } from "@/lib/trader/intelligence/types";
 import { WalkForwardValidationError } from "@/lib/trader/research/errors";
 import { collectRegimeLabelsFromMetrics } from "@/lib/trader/research/regime-coverage";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import {
+  isResearchValidationMetricsV1,
+} from "@/lib/trader/research/research-validation-metrics-taxonomy";
 import type {
   InsertWalkForwardWindowRow,
   ResearchValidationMetrics,
+  ResearchValidationMetricsV2,
   StrategyCandidate,
   StrategyCandidateStatus,
   WalkForwardWindowPlan,
@@ -215,6 +219,93 @@ export async function runWalkForwardValidation(
     "walk_forward_validated",
   );
 
+  return { windows, regimeLabels };
+}
+
+function emptyMetricsLike(metrics: ResearchValidationMetrics): ResearchValidationMetrics {
+  if (isResearchValidationMetricsV1(metrics)) {
+    return {
+      schemaVersion: metrics.schemaVersion,
+      tradeCount: 0,
+      periodRealizedPnl: "0",
+      periodTotalFees: "0",
+      byRegime: [],
+    };
+  }
+  const v2 = metrics as ResearchValidationMetricsV2;
+  return {
+    ...v2,
+    submittedOrders: 0,
+    acceptedOrders: 0,
+    filledOrders: 0,
+    openPositions: 0,
+    closedTrades: 0,
+    markToCloseTrades: 0,
+    realizedPnl: "0",
+    markedPnl: "0",
+    periodTotalFees: "0",
+    rejectedSignals: 0,
+    skippedSignals: 0,
+    byRegime: [],
+  };
+}
+
+/**
+ * Records walk-forward windows as a partition of one validation evaluation.
+ * Does not call a backtest. Window 0 carries that single evaluation; later
+ * windows are empty so the same bars are not counted again as independent tests.
+ */
+export async function accountWalkForwardFromSingleEvaluation(input: {
+  context: OrgContext;
+  candidate: StrategyCandidate;
+  trainBars: readonly Bar[];
+  validationBars: readonly Bar[];
+  oosBarCount: number;
+  singleEvaluation: ResearchValidationMetrics;
+  repository: WalkForwardRepository;
+  newId?: () => string;
+}): Promise<WalkForwardValidationResult> {
+  if (!ALLOWED_WALK_FORWARD_STATUSES.has(input.candidate.status)) {
+    throw new WalkForwardValidationError(
+      `candidate status ${input.candidate.status} is not eligible for walk-forward validation`,
+    );
+  }
+  const windowCount = assertWalkForwardSplits(
+    input.trainBars,
+    input.validationBars,
+    input.oosBarCount,
+  );
+  const newId = input.newId ?? crypto.randomUUID.bind(crypto);
+  const windows: WalkForwardWindowResult[] = [];
+  for (let windowIndex = 0; windowIndex < windowCount; windowIndex += 1) {
+    const plan = buildWalkForwardWindowPlanAtIndex(
+      input.trainBars,
+      input.validationBars,
+      windowIndex,
+      input.oosBarCount,
+    );
+    const metrics = windowIndex === 0 ? input.singleEvaluation : emptyMetricsLike(input.singleEvaluation);
+    await input.repository.insertWalkForwardWindow(input.context, {
+      id: newId(),
+      candidateId: input.candidate.id,
+      windowIndex: plan.windowIndex,
+      inSampleDigest: plan.inSampleDigest,
+      outOfSampleDigest: plan.outOfSampleDigest,
+      metricsJson: serializeMetrics(metrics),
+    });
+    windows.push({
+      windowIndex: plan.windowIndex,
+      inSampleDigest: plan.inSampleDigest,
+      outOfSampleDigest: plan.outOfSampleDigest,
+      metrics,
+    });
+  }
+  const regimeLabels = collectRegimeLabelsFromMetrics(windows.map((window) => window.metrics));
+  await input.repository.updateStrategyCandidateStatus(
+    input.context,
+    input.candidate.id,
+    "walk_forward_validated",
+  );
   return { windows, regimeLabels };
 }
 

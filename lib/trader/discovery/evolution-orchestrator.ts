@@ -21,11 +21,11 @@ import {
   deriveStrategyEvolutionGenerationV2,
   enqueueResearchJobV2,
   runStrategyEvolutionResearchPassV2,
+  StrategyEvolutionResearchError,
   type ClosedTradeOutcomeInputV2,
   type ClosedTradeOutcomePolarityV2,
   type PartitionWindowMetricV2,
   type QualificationEvaluationV2,
-  type QualificationVerdictV2,
   type ResearchMemoryV2,
   type StrategyCandidateGenerationKindV2,
   type StrategyEvolutionLoopStatusV2,
@@ -60,11 +60,12 @@ export type DiscoveryEvolutionPassInput = {
   walkForward?: QualificationEvaluationV2;
   developmentWindows?: readonly PartitionWindowMetricV2[];
   walkForwardWindows?: readonly PartitionWindowMetricV2[];
-  qualificationVerdict?: QualificationVerdictV2;
   holdoutQueryAttempted?: boolean;
   mkbInjectionAttempted?: boolean;
   legacyKnowledgeMutationAttempted?: boolean;
   failureReasons?: readonly string[];
+  specSha256?: string;
+  declaredFamilySize?: number;
   evidenceCutoffUtc?: string;
   symbol?: string;
   parentStrategies?: readonly StrategyParentRefV2[];
@@ -97,7 +98,6 @@ type EnabledResearchV2Admission = {
   costModelIdentity: string;
   development: QualificationEvaluationV2;
   walkForward: QualificationEvaluationV2;
-  qualificationVerdict: QualificationVerdictV2;
 };
 
 function failClosed(reason: string): DiscoveryEvolutionPassResult {
@@ -110,8 +110,14 @@ function failClosed(reason: string): DiscoveryEvolutionPassResult {
 }
 
 function resolveEnabledResearchV2Admission(
-  input: DiscoveryEvolutionPassInput,
+  input: DiscoveryEvolutionPassInput & { qualificationVerdict?: unknown },
 ): EnabledResearchV2Admission | null {
+  if (Object.prototype.hasOwnProperty.call(input, "qualificationVerdict")) {
+    throw new StrategyEvolutionResearchError(
+      "QUALIFICATION_VERDICT_NOT_ACCEPTED_FROM_CALLER",
+      "research-v2 verdict is computed from partition evidence",
+    );
+  }
   if (
     input.navigatorSelect === undefined ||
     input.futureCycleEffect === undefined ||
@@ -119,8 +125,7 @@ function resolveEnabledResearchV2Admission(
     input.researchCodeIdentity === undefined ||
     input.costModelIdentity === undefined ||
     input.developmentWindows === undefined ||
-    input.walkForwardWindows === undefined ||
-    input.qualificationVerdict === undefined
+    input.walkForwardWindows === undefined
   ) {
     return null;
   }
@@ -136,7 +141,6 @@ function resolveEnabledResearchV2Admission(
     costModelIdentity: input.costModelIdentity,
     development,
     walkForward,
-    qualificationVerdict: input.qualificationVerdict,
   };
 }
 
@@ -242,8 +246,9 @@ export async function runDiscoveryEvolutionPass(
     generation,
     development: admission.development,
     walkForward: admission.walkForward,
-    qualificationVerdict: admission.qualificationVerdict,
     failureReasons: input.failureReasons,
+    specSha256: input.specSha256 ?? "",
+    declaredFamilySize: input.declaredFamilySize ?? 0,
     priorMemory: input.priorMemory,
   });
 

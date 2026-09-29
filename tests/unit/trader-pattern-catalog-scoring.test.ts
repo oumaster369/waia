@@ -34,6 +34,21 @@ describe("pattern catalog scoring (M6)", () => {
 
     expect(compareDecimal(score.matchScore, "0")).toBeGreaterThanOrEqual(0);
     expect(compareDecimal(score.matchScore, "1")).toBeLessThanOrEqual(0);
+    expect(score.matchScore).toBe("1");
+    expect(meetsPatternMatchThreshold(score.matchScore)).toBe(true);
+  });
+
+  it("keeps a weak snapshot under the match gate", () => {
+    const score = computePatternMatchScore({
+      definition,
+      features: {
+        close: "100",
+        zscoreVsSma20: "0.1",
+        priceDispersion20: "0.1",
+        eventRiskScore: "2",
+      },
+    });
+    expect(meetsPatternMatchThreshold(score.matchScore)).toBe(false);
   });
 
   it("is deterministic", () => {

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_DISCOVERY_RUN_CONFIG } from "@/lib/trader/discovery/discovery.types";
+import { AppendOnlyStrategyAdmissionJournal } from "@/lib/trader/research/strategy-admission-v1";
+import {
+  STRATEGY_ADMISSION_SPEC_SHA256,
+  admissionDateNets,
+  countsForDateNets,
+} from "./strategy-admission-date-nets";
 import { NoReinforcementGuardError } from "@/lib/trader/discovery/no-reinforcement-guard";
 import {
   qualifyFutureCycleEpistemicEffectV2,
@@ -64,25 +70,31 @@ function parent(id: string, digest: string): StrategyParentRefV2 {
   };
 }
 
+const IS_NETS = admissionDateNets(2022, "0.01");
+const VALIDATION_NETS = admissionDateNets(2024, "0.02", 5);
+
 function evaluation(overrides: Partial<QualificationEvaluationV2> = {}): QualificationEvaluationV2 {
   return {
     netEconomicResult: "2.5",
     maxDrawdown: "-1.0",
     tailEventCount: 1,
-    sampleSize: 12,
+    ...countsForDateNets(IS_NETS),
     incumbentComparisonDigestHex: DIGEST.b,
     ...overrides,
   };
 }
 
-function walkForwardEvaluation(): QualificationEvaluationV2 {
-  return evaluation({
+function walkForwardEvaluation(
+  overrides: Partial<QualificationEvaluationV2> = {},
+): QualificationEvaluationV2 {
+  return {
     netEconomicResult: "1.25",
     maxDrawdown: "-1.5",
     tailEventCount: 2,
-    sampleSize: 8,
+    ...countsForDateNets(VALIDATION_NETS),
     incumbentComparisonDigestHex: DIGEST.a,
-  });
+    ...overrides,
+  };
 }
 
 function navigatorCandidate(
@@ -164,7 +176,8 @@ function passInput(
     generation: defaultGeneration(),
     development: evaluation(),
     walkForward: walkForwardEvaluation(),
-    qualificationVerdict: "QUALIFIED",
+    specSha256: STRATEGY_ADMISSION_SPEC_SHA256,
+    declaredFamilySize: 1,
     ...overrides,
   };
 }
@@ -191,6 +204,15 @@ describe("DEE-646 strategy evolution research-v2 spine", () => {
     expect(first.development.partition).toBe("DEVELOPMENT");
     expect(first.walkForward.partition).toBe("WALK_FORWARD");
     expect(first.walkForward.fittingAllowed).toBe(false);
+    expect(first.walkForward.verdict).toBe("QUALIFIED");
+    expect(first.multipleTesting.method).toBe("holm");
+    expect(first.multipleTesting.familySize).toBe(1);
+    expect(first.multipleTesting.alpha).toBe("0.05");
+    expect(first.development.admission.assessment.verdict).toBe("passed_is");
+    expect(first.development.admission.assessment.seMethod).toBe("newey_west");
+    expect(first.walkForward.admission.assessment.verdict).toBe("passed_validation");
+    expect(first.journalRows.map((row) => row.split)).toEqual(["is", "validation"]);
+    expect(first.journalRows[1]?.countsAsSplitUse).toBe(true);
     expect(first.contentDigestHex).toBe(second.contentDigestHex);
   });
 
@@ -341,15 +363,33 @@ describe("DEE-646 strategy evolution research-v2 spine", () => {
         candidate: result.candidate,
         partition: "BLIND_HOLDOUT",
         evaluation: evaluation(),
-        verdict: "QUALIFIED",
+        specSha256: STRATEGY_ADMISSION_SPEC_SHA256,
+        declaredFamilySize: 1,
       }),
     ).toThrow(/BLIND_HOLDOUT_ITERATIVE_FITNESS_FORBIDDEN/);
+  });
+
+  it("blocks a second validation of the same hypothesis", () => {
+    const journal = new AppendOnlyStrategyAdmissionJournal();
+    runStrategyEvolutionResearchPassV2(passInput({ journal }));
+    expect(() => runStrategyEvolutionResearchPassV2(passInput({ journal }))).toThrow(
+      /split_already_used/,
+    );
+  });
+
+  it("refuses a caller-supplied qualification verdict", () => {
+    expect(() =>
+      runStrategyEvolutionResearchPassV2({
+        ...passInput(),
+        qualificationVerdict: "QUALIFIED",
+      } as never),
+    ).toThrow(/QUALIFICATION_VERDICT_NOT_ACCEPTED_FROM_CALLER/);
   });
 
   it("records a failed candidate as REJECTED and keeps it rejected", () => {
     const result = runStrategyEvolutionResearchPassV2(
       passInput({
-        qualificationVerdict: "REJECTED",
+        walkForward: walkForwardEvaluation({ netEconomicResult: "-1.00" }),
         failureReasons: ["WALK_FORWARD_DID_NOT_BEAT_INCUMBENT"],
       }),
     );

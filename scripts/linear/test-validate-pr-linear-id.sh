@@ -312,6 +312,20 @@ run_case "normal dee → main aligned metadata" 0 \
   "dee-153-linear-id-governance-hardening" \
   "main" || fail=1
 
+run_case "cloud-agent cursor/dee branch with suffix" 0 \
+  "DEE-1152 fix(research): compute admission verdicts from date-level evidence" \
+  "**Linear:** \`DEE-1152\`
+**Tier:** T1" \
+  "cursor/dee-1152-research-scientific-hygiene-cc92" \
+  "main" || fail=1
+
+run_case "cursor branch without dee identity" 1 \
+  "docs(ai-trader): audit" \
+  "**Linear:** \`DEE-1152\`
+**Tier:** T0" \
+  "cursor/ai-trader-discovery-loop-audit-89cd" \
+  "main" || fail=1
+
 DEFAULT_TEMPLATE_BODY="$(sed 's/DEE-NN/DEE-153/g' "${ROOT}/.github/pull_request_template.md")"
 run_case "completed default single-issue template ignores commented train example" 0 \
   "DEE-153 infra(governance): P0 Linear ID collision hardening" \

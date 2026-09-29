@@ -11,13 +11,21 @@ import type { HumanPromotionProposalV2 } from "@/lib/trader/research-v2/human-pr
 import { buildResearchRetirementProposalV2 } from "@/lib/trader/research-v2/research-retirement-proposal-v2";
 import type { ResearchRetirementProposalV2 } from "@/lib/trader/research-v2/research-retirement-proposal-v2";
 import {
+  RESEARCH_HYPOTHESIS_FAMILY_V2_SCHEMA,
+  type ResearchHypothesisFamilyV2,
+} from "@/lib/trader/research-v2/multiple-testing-holm-v2";
+import {
+  AppendOnlyStrategyAdmissionJournal,
+  type StrategyAdmissionJournalRow,
+  type StrategyAdmissionObservation,
+} from "@/lib/trader/research/strategy-admission-v1";
+import {
   queryBlindHoldoutAsIterativeFitnessV2,
   recordQualificationV2,
   recordRejectedCandidateV2,
   assertQualificationPartitionsIndependentV2,
   type QualificationEvaluationV2,
   type QualificationRecordV2,
-  type QualificationVerdictV2,
   type RejectedCandidateRecordV2,
 } from "@/lib/trader/research-v2/qualification-records-v2";
 import {
@@ -73,7 +81,13 @@ export type RunStrategyEvolutionResearchPassV2Input = Readonly<{
   priorMemory?: ResearchMemoryV2;
   development: QualificationEvaluationV2;
   walkForward: QualificationEvaluationV2;
-  qualificationVerdict: QualificationVerdictV2;
+  /** sha256 of the hypothesis spec, recorded before this run reads its target data. */
+  specSha256: string;
+  /** Pre-declared family size. More configurations than this are refused. */
+  declaredFamilySize: number;
+  /** Other IS configurations in the pre-declared family. Holm uses the declared size. */
+  additionalIsObservations?: readonly (readonly StrategyAdmissionObservation[])[];
+  journal?: AppendOnlyStrategyAdmissionJournal;
   failureReasons?: readonly string[];
 }>;
 
@@ -89,6 +103,8 @@ export type StrategyEvolutionResearchPassV2 = Readonly<{
   candidate: StrategyEvolutionCandidateV2;
   development: QualificationRecordV2;
   walkForward: QualificationRecordV2;
+  multipleTesting: ResearchHypothesisFamilyV2;
+  journalRows: readonly StrategyAdmissionJournalRow[];
   knowledge: StrategyEvolutionKnowledgeAdmissionV2;
   proposal: HumanPromotionProposalV2 | null;
   rejectedRecord: RejectedCandidateRecordV2 | null;
@@ -97,8 +113,14 @@ export type StrategyEvolutionResearchPassV2 = Readonly<{
 }>;
 
 export function runStrategyEvolutionResearchPassV2(
-  input: RunStrategyEvolutionResearchPassV2Input,
+  input: RunStrategyEvolutionResearchPassV2Input & { qualificationVerdict?: never },
 ): StrategyEvolutionResearchPassV2 {
+  if (Object.prototype.hasOwnProperty.call(input, "qualificationVerdict")) {
+    throw new StrategyEvolutionResearchError(
+      "QUALIFICATION_VERDICT_NOT_ACCEPTED_FROM_CALLER",
+      "research-v2 verdict is computed from partition evidence",
+    );
+  }
   if (input.holdoutQueryAttempted) {
     queryBlindHoldoutAsIterativeFitnessV2();
   }
@@ -147,20 +169,91 @@ export function runStrategyEvolutionResearchPassV2(
     researchCodeIdentity: input.researchCodeIdentity,
     costModelIdentity: input.costModelIdentity,
   });
+  const hypothesisId = `${input.campaignId}:hypothesis`;
+  const journal = input.journal ?? new AppendOnlyStrategyAdmissionJournal();
+  const isFamily = [input.development.dateNets ?? [], ...(input.additionalIsObservations ?? [])];
   const development = recordQualificationV2({
     candidate,
     partition: "DEVELOPMENT",
     evaluation: input.development,
-    verdict: input.qualificationVerdict,
     failureReasons: input.failureReasons,
+    specSha256: input.specSha256,
+    declaredFamilySize: input.declaredFamilySize,
+    familyObservations: isFamily,
+    trialIndex: 0,
+    symbol: input.symbol,
   });
+  const isPassed = development.verdict === "QUALIFIED";
+  if (isPassed) {
+    journal.assertSplitAvailable(hypothesisId, "validation");
+  }
   const walkForward = recordQualificationV2({
     candidate,
     partition: "WALK_FORWARD",
     evaluation: input.walkForward,
-    verdict: input.qualificationVerdict,
-    failureReasons: input.failureReasons,
+    failureReasons: isPassed
+      ? input.failureReasons
+      : ["IS_NOT_PASSED", ...(input.failureReasons ?? [])],
+    specSha256: input.specSha256,
+    declaredFamilySize: input.declaredFamilySize,
+    familyObservations: [input.walkForward.dateNets ?? []],
+    trialIndex: 0,
+    symbol: input.symbol,
   });
+  const multipleTesting: ResearchHypothesisFamilyV2 = {
+    schemaVersion: RESEARCH_HYPOTHESIS_FAMILY_V2_SCHEMA,
+    method: "holm",
+    familySize: development.admission.assessment.familySize,
+    alpha: "0.05",
+    trials: development.admission.assessment.familyTrials.map((trial) => ({
+      trialIndex: trial.trialIndex,
+      rawPValue: trial.rawPValue,
+      adjustedPValue: trial.adjustedPValue,
+      holmRank: trial.holmRank,
+    })),
+  };
+  journal.append({
+    correctsRowIndex: null,
+    hypothesisId,
+    specSha256: input.specSha256,
+    split: "is",
+    familySize: input.declaredFamilySize,
+    configParamsJson: JSON.stringify(generation.params),
+    nEvents: development.admission.assessment.nEvents,
+    nDates: development.admission.assessment.nDates,
+    netMeanDate: development.admission.assessment.netMeanDate,
+    seMethod: "newey_west",
+    nwLag: development.admission.assessment.nwLag,
+    t: development.admission.assessment.t,
+    pRaw: development.admission.assessment.pRaw,
+    pHolm: development.admission.assessment.pHolm,
+    verdict: development.admission.assessment.verdict,
+    verdictReason: development.failureReasons.join(",") || "passed",
+    flags: development.admission.assessment.flags,
+    countsAsSplitUse: false,
+  });
+  if (isPassed) {
+    journal.append({
+      correctsRowIndex: null,
+      hypothesisId,
+      specSha256: input.specSha256,
+      split: "validation",
+      familySize: input.declaredFamilySize,
+      configParamsJson: JSON.stringify(generation.params),
+      nEvents: walkForward.admission.assessment.nEvents,
+      nDates: walkForward.admission.assessment.nDates,
+      netMeanDate: walkForward.admission.assessment.netMeanDate,
+      seMethod: "newey_west",
+      nwLag: walkForward.admission.assessment.nwLag,
+      t: walkForward.admission.assessment.t,
+      pRaw: walkForward.admission.assessment.pRaw,
+      pHolm: walkForward.admission.assessment.pHolm,
+      verdict: walkForward.admission.assessment.verdict,
+      verdictReason: walkForward.failureReasons.join(",") || "passed",
+      flags: walkForward.admission.assessment.flags,
+      countsAsSplitUse: true,
+    });
+  }
   const knowledge = admitStrategyEvolutionKnowledgeV2({
     navigatorSelect: input.navigatorSelect,
     predictiveAdmissionVerdict: input.predictiveAdmissionVerdict,
@@ -210,6 +303,8 @@ export function runStrategyEvolutionResearchPassV2(
     candidate,
     development,
     walkForward,
+    multipleTesting,
+    journalRows: journal.list(),
     knowledge,
     proposal,
     rejectedRecord,
