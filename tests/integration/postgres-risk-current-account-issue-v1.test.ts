@@ -66,7 +66,12 @@ describe.skipIf(!enabled)("current-account issue writes no authority", () => {
         (select count(*)::int from trader_orders) as orders,
         (select count(*)::int from trader_risk_account_current_v1) as current_rows,
         (select count(*)::int from trader_risk_account_profile_events_v1) as events`;
-      expect(await gateCurrentAccountExecutionBindV1(sql, "00000000-0000-4000-8000-000000113501", "missing-account"))
+      expect(await gateCurrentAccountExecutionBindV1(sql, "00000000-0000-4000-8000-000000113501", "missing-account", {
+        organizationId: "00000000-0000-4000-8000-000000113501",
+        accountId: "missing-account",
+        policyDigest: "ab".repeat(32),
+        releaseSha: "cd".repeat(32),
+      }))
         .toEqual({ decision: "REFUSED", reason: "NO_CURRENT_POINTER", bindInvoked: false });
       expect(await sql`select
         (select count(*)::int from trader_risk_allowances_v2) as allowances,

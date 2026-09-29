@@ -8,6 +8,7 @@ import {
   LIVE_CAPITAL_ENVELOPE_STAGES_V2,
   type LiveCapitalEnvelopeCommandV2,
 } from "@/lib/trader/risk/v2/live-capital-envelope-v2";
+import type { LiveCapitalObservedIdentityV2 } from "@/lib/trader/risk/v2/live-capital-envelope-postgres";
 import {
   advanceLiveCapitalEnvelopeStageV2,
   gateLiveCapitalIssueV2,
@@ -35,6 +36,18 @@ const RELEASE = "cd".repeat(32);
 
 let client: postgres.Sql;
 let database: ReturnType<typeof drizzle>;
+
+function watch(
+  issued: LiveCapitalEnvelopeCommandV2,
+  patch: Partial<LiveCapitalObservedIdentityV2> = {},
+): LiveCapitalObservedIdentityV2 {
+  return {
+    organizationId: patch.organizationId ?? issued.organizationId,
+    accountId: patch.accountId ?? issued.accountId,
+    policyDigest: patch.policyDigest ?? issued.policyDigest,
+    releaseSha: patch.releaseSha ?? issued.releaseSha,
+  };
+}
 
 function command(
   organizationId: string,
@@ -126,21 +139,25 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
           command: issued,
           boundOrganizationId: organizationId,
           stage,
+          observed: watch(issued),
         });
         await advanceLiveCapitalEnvelopeStageV2(client, {
           command: issued,
           boundOrganizationId: organizationId,
           stage,
+          observed: watch(issued),
         });
         expect(await stageCount(organizationId, issued.commandId, stage)).toBe(1);
       }
       const published = await produceLiveCapitalEnvelopeV2(client, {
         command: issued,
         boundOrganizationId: organizationId,
+        observed: watch(issued),
       });
       const replay = await produceLiveCapitalEnvelopeV2(client, {
         command: issued,
         boundOrganizationId: organizationId,
+        observed: watch(issued),
       });
       expect(published).toMatchObject({
         decision: "PUBLISHED",
@@ -176,14 +193,18 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
     const left = postgres(url!, { max: 1, prepare: false, onnotice: () => undefined });
     const right = postgres(url!, { max: 1, prepare: false, onnotice: () => undefined });
     try {
+      const leftCommand = command(organizationId, accountId);
+      const rightCommand = command(organizationId, accountId);
       const [first, second] = await Promise.all([
         produceLiveCapitalEnvelopeV2(left, {
-          command: command(organizationId, accountId),
+          command: leftCommand,
           boundOrganizationId: organizationId,
+          observed: watch(leftCommand),
         }),
         produceLiveCapitalEnvelopeV2(right, {
-          command: command(organizationId, accountId),
+          command: rightCommand,
           boundOrganizationId: organizationId,
+          observed: watch(rightCommand),
         }),
       ]);
       const winner = [first, second].find((result) => result.decision === "PUBLISHED");
@@ -238,6 +259,7 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
     const staleResult = await produceLiveCapitalEnvelopeV2(client, {
       command: stale,
       boundOrganizationId: organizationId,
+      observed: watch(stale),
     });
     expect(staleResult).toMatchObject({
       decision: "REFUSED",
@@ -250,6 +272,7 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
     const staleReplay = await produceLiveCapitalEnvelopeV2(client, {
       command: stale,
       boundOrganizationId: organizationId,
+      observed: watch(stale),
     });
     expect(staleReplay.invalidated).toBe(true);
     expect(await counts(organizationId)).toMatchObject({
@@ -264,11 +287,18 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
     const published = await produceLiveCapitalEnvelopeV2(client, {
       command: issued,
       boundOrganizationId: organizationId,
+      observed: watch(issued),
     });
     expect(published.decision).toBe("PUBLISHED");
-    const issue = await gateLiveCapitalIssueV2(client, organizationId, issued.accountId);
-    const bind = await gateCurrentAccountExecutionBindV1(client, organizationId, issued.accountId);
-    const start = await gateLiveCapitalStartV2(client, organizationId, issued.accountId);
+    const seen = watch(issued);
+    const issue = await gateLiveCapitalIssueV2(client, organizationId, issued.accountId, seen);
+    const bind = await gateCurrentAccountExecutionBindV1(
+      client,
+      organizationId,
+      issued.accountId,
+      seen,
+    );
+    const start = await gateLiveCapitalStartV2(client, organizationId, issued.accountId, seen);
     expect(issue).toMatchObject({
       decision: "BASIS_BOUND",
       basisDigest: published.basisDigest,
@@ -325,19 +355,28 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
       select count(*)::int as n from trader_live_capital_envelope_journal_v2
       where organization_id = ${organizationId}::uuid and command_id = ${issued.commandId}::uuid and stage = 'INVALIDATED'`;
     expect(invalidated!.n).toBe(1);
-    expect(await gateLiveCapitalIssueV2(client, organizationId, issued.accountId)).toMatchObject({
+    expect(
+      await gateLiveCapitalIssueV2(client, organizationId, issued.accountId, watch(issued)),
+    ).toMatchObject({
       decision: "REFUSED",
       invoked: false,
       allowanceId: null,
       orderId: null,
     });
     expect(
-      await gateCurrentAccountExecutionBindV1(client, organizationId, issued.accountId),
+      await gateCurrentAccountExecutionBindV1(
+        client,
+        organizationId,
+        issued.accountId,
+        watch(issued),
+      ),
     ).toMatchObject({
       decision: "REFUSED",
       bindInvoked: false,
     });
-    expect(await gateLiveCapitalStartV2(client, organizationId, issued.accountId)).toMatchObject({
+    expect(
+      await gateLiveCapitalStartV2(client, organizationId, issued.accountId, watch(issued)),
+    ).toMatchObject({
       decision: "REFUSED",
       invoked: false,
     });
@@ -356,6 +395,7 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
       produceLiveCapitalEnvelopeV2(client, {
         command: issued,
         boundOrganizationId: home.organizationId,
+        observed: watch(issued),
       }),
     ).rejects.toThrow("EXTERNAL_ORGANIZATION");
     await expect(
@@ -377,6 +417,7 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
       produceLiveCapitalEnvelopeV2(client, {
         command: heartbeat,
         boundOrganizationId: home.organizationId,
+        observed: watch(heartbeat),
       }),
     ).rejects.toThrow("HEARTBEAT_IS_NOT_AUTHORITY");
     expect(await counts(home.organizationId)).toMatchObject({
@@ -388,5 +429,205 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
       orders: 0,
     });
     expect(await counts(foreign.organizationId)).toMatchObject({ envelopes: 0, journal: 0 });
+  });
+
+  it("invalidates a published envelope after expiry or an external policy or release change", async () => {
+    const { organizationId } = await seed();
+    const changedPolicy = "ef".repeat(32);
+    const changedRelease = "01".repeat(32);
+
+    async function publish(
+      accountId: string,
+      window: { validFromUtc: string; validUntilUtc: string } = OPEN,
+    ) {
+      const issued = command(organizationId, accountId, window);
+      const published = await produceLiveCapitalEnvelopeV2(client, {
+        command: issued,
+        boundOrganizationId: organizationId,
+        observed: watch(issued),
+      });
+      expect(published).toMatchObject({
+        decision: "PUBLISHED",
+        invalidated: false,
+        allowanceId: null,
+        orderId: null,
+      });
+      return issued;
+    }
+
+    async function expectCleared(accountId: string, commandId: string) {
+      expect(await stageCount(organizationId, commandId, "INVALIDATED")).toBe(1);
+      const [current] = await client<{ n: number }[]>`
+        select count(*)::int as n from trader_live_capital_envelope_current_v2
+        where organization_id = ${organizationId}::uuid and account_id = ${accountId}`;
+      expect(current!.n).toBe(0);
+    }
+
+    const policy = await publish("acct-policy-after");
+    const policyReplay = await produceLiveCapitalEnvelopeV2(client, {
+      command: policy,
+      boundOrganizationId: organizationId,
+      observed: watch(policy, { policyDigest: changedPolicy }),
+    });
+    expect(policyReplay).toMatchObject({
+      decision: "REFUSED",
+      reason: "LIVE_CAPITAL_IDENTITY_CHANGED",
+      invalidated: true,
+      allowanceId: null,
+      orderId: null,
+    });
+    await expectCleared("acct-policy-after", policy.commandId);
+    await produceLiveCapitalEnvelopeV2(client, {
+      command: policy,
+      boundOrganizationId: organizationId,
+      observed: watch(policy, { policyDigest: changedPolicy }),
+    });
+    expect(await stageCount(organizationId, policy.commandId, "INVALIDATED")).toBe(1);
+
+    const releaseIssue = await publish("acct-release-issue");
+    expect(
+      await gateLiveCapitalIssueV2(
+        client,
+        organizationId,
+        releaseIssue.accountId,
+        watch(releaseIssue, { releaseSha: changedRelease }),
+      ),
+    ).toMatchObject({
+      decision: "REFUSED",
+      reason: "LIVE_CAPITAL_IDENTITY_CHANGED",
+      invoked: false,
+      allowanceId: null,
+      orderId: null,
+    });
+    await expectCleared(releaseIssue.accountId, releaseIssue.commandId);
+
+    const releaseBind = await publish("acct-release-bind");
+    expect(
+      await gateCurrentAccountExecutionBindV1(
+        client,
+        organizationId,
+        releaseBind.accountId,
+        watch(releaseBind, { releaseSha: changedRelease }),
+      ),
+    ).toMatchObject({
+      decision: "REFUSED",
+      reason: "LIVE_CAPITAL_IDENTITY_CHANGED",
+      bindInvoked: false,
+    });
+    await expectCleared(releaseBind.accountId, releaseBind.commandId);
+
+    const releaseStart = await publish("acct-release-start");
+    expect(
+      await gateLiveCapitalStartV2(
+        client,
+        organizationId,
+        releaseStart.accountId,
+        watch(releaseStart, { releaseSha: changedRelease }),
+      ),
+    ).toMatchObject({
+      decision: "REFUSED",
+      reason: "LIVE_CAPITAL_IDENTITY_CHANGED",
+      invoked: false,
+      allowanceId: null,
+      orderId: null,
+    });
+    await expectCleared(releaseStart.accountId, releaseStart.commandId);
+    await gateLiveCapitalStartV2(
+      client,
+      organizationId,
+      releaseStart.accountId,
+      watch(releaseStart, { releaseSha: changedRelease }),
+    );
+    expect(await stageCount(organizationId, releaseStart.commandId, "INVALIDATED")).toBe(1);
+
+    const [until] = await client<{ until: string }[]>`
+      select to_char(
+        date_trunc('milliseconds', clock_timestamp() + interval '12 seconds') at time zone 'UTC',
+        'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as until`;
+    const expiry = await publish("acct-expiry-after", {
+      validFromUtc: OPEN.validFromUtc,
+      validUntilUtc: until!.until,
+    });
+    await client`
+      select pg_sleep(greatest(0, extract(epoch from (${until!.until}::timestamptz - clock_timestamp())) + 0.25))`;
+    expect(
+      await gateLiveCapitalIssueV2(client, organizationId, expiry.accountId, watch(expiry)),
+    ).toMatchObject({
+      decision: "REFUSED",
+      reason: "LIVE_CAPITAL_ENVELOPE_STALE",
+      invoked: false,
+      allowanceId: null,
+      orderId: null,
+    });
+    await expectCleared(expiry.accountId, expiry.commandId);
+    expect(
+      await gateLiveCapitalIssueV2(client, organizationId, expiry.accountId, watch(expiry)),
+    ).toMatchObject({
+      decision: "REFUSED",
+      reason: "LIVE_CAPITAL_ENVELOPE_ABSENT",
+      invoked: false,
+    });
+    expect(await stageCount(organizationId, expiry.commandId, "INVALIDATED")).toBe(1);
+
+    expect(await counts(organizationId)).toMatchObject({
+      allowances: 0,
+      orders: 0,
+      current_rows: 0,
+    });
+  });
+
+  it("pins the composite validation key and invoker search_path", async () => {
+    const [unique] = await client<{ def: string }[]>`
+      select pg_get_constraintdef(oid) as def
+      from pg_constraint
+      where conname = 'tmrvr_v1_id_organization_uq'`;
+    expect(unique!.def).toBe("UNIQUE (id, organization_id)");
+    const [foreign] = await client<{ def: string }[]>`
+      select pg_get_constraintdef(c.oid) as def
+      from pg_constraint c
+      join pg_class t on t.oid = c.conrelid
+      join pg_namespace n on n.oid = t.relnamespace
+      where n.nspname = 'public'
+        and t.relname = 'trader_risk_account_reference_members_v1'
+        and c.contype = 'f'
+        and pg_get_constraintdef(c.oid) like '%validation_digest%'`;
+    expect(foreign!.def).toContain("FOREIGN KEY (validation_digest, organization_id)");
+    expect(foreign!.def).toContain("trader_mi_raw_validation_receipt_v1(id, organization_id)");
+    const [fn] = await client<{ prosecdef: boolean; proconfig: string[] | null }[]>`
+      select p.prosecdef, p.proconfig
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'waia_risk_current_account_v1_block_mutation'`;
+    expect(fn!.prosecdef).toBe(false);
+    expect(fn!.proconfig ?? []).toContain("search_path=pg_catalog, public");
+    const triggers = await client<{ relname: string; proname: string; nspname: string }[]>`
+      select c.relname, p.proname, n.nspname
+      from pg_trigger t
+      join pg_class c on c.oid = t.tgrelid
+      join pg_proc p on p.oid = t.tgfoid
+      join pg_namespace n on n.oid = p.pronamespace
+      where not t.tgisinternal
+        and c.relname in (
+          'trader_live_capital_envelopes_v2',
+          'trader_live_capital_envelope_journal_v2',
+          'trader_live_capital_basis_bindings_v2')
+      order by c.relname`;
+    expect(triggers).toEqual([
+      {
+        relname: "trader_live_capital_basis_bindings_v2",
+        proname: "waia_risk_current_account_v1_block_mutation",
+        nspname: "public",
+      },
+      {
+        relname: "trader_live_capital_envelope_journal_v2",
+        proname: "waia_risk_current_account_v1_block_mutation",
+        nspname: "public",
+      },
+      {
+        relname: "trader_live_capital_envelopes_v2",
+        proname: "waia_risk_current_account_v1_block_mutation",
+        nspname: "public",
+      },
+    ]);
   });
 });

@@ -12,7 +12,10 @@ import {
   type CurrentAccountAuthorityV1,
 } from "@/lib/trader/risk/v2/risk-current-account-read-v1";
 import { foldExpectedEnforcementSuffixV1, holdUnpublishedInclusionsV1 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
-import { readLiveCapitalBasisAdmissionV2 } from "@/lib/trader/risk/v2/live-capital-envelope-postgres";
+import {
+  readLiveCapitalBasisAdmissionV2,
+  type LiveCapitalObservedIdentityV2,
+} from "@/lib/trader/risk/v2/live-capital-envelope-postgres";
 
 type FoldedSuffixInputV1 = Parameters<typeof foldExpectedEnforcementSuffixV1>[0];
 
@@ -61,6 +64,7 @@ export async function gateCurrentAccountExecutionBindV1(
   sql: postgres.Sql,
   organizationId: string,
   accountId: string,
+  observed: LiveCapitalObservedIdentityV2,
 ): Promise<
   | {
       decision: "BASIS_BOUND";
@@ -75,7 +79,7 @@ export async function gateCurrentAccountExecutionBindV1(
       bindInvoked: false;
     }
 > {
-  const basis = await readLiveCapitalBasisAdmissionV2(sql, organizationId, accountId);
+  const basis = await readLiveCapitalBasisAdmissionV2(sql, organizationId, accountId, observed);
   if (basis.decision === "BASIS_BOUND") {
     return {
       decision: "BASIS_BOUND", reason: null, bindInvoked: false,
@@ -650,6 +654,7 @@ export async function refuseProfileBackedExecutionV1(
     observed: Parameters<typeof admitOpenProfileFrontierV1>[0]["observed"];
     unpublishedTruthRecordIds: readonly string[];
     suffix: FoldedSuffixInputV1;
+    envelope: LiveCapitalObservedIdentityV2;
   },
 ): Promise<{
   issue:
@@ -668,7 +673,7 @@ export async function refuseProfileBackedExecutionV1(
     throw new RiskCurrentAccountRefusedV1("SUFFIX_NOTIONALS_UNVERIFIED");
   }
   const stored = await readStoredProfileAuthorityV1(sql, input.organizationId, input.accountId);
-  const bind = await gateCurrentAccountExecutionBindV1(sql, input.organizationId, input.accountId);
+  const bind = await gateCurrentAccountExecutionBindV1(sql, input.organizationId, input.accountId, input.envelope);
   if (bind.bindInvoked) throw new RiskCurrentAccountRefusedV1("CURRENT_POINTER_NOT_GRANTED");
   if (stored.action !== "PROPOSE") {
     return {

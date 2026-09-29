@@ -33,6 +33,13 @@ type CurrentRow = {
   basis_digest: string | null;
 };
 
+export type LiveCapitalObservedIdentityV2 = Readonly<{
+  organizationId: string;
+  accountId: string;
+  policyDigest: string;
+  releaseSha: string;
+}>;
+
 export type LiveCapitalEnvelopeResultV2 = Readonly<{
   decision: "PUBLISHED" | "REFUSED";
   reason: string | null;
@@ -164,6 +171,66 @@ function requireCommand(
   return command;
 }
 
+function requireObservedOrganization(
+  observed: LiveCapitalObservedIdentityV2,
+  boundOrganizationId: string,
+): void {
+  if (observed.organizationId !== boundOrganizationId)
+    throw new RiskCurrentAccountRefusedV1("EXTERNAL_ORGANIZATION");
+}
+
+/** A stored PUBLISHED row is not authority by itself. Re-decide from the sealed body,
+ * the database clock, and the caller's observed identity. */
+async function recheckPublishedAuthorityV2(
+  tx: Sql,
+  observed: LiveCapitalObservedIdentityV2,
+  pointer: { organizationId: string; accountId: string },
+  envelopeDigest: string,
+  basisDigest: string,
+): Promise<LiveCapitalEnvelopeResultV2> {
+  const [envelope] = await tx<{ body_text: string }[]>`
+    select body_text from trader_live_capital_envelopes_v2
+    where organization_id = ${pointer.organizationId}::uuid
+      and account_id = ${pointer.accountId}
+      and content_digest = ${envelopeDigest}`;
+  if (!envelope) {
+    await tx`delete from trader_live_capital_envelope_current_v2
+      where organization_id = ${pointer.organizationId}::uuid and account_id = ${pointer.accountId}`;
+    return refused("LIVE_CAPITAL_ENVELOPE_ABSENT", true);
+  }
+  const stored = commandFromBody(envelope.body_text);
+  const receipt = sealLiveCapitalEnvelopeV2(stored);
+  if (receipt.contentDigest !== envelopeDigest)
+    throw new RiskCurrentAccountRefusedV1("RECORD_SEAL");
+  const nowUtc = await dbNow(tx);
+  const decision = decideLiveCapitalEnvelopePublicationV2({
+    liveCapitalEnvelope: receipt,
+    sourceMethodQualified: false,
+    bound: { ...observed, nowUtc },
+  });
+  if (decision.decision === "PUBLISHED" && decision.basisDigest === basisDigest)
+    return published(envelopeDigest, basisDigest, true);
+  if (decision.decision === "REFUSED" && decision.reason === "EXTERNAL_ORGANIZATION")
+    throw new RiskCurrentAccountRefusedV1("EXTERNAL_ORGANIZATION");
+  const reason =
+    decision.decision === "REFUSED" &&
+    (decision.reason === "LIVE_CAPITAL_ENVELOPE_STALE" ||
+      decision.reason === "LIVE_CAPITAL_ENVELOPE_ABSENT")
+      ? decision.reason
+      : "LIVE_CAPITAL_IDENTITY_CHANGED";
+  const rows = await loadJournal(tx, stored);
+  if (!rows.some((row) => row.stage === "INVALIDATED")) {
+    await journal(tx, stored, "INVALIDATED", {
+      envelopeDigest,
+      basisDigest,
+      reason,
+    });
+  }
+  await tx`delete from trader_live_capital_envelope_current_v2
+    where organization_id = ${pointer.organizationId}::uuid and account_id = ${pointer.accountId}`;
+  return { ...refused(reason, true), envelopeDigest, basisDigest };
+}
+
 /** One durable stage. A repeated call returns the committed stage and does not insert another row. */
 export async function advanceLiveCapitalEnvelopeStageV2(
   sql: postgres.Sql,
@@ -171,8 +238,10 @@ export async function advanceLiveCapitalEnvelopeStageV2(
     command: LiveCapitalEnvelopeCommandV2;
     boundOrganizationId: string;
     stage: LiveCapitalEnvelopeStageV2;
+    observed: LiveCapitalObservedIdentityV2;
   },
 ): Promise<LiveCapitalEnvelopeResultV2> {
+  requireObservedOrganization(input.observed, input.boundOrganizationId);
   const command = requireCommand(input.command, input.boundOrganizationId);
   const receipt = sealLiveCapitalEnvelopeV2(command);
   assertLiveCapitalEnvelopeReceiptV2(receipt);
@@ -185,7 +254,13 @@ export async function advanceLiveCapitalEnvelopeStageV2(
     if (invalidated) return refused(invalidated.reason ?? "LIVE_CAPITAL_ENVELOPE_STALE", true);
     const existing = rows.find((row) => row.stage === stage);
     if (existing?.stage === "PUBLISHED" && existing.envelope_digest && existing.basis_digest) {
-      return published(existing.envelope_digest, existing.basis_digest, true);
+      return recheckPublishedAuthorityV2(
+        tx,
+        input.observed,
+        { organizationId: command.organizationId, accountId: command.accountId },
+        existing.envelope_digest,
+        existing.basis_digest,
+      );
     }
     if (existing) {
       return {
@@ -208,8 +283,15 @@ export async function advanceLiveCapitalEnvelopeStageV2(
       )
     ) {
       const publishedRow = rows.find((row) => row.stage === "PUBLISHED");
-      if (publishedRow?.envelope_digest && publishedRow.basis_digest)
-        return published(publishedRow.envelope_digest, publishedRow.basis_digest, true);
+      if (publishedRow?.envelope_digest && publishedRow.basis_digest) {
+        return recheckPublishedAuthorityV2(
+          tx,
+          input.observed,
+          { organizationId: command.organizationId, accountId: command.accountId },
+          publishedRow.envelope_digest,
+          publishedRow.basis_digest,
+        );
+      }
       return refused("STAGE_ALREADY_COMMITTED");
     }
     if (prior && !rows.some((row) => row.stage === prior))
@@ -329,7 +411,11 @@ export async function advanceLiveCapitalEnvelopeStageV2(
 /** Runs every durable stage. Restart continues from the last committed stage without a second effect. */
 export async function produceLiveCapitalEnvelopeV2(
   sql: postgres.Sql,
-  input: { command: LiveCapitalEnvelopeCommandV2; boundOrganizationId: string },
+  input: {
+    command: LiveCapitalEnvelopeCommandV2;
+    boundOrganizationId: string;
+    observed: LiveCapitalObservedIdentityV2;
+  },
 ): Promise<LiveCapitalEnvelopeResultV2> {
   let last = refused("CAPTURED");
   for (const stage of LIVE_CAPITAL_ENVELOPE_STAGES_V2) {
@@ -433,67 +519,58 @@ export type LiveCapitalBasisAdmissionV2 =
       invoked: false;
     };
 
-/** Issue, bind, and start all require this binding. The binding does not submit an order. */
+function absentAdmission(): LiveCapitalBasisAdmissionV2 {
+  return {
+    decision: "REFUSED",
+    reason: "LIVE_CAPITAL_ENVELOPE_ABSENT",
+    allowanceId: null,
+    orderId: null,
+    invoked: false,
+  };
+}
+
+/** Issue, bind, and start all require this binding. The binding does not submit an order.
+ *  Observed policy and release come from the caller. A stale or changed identity is invalidated once.
+ */
 export async function readLiveCapitalBasisAdmissionV2(
   sql: postgres.Sql,
   boundOrganizationId: string,
   accountId: string,
+  observed: LiveCapitalObservedIdentityV2,
 ): Promise<LiveCapitalBasisAdmissionV2> {
   if (!boundOrganizationId) throw new RiskCurrentAccountRefusedV1("EXTERNAL_ORGANIZATION");
-  const rows = await sql<
-    {
-      organization_id: string;
-      envelope_digest: string;
-      basis_digest: string | null;
-      policy_digest: string;
-      release_sha: string;
-      body_text: string;
-    }[]
-  >`
-    select current.organization_id, current.envelope_digest, current.basis_digest,
-      current.policy_digest, current.release_sha, envelope.body_text
-    from trader_live_capital_envelope_current_v2 current
-    join trader_live_capital_envelopes_v2 envelope
-      on envelope.organization_id = current.organization_id
-     and envelope.account_id = current.account_id
-     and envelope.content_digest = current.envelope_digest
-    where current.organization_id = ${boundOrganizationId}::uuid and current.account_id = ${accountId}`;
-  const row = rows[0];
-  if (!row?.basis_digest)
-    return {
-      decision: "REFUSED",
-      reason: "LIVE_CAPITAL_ENVELOPE_ABSENT",
-      allowanceId: null,
-      orderId: null,
-      invoked: false,
-    };
-  const command = commandFromBody(row.body_text);
-  const receipt = sealLiveCapitalEnvelopeV2(command);
-  if (receipt.contentDigest !== row.envelope_digest)
-    throw new RiskCurrentAccountRefusedV1("RECORD_SEAL");
-  const nowRows = await sql<{ now: string }[]>`
-    select to_char(date_trunc('milliseconds', clock_timestamp()) at time zone 'UTC',
-      'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as now`;
-  const decision = decideLiveCapitalEnvelopePublicationV2({
-    liveCapitalEnvelope: receipt,
-    sourceMethodQualified: false,
-    bound: {
-      organizationId: boundOrganizationId,
-      accountId,
-      policyDigest: row.policy_digest,
-      releaseSha: row.release_sha,
-      nowUtc: nowRows[0]!.now,
-    },
-  });
-  if (decision.decision !== "PUBLISHED" || decision.basisDigest !== row.basis_digest) {
-    if (decision.decision === "REFUSED" && decision.reason === "EXTERNAL_ORGANIZATION") {
-      throw new RiskCurrentAccountRefusedV1("EXTERNAL_ORGANIZATION");
+  requireObservedOrganization(observed, boundOrganizationId);
+  return sql.begin(async (tx) => {
+    await lockScope(tx, boundOrganizationId, accountId);
+    const rows = await tx<{ envelope_digest: string; basis_digest: string | null }[]>`
+      select envelope_digest, basis_digest
+      from trader_live_capital_envelope_current_v2
+      where organization_id = ${boundOrganizationId}::uuid and account_id = ${accountId}
+      for update`;
+    const row = rows[0];
+    if (!row?.basis_digest) return absentAdmission();
+    const settled = await recheckPublishedAuthorityV2(
+      tx,
+      observed,
+      { organizationId: boundOrganizationId, accountId },
+      row.envelope_digest,
+      row.basis_digest,
+    );
+    if (settled.decision === "PUBLISHED" && settled.basisDigest && settled.envelopeDigest) {
+      return {
+        decision: "BASIS_BOUND",
+        basisDigest: settled.basisDigest,
+        envelopeDigest: settled.envelopeDigest,
+        allowanceId: null,
+        orderId: null,
+        invoked: false,
+      };
     }
     const reason =
-      decision.decision === "REFUSED" &&
-      (decision.reason === "LIVE_CAPITAL_ENVELOPE_ABSENT" ||
-        decision.reason === "LIVE_CAPITAL_ENVELOPE_STALE")
-        ? decision.reason
+      settled.reason === "LIVE_CAPITAL_ENVELOPE_STALE" ||
+      settled.reason === "LIVE_CAPITAL_IDENTITY_CHANGED" ||
+      settled.reason === "LIVE_CAPITAL_ENVELOPE_ABSENT"
+        ? settled.reason
         : "LIVE_CAPITAL_IDENTITY_CHANGED";
     return {
       decision: "REFUSED",
@@ -502,29 +579,23 @@ export async function readLiveCapitalBasisAdmissionV2(
       orderId: null,
       invoked: false,
     };
-  }
-  return {
-    decision: "BASIS_BOUND",
-    basisDigest: row.basis_digest,
-    envelopeDigest: row.envelope_digest,
-    allowanceId: null,
-    orderId: null,
-    invoked: false,
-  };
+  });
 }
 
 export function gateLiveCapitalIssueV2(
   sql: postgres.Sql,
   boundOrganizationId: string,
   accountId: string,
+  observed: LiveCapitalObservedIdentityV2,
 ): Promise<LiveCapitalBasisAdmissionV2> {
-  return readLiveCapitalBasisAdmissionV2(sql, boundOrganizationId, accountId);
+  return readLiveCapitalBasisAdmissionV2(sql, boundOrganizationId, accountId, observed);
 }
 
 export function gateLiveCapitalStartV2(
   sql: postgres.Sql,
   boundOrganizationId: string,
   accountId: string,
+  observed: LiveCapitalObservedIdentityV2,
 ): Promise<LiveCapitalBasisAdmissionV2> {
-  return readLiveCapitalBasisAdmissionV2(sql, boundOrganizationId, accountId);
+  return readLiveCapitalBasisAdmissionV2(sql, boundOrganizationId, accountId, observed);
 }

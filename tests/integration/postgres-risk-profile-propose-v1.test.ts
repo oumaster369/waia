@@ -177,16 +177,22 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
         predecessorStateVersion: "1", terminalStateVersion: "1",
         declaredMaxEvents: 4,
       };
+      const envelope = {
+        organizationId: org!.id,
+        accountId,
+        policyDigest: "ab".repeat(32),
+        releaseSha: "cd".repeat(32),
+      };
       await expect(refuseProfileBackedExecutionV1(sql, {
-        organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [],
+        organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [], envelope,
         suffix: { ...suffix, accountId: "other-account" },
       })).rejects.toThrow(/SUFFIX_SCOPE_MISMATCH/);
       await expect(refuseProfileBackedExecutionV1(sql, {
-        organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [],
+        organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [], envelope,
         suffix: { ...suffix, terminalReconciledExposureNotional: "1" },
       })).rejects.toThrow(/SUFFIX_TERMINAL_MISMATCH/);
       expect(await refuseProfileBackedExecutionV1(sql, {
-        organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [], suffix,
+        organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [], envelope, suffix,
       })).toEqual({
         issue: { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null, exposureDelta: "2", pendingDelta: "-1" },
         bind: { decision: "REFUSED", reason: "NO_CURRENT_POINTER", bindInvoked: false },
@@ -194,7 +200,7 @@ describe.skipIf(!enabled)("profile propose writes no current authority", () => {
       await cancelStoredProfileProposalV1(sql, {
         organizationId: org!.id, accountId, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
       });
-      expect(await refuseProfileBackedExecutionV1(sql, { organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [], suffix })).toEqual({
+      expect(await refuseProfileBackedExecutionV1(sql, { organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [], envelope, suffix })).toEqual({
         issue: { decision: "REFUSED", reason: "PROFILE_PROPOSAL_NOT_OPEN", allowanceId: null, orderId: null },
         bind: { decision: "REFUSED", reason: "NO_CURRENT_POINTER", bindInvoked: false },
       });

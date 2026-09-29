@@ -37,6 +37,9 @@ CREATE TABLE public.trader_risk_account_profile_events_v1 (
   CHECK(body_text::jsonb->>'profileDigest' IS NOT DISTINCT FROM profile_digest AND body_text::jsonb->>'action' IS NOT DISTINCT FROM action AND body_text::jsonb->>'actorId' IS NOT DISTINCT FROM actor_id::text AND (body_text::jsonb->>'eventSequence')::bigint IS NOT DISTINCT FROM event_sequence AND body_text::jsonb->>'previousEventDigest' IS NOT DISTINCT FROM previous_event_digest)
 );
 --> statement-breakpoint
+ALTER TABLE public.trader_mi_raw_validation_receipt_v1
+  ADD CONSTRAINT tmrvr_v1_id_organization_uq UNIQUE (id, organization_id);
+--> statement-breakpoint
 CREATE TABLE public.trader_risk_account_reference_members_v1 (
   organization_id uuid NOT NULL REFERENCES public.organizations(id),
   account_id text NOT NULL CHECK(length(account_id) BETWEEN 1 AND 256),
@@ -54,7 +57,7 @@ CREATE TABLE public.trader_risk_account_reference_members_v1 (
   UNIQUE(organization_id,account_id,profile_digest,window_id,instrument_digest,slot),
   FOREIGN KEY(organization_id,account_id,profile_digest) REFERENCES trader_risk_account_profiles_v1(organization_id,account_id,content_digest),
   FOREIGN KEY(capture_digest,organization_id,source_id) REFERENCES trader_mi_raw_capture_receipt_v1(id,organization_id,source_id),
-  FOREIGN KEY(validation_digest) REFERENCES trader_mi_raw_validation_receipt_v1(id),
+  FOREIGN KEY(validation_digest, organization_id) REFERENCES public.trader_mi_raw_validation_receipt_v1(id, organization_id),
   CHECK(body_text::jsonb->>'profileDigest' IS NOT DISTINCT FROM profile_digest AND body_text::jsonb->>'windowId' IS NOT DISTINCT FROM window_id AND (body_text::jsonb->>'slot')::integer IS NOT DISTINCT FROM slot AND body_text::jsonb->>'instrumentIdentityDigestHex' IS NOT DISTINCT FROM instrument_digest AND body_text::jsonb->>'sourceId' IS NOT DISTINCT FROM source_id::text AND body_text::jsonb->>'captureReceiptDigest' IS NOT DISTINCT FROM capture_digest AND body_text::jsonb->>'validationReceiptDigest' IS NOT DISTINCT FROM validation_digest AND body_text::jsonb->>'observationId' IS NOT DISTINCT FROM observation_id AND body_text::jsonb->>'gatewayReceiptDigest' IS NOT DISTINCT FROM gateway_digest)
 );
 --> statement-breakpoint
@@ -193,7 +196,7 @@ CREATE TABLE public.trader_risk_account_current_v1 (
 );
 --> statement-breakpoint
 CREATE FUNCTION public.waia_risk_current_account_v1_block_mutation()
-RETURNS trigger LANGUAGE plpgsql AS $$
+RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
 BEGIN
   RAISE EXCEPTION '% is append-only (no % allowed)', TG_TABLE_NAME, TG_OP USING ERRCODE='check_violation';
 END;
