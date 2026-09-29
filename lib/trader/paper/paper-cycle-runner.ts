@@ -63,6 +63,7 @@ import type {
   RunPollPaperCyclesInput,
 } from "@/lib/trader/paper/paper-cycle.types";
 import { createForecastV2DurableProducerV1 } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
+import { submitExecutionV2ForStrategyDecision } from "@/lib/trader/execution/v2/org-order-path";
 import { admissionPosturesForQualifiedEnvelope } from "@/lib/trader/paper/pre-qualification-paper-envelope";
 import { buildAuthoritativeRuntimeContextV2 } from "@/lib/trader/runtime-v2/authoritative-runtime-context-v2";
 import type { ComposeCanonicalEpistemicSpineV2Input } from "@/lib/trader/runtime-v2/canonical-epistemic-compose-v2";
@@ -857,6 +858,49 @@ export async function runPaperCycleOnce(
     }
     const symbol = snapshot.bars[0]?.symbol ?? snapshot.quote.symbol;
     const pitAnchor = snapshot.evaluatedAt;
+    const forecastOutcome = evaluation.forecastRuntimeOutcome;
+    if (deps.executionV2 && forecastOutcome?.status === "FORECAST_AUTHORIZED") {
+      const decision = await deps.decisionCapitalAuthorityV2.decide({
+        organizationId: context.organizationId,
+        accountId: input.accountKey,
+        cycleId: snapshot.cycleId,
+        symbol,
+        referencePrice: evaluation.features.features.close,
+        forecastOutcome,
+        proposal: {
+          action: "ENTER_LONG",
+          quantity: input.defaultQuantity,
+        },
+      });
+      const submission = await submitExecutionV2ForStrategyDecision(
+        decision,
+        deps.executionV2,
+        context,
+        decision.status === "NO_TRADE"
+          ? null
+          : (deps.executionV2AdmissionForActionableDecision?.(decision.decision) ?? null),
+      );
+      if (submission) {
+        strategyExecutions.push({
+          signal,
+          submitBlocked: false,
+          execution: null,
+          reconciliation: null,
+        });
+        return {
+          evaluation,
+          strategyExecutions,
+          ...pickLegacyExecution(strategyExecutions, guardianPhase.guardianExecutions),
+          submitBlocked: false,
+          guardian: guardianPhase.guardianResult,
+          guardianExecutions: guardianPhase.guardianExecutions,
+          htrGuardian: htrGuardianPhase.htrGuardian,
+          htrBreachCancellation: htrGuardianPhase.htrBreachCancellation,
+          htrRuntimeCallOrder: input.htrAccounting?.bridge.callOrder,
+          hypothesisSessionState: evaluation.hypothesisSessionState,
+        };
+      }
+    }
     const envelope =
       input.canonicalOrdinaryCapitalEnvelopeV2 ?? deps.canonicalOrdinaryCapitalEnvelopeV2;
     const unavailableSources = envelope?.unavailableContextSources ?? [];

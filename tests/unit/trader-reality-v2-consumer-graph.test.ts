@@ -24,7 +24,8 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
       expect.objectContaining({
         status: "PASS",
         // DEE-1126 extracts passive interval durations and the replay minimum.
-        sources: 157,
+        // DEE-1151 adds Execution V2 order-path modules under execution/v2.
+        sources: 162,
         // DEE-1015 adds exactly one observation-only consumer: the assignment-bound
         // credential read boundary that replaces the generic repository on that path.
         // DEE-1050 adds three public-read consumers: RSS news, Alternative.me, and
@@ -33,16 +34,17 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         // DEE-1130 adds one excluded historical reconciliation projector.
         // DEE-1135 pins the HTX account acquisition spec and its PostgreSQL journal
         // on the existing Reality boundary.
-        consumers: 143,
-        // skipBlindTail in scripts/trader/ri-evidence-campaign.ts changed an
-        // existing consumer's body. The path set stays the same.
-        consumerDigestHex: "6680f573a319f9e0da2b790e5b6815cb8d71cbb7a15acf3e71201f54d14ea725",
+        // DEE-1151 adds paper and live callers that import Execution V2.
+        // skipBlindTail in scripts/trader/ri-evidence-campaign.ts changes an
+        // existing consumer's body. Counts and digests are recomputed on the merge.
+        consumers: 148,
+        consumerDigestHex: "471d4249d7a689e085599495960b668704116f922936bd49710786b5f9f06a34",
         // DEE-1099 adds one read of freshly validated account permissions,
         // not a financial observation or a venue effect.
         connectorReferences: 26,
         sourceContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
         consumerContentDigestHex:
-          "b439926bbe9ce8dff3a0935a781ae501ec96fcb95a85a49ee94ac3ee41f5c9e0",
+          "0e3c9506f7c2d833f457f60cf086f3f35e18a95bcc09054e5a8c9b2a001243e5",
       }),
     );
   });

@@ -3,7 +3,21 @@ import { createHash } from "node:crypto";
 import { and, eq, sql as sqlQuery } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+const prePostGate = vi.hoisted(() => ({ fail: false }));
+
+vi.mock("@/lib/trader/execution/v2/pre-post-recheck-v2", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/trader/execution/v2/pre-post-recheck-v2")>();
+  return {
+    ...actual,
+    prePostNetworkRefusalV2: (...args: Parameters<typeof actual.prePostNetworkRefusalV2>) => {
+      if (prePostGate.fail) throw new Error("transient pre-post database failure");
+      return actual.prePostNetworkRefusalV2(...args);
+    },
+  };
+});
 
 import * as pgSchema from "@/db/schema.postgres";
 import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -31,21 +45,35 @@ import {
   readExecutionAttemptProjectionV2Postgres,
   readExecutionAttemptV2Postgres,
 } from "@/lib/trader/execution/v2/repository-postgres";
+import { HtxPlacementRejectedError } from "@/lib/trader/connectors/htx/classify-htx-placement";
 import {
   dispatchAndRecordExecutionAttemptV2,
   recordProtectiveCancelAcknowledgementV2Postgres,
   requestProtectiveCancelV2Postgres,
+  resolveReconciliationRequiredV2Postgres,
 } from "@/lib/trader/execution/v2/recovery-postgres";
 import { divideDecimal } from "@/lib/trader/risk/numeric";
 import {
   admitRiskAllowanceV2Postgres,
   consumeRiskAllowanceForOrderV2Postgres,
-  initializeRiskAccountStateV2Postgres,
+  initializeRiskAccountStateV2Postgres as initializeRiskAccountStateRaw,
   revokeRiskAllowanceV2Postgres,
   RiskV2AdmissionRefusedError,
   type AdmitRiskAllowanceV2Input,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
+import { HTX_DEFAULT_REST_HOST } from "@/lib/trader/connectors/htx/config";
+import { HtxExchangeConnector } from "@/lib/trader/connectors/htx/htx-exchange-connector";
+import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
+import { createPostgresKillSwitchService } from "@/lib/trader/risk/kill-switch";
+import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import { createPostgresExecutionV2Service } from "@/lib/trader/execution/v2/connector-dispatch";
+import { createAssertExecutionV2LiveAuthorized, createOrgScopedExecutionV2OrderPath } from "@/lib/trader/execution/v2/org-order-path";
+import { EXECUTION_V2_LIVE_GATE_REASONS } from "@/lib/trader/execution/v2/live-gates";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
+import {
+  deleteLiveCapitalEnvelopeRows,
+  publishMirroredLiveCapitalEnvelopeV2,
+} from "../helpers/live-capital-test-envelope";
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
@@ -136,7 +164,30 @@ function admission(accountId: string): AdmitRiskAllowanceV2Input {
   };
 }
 
+async function initializeRiskAccountStateV2Postgres(
+  database: Parameters<typeof initializeRiskAccountStateRaw>[0],
+  context: Parameters<typeof initializeRiskAccountStateRaw>[1],
+  state: Parameters<typeof initializeRiskAccountStateRaw>[2],
+) {
+  await initializeRiskAccountStateRaw(database, context, state);
+  await publishMirroredLiveCapitalEnvelopeV2({
+    organizationId: context.organizationId,
+    accountId: state.accountId,
+    exposureLimitNotional: state.accounting.exposureLimitNotional,
+  });
+}
+
+async function deleteOrgAuditLogs(sql: postgres.Sql, organizationId: string): Promise<void> {
+  await sql.unsafe("ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_block_delete");
+  try {
+    await sql`DELETE FROM audit_logs WHERE organization_id = ${organizationId}::uuid`;
+  } finally {
+    await sql.unsafe("ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_block_delete");
+  }
+}
+
 async function clearOrganization(sql: postgres.Sql, organizationId: string): Promise<void> {
+  await deleteLiveCapitalEnvelopeRows(sql, organizationId);
   const guarded = [
     ["trader_execution_reports_v2", "trader_execution_reports_v2_block_delete"],
     ["trader_execution_attempts_v2", "trader_execution_attempts_v2_block_delete"],
@@ -351,6 +402,7 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
   }, 120_000);
 
   beforeEach(async () => {
+    prePostGate.fail = false;
     await clearOrganization(sql, orgA);
     await clearOrganization(sql, orgB);
   });
@@ -359,6 +411,8 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     if (sql) {
       await clearOrganization(sql, orgA);
       await clearOrganization(sql, orgB);
+      await deleteOrgAuditLogs(sql, orgA);
+      await deleteOrgAuditLogs(sql, orgB);
       await sql.end({ timeout: 10 });
     }
     await cleanupWp13Org(url!, USER_A);
@@ -488,7 +542,7 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
   }
 
   async function admittedBindInput(
-    options: { reduction?: boolean; validForMs?: number } = {},
+    options: { reduction?: boolean; validForMs?: number; symbol?: string; baseAsset?: string } = {},
   ): Promise<BindExecutionAuthorityV2Input> {
     const accountId = "atomic-bind";
     const state = account(accountId);
@@ -503,6 +557,8 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
         validForMs: options.validForMs ?? request.validForMs,
         verdict: {
           ...request.verdict,
+          ...(options.symbol ? { symbol: options.symbol } : {}),
+          ...(options.baseAsset ? { baseAsset: options.baseAsset } : {}),
           decision: {
             ...request.verdict.decision,
             action: options.reduction ? "REDUCE" : "ENTER_LONG",
@@ -2132,5 +2188,422 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       bound.attempt.executionAttemptId,
     );
     expect(projection?.lifecycleState).toBe("VENUE_REJECTED");
+  });
+
+  it("DEE-1151 submits one paper order through Execution V2 to the connector", async () => {
+    const input = await admittedBindInput();
+    const connector = new MockExchangeConnector();
+    await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
+    const placeOrder = vi.spyOn(connector, "placeOrder");
+    const path = createOrgScopedExecutionV2OrderPath({
+      db,
+      connectorFor: () => connector,
+    });
+    const result = await path.service.submit({ organizationId: orgA }, input);
+    expect(placeOrder).toHaveBeenCalledTimes(1);
+    expect(result.outcome.status).toBe("VENUE_ACCEPTED");
+    const projection = await readExecutionAttemptProjectionV2Postgres(
+      db,
+      { organizationId: orgA },
+      result.authority.attempt.executionAttemptId,
+    );
+    expect(projection?.lifecycleState).toBe("VENUE_ACCEPTED");
+  });
+
+  it("DEE-1151 refuses a live bind when a live gate is absent and still admits paper", async () => {
+    const input = await admittedBindInput();
+    const live = { ...input, executionMode: "live" as const };
+    const before = await lockProofState(input);
+    await expect(
+      bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, live),
+    ).rejects.toBeInstanceOf(ExecutionV2AuthorityRefusedError);
+    await expect(
+      createAssertExecutionV2LiveAuthorized(db)({ organizationId: orgA }, live),
+    ).rejects.toBeInstanceOf(ExecutionV2AuthorityRefusedError);
+    try {
+      await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, live);
+      throw new Error("live bind should have refused");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ExecutionV2AuthorityRefusedError);
+      expect(EXECUTION_V2_LIVE_GATE_REASONS).toContain(
+        (error as ExecutionV2AuthorityRefusedError).reason,
+      );
+    }
+    const after = await lockProofState(input);
+    expect(after.allowance).toEqual(before.allowance);
+    expect(after.counts).toEqual(before.counts);
+    const connector = new MockExchangeConnector();
+    await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
+    const placeOrder = vi.spyOn(connector, "placeOrder");
+    const path = createOrgScopedExecutionV2OrderPath({
+      db,
+      connectorFor: () => connector,
+    });
+    const paper = await path.service.submit({ organizationId: orgA }, input);
+    expect(placeOrder).toHaveBeenCalledTimes(1);
+    expect(paper.outcome.status).toBe("VENUE_ACCEPTED");
+  });
+
+  async function pendingNotional(accountId: string): Promise<string> {
+    const rows = await sql<{ pending: string }[]>`
+      SELECT worst_case_pending_exposure_notional::text AS pending
+      FROM trader_risk_account_state_v2
+      WHERE organization_id = ${orgA}::uuid AND account_id = ${accountId}`;
+    return rows[0]?.pending ?? "";
+  }
+
+  it("DEE-1151 records an HTX business reject and releases the pending reserve", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    let posts = 0;
+    const rejected = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        posts += 1;
+        throw new HtxPlacementRejectedError("venue rejected the placement", {
+          httpStatus: 200,
+          errCode: "order-value-min-error",
+        });
+      },
+    );
+    expect(posts).toBe(1);
+    expect(rejected.status).toBe("VENUE_REJECTED");
+    expect(await pendingNotional(input.allowance.accountId)).toMatch(/^0(\.0+)?$/);
+    const again = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        posts += 1;
+        throw new Error("must not post again");
+      },
+    );
+    expect(again.status).toBe("REFUSED_ALREADY_TERMINAL");
+    expect(posts).toBe(1);
+    expect(await pendingNotional(input.allowance.accountId)).toMatch(/^0(\.0+)?$/);
+  });
+
+  it("DEE-1151 reduces reconciliation to a reject only after its own venue read is absent", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    const unknown = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        throw new Error("socket reset");
+      },
+    );
+    expect(unknown.status).toBe("RECONCILIATION_REQUIRED");
+    expect(await pendingNotional(input.allowance.accountId)).not.toMatch(/^0(\.0+)?$/);
+    const stayed = await resolveReconciliationRequiredV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => ({ status: "UNKNOWN" }),
+    );
+    expect(stayed.status).toBe("RECONCILIATION_REQUIRED");
+    expect(await pendingNotional(input.allowance.accountId)).not.toMatch(/^0(\.0+)?$/);
+    const callerAbsent = await resolveReconciliationRequiredV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => ({ status: "ABSENT" }),
+    );
+    expect(callerAbsent.status).toBe("RECONCILIATION_REQUIRED");
+    expect(await pendingNotional(input.allowance.accountId)).not.toMatch(/^0(\.0+)?$/);
+    let ownReads = 0;
+    const absent = await resolveReconciliationRequiredV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => ({ status: "ABSENT" }),
+      async () => {
+        ownReads += 1;
+        return { status: "ABSENT" };
+      },
+    );
+    expect(absent.status).toBe("VENUE_REJECTED");
+    expect(ownReads).toBe(1);
+    expect(await pendingNotional(input.allowance.accountId)).toMatch(/^0(\.0+)?$/);
+    let lookups = 0;
+    const terminal = await resolveReconciliationRequiredV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        lookups += 1;
+        return { status: "ABSENT" };
+      },
+      async () => {
+        lookups += 1;
+        return { status: "ABSENT" };
+      },
+    );
+    expect(terminal.status).toBe("REFUSED_ALREADY_TERMINAL");
+    expect(lookups).toBe(0);
+  });
+
+  it("DEE-1151 reduces reconciliation to an accepted order without releasing the reserve", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    const unknown = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        throw new Error("timeout");
+      },
+    );
+    expect(unknown.status).toBe("RECONCILIATION_REQUIRED");
+    const held = await pendingNotional(input.allowance.accountId);
+    const payload = bound.attempt.exactRequestPayload;
+    const found = await resolveReconciliationRequiredV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => ({
+        status: "FOUND",
+        observation: {
+          order: {
+            orderId: "htx-reconciled-1",
+            clientOrderId: payload.clientOrderId,
+            symbol: payload.symbol,
+            side: payload.side,
+            type: payload.type,
+            status: "open",
+            price: payload.price ?? undefined,
+            quantity: payload.quantity,
+            filledQuantity: "0",
+            createdAt: "2026-08-21T00:00:00.000Z",
+            updatedAt: "2026-08-21T00:00:01.000Z",
+          },
+          trades: [],
+          raw: { lookup: "FOUND" },
+        },
+      }),
+    );
+    expect(found.status).toBe("VENUE_ACCEPTED");
+    expect(await pendingNotional(input.allowance.accountId)).toBe(held);
+  });
+
+  it("DEE-1151 does not post after SUBMIT_STARTED when a kill switch is tripped", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    const service = createPostgresKillSwitchService(db);
+    try {
+      let posts = 0;
+      const refused = await dispatchAndRecordExecutionAttemptV2(
+        db,
+        { organizationId: orgA },
+        bound.attempt.executionAttemptId,
+        async () => {
+          posts += 1;
+          throw new Error("post must not be sent");
+        },
+        async () => {
+          await service.trip(
+            { actorType: "service", actorId: null },
+            requireOrgContext(orgA),
+            { scopeType: "organization", organizationId: orgA },
+            { scopeType: "organization", scopeRef: null, switchType: "EMERGENCY_STOP" },
+            { enforcementMode: "REJECT", origin: "manual", reason: "dee-1151 pre-post" },
+          );
+        },
+      );
+      expect(posts).toBe(0);
+      expect(refused.status).toBe("VENUE_REJECTED");
+      expect(await pendingNotional(input.allowance.accountId)).toMatch(/^0(\.0+)?$/);
+      const reports = await listExecutionReportsV2Postgres(
+        db,
+        { organizationId: orgA },
+        bound.attempt.executionAttemptId,
+      );
+      expect(reports.at(-1)?.rawObservation).toMatchObject({
+        postSent: false,
+        reason: "KILL_SWITCH_TRIPPED",
+      });
+    } finally {
+      await sql`delete from trader_kill_switches where organization_id = ${orgA}::uuid`;
+    }
+  });
+
+  it("DEE-1151 keeps a transient pre-POST database failure non-terminal and does not post", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    const held = await pendingNotional(input.allowance.accountId);
+    let posts = 0;
+    prePostGate.fail = true;
+    const unavailable = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        posts += 1;
+        throw new Error("post must not be sent");
+      },
+    );
+    expect(posts).toBe(0);
+    expect(unavailable.status).toBe("RECONCILIATION_REQUIRED");
+    expect(await pendingNotional(input.allowance.accountId)).toBe(held);
+    const reports = await listExecutionReportsV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+    );
+    expect(reports.at(-1)).toMatchObject({
+      reportType: "RECONCILIATION_REQUIRED",
+      rawObservation: { cause: "PRE_POST_RECHECK_UNAVAILABLE", postSent: false },
+    });
+    const projection = await readExecutionAttemptProjectionV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+    );
+    expect(projection?.lifecycleState).toBe("RECONCILIATION_REQUIRED");
+    prePostGate.fail = false;
+    let retryPosts = 0;
+    const retry = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        retryPosts += 1;
+        throw new Error("post must not be sent");
+      },
+    );
+    expect(retryPosts).toBe(0);
+    expect(retry.status).toBe("REFUSED_ALREADY_TERMINAL");
+  });
+
+  function publishedClientOrderFetch(body: Record<string, unknown>) {
+    let posts = 0;
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      const json = (payload: unknown, status = 200) =>
+        new Response(JSON.stringify(payload), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        });
+      if (url.pathname === "/v1/account/accounts") {
+        return json({ status: "ok", data: [{ id: 100009, type: "spot", state: "working" }] });
+      }
+      if (url.pathname === "/v2/user/uid") return json({ code: 200, data: 63628520 });
+      if (url.pathname === "/v2/user/api-key") {
+        return json({
+          code: 200,
+          data: [{ accessKey: "test-access-key", permission: "readOnly,trade", status: "normal" }],
+        });
+      }
+      if (url.pathname === "/v1/order/orders/place") {
+        posts += 1;
+        const posted = JSON.parse(String(init?.body)) as { "client-order-id": string };
+        body["client-order-id"] = posted["client-order-id"];
+        return json({ status: "ok", data: body.id });
+      }
+      if (url.pathname === "/v1/order/orders/getClientOrder") {
+        return json({ status: "ok", data: body });
+      }
+      throw new Error(`Unhandled HTX mock fetch: ${url.pathname}`);
+    };
+    return { fetchImpl, posts: () => posts };
+  }
+
+  it("DEE-1151 accepts a published getClientOrder body after venue decimals are normalized", async () => {
+    const input = await admittedBindInput({ symbol: "BTC/USDT", baseAsset: "BTC/" });
+    // Published GET /v1/order/orders/getClientOrder shape: field-* and 18 fractional zeros.
+    // Allowances seal symbol as base+quote, so this fixture's base is "BTC/" and the
+    // sealed symbol is BTC/USDT — the same string htxSymbolToInternal("btcusdt") returns.
+    const published: Record<string, unknown> = {
+      id: 357632718898331,
+      symbol: "btcusdt",
+      "account-id": 13496526,
+      amount: "0.001000000000000000",
+      price: "25000.000000000000000000",
+      "created-at": 1630649406687,
+      type: "buy-limit",
+      "field-amount": "0.0",
+      "field-cash-amount": "0.0",
+      "field-fees": "0.0",
+      "finished-at": 0,
+      source: "spot-api",
+      state: "submitted",
+      "canceled-at": 0,
+    };
+    const transport = publishedClientOrderFetch(published);
+    const connector = new HtxExchangeConnector({
+      apiKey: "test-access-key",
+      apiSecret: "test-secret-key",
+      restHost: HTX_DEFAULT_REST_HOST,
+      fetchImpl: transport.fetchImpl,
+    });
+    const validated = await connector.validateCredentials({
+      apiKey: "test-access-key",
+      apiSecret: "test-secret-key",
+    });
+    expect(validated.valid).toBe(true);
+    const service = createPostgresExecutionV2Service({
+      db,
+      connectorFor: () => connector,
+    });
+    const submitted = await service.submit({ organizationId: orgA }, input);
+    expect(transport.posts()).toBe(1);
+    expect(submitted.outcome.status).toBe("VENUE_ACCEPTED");
+    const reports = await listExecutionReportsV2Postgres(
+      db,
+      { organizationId: orgA },
+      submitted.authority.attempt.executionAttemptId,
+    );
+    expect(reports.at(-1)).toMatchObject({
+      reportType: "VENUE_ACCEPTED",
+      rawObservation: {
+        order: { price: "25000", quantity: "0.001", filledQuantity: "0", status: "open" },
+        connector: {
+          order: {
+            amount: "0.001000000000000000",
+            price: "25000.000000000000000000",
+            "field-amount": "0.0",
+          },
+        },
+      },
+    });
+  });
+
+  it("DEE-1151 does not accept a venue decimal with a non-zero digit past scale 8", async () => {
+    const input = await admittedBindInput({ symbol: "BTC/USDT", baseAsset: "BTC/" });
+    const published: Record<string, unknown> = {
+      id: 357632718898331,
+      symbol: "btcusdt",
+      "account-id": 13496526,
+      amount: "0.001000000000000000",
+      price: "25000.000000001",
+      "created-at": 1630649406687,
+      type: "buy-limit",
+      "field-amount": "0.0",
+      "field-cash-amount": "0.0",
+      "field-fees": "0.0",
+      state: "submitted",
+    };
+    const transport = publishedClientOrderFetch(published);
+    const connector = new HtxExchangeConnector({
+      apiKey: "test-access-key",
+      apiSecret: "test-secret-key",
+      restHost: HTX_DEFAULT_REST_HOST,
+      fetchImpl: transport.fetchImpl,
+    });
+    expect((await connector.validateCredentials({
+      apiKey: "test-access-key",
+      apiSecret: "test-secret-key",
+    })).valid).toBe(true);
+    const service = createPostgresExecutionV2Service({
+      db,
+      connectorFor: () => connector,
+    });
+    const submitted = await service.submit({ organizationId: orgA }, input);
+    expect(transport.posts()).toBe(1);
+    expect(submitted.outcome.status).toBe("RECONCILIATION_REQUIRED");
+    expect(submitted.outcome.status).not.toBe("VENUE_ACCEPTED");
   });
 });

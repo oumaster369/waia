@@ -44,6 +44,13 @@ import {
   type RiskVerdictV2Draft,
 } from "./risk-verdict-contract-v2";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
+import { enforcingKillSwitchCoversAccountV2 } from "@/lib/trader/risk/kill-switch/project-onto-risk-accounts-v2";
+import {
+  accountingCappedByLiveCapitalEnvelopeV2,
+  assertNotionalWithinLiveCapitalLimitV2,
+  LiveCapitalOrderLimitRefusedError,
+  requireLiveCapitalOrderLimitV2,
+} from "@/lib/trader/risk/v2/live-capital-order-limit-v2";
 
 type RiskTx = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
 type RiskExecutor = Pick<WaiaPostgresDb, "select" | "execute">;
@@ -560,6 +567,9 @@ export async function admitRiskAllowanceV2Postgres(
   }
   const outcome = await runWaiaPostgresTransaction(db, async (tx) => {
     const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
+    if (await enforcingKillSwitchCoversAccountV2(tx, scoped.organizationId)) {
+      throw new RiskV2AdmissionRefusedError("KILL_SWITCH_TRIPPED");
+    }
     const strictExposureReduction = deriveStrictExposureReductionV2({
       state,
       verdict: input.verdict,
@@ -633,6 +643,18 @@ export async function admitRiskAllowanceV2Postgres(
       }
       // The issued row's notional is already inside outstandingReservationNotional.
       // Admission must judge the rest of the envelope, not charge this reservation twice.
+      let replayAccounting;
+      try {
+        replayAccounting = await accountingCappedByLiveCapitalEnvelopeV2(
+          tx,
+          scoped.organizationId,
+          input.accountId,
+          state.accounting,
+        );
+      } catch (error) {
+        if (error instanceof LiveCapitalOrderLimitRefusedError) return refuseReplay(error.reason);
+        throw error;
+      }
       const replay = assessIssuedAllowanceReplayV1({
         killState: state.killState,
         stateRealitySnapshotId: state.realitySnapshotId,
@@ -642,9 +664,9 @@ export async function admitRiskAllowanceV2Postgres(
         verdictRealityContentDigestHex: verdict.reality.contentDigestHex,
         verdictReconciliationAuthorityDigestHex: verdict.reality.reconciliationAuthorityDigestHex,
         accounting: {
-          ...state.accounting,
+          ...replayAccounting,
           outstandingReservationNotional: formatDecimal(
-            parseDecimal(state.accounting.outstandingReservationNotional) -
+            parseDecimal(replayAccounting.outstandingReservationNotional) -
               parseDecimal(allowance.reservedExposureNotional),
           ),
         },
@@ -672,8 +694,22 @@ export async function admitRiskAllowanceV2Postgres(
     ) {
       throw new RiskV2AdmissionRefusedError("CURRENT_AUTHORITY_BINDING_MISMATCH");
     }
+    let admissionAccounting;
+    try {
+      admissionAccounting = await accountingCappedByLiveCapitalEnvelopeV2(
+        tx,
+        scoped.organizationId,
+        input.accountId,
+        state.accounting,
+      );
+    } catch (error) {
+      if (error instanceof LiveCapitalOrderLimitRefusedError) {
+        throw new RiskV2AdmissionRefusedError(error.reason);
+      }
+      throw error;
+    }
     const calculation = calculateRiskAdmissionV2({
-      accounting: state.accounting,
+      accounting: admissionAccounting,
       requestedReservationNotional: reservationNotional,
       posture: state.posture,
       strictExposureReduction,
@@ -1047,6 +1083,12 @@ export function issuedAllowanceRefusalTerminalizesStoredRowV2(reason: string): b
     case "CURRENT_POSTURE_RESTRICTED":
     case "EXECUTION_FAIL_CLOSED":
     case "KILL_SWITCH_TRIPPED":
+    case "LIVE_CAPITAL_ENVELOPE_ABSENT":
+    case "LIVE_CAPITAL_ENVELOPE_STALE":
+    case "LIVE_CAPITAL_IDENTITY_CHANGED":
+    case "LIVE_CAPITAL_LIMIT_MISMATCH":
+    case "LIVE_CAPITAL_NOT_POSITIVE":
+    case "LIVE_CAPITAL_LOSS_LIMIT_EXCEEDED":
       return true;
     default:
       return false;
@@ -1146,6 +1188,9 @@ export async function terminalizeIssuedAllowanceIfBindWouldRefuseV2(
 ): Promise<IssuedAllowanceBindPreflightV2 | null> {
   const scoped = requireOrgContext(context.organizationId);
   const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
+  if (await enforcingKillSwitchCoversAccountV2(tx, scoped.organizationId)) {
+    throw new RiskV2AdmissionRefusedError("KILL_SWITCH_TRIPPED");
+  }
   const rows = await tx
     .select()
     .from(pgSchema.traderRiskAllowancesV2)
@@ -1180,6 +1225,32 @@ export async function terminalizeIssuedAllowanceIfBindWouldRefuseV2(
   if (!verdictRows[0]) throw new RiskV2PersistenceConflictError("allowance verdict missing");
   const allowance = allowanceAuthorityFromRow(row, verdictFromRow(verdictRows[0]));
   const durableAt = await freshEligibilityTime(tx);
+  try {
+    const effectiveLimit = await requireLiveCapitalOrderLimitV2(
+      tx,
+      scoped.organizationId,
+      input.accountId,
+      state.accounting.exposureLimitNotional,
+    );
+    if (input.effectNotionalCeiling !== undefined) {
+      assertNotionalWithinLiveCapitalLimitV2(input.effectNotionalCeiling, effectiveLimit);
+    }
+  } catch (error) {
+    if (!(error instanceof LiveCapitalOrderLimitRefusedError)) throw error;
+    if (!issuedAllowanceRefusalTerminalizesStoredRowV2(error.reason)) {
+      return { status: "REFUSED", reason: error.reason, terminalized: false };
+    }
+    await refuseIssuedAllowanceConsumptionV2({
+      tx,
+      state,
+      row,
+      eventId: randomUUID(),
+      reason: error.reason,
+      durableAt,
+      withoutOrder: true,
+    });
+    return { status: "REFUSED", reason: error.reason, terminalized: true };
+  }
   const decision = issuedConsumptionBindingOrRefusal({
     organizationId: scoped.organizationId,
     state,
@@ -1328,6 +1399,9 @@ export async function revalidateConsumedRiskAllowanceForExecutionV2(
 ): Promise<void> {
   const scoped = requireOrgContext(context.organizationId);
   const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
+  if (await enforcingKillSwitchCoversAccountV2(tx, scoped.organizationId)) {
+    throw new RiskV2AdmissionRefusedError("KILL_SWITCH_TRIPPED");
+  }
   const rows = await tx
     .select()
     .from(pgSchema.traderRiskAllowancesV2)
@@ -1465,6 +1539,27 @@ export async function consumeRiskAllowanceForOrderV2FromTransaction(
       riskAllowanceId: allowance.riskAllowanceId,
       reason: `ALLOWANCE_${row.lifecycleState}`,
     };
+  }
+  try {
+    const effectiveLimit = await requireLiveCapitalOrderLimitV2(
+      tx,
+      scoped.organizationId,
+      input.accountId,
+      state.accounting.exposureLimitNotional,
+    );
+    if (input.effectNotionalCeiling !== undefined) {
+      assertNotionalWithinLiveCapitalLimitV2(input.effectNotionalCeiling, effectiveLimit);
+    }
+  } catch (error) {
+    if (!(error instanceof LiveCapitalOrderLimitRefusedError)) throw error;
+    return refuseIssuedAllowanceConsumptionV2({
+      tx,
+      state,
+      row,
+      eventId: input.consumptionEventId,
+      reason: error.reason,
+      durableAt,
+    });
   }
   const decision = issuedConsumptionBindingOrRefusal({
     organizationId: scoped.organizationId,

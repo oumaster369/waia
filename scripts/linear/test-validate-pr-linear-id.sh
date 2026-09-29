@@ -305,6 +305,20 @@ run_case "missing explicit Linear" 1 \
   "**Tier:** T1" \
   "dee-153-foo" || fail=1
 
+run_case "cloud agent cursor/dee branch aligned metadata" 0 \
+  "DEE-1151 feat(execution): paper and live create Execution V2" \
+  "**Linear:** \`DEE-1151\`
+**Tier:** T2" \
+  "cursor/dee-1151-p0-1-execution-v2-path-8933" \
+  "main" || fail=1
+
+run_case "cursor branch without dee identity fails" 1 \
+  "DEE-1151 feat(execution): paper and live create Execution V2" \
+  "**Linear:** \`DEE-1151\`
+**Tier:** T2" \
+  "cursor/ai-trader-full-audit-2026-09-29-6934" \
+  "main" || fail=1
+
 run_case "normal dee → main aligned metadata" 0 \
   "DEE-153 infra(governance): P0 Linear ID collision hardening" \
   "**Linear:** \`DEE-153\` https://linear.app/deepsense/issue/DEE-153

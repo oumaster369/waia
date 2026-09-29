@@ -29,9 +29,9 @@
       "lib/trader/execution/historical-simulated-exchange.ts",
       "lib/trader/connectors/mock-exchange-connector.ts"
     ],
-    "expectedFileCount": 157,
-    "sortedPathDigestHex": "8a920eb50ee18138ca1dfeebfc02532822407beb2aaf4d98a14587f94dfc2aaf",
-    "sortedContentDigestHex": "93b51ef18ada1f21dfd8130b0fbc49401c3b9cc3344b603492a54ec36591f5aa"
+    "expectedFileCount": 162,
+    "sortedPathDigestHex": "a6828ed74c7fde97de1556ac4dcb4e9de369ff2fe0cd7d4a430fdeff15b7d15a",
+    "sortedContentDigestHex": "e269a3bf11fc46c085600aa550645b830c21779247363d5523f487d300c9d0e1"
   },
   "sourceRules": [
     {
@@ -114,9 +114,9 @@
       "getTradeHistory",
       "placeOrder"
     ],
-    "expectedFileCount": 143,
-    "sortedPathDigestHex": "6680f573a319f9e0da2b790e5b6815cb8d71cbb7a15acf3e71201f54d14ea725",
-    "sortedContentDigestHex": "b439926bbe9ce8dff3a0935a781ae501ec96fcb95a85a49ee94ac3ee41f5c9e0"
+    "expectedFileCount": 148,
+    "sortedPathDigestHex": "471d4249d7a689e085599495960b668704116f922936bd49710786b5f9f06a34",
+    "sortedContentDigestHex": "0e3c9506f7c2d833f457f60cf086f3f35e18a95bcc09054e5a8c9b2a001243e5"
   },
   "consumerRules": [
     {

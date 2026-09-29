@@ -101,7 +101,7 @@ describe.runIf(enabled)("FHV Execution V2 historical symbol boundary", () => {
         legacySubmissions: 0,
       });
     } finally {
-      bound.cleanup();
+      await bound.cleanup();
       await sql.end({ timeout: 5 });
     }
   });

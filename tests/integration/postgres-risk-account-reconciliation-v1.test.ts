@@ -31,15 +31,29 @@ import {
 } from "@/lib/trader/execution/v2/contracts";
 import { listExecutionReportsV2Postgres } from "@/lib/trader/execution/v2/repository-postgres";
 import { divideDecimal } from "@/lib/trader/risk/numeric";
+import { publishMirroredLiveCapitalEnvelopeV2 } from "../helpers/live-capital-test-envelope";
 import {
   admitRiskAllowanceV2Postgres,
-  initializeRiskAccountStateV2Postgres,
+  initializeRiskAccountStateV2Postgres as initializeRiskAccountStateRaw,
   RiskV2AdmissionRefusedError,
   type AdmitRiskAllowanceV2Input,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import { createRiskAccountProfileV1, createRiskAccountReferenceV1, riskAccountDigestV1,
   sealRiskAccountRecordV1, RISK_ACCOUNT_CHANNELS_V1, RISK_REFERENCE_METHOD_V1,
   type RiskReferenceMemberV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
+
+async function initializeRiskAccountStateV2Postgres(
+  database: Parameters<typeof initializeRiskAccountStateRaw>[0],
+  context: Parameters<typeof initializeRiskAccountStateRaw>[1],
+  state: Parameters<typeof initializeRiskAccountStateRaw>[2],
+) {
+  await initializeRiskAccountStateRaw(database, context, state);
+  await publishMirroredLiveCapitalEnvelopeV2({
+    organizationId: context.organizationId,
+    accountId: state.accountId,
+    exposureLimitNotional: state.accounting.exposureLimitNotional,
+  });
+}
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1", url = process.env.DATABASE_URL_POSTGRES?.trim();
 const receipt = (stage: string, body: unknown) => console.log(JSON.stringify({ kind: "DEE1135_ACQUISITION_RECEIPT", stage, body }));

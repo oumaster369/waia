@@ -42,6 +42,8 @@ import {
   readExecutionPlanV2Postgres,
   readExecutionPolicyV2Postgres,
 } from "./repository-postgres";
+import { assertExecutionV2LiveGatesPostgres, ExecutionV2LiveGateRefusedError } from "./live-gates";
+import { prePostNetworkRefusalV2 } from "./pre-post-recheck-v2";
 
 type PlanMechanicsV2 = Omit<CreateExecutionPlanV2Input, "executionPlanId" | "allowance" | "policy">;
 
@@ -53,6 +55,8 @@ export type BindExecutionAuthorityV2Input = Readonly<{
   credentialId: string | null;
   strategySignalId: string | null;
   allocationDecisionId: string | null;
+  strategyId?: string | null;
+  strategyVersion?: string | null;
 }>;
 
 export type BoundExecutionAuthorityV2 = Readonly<{
@@ -199,6 +203,18 @@ export async function bindExecutionAuthorityV2Postgres(
     if (!(await readRiskAccountStateV2Postgres(tx, scoped, input.allowance.accountId, true))) {
       throw new RiskV2AdmissionRefusedError("RISK_ACCOUNT_STATE_MISSING");
     }
+    // Live gates run under the account lock, before any allowance consume.
+    // A refusal rolls the transaction back and leaves the ISSUED allowance reserved.
+    if (input.executionMode === "live") {
+      try {
+        await assertExecutionV2LiveGatesPostgres(tx, scoped, input);
+      } catch (error) {
+        if (error instanceof ExecutionV2LiveGateRefusedError) {
+          throw new ExecutionV2AuthorityRefusedError(error.reason);
+        }
+        throw error;
+      }
+    }
     // Terminalize an allowance that is unfit on its own before policy/plan inserts,
     // then commit that write. A malformed request throws here so the transaction
     // rolls back and the ISSUED row stays reserved.
@@ -307,6 +323,8 @@ export async function bindExecutionAuthorityV2Postgres(
         plan: storedPlan,
         riskAllowanceContentDigestHex: input.allowance.contentDigestHex,
         boundAtUtc: boundAt.toISOString(),
+        strategyId: input.strategyId,
+        strategyVersion: input.strategyVersion,
       });
       await tx
         .update(pgSchema.traderOrders)
@@ -382,7 +400,8 @@ export type ExecutionV2NetworkSubmitter<T> = (
 export type DispatchCommittedExecutionV2Result<T> =
   | Readonly<{ status: "SUBMITTED"; attempt: ExecutionAttemptV2; rawResult: T }>
   | Readonly<{ status: "FAIL_UNKNOWN"; attempt: ExecutionAttemptV2; error: unknown }>
-  | Readonly<{ status: "REFUSED_ALREADY_STARTED"; lifecycleState: string }>;
+  | Readonly<{ status: "REFUSED_ALREADY_STARTED"; lifecycleState: string }>
+  | Readonly<{ status: "REFUSED_BEFORE_POST"; attempt: ExecutionAttemptV2; reason: string }>;
 
 /**
  * Serializes current Risk admission with the one durable SUBMIT_STARTED record,
@@ -395,6 +414,7 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
   context: OrgContext,
   executionAttemptId: string,
   submit: ExecutionV2NetworkSubmitter<T>,
+  afterSubmitStarted?: () => Promise<void>,
 ): Promise<DispatchCommittedExecutionV2Result<T>> {
   const scoped = requireOrgContext(context.organizationId);
   const ready = await runWaiaPostgresTransaction(db, async (tx) => {
@@ -470,6 +490,8 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
       plan,
       riskAllowanceContentDigestHex: projection.attempt.riskAllowanceContentDigestHex,
       boundAtUtc: projection.attempt.boundAtUtc,
+      strategyId: projection.attempt.exactRequestPayload.strategyId,
+      strategyVersion: projection.attempt.exactRequestPayload.strategyVersion,
     });
     const priceMatches =
       (order.price === null && projection.attempt.exactRequestPayload.price === null) ||
@@ -534,6 +556,22 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
     };
   });
   if (ready.status !== "READY") return ready;
+  if (afterSubmitStarted) await afterSubmitStarted();
+  let refusal: string | null;
+  try {
+    refusal = await prePostNetworkRefusalV2(db, scoped, ready.attempt);
+  } catch {
+    // A thrown read is not a venue reject. The caller records a non-terminal
+    // refusal and must not POST. A returned refusal string stays terminal.
+    refusal = "PRE_POST_RECHECK_UNAVAILABLE";
+  }
+  if (refusal) {
+    return Object.freeze({
+      status: "REFUSED_BEFORE_POST" as const,
+      attempt: ready.attempt,
+      reason: refusal,
+    });
+  }
   try {
     const rawResult = await submit(ready.attempt.exactRequestPayload, {
       executionAttemptId: ready.attempt.executionAttemptId,

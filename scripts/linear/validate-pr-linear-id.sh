@@ -395,7 +395,8 @@ extract_branch_nn() {
   if [[ "$branch" =~ ^dee-([0-9]+)- ]]; then
     nn="${BASH_REMATCH[1]}"
   elif [[ "$branch" =~ ^cursor/dee-([0-9]+)-[a-z0-9-]+-[a-z0-9]+$ ]]; then
-    # Cloud-agent branches keep dee-<NN>-<slug> and append a disambiguating suffix.
+    # Cloud-agent branches keep dee-<NN>-<slug> and append a suffix.
+    # A numeric suffix (main) and an alphanumeric suffix (for example cc92) both match.
     nn="${BASH_REMATCH[1]}"
   fi
   if [[ -n "$nn" ]]; then
