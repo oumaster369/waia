@@ -1034,6 +1034,25 @@ function issuedConsumptionBindingOrRefusal(input: {
   }
 }
 
+/**
+ * A stored ISSUED allowance is terminalized only when it is unfit on its own.
+ * A malformed bind request (nonce, digest, lineage, ceiling, order shape) must
+ * roll back and leave that row ISSUED.
+ */
+export function issuedAllowanceRefusalTerminalizesStoredRowV2(reason: string): boolean {
+  switch (reason) {
+    case "ALLOWANCE_EXPIRED":
+    case "CURRENT_AUTHORITY_BINDING_MISMATCH":
+    case "STRICT_REDUCTION_PROOF_INVALID":
+    case "CURRENT_POSTURE_RESTRICTED":
+    case "EXECUTION_FAIL_CLOSED":
+    case "KILL_SWITCH_TRIPPED":
+      return true;
+    default:
+      return false;
+  }
+}
+
 async function refuseIssuedAllowanceConsumptionV2(input: {
   tx: RiskTx;
   state: RiskAccountStateV2;
@@ -1106,17 +1125,25 @@ async function refuseIssuedAllowanceConsumptionV2(input: {
   };
 }
 
+export type IssuedAllowanceBindPreflightV2 = Readonly<{
+  status: "REFUSED";
+  reason: string;
+  /** True only when this call wrote a terminal row that the caller must commit. */
+  terminalized: boolean;
+}>;
+
 /**
- * Bind calls this before policy/plan inserts. An ineligible ISSUED allowance is
- * terminalized here so the caller can commit that write and refuse outside the
- * transaction. An eligible or already-consumed allowance is left untouched and
- * is not locked, preserving account-then-allowance lock order on the success path.
+ * Bind calls this before policy/plan inserts. An ISSUED allowance that is unfit
+ * on its own is terminalized here so the caller can commit that write and refuse
+ * outside the transaction. A refusal that describes the request leaves the row
+ * untouched. An eligible or already-consumed allowance is not locked, preserving
+ * account-then-allowance lock order on the success path.
  */
 export async function terminalizeIssuedAllowanceIfBindWouldRefuseV2(
   tx: RiskTx,
   context: OrgContext,
   input: ConsumeRiskAllowanceForOrderV2Input,
-): Promise<RefusedRiskAllowanceForOrderV2 | null> {
+): Promise<IssuedAllowanceBindPreflightV2 | null> {
   const scoped = requireOrgContext(context.organizationId);
   const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
   const rows = await tx
@@ -1135,9 +1162,8 @@ export async function terminalizeIssuedAllowanceIfBindWouldRefuseV2(
   if (row.lifecycleState !== "ISSUED") {
     return {
       status: "REFUSED",
-      order: null,
-      riskAllowanceId: row.id,
       reason: `ALLOWANCE_${row.lifecycleState}`,
+      terminalized: false,
     };
   }
   const verdictRows = await tx
@@ -1165,6 +1191,9 @@ export async function terminalizeIssuedAllowanceIfBindWouldRefuseV2(
     durableAt,
   });
   if (decision.status === "ELIGIBLE") return null;
+  if (!issuedAllowanceRefusalTerminalizesStoredRowV2(decision.reason)) {
+    return { status: "REFUSED", reason: decision.reason, terminalized: false };
+  }
   const lockedRows = await tx
     .select()
     .from(pgSchema.traderRiskAllowancesV2)
@@ -1180,12 +1209,11 @@ export async function terminalizeIssuedAllowanceIfBindWouldRefuseV2(
   if (!locked || locked.lifecycleState !== "ISSUED") {
     return {
       status: "REFUSED",
-      order: null,
-      riskAllowanceId: row.id,
       reason: locked ? `ALLOWANCE_${locked.lifecycleState}` : "ALLOWANCE_NOT_FOUND",
+      terminalized: false,
     };
   }
-  return refuseIssuedAllowanceConsumptionV2({
+  const refused = await refuseIssuedAllowanceConsumptionV2({
     tx,
     state,
     row: locked,
@@ -1193,6 +1221,7 @@ export async function terminalizeIssuedAllowanceIfBindWouldRefuseV2(
     reason: decision.reason,
     durableAt,
   });
+  return { status: "REFUSED", reason: refused.reason, terminalized: true };
 }
 
 function requireOrderMatchesAllowanceV2(input: {

@@ -199,16 +199,20 @@ export async function bindExecutionAuthorityV2Postgres(
     if (!(await readRiskAccountStateV2Postgres(tx, scoped, input.allowance.accountId, true))) {
       throw new RiskV2AdmissionRefusedError("RISK_ACCOUNT_STATE_MISSING");
     }
-    // Terminalize an ineligible allowance before policy/plan inserts, then commit
-    // that write. The refusal is thrown only after this transaction returns.
+    // Terminalize an allowance that is unfit on its own before policy/plan inserts,
+    // then commit that write. A malformed request throws here so the transaction
+    // rolls back and the ISSUED row stays reserved.
     const earlyRefusal = await terminalizeIssuedAllowanceIfBindWouldRefuseV2(
       tx,
       scoped,
       consumptionInput,
     );
+    if (earlyRefusal && !earlyRefusal.terminalized) {
+      throw new ExecutionV2AuthorityRefusedError(earlyRefusal.reason);
+    }
     if (earlyRefusal) return { status: "REFUSED" as const, reason: earlyRefusal.reason };
-    // Inserts and the order bind sit in a savepoint. A later consumption refusal
-    // rolls back only those rows; the allowance terminalization is rewritten after.
+    // Inserts and the order bind sit in a savepoint. A later intrinsic refusal
+    // rolls those rows back and rewrites the terminal state after the savepoint.
     await tx.execute(sql`SAVEPOINT bind_authority_effects`);
     let effectsOpen = true;
     const releaseEffects = async () => {
@@ -230,12 +234,15 @@ export async function bindExecutionAuthorityV2Postgres(
       if (consumed.status !== "CONSUMED") {
         await tx.execute(sql`ROLLBACK TO SAVEPOINT bind_authority_effects`);
         effectsOpen = false;
-        const refusal = await terminalizeIssuedAllowanceIfBindWouldRefuseV2(
-          tx,
-          scoped,
-          consumptionInput,
-        );
-        return { status: "REFUSED" as const, reason: refusal?.reason ?? consumed.reason };
+        const refusal = await terminalizeIssuedAllowanceIfBindWouldRefuseV2(tx, scoped, {
+          ...consumptionInput,
+          riskAllowanceContentDigestHex: storedPlan.riskAllowanceContentDigestHex,
+          effectNotionalCeiling: storedPlan.approvedNotionalCeiling,
+        });
+        if (refusal?.terminalized) {
+          return { status: "REFUSED" as const, reason: refusal.reason };
+        }
+        throw new ExecutionV2AuthorityRefusedError(refusal?.reason ?? consumed.reason);
       }
 
       if (!consumed.consumedNow) {
