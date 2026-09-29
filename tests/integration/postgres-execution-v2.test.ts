@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { and, eq, sql as sqlQuery } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as pgSchema from "@/db/schema.postgres";
 import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -45,6 +45,8 @@ import {
   RiskV2AdmissionRefusedError,
   type AdmitRiskAllowanceV2Input,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
+import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
+import { createOrgScopedExecutionV2OrderPath } from "@/lib/trader/execution/v2/org-order-path";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
 
@@ -2132,5 +2134,25 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       bound.attempt.executionAttemptId,
     );
     expect(projection?.lifecycleState).toBe("VENUE_REJECTED");
+  });
+
+  it("DEE-1151 submits one paper order through Execution V2 to the connector", async () => {
+    const input = await admittedBindInput();
+    const connector = new MockExchangeConnector();
+    await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
+    const placeOrder = vi.spyOn(connector, "placeOrder");
+    const path = createOrgScopedExecutionV2OrderPath({
+      db,
+      connectorFor: () => connector,
+    });
+    const result = await path.service.submit({ organizationId: orgA }, input);
+    expect(placeOrder).toHaveBeenCalledTimes(1);
+    expect(result.outcome.status).toBe("VENUE_ACCEPTED");
+    const projection = await readExecutionAttemptProjectionV2Postgres(
+      db,
+      { organizationId: orgA },
+      result.authority.attempt.executionAttemptId,
+    );
+    expect(projection?.lifecycleState).toBe("VENUE_ACCEPTED");
   });
 });

@@ -4,6 +4,8 @@ enforceServerOnly();
 
 import { createPerRequestPostgresRuntime } from "@/db/postgres-client";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
+import { createOrgScopedExecutionV2OrderPath } from "@/lib/trader/execution/v2/org-order-path";
+import { buildPreQualificationPaperEnvelope } from "@/lib/trader/paper/pre-qualification-paper-envelope";
 import {
   createPostgresOrderExecutionService,
   createPostgresOrderRepository,
@@ -114,6 +116,10 @@ export async function buildPaperLoopDepsFromEnv(
     connectorForMode: () => connector,
     writeAudit,
   });
+  const orderPath = createOrgScopedExecutionV2OrderPath({
+    db,
+    connectorFor: () => connector,
+  });
   const reconciliation = createPostgresReconciliationService(db, {
     connectorForMode: () => connector,
     writeAudit,
@@ -132,6 +138,9 @@ export async function buildPaperLoopDepsFromEnv(
     paperCycleDeps: {
       execution,
       reconciliation,
+      decisionCapitalAuthorityV2: orderPath.decisionCapitalAuthorityV2,
+      canonicalOrdinaryCapitalEnvelopeV2: buildPreQualificationPaperEnvelope(),
+      executionV2: orderPath.service,
     },
     orderRepository,
     poll,

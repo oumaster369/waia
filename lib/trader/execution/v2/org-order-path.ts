@@ -1,0 +1,104 @@
+import { createHash } from "node:crypto";
+
+import { enforceServerOnly } from "@/lib/enforce-server-only";
+
+enforceServerOnly();
+
+import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import {
+  admitRiskAllowanceV2Postgres,
+  type AdmitRiskAllowanceV2Input,
+  type AdmitRiskAllowanceV2Result,
+} from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
+import type { CanonicalDecisionCapitalAuthorityV2Deps } from "@/lib/trader/runtime-v2/decision-capital-authority-v2";
+
+import type { BindExecutionAuthorityV2Input } from "./authority-postgres";
+import {
+  createPostgresExecutionV2Service,
+  type ExecutionV2ConnectorResolver,
+  type ExecutionV2SubmissionResult,
+} from "./connector-dispatch";
+
+export type ExecutionV2OrderService = ReturnType<typeof createPostgresExecutionV2Service>;
+
+const UNQUALIFIED_DECISION_DIGEST = createHash("sha256")
+  .update("waia.trader.execution_v2.decision_not_qualified")
+  .digest("hex");
+
+/**
+ * Live submit stays refused until the bind-path gates exist.
+ * A missing hook and a present-but-ungated hook are different refusals.
+ */
+export const assertExecutionV2LiveAuthorized: (
+  context: OrgContext,
+  request: BindExecutionAuthorityV2Input,
+) => Promise<void> = async () => {
+  throw new Error("EXECUTION_V2_LIVE_GATES_ABSENT");
+};
+
+export type ExecutionV2AdmitAndSubmitInput = Readonly<{
+  admission: AdmitRiskAllowanceV2Input;
+  bind: Omit<BindExecutionAuthorityV2Input, "allowance">;
+}>;
+
+export type ExecutionV2AdmitAndSubmitResult = Readonly<{
+  admitted: AdmitRiskAllowanceV2Result;
+  submission: ExecutionV2SubmissionResult;
+}>;
+
+/**
+ * Org-scoped Execution V2 order path. Paper and live composers construct this
+ * instead of calling the legacy order service. `decide` stays non-actionable
+ * until a qualified decision is supplied; `submit` is the only placeOrder path.
+ */
+export function createOrgScopedExecutionV2OrderPath(
+  input: Readonly<{
+    db: WaiaPostgresDb;
+    connectorFor: ExecutionV2ConnectorResolver;
+    assertLiveAuthorized?: (
+      context: OrgContext,
+      request: BindExecutionAuthorityV2Input,
+    ) => Promise<void>;
+  }>,
+) {
+  const service = createPostgresExecutionV2Service({
+    db: input.db,
+    connectorFor: input.connectorFor,
+    ...(input.assertLiveAuthorized ? { assertLiveAuthorized: input.assertLiveAuthorized } : {}),
+  });
+
+  const decisionCapitalAuthorityV2: CanonicalDecisionCapitalAuthorityV2Deps = {
+    async decide(request) {
+      return {
+        status: "NO_TRADE",
+        decisionId: "execution-v2-unqualified",
+        decisionContentDigestHex: UNQUALIFIED_DECISION_DIGEST,
+        forecastAuthorityContentDigestHex: request.forecastOutcome.authority.contentDigestHex,
+        reasonCodes: ["EXECUTION_V2_DECISION_NOT_QUALIFIED"],
+      };
+    },
+    async assessRisk() {
+      throw new Error("EXECUTION_V2_RISK_STAGE_UNREACHABLE");
+    },
+    async execute() {
+      throw new Error("EXECUTION_V2_ADMISSION_INPUTS_INCOMPLETE");
+    },
+  };
+
+  return Object.freeze({
+    service,
+    decisionCapitalAuthorityV2,
+    async admitAndSubmit(
+      context: OrgContext,
+      request: ExecutionV2AdmitAndSubmitInput,
+    ): Promise<ExecutionV2AdmitAndSubmitResult> {
+      const admitted = await admitRiskAllowanceV2Postgres(input.db, context, request.admission);
+      const submission = await service.submit(context, {
+        ...request.bind,
+        allowance: admitted.allowance,
+      });
+      return Object.freeze({ admitted, submission });
+    },
+  });
+}

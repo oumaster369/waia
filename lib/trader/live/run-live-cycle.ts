@@ -6,6 +6,7 @@ if (process.env.VITEST !== "true") {
 }
 
 import type { OrderExecutionService } from "@/lib/trader/execution/execution-service.types";
+import type { ExecutionV2OrderService } from "@/lib/trader/execution/v2/org-order-path";
 import type { ReconciliationService } from "@/lib/trader/execution/reconciliation.types";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import type { MarketSnapshot } from "@/lib/trader/market-data/types";
@@ -61,6 +62,8 @@ export type LiveCycleDeps = {
   /** DEE-634: sole live-equivalent actionability/economics authority. */
   decisionCapitalAuthorityV2?: CanonicalDecisionCapitalAuthorityV2Deps;
   canonicalOrdinaryCapitalEnvelopeV2?: LiveCanonicalOrdinaryCapitalEnvelopeV2;
+  /** DEE-1151: Execution V2 order service. Legacy `execution` stays fail-closed. */
+  executionV2?: ExecutionV2OrderService;
 };
 
 export type RunLiveCycleInput = {

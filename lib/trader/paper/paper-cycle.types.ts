@@ -1,4 +1,5 @@
 import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
+import type { ExecutionV2OrderService } from "@/lib/trader/execution/v2/org-order-path";
 import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import type {
   OrderExecutionService,
@@ -181,6 +182,8 @@ export type PaperCycleDeps = {
   decisionCapitalAuthorityV2?: CanonicalDecisionCapitalAuthorityV2Deps;
   /** DEE-1024: optional epistemic envelope; omission fails closed without inventing receipts. */
   canonicalOrdinaryCapitalEnvelopeV2?: PaperCanonicalOrdinaryCapitalEnvelopeV2;
+  /** DEE-1151: Execution V2 order service. Legacy `execution` stays fail-closed. */
+  executionV2?: ExecutionV2OrderService;
 };
 
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";
