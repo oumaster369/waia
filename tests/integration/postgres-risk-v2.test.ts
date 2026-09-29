@@ -11,8 +11,10 @@ import {
   consumeRiskAllowanceForOrderV2Postgres,
   initializeRiskAccountStateV2Postgres,
   readRiskAccountStateV2Postgres,
+  expireRiskAllowanceV2Postgres,
   revokeRiskAllowanceV2Postgres,
   RiskV2AdmissionRefusedError,
+  RiskV2PersistenceConflictError,
   type AdmitRiskAllowanceV2Input,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
@@ -156,6 +158,9 @@ function admission(input: {
   };
 }
 
+/** Longer than the 10s lock-waiter poll, so the allowance is still open when the wait is observed. */
+const LOCK_CROSSING_VALID_FOR_MS = 20_000;
+
 function claim(input: AdmitRiskAllowanceV2Input, orderIdentity: number) {
   return {
     accountId: input.accountId,
@@ -179,7 +184,61 @@ function claim(input: AdmitRiskAllowanceV2Input, orderIdentity: number) {
   };
 }
 
-describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () => {
+async function runAcrossAccountLockPastExpiry<T>(input: {
+  sqlClient: postgres.Sql;
+  organizationId: string;
+  accountId: string;
+  allowanceId: string;
+  applicationName: string;
+  run: (operationDb: WaiaPostgresDb) => Promise<T>;
+}): Promise<T> {
+  const locker = postgres(url!, { max: 1 });
+  const operationClient = postgres(url!, {
+    max: 1,
+    connection: { application_name: input.applicationName },
+  });
+  const operationDb = drizzle(operationClient, { schema: pgSchema }) as WaiaPostgresDb;
+  let operation: Promise<T> | undefined;
+  try {
+    await locker`BEGIN`;
+    await locker`
+      SELECT account_id FROM trader_risk_account_state_v2
+      WHERE organization_id = ${input.organizationId}::uuid AND account_id = ${input.accountId}
+      FOR UPDATE`;
+    operation = input.run(operationDb);
+    const started = Date.now();
+    let waiting = false;
+    while (Date.now() - started < 10_000) {
+      const [row] = await input.sqlClient<{ n: number }[]>`
+        select count(*)::int as n from pg_stat_activity
+        where datname = current_database()
+          and application_name = ${input.applicationName}
+          and wait_event_type = 'Lock'`;
+      if (row!.n > 0) {
+        waiting = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    }
+    expect(waiting).toBe(true);
+    const [stillOpen] = await input.sqlClient<{ open: boolean }[]>`
+      select valid_until > clock_timestamp() as open
+      from trader_risk_allowances_v2
+      where id = ${input.allowanceId}::uuid`;
+    expect(stillOpen!.open).toBe(true);
+    await locker`
+      select pg_sleep(greatest(0, extract(epoch from (
+        (select valid_until from trader_risk_allowances_v2 where id = ${input.allowanceId}::uuid)
+        - clock_timestamp())) + 0.05))`;
+    await locker`COMMIT`;
+    return await operation;
+  } finally {
+    await locker`ROLLBACK`.catch(() => undefined);
+    await locker.end({ timeout: 5 });
+    await operation?.catch(() => undefined);
+    await operationClient.end({ timeout: 5 });
+  }
+}describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () => {
   let sqlClient: postgres.Sql;
   let db: WaiaPostgresDb;
   let orgA: string;
@@ -259,6 +318,111 @@ describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () =>
       nextEnforcementEventSequence: "2",
       accounting: { outstandingReservationNotional: "60" },
     });
+  });
+
+  it("refuses a replay that fits only when a foreign reservation is ignored", async () => {
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      account("replay-foreign"),
+    );
+    const foreign = admission({ accountId: "replay-foreign", identity: 90, reservation: "30" });
+    const target = admission({ accountId: "replay-foreign", identity: 91, reservation: "40" });
+    await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, foreign);
+    await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, target);
+    await sqlClient`
+      UPDATE trader_risk_account_state_v2
+      SET reconciled_exposure_notional = 25,
+          worst_case_pending_exposure_notional = 20
+      WHERE organization_id = ${orgA}::uuid AND account_id = 'replay-foreign'`;
+    await expect(
+      admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, target),
+    ).rejects.toMatchObject({
+      name: "RiskV2AdmissionRefusedError",
+      reason: "RESERVATION_EXCEEDS_REMAINING_ENVELOPE",
+    });
+    const rows = await sqlClient<{ id: string; lifecycle_state: string }[]>`
+      select id::text as id, lifecycle_state
+      from trader_risk_allowances_v2
+      where organization_id = ${orgA}::uuid and account_id = 'replay-foreign'
+      order by id`;
+    expect(rows).toEqual([
+      { id: foreign.riskAllowanceId, lifecycle_state: "ISSUED" },
+      { id: target.riskAllowanceId, lifecycle_state: "REVOKED" },
+    ]);
+    await expect(
+      readRiskAccountStateV2Postgres(db, { organizationId: orgA }, "replay-foreign"),
+    ).resolves.toMatchObject({
+      accounting: {
+        outstandingReservationNotional: "30",
+        reconciledExposureNotional: "25",
+        worstCasePendingExposureNotional: "20",
+      },
+    });
+    const [event] = await sqlClient<{ event_type: string }[]>`
+      select event_type from trader_risk_enforcement_events_v2
+      where organization_id = ${orgA}::uuid and account_id = 'replay-foreign'
+        and risk_allowance_id = ${target.riskAllowanceId}::uuid
+      order by event_sequence desc limit 1`;
+    expect(event!.event_type).toBe("ALLOWANCE_REVOKED");
+  });
+
+  it("replays an issued allowance without charging its own reservation twice", async () => {
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      account("replay-sixty"),
+    );
+    const sixty = admission({ accountId: "replay-sixty", identity: 50, reservation: "60" });
+    const first = await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, sixty);
+    const replay = await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, sixty);
+    expect(first.insertedNew).toBe(true);
+    expect(replay).toEqual({ ...first, insertedNew: false });
+    expect(replay.allowance.riskAllowanceId).toBe(sixty.riskAllowanceId);
+    await expect(
+      readRiskAccountStateV2Postgres(db, { organizationId: orgA }, "replay-sixty"),
+    ).resolves.toMatchObject({
+      accounting: { outstandingReservationNotional: "60", exposureLimitNotional: "100" },
+    });
+
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      account("replay-forties"),
+    );
+    const firstForty = admission({ accountId: "replay-forties", identity: 51, reservation: "40" });
+    const secondForty = admission({ accountId: "replay-forties", identity: 52, reservation: "40" });
+    const admittedFirst = await admitRiskAllowanceV2Postgres(
+      db,
+      { organizationId: orgA },
+      firstForty,
+    );
+    const admittedSecond = await admitRiskAllowanceV2Postgres(
+      db,
+      { organizationId: orgA },
+      secondForty,
+    );
+    const replayFirst = await admitRiskAllowanceV2Postgres(
+      db,
+      { organizationId: orgA },
+      firstForty,
+    );
+    const replaySecond = await admitRiskAllowanceV2Postgres(
+      db,
+      { organizationId: orgA },
+      secondForty,
+    );
+    expect(replayFirst).toEqual({ ...admittedFirst, insertedNew: false });
+    expect(replaySecond).toEqual({ ...admittedSecond, insertedNew: false });
+    await expect(
+      readRiskAccountStateV2Postgres(db, { organizationId: orgA }, "replay-forties"),
+    ).resolves.toMatchObject({
+      accounting: { outstandingReservationNotional: "80", exposureLimitNotional: "100" },
+    });
+    const [count] = await sqlClient<{ n: number }[]>`
+      select count(*)::int as n from trader_risk_allowances_v2
+      where organization_id = ${orgA}::uuid and account_id = 'replay-forties'`;
+    expect(count!.n).toBe(2);
   });
 
   it("releases reservations once, terminates lifecycle, and preserves the digest chain", async () => {
@@ -652,4 +816,289 @@ describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () =>
     `;
     expect(grants).toEqual([]);
   });
+
+  it("refuses an allowance replay against drifted reality when the stored verdict still binds", async () => {
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      account("stored-replay"),
+    );
+    const input = admission({ accountId: "stored-replay", identity: 40, reservation: "10" });
+    await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, input);
+    const drifted = "reality-stored-replay-drift";
+    await sqlClient`
+      UPDATE trader_risk_account_state_v2
+      SET reality_snapshot_id = ${drifted}
+      WHERE organization_id = ${orgA}::uuid AND account_id = 'stored-replay'`;
+    await expect(
+      admitRiskAllowanceV2Postgres(
+        db,
+        { organizationId: orgA },
+        {
+          ...input,
+          verdict: { ...input.verdict, reality: { ...input.verdict.reality, snapshotId: drifted } },
+        },
+      ),
+    ).rejects.toMatchObject({ reason: "CURRENT_AUTHORITY_BINDING_MISMATCH" });
+    const [count] = await sqlClient<{ n: number }[]>`
+      select count(*)::int as n from trader_risk_allowances_v2
+      where organization_id = ${orgA}::uuid and account_id = 'stored-replay'`;
+    expect(count!.n).toBe(1);
+    const [row] = await sqlClient<{ lifecycle_state: string; terminal_reason_code: string }[]>`
+      select lifecycle_state, terminal_reason_code
+      from trader_risk_allowances_v2
+      where organization_id = ${orgA}::uuid and account_id = 'stored-replay'`;
+    expect(row).toEqual({
+      lifecycle_state: "REVOKED",
+      terminal_reason_code: "CURRENT_AUTHORITY_BINDING_MISMATCH",
+    });
+    await expect(
+      readRiskAccountStateV2Postgres(db, { organizationId: orgA }, "stored-replay"),
+    ).resolves.toMatchObject({
+      accounting: { outstandingReservationNotional: "0" },
+    });
+    const [event] = await sqlClient<{ event_type: string }[]>`
+      select event_type from trader_risk_enforcement_events_v2
+      where organization_id = ${orgA}::uuid and account_id = 'stored-replay'
+      order by event_sequence desc limit 1`;
+    expect(event!.event_type).toBe("ALLOWANCE_REVOKED");
+    await expect(
+      admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, input),
+    ).rejects.toBeInstanceOf(RiskV2AdmissionRefusedError);
+    await expect(
+      admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, input),
+    ).rejects.not.toBeInstanceOf(RiskV2PersistenceConflictError);
+  });
+
+  it("expires an allowance on the clock after the account lock, not the transaction start", async () => {
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      account("fresh-clock"),
+    );
+    const authority = {
+      ...admission({ accountId: "fresh-clock", identity: 41, reservation: "10" }),
+      validForMs: LOCK_CROSSING_VALID_FOR_MS,
+    };
+    await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority);
+    const expired = await runAcrossAccountLockPastExpiry({
+      sqlClient,
+      organizationId: orgA,
+      accountId: "fresh-clock",
+      allowanceId: authority.riskAllowanceId,
+      applicationName: "dee1135-fresh-clock",
+      run: (operationDb) =>
+        expireRiskAllowanceV2Postgres(
+          operationDb,
+          { organizationId: orgA },
+          {
+            accountId: "fresh-clock",
+            riskAllowanceId: authority.riskAllowanceId,
+            eventId: uuid(657_900),
+            reasonCode: "ALLOWANCE_EXPIRED",
+          },
+        ),
+    });
+    expect(expired).toBe(true);
+    const [row] = await sqlClient<{ lifecycle_state: string }[]>`
+      select lifecycle_state from trader_risk_allowances_v2
+      where id = ${authority.riskAllowanceId}::uuid`;
+    expect(row!.lifecycle_state).toBe("EXPIRED");
+  }, 60_000);
+
+  it("terminalizes a replay refused by kill, stale reconciliation, or posture and releases the reservation", async () => {
+    const cases = [
+      {
+        accountId: "replay-kill",
+        identity: 70,
+        set: "kill_state = 'TRIPPED'",
+        reason: "CURRENT_AUTHORITY_BINDING_MISMATCH",
+      },
+      {
+        accountId: "replay-stale",
+        identity: 71,
+        set: "reconciliation_status = 'STALE'",
+        reason: "RECONCILIATION_NOT_CURRENT",
+      },
+      {
+        accountId: "replay-halt",
+        identity: 72,
+        set: "posture = 'HALT'",
+        reason: "POSTURE_REFUSED",
+      },
+    ] as const;
+    for (const entry of cases) {
+      await initializeRiskAccountStateV2Postgres(
+        db,
+        { organizationId: orgA },
+        account(entry.accountId),
+      );
+      const authority = admission({
+        accountId: entry.accountId,
+        identity: entry.identity,
+        reservation: "10",
+      });
+      await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority);
+      await sqlClient.unsafe(
+        `UPDATE trader_risk_account_state_v2 SET ${entry.set} WHERE organization_id = $1::uuid AND account_id = $2`,
+        [orgA, entry.accountId],
+      );
+      await expect(
+        admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority),
+      ).rejects.toMatchObject({ reason: entry.reason });
+      const [row] = await sqlClient<
+        {
+          lifecycle_state: string;
+          terminal_reason_code: string;
+          n: number;
+        }[]
+      >`
+        select lifecycle_state, terminal_reason_code,
+          (select count(*)::int from trader_risk_allowances_v2
+            where organization_id = ${orgA}::uuid and account_id = ${entry.accountId}) as n
+        from trader_risk_allowances_v2
+        where id = ${authority.riskAllowanceId}::uuid`;
+      expect(row).toMatchObject({
+        lifecycle_state: "REVOKED",
+        terminal_reason_code: entry.reason,
+        n: 1,
+      });
+      await expect(
+        readRiskAccountStateV2Postgres(db, { organizationId: orgA }, entry.accountId),
+      ).resolves.toMatchObject({
+        accounting: { outstandingReservationNotional: "0" },
+      });
+    }
+  });
+
+  it("expires an issued allowance when replay is evaluated after validUntil", async () => {
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      account("replay-expired"),
+    );
+    const authority = {
+      ...admission({ accountId: "replay-expired", identity: 80, reservation: "10" }),
+      validForMs: 1_500,
+    };
+    await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority);
+    await sqlClient`select pg_sleep(2)`;
+    await expect(
+      admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority),
+    ).rejects.toMatchObject({ reason: "ALLOWANCE_EXPIRED" });
+    const [row] = await sqlClient<{ lifecycle_state: string; n: number }[]>`
+      select lifecycle_state,
+        (select count(*)::int from trader_risk_allowances_v2
+          where organization_id = ${orgA}::uuid and account_id = 'replay-expired') as n
+      from trader_risk_allowances_v2
+      where id = ${authority.riskAllowanceId}::uuid`;
+    expect(row).toEqual({ lifecycle_state: "EXPIRED", n: 1 });
+    await expect(
+      readRiskAccountStateV2Postgres(db, { organizationId: orgA }, "replay-expired"),
+    ).resolves.toMatchObject({
+      accounting: { outstandingReservationNotional: "0" },
+    });
+  });
+
+  it("refuses consume on the clock after the account lock, not the transaction start", async () => {
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      account("consume-clock"),
+    );
+    const authority = {
+      ...admission({ accountId: "consume-clock", identity: 81, reservation: "10" }),
+      validForMs: LOCK_CROSSING_VALID_FOR_MS,
+    };
+    await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority);
+    const consumed = await runAcrossAccountLockPastExpiry({
+      sqlClient,
+      organizationId: orgA,
+      accountId: "consume-clock",
+      allowanceId: authority.riskAllowanceId,
+      applicationName: "dee1135-consume-clock",
+      run: (operationDb) =>
+        consumeRiskAllowanceForOrderV2Postgres(
+          operationDb,
+          { organizationId: orgA },
+          claim(authority, 81),
+        ),
+    });
+    expect(consumed).toMatchObject({ status: "REFUSED", reason: "ALLOWANCE_EXPIRED" });
+    const [row] = await sqlClient<{ lifecycle_state: string; order_count: string }[]>`
+      select lifecycle_state,
+        (select count(*)::text from trader_orders
+          where organization_id = ${orgA}::uuid
+            and risk_allowance_id = ${authority.riskAllowanceId}::uuid) as order_count
+      from trader_risk_allowances_v2
+      where id = ${authority.riskAllowanceId}::uuid`;
+    expect(row).toEqual({ lifecycle_state: "EXPIRED", order_count: "0" });
+    await expect(
+      readRiskAccountStateV2Postgres(db, { organizationId: orgA }, "consume-clock"),
+    ).resolves.toMatchObject({
+      accounting: { outstandingReservationNotional: "0" },
+    });
+  }, 60_000);
+
+  it("stamps issuedAt from the clock after the account lock is released", async () => {
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      account("issue-clock"),
+    );
+    const authority = admission({ accountId: "issue-clock", identity: 60, reservation: "10" });
+    const locker = postgres(url!, { max: 1 });
+    const admitClient = postgres(url!, {
+      max: 1,
+      connection: { application_name: "dee1135-issue-clock" },
+    });
+    const admitDb = drizzle(admitClient, { schema: pgSchema }) as WaiaPostgresDb;
+    let admitting: Promise<Awaited<ReturnType<typeof admitRiskAllowanceV2Postgres>>> | undefined;
+    try {
+      await locker`BEGIN`;
+      await locker`
+        SELECT account_id FROM trader_risk_account_state_v2
+        WHERE organization_id = ${orgA}::uuid AND account_id = 'issue-clock'
+        FOR UPDATE`;
+      admitting = admitRiskAllowanceV2Postgres(admitDb, { organizationId: orgA }, authority);
+      const started = Date.now();
+      let waiting = false;
+      while (Date.now() - started < 10_000) {
+        const [row] = await sqlClient<{ n: number }[]>`
+          select count(*)::int as n from pg_stat_activity
+          where datname = current_database()
+            and application_name = 'dee1135-issue-clock'
+            and wait_event_type = 'Lock'`;
+        if (row!.n > 0) {
+          waiting = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 40));
+      }
+      expect(waiting).toBe(true);
+      const [floor] = await locker<{ released_at: Date }[]>`
+        select date_trunc('milliseconds', clock_timestamp()) as released_at`;
+      const releasedAt = new Date(floor!.released_at);
+      expect(Number.isFinite(releasedAt.getTime())).toBe(true);
+      await locker`COMMIT`;
+      const admitted = await admitting;
+      expect(admitted.insertedNew).toBe(true);
+      expect(new Date(admitted.allowance.issuedAtUtc).getTime()).toBeGreaterThanOrEqual(
+        releasedAt.getTime(),
+      );
+      expect(
+        new Date(admitted.allowance.validUntilUtc).getTime() -
+          new Date(admitted.allowance.issuedAtUtc).getTime(),
+      ).toBe(authority.validForMs);
+      const [stored] = await sqlClient<{ issued_at: Date }[]>`
+        select issued_at from trader_risk_allowances_v2
+        where id = ${authority.riskAllowanceId}::uuid`;
+      expect(new Date(stored!.issued_at).getTime()).toBeGreaterThanOrEqual(releasedAt.getTime());
+    } finally {
+      await locker`ROLLBACK`.catch(() => undefined);
+      await locker.end({ timeout: 5 });
+      await admitting?.catch(() => undefined);
+      await admitClient.end({ timeout: 5 });
+    }
+  }, 30_000);
 });

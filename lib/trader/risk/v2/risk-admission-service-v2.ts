@@ -35,9 +35,7 @@ function canonicalNonnegative(value: string): string {
   return formatDecimal(parsed);
 }
 
-export function computeRiskAccountRemainingNotionalV2(
-  input: RiskAccountAccountingV2,
-): string {
+export function computeRiskAccountRemainingNotionalV2(input: RiskAccountAccountingV2): string {
   const limit = parseDecimal(canonicalNonnegative(input.exposureLimitNotional));
   const used =
     parseDecimal(canonicalNonnegative(input.reconciledExposureNotional)) +
@@ -136,4 +134,42 @@ export function calculateCurrentAccountRiskAdmissionV1(input: {
     reconciliationStatus: "UNAVAILABLE",
   });
   return { ...calculation, basisDiagnostic: input.authority.reason };
+}
+
+/** Replay of an already issued allowance. It never mints a second row.
+ *  Present permission is returned only while the same current-authority checks still pass.
+ *  outstandingReservationNotional must exclude this allowance's own reserved notional:
+ *  that amount is already inside the account total.
+ */
+export function assessIssuedAllowanceReplayV1(input: {
+  killState: string;
+  stateRealitySnapshotId: string;
+  stateRealityContentDigestHex: string;
+  stateReconciliationAuthorityDigestHex: string;
+  verdictRealitySnapshotId: string;
+  verdictRealityContentDigestHex: string;
+  verdictReconciliationAuthorityDigestHex: string;
+  accounting: RiskAccountAccountingV2;
+  requestedReservationNotional: string;
+  posture: ProtectivePostureV2;
+  strictExposureReduction: boolean;
+  reconciliationStatus: "RECONCILED" | "DIVERGENT" | "UNAVAILABLE" | "STALE";
+}): { decision: "CURRENT" } | { decision: "REFUSED"; reason: string } {
+  if (
+    input.killState !== "CLEAR" ||
+    input.stateRealitySnapshotId !== input.verdictRealitySnapshotId ||
+    input.stateRealityContentDigestHex !== input.verdictRealityContentDigestHex ||
+    input.stateReconciliationAuthorityDigestHex !== input.verdictReconciliationAuthorityDigestHex
+  ) {
+    return { decision: "REFUSED", reason: "CURRENT_AUTHORITY_BINDING_MISMATCH" };
+  }
+  const calculation = calculateRiskAdmissionV2({
+    accounting: input.accounting,
+    requestedReservationNotional: input.requestedReservationNotional,
+    posture: input.posture,
+    strictExposureReduction: input.strictExposureReduction,
+    reconciliationStatus: input.reconciliationStatus,
+  });
+  if (calculation.status === "REFUSED") return { decision: "REFUSED", reason: calculation.reason };
+  return { decision: "CURRENT" };
 }
