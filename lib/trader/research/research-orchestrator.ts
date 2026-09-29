@@ -97,6 +97,12 @@ import type { ConfidenceUpdateSink } from "@/lib/trader/knowledge/knowledge-conf
 import type { OutcomeResolutionReadPort } from "@/lib/trader/knowledge/mkb-read-model.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
+/**
+ * The blind tail was not executed. This is not a blind-validation result id
+ * and must not be read as evidence that a holdout row exists.
+ */
+export const RESEARCH_PIPELINE_BLIND_TAIL_NOT_RUN = "not-produced" as const;
+
 type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "delete">;
 
 export type RunResearchPipelineInput = {
@@ -498,7 +504,7 @@ export async function runResearchPipelinePostgres(
 
   const blind = skipBlindTail
     ? {
-        result: { id: "blind-tail-skipped" },
+        result: { id: RESEARCH_PIPELINE_BLIND_TAIL_NOT_RUN },
         metrics: emptyBlindMetrics,
       }
     : await (async () => {

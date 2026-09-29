@@ -30,6 +30,89 @@ import {
 
 const SPEC = STRATEGY_ADMISSION_SPEC_SHA256;
 
+function quarterBlock(
+  year: number,
+  quarterNets: readonly [string, string, string, string],
+  perQuarter: number,
+) {
+  const months = [1, 4, 7, 10];
+  const rows = [];
+  for (let quarter = 0; quarter < 4; quarter += 1) {
+    for (let offset = 0; offset < perQuarter; offset += 1) {
+      const date = new Date(Date.UTC(year, months[quarter]! - 1, 10 + offset));
+      rows.push({ utcDate: date.toISOString().slice(0, 10), net: quarterNets[quarter]! });
+    }
+  }
+  return rows;
+}
+
+function sampleSharpe(values: readonly number[]): number {
+  const count = values.length;
+  const mean = values.reduce((sum, value) => sum + value, 0) / count;
+  const demeaned = values.map((value) => value - mean);
+  const variance = demeaned.reduce((sum, value) => sum + value * value, 0) / (count - 1);
+  return mean / Math.sqrt(variance);
+}
+
+/** Reviewer counterexample: N=51 copies of SR 0.17075689258423518, variance 1.96e-32. */
+function reviewerIdenticalTrialSharpe() {
+  const target = 0.17075689258423518;
+  const count = 250;
+  let state = 3;
+  const nextUniform = () => {
+    state = (Math.imul(1664525, state) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+  let spare: number | null = null;
+  const nextNormal = () => {
+    if (spare !== null) {
+      const value = spare;
+      spare = null;
+      return value;
+    }
+    let u = 0;
+    let v = 0;
+    let radius = 0;
+    do {
+      u = nextUniform() * 2 - 1;
+      v = nextUniform() * 2 - 1;
+      radius = u * u + v * v;
+    } while (radius >= 1 || radius === 0);
+    const scale = Math.sqrt((-2 * Math.log(radius)) / radius);
+    spare = v * scale;
+    return u * scale;
+  };
+  const draws = Array.from({ length: count }, () => nextNormal());
+  const drawMean = draws.reduce((sum, value) => sum + value, 0) / count;
+  const drawVariance = draws.reduce((sum, value) => sum + (value - drawMean) ** 2, 0) / (count - 1);
+  const standardized = draws.map((value) => (value - drawMean) / Math.sqrt(drawVariance));
+  const level = 0.003;
+  const rounded = standardized.map((value) =>
+    Number((level + (level / target) * value).toFixed(8)),
+  );
+  const sr = sampleSharpe(rounded);
+  const copies = Array.from({ length: 51 }, () => sr);
+  const copyMean = copies.reduce((sum, value) => sum + value, 0) / copies.length;
+  const variance =
+    copies.reduce((sum, value) => sum + (value - copyMean) ** 2, 0) / (copies.length - 1);
+  const reviewerCopies = Array.from({ length: 51 }, () => target);
+  const reviewerMean =
+    reviewerCopies.reduce((sum, value) => sum + value, 0) / reviewerCopies.length;
+  const reviewerVariance =
+    reviewerCopies.reduce((sum, value) => sum + (value - reviewerMean) ** 2, 0) /
+    (reviewerCopies.length - 1);
+  const origin = Date.parse("2014-01-02T00:00:00.000Z");
+  return {
+    sr,
+    variance,
+    reviewerVariance,
+    observations: rounded.map((value, index) => ({
+      utcDate: new Date(origin + index * 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      net: value.toFixed(8),
+    })),
+  };
+}
+
 const SIGNAL = "2022-01-01T00:00:00.000Z";
 const ENTRY = "2022-01-01T00:01:00.000Z";
 
@@ -223,6 +306,26 @@ describe("strategy admission v1", () => {
     expect(Number(assessment.netMeanDate)).toBeCloseTo(0.0144, 4);
   });
 
+  it("rejects a single positive year on IS and a 2-of-4 quarter validation even when t is high", () => {
+    const isDates = quarterBlock(2024, ["0.004", "0.004", "-0.0004", "-0.0004"], 8);
+    const isAssessment = admit({ horizonBars: 1, kind: "continuous" }, isDates);
+    expect(Number(isAssessment.netMeanDate)).toBeCloseTo(0.0018, 4);
+    expect(Number(isAssessment.t)).toBeCloseTo(3.352, 2);
+    expect(isAssessment.verdict).not.toBe("passed_is");
+    expect(isAssessment.reasons).toContain("STABILITY_NOT_MET");
+
+    const validationDates = quarterBlock(2024, ["0.008", "0.008", "-0.001", "-0.001"], 4);
+    const validation = admit(
+      { split: "validation", horizonBars: 1, kind: "continuous" },
+      validationDates,
+    );
+    expect(Number(validation.t)).toBeCloseTo(2.311, 2);
+    expect(Number(validation.t)).toBeGreaterThanOrEqual(1.645);
+    expect(validation.reasons).not.toContain("VALIDATION_T_BELOW_1_645");
+    expect(validation.verdict).not.toBe("passed_validation");
+    expect(validation.reasons).toContain("STABILITY_NOT_MET");
+  });
+
   it("does not award DSR 1 when trial Sharpe variance is zero", () => {
     const n = 250;
     const centered = Array.from({ length: n }, (_, index) => index - (n - 1) / 2);
@@ -267,6 +370,34 @@ describe("strategy admission v1", () => {
     );
     expect(zeroStd.dsr).toBe("0.00000000");
     expect(zeroStd.verdict).not.toBe("passed_is");
+
+    // 51 bitwise-identical Sharpes. The sample variance is float dust (1.96e-32),
+    // which used to set SR0 ≈ 0 and DSR ≈ 0.9968. Estimation variance must fail it.
+    const dust = reviewerIdenticalTrialSharpe();
+    expect(dust.reviewerVariance).toBe(1.9644485432749806e-32);
+    expect(dust.sr).toBeCloseTo(0.17075689258423518, 7);
+    expect(dust.variance).toBeGreaterThan(0);
+    expect(dust.variance).toBeLessThanOrEqual(1e-12 * Math.max(1, dust.sr * dust.sr));
+    expect(dust.variance).toBe(1.9644485432749806e-32);
+    const dustTrials = Array.from({ length: familySize }, (_, index) => ({
+      hypothesisId: `dust-${index}`,
+      observations: dust.observations,
+    }));
+    const haircut = admit(
+      {
+        declaredFamilySize: familySize,
+        trials: dustTrials,
+        confirmatoryIndex: 0,
+        kind: "event",
+        horizonBars: 1,
+      },
+      dust.observations,
+    );
+    expect(Number(haircut.dsr)).toBeLessThan(0.95);
+    expect(Number(haircut.dsr)).toBeGreaterThan(0.5);
+    expect(Number(haircut.dsr)).toBeCloseTo(0.672, 1);
+    expect(haircut.reasons).toContain("DEFLATED_SHARPE_NOT_PASSED");
+    expect(haircut.verdict).not.toBe("passed_is");
   });
 
   it("keeps a one-shot validation across a new journal on the same file", () => {

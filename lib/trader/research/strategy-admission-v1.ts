@@ -35,6 +35,13 @@ export const STRATEGY_ADMISSION_AUDIT_P_RAW = 1e-6 as const;
 export const STRATEGY_ADMISSION_AUDIT_IS_SHARPE = 3 as const;
 export const STRATEGY_ADMISSION_QUARTER_POSITIVE_FRACTION = 0.75 as const;
 export const STRATEGY_ADMISSION_YEAR_POSITIVE_FRACTION = 2 / 3;
+/** Spec §7 year arm is “2 of 3 years”, so a single year cannot satisfy it. */
+export const STRATEGY_ADMISSION_MIN_POSITIVE_YEAR_SPAN = 3 as const;
+/**
+ * Cross-sectional variance at or below this multiple of max(1, SR²) is float dust,
+ * not a real spread of trial Sharpes. Identical trials must use the SR-estimation variance.
+ */
+export const STRATEGY_ADMISSION_TRIAL_SHARPE_VARIANCE_DUST = 1e-12 as const;
 
 export function defaultStrategyAdmissionJournalPath(): string {
   const configured = process.env.WAIA_STRATEGY_ADMISSION_JOURNAL_PATH?.trim();
@@ -752,9 +759,12 @@ function deflatedSharpe(input: {
       trialSharpes.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (trialSharpes.length - 1)
     );
   })();
-  // Identical trials (or an undefined cross-section) use Bailey–López de Prado SR variance.
+  // Identical trials, float dust, or an undefined cross-section use Bailey–López de Prado SR variance.
+  // Bitwise-identical Sharpes still produce a sample variance around 1e-32.
+  const varianceDust =
+    STRATEGY_ADMISSION_TRIAL_SHARPE_VARIANCE_DUST * Math.max(1, moments.sr * moments.sr);
   const variance =
-    Number.isFinite(crossSectional) && crossSectional > 0
+    Number.isFinite(crossSectional) && crossSectional > varianceDust
       ? crossSectional
       : srEstimationVariance(moments, count);
   const n = input.familySize;
@@ -986,8 +996,12 @@ export function assessStrategyAdmission(
   const quarterRule =
     quarterCount >= STRATEGY_ADMISSION_MIN_QUARTERS &&
     positiveQuarters / quarterCount >= STRATEGY_ADMISSION_QUARTER_POSITIVE_FRACTION;
+  // IS may use the year arm only across at least three years (§7: 2 of 3).
+  // One positive year out of one does not pass. Validation is quarters only:
+  // t ≥ 1.645 does not replace “3 of 4 quarters”.
   const yearRule =
-    yearCount >= 1 &&
+    input.split === "is" &&
+    yearCount >= STRATEGY_ADMISSION_MIN_POSITIVE_YEAR_SPAN &&
     positiveYears / yearCount >= STRATEGY_ADMISSION_YEAR_POSITIVE_FRACTION &&
     negativeYears <= 1;
   if (sampleOk && !(quarterRule || yearRule)) reasons.push("STABILITY_NOT_MET");

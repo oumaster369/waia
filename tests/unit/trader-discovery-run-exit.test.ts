@@ -45,6 +45,21 @@ describe("trader:discovery:run exit codes", () => {
     ).toBe(1);
   });
 
+  it("exits non-zero when the admission journal cannot be opened", () => {
+    expect(
+      resolveDiscoveryRunExitCode({
+        enabled: true,
+        barsCount: 10,
+        closedTradeCount: 4,
+        result: {
+          skipped: true,
+          reason: "admission_journal_unavailable",
+          status: "FAIL_CLOSED",
+        },
+      }),
+    ).toBe(1);
+  });
+
   it("keeps a disabled empty run at exit zero", () => {
     expect(
       resolveDiscoveryRunExitCode({

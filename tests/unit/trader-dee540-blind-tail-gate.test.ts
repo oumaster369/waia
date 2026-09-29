@@ -162,5 +162,7 @@ describe("DEE-540 blind tail gate", () => {
       "utf8",
     );
     expect(campaign).toContain("skipBlindTail: true");
+    expect(orchestrator).toContain('RESEARCH_PIPELINE_BLIND_TAIL_NOT_RUN = "not-produced"');
+    expect(orchestrator).not.toContain("blind-tail-skipped");
   });
 });

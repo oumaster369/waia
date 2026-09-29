@@ -53,7 +53,8 @@ export function resolveDiscoveryRunExitCode(input: {
 }): number {
   if (
     input.result.reason === "research_v2_admission_incomplete" ||
-    input.result.reason === "research_v2_outcomes_required"
+    input.result.reason === "research_v2_outcomes_required" ||
+    input.result.reason === "admission_journal_unavailable"
   ) {
     return 1;
   }

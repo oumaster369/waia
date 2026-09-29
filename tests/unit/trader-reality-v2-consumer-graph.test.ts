@@ -34,11 +34,15 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         // DEE-1135 pins the HTX account acquisition spec and its PostgreSQL journal
         // on the existing Reality boundary.
         consumers: 143,
+        // skipBlindTail in scripts/trader/ri-evidence-campaign.ts changed an
+        // existing consumer's body. The path set stays the same.
+        consumerDigestHex: "6680f573a319f9e0da2b790e5b6815cb8d71cbb7a15acf3e71201f54d14ea725",
         // DEE-1099 adds one read of freshly validated account permissions,
         // not a financial observation or a venue effect.
         connectorReferences: 26,
         sourceContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
-        consumerContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
+        consumerContentDigestHex:
+          "b439926bbe9ce8dff3a0935a781ae501ec96fcb95a85a49ee94ac3ee41f5c9e0",
       }),
     );
   });
@@ -47,10 +51,23 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
     const inventory = JSON.parse(readFileSync(INVENTORY, "utf8"));
     const file = "lib/trader/live/live-connector.ts";
     expect(inventory.admittedBoundaryFiles).not.toContain(file);
-    expect(inventory.explicitCompatibilityChecks.filter((entry: { file: string }) => entry.file === file))
-      .toEqual([{ file, method: "getAccountInfo", occurrences: 1, disposition: expect.stringContaining("CREDENTIAL_PERMISSION_CHECK_ONLY") }]);
-    const references = detectConnectorMethodReferencesInSource(readFileSync(join(ROOT, file), "utf8"), file,
-      ["getAccountInfo", "getBalances", "getOrder", "getTradeHistory", "placeOrder", "cancelOrder"]);
+    expect(
+      inventory.explicitCompatibilityChecks.filter(
+        (entry: { file: string }) => entry.file === file,
+      ),
+    ).toEqual([
+      {
+        file,
+        method: "getAccountInfo",
+        occurrences: 1,
+        disposition: expect.stringContaining("CREDENTIAL_PERMISSION_CHECK_ONLY"),
+      },
+    ]);
+    const references = detectConnectorMethodReferencesInSource(
+      readFileSync(join(ROOT, file), "utf8"),
+      file,
+      ["getAccountInfo", "getBalances", "getOrder", "getTradeHistory", "placeOrder", "cancelOrder"],
+    );
     expect(references.map(({ method }) => method)).toEqual(["getAccountInfo"]);
   });
 
