@@ -386,17 +386,17 @@ export const INFORMATION_SUFFICIENCY_PRODUCERS_V2 = [
   },
   {
     path: "lib/trader/paper/research-understanding-v1/repository-postgres.ts",
-    symbols: ["createSavedResearchOwner", "persistRequiredInformationProfileWithinTransactionV2Postgres", "readResearchAssignmentWithinHeldTransaction as readAssignment", "captureFixedResearchCompletionSnapshot", "prepareFixedResearchCompletion", "writeFixedResearchCompletion"],
+    symbols: ["createSavedResearchOwner", "createSavedDomainResearchOwner", "prepareHeldSavedDomainResearchReplay", "persistRequiredInformationProfileWithinTransactionV2Postgres", "readResearchAssignmentWithinHeldTransaction as readAssignment", "captureFixedResearchCompletionSnapshot", "prepareFixedResearchCompletion", "writeFixedResearchCompletion"],
     disposition: "ASSIGNMENT_COMPLETION_BOUND_RESEARCH_PERSISTENCE_REPLAY",
   },
   {
     path: "lib/trader/paper/research-understanding-v1/held-replay.ts",
-    symbols: ["readResearchAssignmentWithinHeldTransaction", "researchActor", "checkRequestedProfile", "ASSIGNMENT_CONFIG_CONFLICT", "prepareCompletion", "writeCompletion"],
+    symbols: ["readResearchAssignmentWithinHeldTransaction", "researchActor", "checkRequestedProfile", "ASSIGNMENT_CONFIG_CONFLICT", "prepareCompletion", "writeCompletion", "writeSavedDomainCompletion", "readSavedDomainResearchAssignmentWithinHeldTransaction"],
     disposition: "FIXED_ASSIGNMENT_READER_REPLAY_AND_HELD_COMPLETION_DELEGATION_NO_CALLER_AUTHORITY",
   },
   {
     path: "lib/trader/paper/research-understanding-v1/completion-write-postgres.ts",
-    symbols: ["captureFixedResearchCompletionSnapshot", "prepareFixedResearchCompletion", "writeFixedResearchCompletion",
+    symbols: ["captureFixedResearchCompletionSnapshot", "captureFixedSavedDomainResearchCompletionSnapshot", "prepareFixedResearchCompletion", "writeFixedResearchCompletion", "writeFixedSavedDomainResearchCompletion",
       "persistInformationSufficiencyReceiptWithinTransactionV2Postgres", "requireInformationSufficiencyAuthorityWithinTransactionV2Postgres",
       "SOURCE_SNAPSHOT_CONFLICT", "PREDECESSOR_CONFLICT"],
     disposition: "INTERNAL_FIXED_COMPLETION_RECEIPT_WRITER_UNDER_PUBLIC_OWNER_OR_BOUND_HELD_CLIENT",

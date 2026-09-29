@@ -14,9 +14,10 @@ import { check, bounded, orgSchema, digestSchema, parseStrict, captureAssignment
   type ResearchAssignmentConfig, type ResearchRange, type ResearchActor } from "./contract";
 import { evaluateSavedResearchUnderstanding, type ResearchEvaluation } from "./evaluate";
 import { captureFixedResearchCompletionSnapshot, prepareFixedResearchCompletion, writeFixedResearchCompletion,
-  type PreparedResearchCompletion } from "./completion-write-postgres";
+  captureFixedSavedDomainResearchCompletionSnapshot, writeFixedSavedDomainResearchCompletion, type PreparedResearchCompletion } from "./completion-write-postgres";
 import type { DatabaseClockRuntimeHolderV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
-import { ResearchReadBudget, readBoundedResearchAssignment, readBoundedResearchProfile, readBoundedResearchCompletion,
+import { NoncapitalControlReadBudget, type SavedResearchHolderV1 } from "@/lib/trader/runtime-authority/v2/noncapital-domain-lease-postgres-v1";
+import { ResearchReadBudget, readBoundedSavedDomainResearchAssignment, readBoundedResearchAssignment, readBoundedResearchProfile, readBoundedResearchCompletion,
   readBoundedResearchInputs, readBoundedResearchPredecessor } from "./bounded-source-postgres";
 
 export type ResearchRequest = { assignment: ResearchAssignmentConfig; range: ResearchRange;
@@ -61,9 +62,17 @@ export function checkRequestedProfile(profile: RequiredInformationProfileV2, req
     "PROFILE_IDENTITY_CONFLICT");
 }
 export async function readResearchAssignmentWithinHeldTransaction(db: WaiaPostgresDb, context: OrgContext, request: CapturedResearchRequest, budget: ResearchReadBudget) {
+  return readAssignmentCore(db, context, request, budget, false);
+}
+export async function readSavedDomainResearchAssignmentWithinHeldTransaction(db: WaiaPostgresDb, context: OrgContext, request: CapturedResearchRequest, budget: ResearchReadBudget) {
+  return readAssignmentCore(db, context, request, budget, true);
+}
+async function readAssignmentCore(db: WaiaPostgresDb, context: OrgContext, request: CapturedResearchRequest, budget: ResearchReadBudget, savedDomain: boolean) {
   budget.checkDeadline();
   const authorizedActor = await researchActor(db, context); budget.checkDeadline();
-  const assignment = await readBoundedResearchAssignment(db, context.organizationId, request.assignment.researchSessionId, budget); budget.checkDeadline();
+  const assignment = savedDomain
+    ? await readBoundedSavedDomainResearchAssignment(db, context.organizationId, request.assignment.researchSessionId, budget)
+    : await readBoundedResearchAssignment(db, context.organizationId, request.assignment.researchSessionId, budget); budget.checkDeadline();
   if (!assignment) return null;
   const profile = await readBoundedResearchProfile(db, context.organizationId, assignment.profileId, budget); budget.checkDeadline();
   assertResearchAssignment(assignment, profile); checkRequestedProfile(profile, request);
@@ -77,6 +86,7 @@ export class HeldResearchAccounting {
   private count = 0;
   private reserved = 0;
   readonly inputs = new ResearchReadBudget(APPLICATION_LIMITS.uniqueInputAggregate, undefined, () => this.assertDeadline());
+  readonly noncapitalControls = new NoncapitalControlReadBudget(this.inputs);
   get statements() { return this.count; }
   assertDeadline(): void { check(performance.now() - this.started <= APPLICATION_LIMITS.durationMs, "INVOCATION_DEADLINE_EXCEEDED"); }
   beforeStatement(): void {
@@ -97,9 +107,18 @@ export class HeldResearchAccounting {
 /** Extracted fixed reader. No transaction control, writes or alternate evaluator. */
 export async function readResearchSnapshotWithinHeldTransaction(db: WaiaPostgresDb, context: OrgContext,
   request: CapturedResearchRequest, sourceSequence: number, accounting?: HeldResearchAccounting) {
+  return readSnapshotCore(db, context, request, sourceSequence, accounting, false);
+}
+export async function readSavedDomainResearchSnapshotWithinHeldTransaction(db: WaiaPostgresDb, context: OrgContext,
+  request: CapturedResearchRequest, sourceSequence: number, accounting: HeldResearchAccounting) {
+  return readSnapshotCore(db, context, request, sourceSequence, accounting, true);
+}
+async function readSnapshotCore(db: WaiaPostgresDb, context: OrgContext, request: CapturedResearchRequest,
+  sourceSequence: number, accounting: HeldResearchAccounting | undefined, savedDomain: boolean) {
   accounting?.assertDeadline();
   const budget = accounting?.budget(LIMITS.inputAggregate) ?? new ResearchReadBudget(LIMITS.inputAggregate);
-  const saved = await readResearchAssignmentWithinHeldTransaction(db, context, request, budget); budget.checkDeadline();
+  const saved = savedDomain ? await readSavedDomainResearchAssignmentWithinHeldTransaction(db, context, request, budget)
+    : await readResearchAssignmentWithinHeldTransaction(db, context, request, budget); budget.checkDeadline();
   if (!saved) return null;
   const sequence = sourceSequence - saved.assignment.firstSourceSequence;
   const completion = await readBoundedResearchCompletion(db, saved.assignment, saved.profile, sequence,
@@ -124,6 +143,12 @@ export function verifyResearchSnapshotComputed(saved: NonNullable<Awaited<Return
  * The owner retains transaction control, settings and finalization accounting.
  */
 export function prepareHeldResearchReplay(originatingPool: postgres.Sql, accounting: HeldResearchAccounting) {
+  return prepareHeldReplayCore(originatingPool, accounting, false);
+}
+export function prepareHeldSavedDomainResearchReplay(originatingPool: postgres.Sql, accounting: HeldResearchAccounting) {
+  return prepareHeldReplayCore(originatingPool, accounting, true);
+}
+function prepareHeldReplayCore(originatingPool: postgres.Sql, accounting: HeldResearchAccounting, savedDomain: boolean) {
   check(typeof originatingPool.begin === "function" && typeof (originatingPool as unknown as { savepoint?: unknown }).savepoint !== "function", "POOL_REQUIRED");
   const options = originatingPool.options;
   check(options && typeof options.parsers === "object" && options.parsers !== null &&
@@ -157,11 +182,16 @@ export function prepareHeldResearchReplay(originatingPool: postgres.Sql, account
         const { context, request } = captureResearchReplaySelector(suppliedContext, supplied);
         check(Number.isSafeInteger(sourceSequence) && sourceSequence >= request.range.startSequence &&
           sourceSequence - request.range.startSequence < request.range.count, "INVALID_RANGE");
-        const snapshotHandle = await captureFixedResearchCompletionSnapshot(db, context, request, sourceSequence, accounting);
+        const snapshotHandle = savedDomain
+          ? await captureFixedSavedDomainResearchCompletionSnapshot(db, context, request, sourceSequence, accounting)
+          : await captureFixedResearchCompletionSnapshot(db, context, request, sourceSequence, accounting);
         return prepareFixedResearchCompletion(snapshotHandle, accounting);
       },
       async writeCompletion(prepared: PreparedResearchCompletion, holder: DatabaseClockRuntimeHolderV2) {
-        return writeFixedResearchCompletion(db, prepared, holder, accounting);
+        check(!savedDomain, "HOLDER_DOMAIN_CONFLICT"); return writeFixedResearchCompletion(db, prepared, holder, accounting);
+      },
+      async writeSavedDomainCompletion(prepared: PreparedResearchCompletion, holder: SavedResearchHolderV1) {
+        check(savedDomain, "HOLDER_DOMAIN_CONFLICT"); return writeFixedSavedDomainResearchCompletion(db, prepared, holder, accounting);
       },
       async replay(suppliedContext: OrgContext, supplied: ResearchRequest, sourceSequence: number) {
         accounting.assertDeadline();

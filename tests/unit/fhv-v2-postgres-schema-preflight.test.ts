@@ -35,13 +35,13 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
   })();
 
   it("accepts all exact migration bytes applied by the full checkout migration job", () => {
-    expect(fullApplied).toHaveLength(224);
+    expect(fullApplied).toHaveLength(226);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: fullApplied }),
     ).not.toThrow();
   });
 
-  it("requires the complete Cody policy prefix and admits 0208-0223 only as explicit compatible additive", () => {
+  it("requires the complete Cody policy prefix and admits 0208-0225 only as explicit compatible additive", () => {
     const journal = JSON.parse(
       readFileSync(join(process.cwd(), "db/migrations_postgres/meta/_journal.json"), "utf8"),
     ) as { entries: Array<{ idx: number; when: number; tag: string }> };
@@ -69,6 +69,8 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
       "0221_trader_research_understanding_v1",
       "0222_trader_historical_reconciliation_v1",
       "0223_trader_research_application_v1",
+      "0224_trader_risk_current_account_basis",
+      "0225_trader_noncapital_domain_ownership_v1",
     ]);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: baseline }),
@@ -239,6 +241,11 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
     },
   );
 
+  it.each([224, 225])("rejects altered compatible%s bytes without extending the required frontier", idx => {
+    expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive,
+      applied: fullApplied.map(row => row.createdAt === String(1780000000000 + idx) ? { ...row, hash: "0".repeat(64) } : row) })).toThrow();
+    expect(FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX).toBe(207);
+  });
   it("rejects changed compatible0223 bytes even when the complete journal is present", () => {
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({

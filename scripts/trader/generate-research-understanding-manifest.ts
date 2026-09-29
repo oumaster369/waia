@@ -6,7 +6,9 @@ import ts from "typescript";
 
 const output = "lib/trader/paper/research-understanding-v1/computation-manifest.ts";
 const runtime = process.argv.includes("--runtime");
-const roots = runtime ? ["scripts/trader/paper-bar-close-loop.ts"] : ["lib/trader/paper/research-understanding-v1/evaluate.ts"];
+const savedDomain = process.argv.includes("--saved-domain");
+const cliRoot = savedDomain ? "scripts/trader/saved-research.ts" : "scripts/trader/paper-bar-close-loop.ts";
+const roots = runtime ? [cliRoot] : ["lib/trader/paper/research-understanding-v1/evaluate.ts"];
 const external = new Set(runtime ? ["node:crypto", "node:buffer", "zod", "node:url", "node:fs/promises", "node:fs", "node:path", "node:module",
   "drizzle-orm", "drizzle-orm/pg-core", "drizzle-orm/sqlite-core", "drizzle-orm/postgres-js", "drizzle-orm/better-sqlite3", "postgres", "server-only", "better-sqlite3", "@opennextjs/cloudflare"] : ["node:crypto", "node:buffer", "zod"]);
 const externalUsed = new Set<string>();
@@ -44,11 +46,11 @@ function visit(file: string) {
     }
     ts.forEachChild(node, inspect);
   }
-  if (runtime && file === "scripts/trader/paper-bar-close-loop.ts") {
+  if (runtime && file === cliRoot) {
     // Inspect only the exact selected mode and shared exit/error code. An earlier
     // branch is safe to skip only when its condition is a different literal mode
     // and every admitted success path returns before reaching this branch.
-    const entry = ast.statements.find((n): n is ts.FunctionDeclaration => ts.isFunctionDeclaration(n) && n.name?.text === "runPaperBarCloseCli");
+    const entry = ast.statements.find((n): n is ts.FunctionDeclaration => ts.isFunctionDeclaration(n) && n.name?.text === (savedDomain ? "runSavedResearchCli" : "runPaperBarCloseCli"));
     if (!entry?.body) throw new Error("RESEARCH_CLI_ENTRY_MISSING");
     const statements = entry.body.statements;
     if (statements[0]?.getText(ast) !== "args = [...args];") throw new Error("RESEARCH_CLI_ARGS_CAPTURE_MISSING");

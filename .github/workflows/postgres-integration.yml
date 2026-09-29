@@ -88,6 +88,11 @@ on:
       - "lib/trader/intelligence/hypothesis/evidence-judgment-kernel-v1.ts"
       - "scripts/trader/generate-research-application-manifest.ts"
       - "tests/helpers/research-application-v1-process.ts"
+      - "tests/helpers/noncapital-domain-process.ts"
+      - "tests/integration/postgres-runtime-domain-ownership-v1.test.ts"
+      - "tests/unit/trader-runtime-domain-ownership-closure.test.ts"
+      - "scripts/trader/recorded-acquisition.ts"
+      - "scripts/trader/saved-research.ts"
       - "tests/integration/postgres-research-application-v1.test.ts"
       - "tests/unit/research-application-v1-specification.test.ts"
       - "tests/unit/research-application-v1-compatibility.test.ts"
@@ -118,6 +123,7 @@ on:
       - "scripts/trader/reality-execution-report-catch-up.ts"
       - "package.json"
       - "tests/integration/postgres-risk-v2.test.ts"
+      - "tests/integration/postgres-risk-validation-org-fk-v1.test.ts"
       - "tests/integration/postgres-reality-v2.test.ts"
       - "tests/integration/postgres-canonical-decision-verification-v2.test.ts"
       - "lib/trader/observability/control-replay-scientific-v2-driver-v1.ts"
@@ -233,6 +239,7 @@ jobs:
             tests/integration/postgres-execution-v2.test.ts \
             tests/integration/postgres-execution-reality-delivery.test.ts \
             tests/integration/postgres-risk-v2.test.ts \
+            tests/integration/postgres-risk-validation-org-fk-v1.test.ts \
             tests/integration/postgres-risk-limits-bootstrap.test.ts \
             tests/integration/postgres-trader-service-actor-authorization.test.ts \
             tests/integration/postgres-reality-v2.test.ts \
@@ -254,7 +261,8 @@ jobs:
             tests/integration/postgres-research-understanding-v1.test.ts \
             tests/integration/postgres-knowledge-snapshot-eligibility.test.ts \
             tests/integration/postgres-historical-production-reconciliation-frontier-v1.test.ts \
-            tests/integration/postgres-research-application-v1.test.ts
+            tests/integration/postgres-research-application-v1.test.ts \
+            tests/integration/postgres-runtime-domain-ownership-v1.test.ts
           node scripts/postgres-validation/assert-capital-test-results.mjs .tmp/capital-postgres-results.json
 
   historical-reconciliation-profile:

@@ -173,7 +173,16 @@ export async function readBoundedResearchInputs(db: WaiaPostgresDb, assignment: 
 
 /** New sidecar identity is mandatory for this owner; generic profile/receipt presence never substitutes. */
 export async function readBoundedResearchAssignment(db: WaiaPostgresDb, org: string, sessionId: string, budget: ResearchReadBudget) {
-  const query = await inspect(db, "assignment", recordScope("assignment", org, sessionId), budget, 1, undefined, true);
+  return readResearchAssignmentCore(db, org, sessionId, budget, false);
+}
+/** Fixed write-capable route only; completed fact readers retain the original projection and predicate. */
+export async function readBoundedSavedDomainResearchAssignment(db: WaiaPostgresDb, org: string, sessionId: string, budget: ResearchReadBudget) {
+  return readResearchAssignmentCore(db, org, sessionId, budget, true);
+}
+async function readResearchAssignmentCore(db: WaiaPostgresDb, org: string, sessionId: string, budget: ResearchReadBudget, savedDomain: boolean) {
+  const where = recordScope("assignment", org, sessionId);
+  const query = await inspect(db, "assignment", savedDomain
+    ? sql`${where} and ${schema.traderResearchUnderstandingAssignmentsV1.ownershipDomain}='SAVED_RESEARCH_V1'` : where, budget, 1, undefined, true);
   if (!query) return null;
   const row = (await bodies(db, query, budget))[0]!;
   const assignment = decodeBody<ResearchAssignment>(row as { bodyJson: string; contentDigest: string });

@@ -341,6 +341,11 @@ describe("DEE-715 exact Market Understanding producer, consumer, and bypass clos
     expect(researchOwner).toContain("return writeFixedResearchCompletion(tx, prepared.prepared, holder, lifetime)");
     expect(heldReplay).toContain("return prepareFixedResearchCompletion(snapshotHandle, accounting)");
     expect(heldReplay).toContain("return writeFixedResearchCompletion(db, prepared, holder, accounting)");
+    expect(researchOwner).toContain("export function createSavedDomainResearchOwner(");
+    expect(researchOwner).toContain("bound.prepareCompletion(context, replayRequest, sourceSequence)");
+    expect(researchOwner).toContain("bound.writeSavedDomainCompletion(prepared.prepared, selectedHolder)");
+    expect(heldReplay).toContain("return writeFixedSavedDomainResearchCompletion(db, prepared, holder, accounting)");
+    expect(completionWriter).toContain('captured.domain === lease.domain, "RESEARCH_COMPLETION_HANDLE_INVALID"');
     expect(completionWriter).not.toMatch(/\.transaction\(|\.begin\(|suppliedOutput|suppliedEvaluator|createSavedResearchOwner|createSavedApplicationOwner/);
     expect(heldReplay).toContain("export function verifyResearchSnapshotComputed(");
     expect(heldReplay).toContain("const output = evaluateSavedResearchUnderstanding(saved.packet, saved.assignment, saved.profile, saved.revisions);");

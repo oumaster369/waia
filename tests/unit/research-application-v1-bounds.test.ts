@@ -96,13 +96,13 @@ describe("actual held dispatch and invocation accounting", () => {
 import { readApplicationRows, applicationScope, decodeApplicationBody } from "@/lib/trader/paper/research-application-v1/bounded-read-postgres";
 import { ResearchApplicationRefusal, applicationDigest } from "@/lib/trader/paper/research-application-v1/contract";
 function applicationTransport(replies: unknown[][]) {
-  const trace: string[] = [];
-  const client = { savepoint() { throw new Error("SAVEPOINT_FORBIDDEN"); }, unsafe(query: string) {
-    trace.push(query); return Object.assign(Promise.resolve(replies[trace.length - 1] ?? []), { values: async () => [] });
+  const trace: string[] = [], parameters: unknown[][] = [];
+  const client = { savepoint() { throw new Error("SAVEPOINT_FORBIDDEN"); }, unsafe(query: string, params: unknown[] = []) {
+    trace.push(query); parameters.push([...params]); return Object.assign(Promise.resolve(replies[trace.length - 1] ?? []), { values: async () => [] });
   } } as unknown as postgres.TransactionSql;
   const pool = { begin() { throw new Error("ROOT_BEGIN_FORBIDDEN"); }, options: { parsers: {}, serializers: {} } } as unknown as postgres.Sql;
   const accounting = new HeldResearchAccounting();
-  return { trace, accounting, db: prepareHeldResearchReplay(pool, accounting).bindHeld(client).executor,
+  return { trace, parameters, accounting, db: prepareHeldResearchReplay(pool, accounting).bindHeld(client).executor,
     budget: accounting.budget(APPLICATION_LIMITS.additionalAggregate) };
 }
 const applicationOrg = "00000000-0000-4000-8000-000000000001";
@@ -116,6 +116,7 @@ describe("actual bounded application SQL reader", () => {
     expect(f.trace).toHaveLength(2); expect(f.trace[0]).toContain("octet_length(to_jsonb(bounded_row)::text)");
     expect(f.trace[0]).not.toContain("select bounded_row.*"); expect(f.trace[1]).toContain("select bounded_row.*");
     // The inner body set is an explicit admitted projection, not an unbounded table wildcard.
+    expect(f.trace[1]).toContain('"ownership_domain" as "ownershipDomain"');
     expect(f.trace[1]).toContain('"body_json" as "bodyJson"'); expect(f.trace[1]).not.toMatch(/select \* from/);
     expect(f.accounting.statements).toBe(2); expect(f.accounting.inputs.total).toBe(400);
   });
@@ -167,7 +168,7 @@ describe("actual bounded application SQL reader", () => {
 import { admitApplicationWriteRow, readApplicationRegistration } from "@/lib/trader/paper/research-application-v1/bounded-read-postgres";
 import type { ResearchApplicationConfigurationV1 } from "@/lib/trader/paper/research-application-v1/contract";
 describe("full physical candidate projection admission", () => {
-  const candidate = () => ({ organizationId: applicationOrg, assignmentDigest: "a".repeat(64), contentDigest: "b".repeat(64),
+  const candidate = () => ({ ownershipDomain: "CAPITAL_LEGACY_V2", organizationId: applicationOrg, assignmentDigest: "a".repeat(64), contentDigest: "b".repeat(64),
     bodyJson: '{"body":"quoted \\" text"}', runtimeInstanceId: "owner", leaseEpoch: 1, leaseContentDigest: "c".repeat(64),
     researchSessionId: "r", researchAssignmentDigest: "d".repeat(64) });
   it("charges the actual SQL projection bytes with its holder/body escaping, not only the raw body", async () => {
@@ -175,6 +176,8 @@ describe("full physical candidate projection admission", () => {
     await admitApplicationWriteRow(f.db, "assignment", row, f.budget);
     expect(f.accounting.inputs.total).toBe(65536); expect(f.trace).toHaveLength(1);
     expect(f.trace[0]).toContain("octet_length(jsonb_build_object(");
+    const domainKey = f.parameters[0]!.indexOf("ownershipDomain");
+    expect(domainKey).toBeGreaterThan(1); expect(f.parameters[0]![domainKey + 1]).toBe("CAPITAL_LEGACY_V2");
     expect(f.trace[0]).toContain("::uuid"); expect(f.trace[0]).toContain("::integer");
     expect(f.trace[0]).not.toMatch(/insert|select bounded_row\.\*/);
   });
@@ -192,9 +195,9 @@ describe("full physical candidate projection admission", () => {
     await expect(admitApplicationWriteRow(f.db, "assignment", candidate(), f.budget)).rejects.toThrow("STORED_ROW_LIMIT_EXCEEDED");
     expect(f.accounting.inputs.total).toBe(0); expect(f.trace).toHaveLength(1);
   });
-  it.each(["extra", "missing", "body"])("refuses %s candidate before dispatch", async kind => {
+  it.each(["extra", "missing", "domain", "body"])("refuses %s candidate before dispatch", async kind => {
     const f = applicationTransport([]), row: Record<string, unknown> = candidate();
-    if (kind === "extra") row.extra = 1; else if (kind === "missing") delete row.leaseContentDigest; else row.bodyJson = "x".repeat(65537);
+    if (kind === "extra") row.extra = 1; else if (kind === "missing") delete row.leaseContentDigest; else if (kind === "domain") delete row.ownershipDomain; else row.bodyJson = "x".repeat(65537);
     await expect(admitApplicationWriteRow(f.db, "assignment", row, f.budget)).rejects.toThrow(); expect(f.trace).toEqual([]);
   });
 });

@@ -14,6 +14,8 @@ import { hasCanonicalGatewayPitReceiptContentV1, readCanonicalPitObservationWith
 import { readTrustAsOfReceiptV1Postgres } from "@/lib/trader/mi/trust-as-of-repository-postgres";
 import { assertRuntimeDatabaseClockHolderV2, lockRuntimeOrganizationV2,
   type DatabaseClockRuntimeHolderV2 } from "@/lib/trader/runtime-authority/v2/runtime-control-lease-database-clock-postgres-v2";
+import { lockRecordedAcquisitionOrganizationV1, assertRecordedAcquisitionHolderWithinHeldTransactionV1,
+  type RecordedAcquisitionHolderV1 } from "@/lib/trader/runtime-authority/v2/noncapital-domain-lease-postgres-v1";
 import { assertEnvironment, assertPacketSize, assertSeal, assertSession, copy, digest, seal, requireCondition as check,
   ANALYSIS_CONTRACT, type AnalysisSession, type AnalysisPacket, type AnalysisCompanion, type NormalizedMandatory } from "./recorded-analysis-v1";
 import { normalizeMandatory } from "./normalize-mandatory-packet-v1";
@@ -63,6 +65,30 @@ export async function readRecordedAnalysis(pool: postgres.Sql, session: Analysis
   return drizzle(pool, { schema }).transaction(tx => readAnalysisWithinTransaction(tx, session, sequence),
     { isolationLevel: "read committed", accessMode: "read only" });
 }
+/** Fixed acquisition read: immutable root affinity is checked before source work. */
+export async function readRecordedAcquisitionAnalysisWithinTransaction(db: WaiaPostgresDb, session: AnalysisSession, sequence: number) {
+  scope(session, sequence);
+  const root = (await db.select({ domain: sessions.ownershipDomain }).from(sessions).where(and(
+    eq(sessions.organizationId, session.organizationId), eq(sessions.sessionId, session.sessionId))))[0];
+  check(!root || root.domain === "RECORDED_ACQUISITION_V1", "SESSION_DOMAIN_CONFLICT");
+  return readAnalysisWithinTransaction(db, session, sequence);
+}
+export async function readRecordedAcquisitionAnalysis(pool: postgres.Sql, session: AnalysisSession, sequence: number) {
+  requireAnalysisPool(pool); session = copy(session); scope(session, sequence);
+  return drizzle(pool, { schema }).transaction(tx => readRecordedAcquisitionAnalysisWithinTransaction(tx, session, sequence),
+    { isolationLevel: "read committed", accessMode: "read only" });
+}
+type PublicationLease = { domain: "CAPITAL_LEGACY_V2"; holder: DatabaseClockRuntimeHolderV2 }
+  | { domain: "RECORDED_ACQUISITION_V1"; holder: RecordedAcquisitionHolderV1 };
+async function currentPublication(db: WaiaPostgresDb, lease: PublicationLease) {
+  if (lease.domain === "RECORDED_ACQUISITION_V1") {
+    await lockRecordedAcquisitionOrganizationV1(db, lease.holder.organizationId);
+    return assertRecordedAcquisitionHolderWithinHeldTransactionV1(db, lease.holder);
+  }
+  await lockRuntimeOrganizationV2(db, lease.holder.organizationId);
+  return assertRuntimeDatabaseClockHolderV2(db, lease.holder);
+}
+
 /** Complete persisted outcome bodies; no current trust/source-status fallback during replay. */
 async function readSourceEvidence(db: WaiaPostgresDb, session: AnalysisSession, receipt: CanonicalGatewayPitReceiptV1) {
   check(receipt.organizationId === session.organizationId && hasCanonicalGatewayPitReceiptContentV1(receipt), "SOURCE_RECEIPT_CONFLICT");
@@ -103,7 +129,16 @@ export async function precedingAnalysis(db: WaiaPostgresDb, session: AnalysisSes
 /** Source writes intentionally precede packet publication; leftovers are never a completed prefix. */
 export async function publishRecordedAnalysis(pool: postgres.Sql, session: AnalysisSession, holder: DatabaseClockRuntimeHolderV2,
   sequence: number, analysisPitAnchor: string, normalized: NormalizedMandatory): Promise<AnalysisPacket> {
-  requireAnalysisPool(pool); assertEnvironment(); session = copy(session); holder = copy(holder); normalized = copy(normalized); scope(session, sequence);
+  return publishRecordedAnalysisCore(pool, session, { domain: "CAPITAL_LEGACY_V2", holder: copy(holder) }, sequence, analysisPitAnchor, normalized);
+}
+export async function publishRecordedAcquisitionAnalysis(pool: postgres.Sql, session: AnalysisSession, holder: RecordedAcquisitionHolderV1,
+  sequence: number, analysisPitAnchor: string, normalized: NormalizedMandatory): Promise<AnalysisPacket> {
+  return publishRecordedAnalysisCore(pool, session, { domain: "RECORDED_ACQUISITION_V1", holder }, sequence, analysisPitAnchor, normalized);
+}
+async function publishRecordedAnalysisCore(pool: postgres.Sql, session: AnalysisSession, lease: PublicationLease,
+  sequence: number, analysisPitAnchor: string, normalized: NormalizedMandatory): Promise<AnalysisPacket> {
+  const holder = lease.holder;
+  requireAnalysisPool(pool); assertEnvironment(); session = copy(session); normalized = copy(normalized); scope(session, sequence);
   check(holder.organizationId === session.organizationId, "TENANT_MISMATCH");
   check(digest(normalizeMandatory(normalized.captured, session, analysisPitAnchor)) === digest(normalized), "NORMALIZATION_CONTENT_CONFLICT");
   assertPacketSize(session, normalized);
@@ -112,9 +147,9 @@ export async function publishRecordedAnalysis(pool: postgres.Sql, session: Analy
     { organizationId: session.organizationId }, observation, { pitCutoffUtc: analysisPitAnchor })).receipt);
   return db.transaction(async tx => {
     const db = tx;
-    await lockRuntimeOrganizationV2(tx, session.organizationId);
-    await assertRuntimeDatabaseClockHolderV2(tx, holder);
-    const current = await readAnalysisWithinTransaction(db, session, sequence);
+    await currentPublication(tx, lease);
+    const current = lease.domain === "RECORDED_ACQUISITION_V1"
+      ? await readRecordedAcquisitionAnalysisWithinTransaction(db, session, sequence) : await readAnalysisWithinTransaction(db, session, sequence);
     const previous = await precedingAnalysis(db, session, sequence);
     check(previous.scheduledBarCloseTime === null || previous.scheduledBarCloseTime < normalized.scheduledBarCloseTime, "SOURCE_NOT_ADVANCED");
     const sources: AnalysisPacket["sources"] = [];
@@ -125,11 +160,13 @@ export async function publishRecordedAnalysis(pool: postgres.Sql, session: Analy
     if (current.packet) { check(current.packet.contentDigest === packet.contentDigest, "PACKET_CONFLICT"); return current.packet; }
     const { configDigest, ...sessionBody } = session;
     await db.insert(sessions).values({ organizationId: session.organizationId, sessionId: session.sessionId, contentDigest: configDigest,
-      bodyJson: canonicalJsonString(sessionBody), ...holderColumns(holder) }).onConflictDoNothing();
+      bodyJson: canonicalJsonString(sessionBody), ...holderColumns(holder), ownershipDomain: lease.domain }).onConflictDoNothing();
     await db.insert(packets).values({ organizationId: session.organizationId, sessionId: session.sessionId, sequence,
-      configDigest, analysisPitAnchor, contentDigest: packet.contentDigest, bodyJson: encodeBody(packet), ...holderColumns(holder) });
+      configDigest, analysisPitAnchor, contentDigest: packet.contentDigest, bodyJson: encodeBody(packet), ...holderColumns(holder), ownershipDomain: lease.domain });
     await verifyRecordedSources(db, packet);
-    await assertRuntimeDatabaseClockHolderV2(tx, holder);
+    // The first call holds the fixed domain lock through this final assertion.
+    if (lease.domain === "RECORDED_ACQUISITION_V1") await assertRecordedAcquisitionHolderWithinHeldTransactionV1(tx, lease.holder);
+    else await assertRuntimeDatabaseClockHolderV2(tx, lease.holder);
     return packet;
   }, { isolationLevel: "read committed" });
 }
