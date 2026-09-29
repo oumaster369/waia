@@ -31,7 +31,7 @@
     ],
     "expectedFileCount": 162,
     "sortedPathDigestHex": "a6828ed74c7fde97de1556ac4dcb4e9de369ff2fe0cd7d4a430fdeff15b7d15a",
-    "sortedContentDigestHex": "47c11423fdb2d885a387262360d3b5e8c4267c429715d69fcc8247f762b18f51"
+    "sortedContentDigestHex": "9210fc821d6b01008a8c2c28290b446de06c8bb4125b832d4b09a6a76e10f7b5"
   },
   "sourceRules": [
     {
@@ -116,7 +116,7 @@
     ],
     "expectedFileCount": 148,
     "sortedPathDigestHex": "471d4249d7a689e085599495960b668704116f922936bd49710786b5f9f06a34",
-    "sortedContentDigestHex": "3ff8d52f8ae1dfc2e7a22a492a03459ab57750850a904c03c42f26fbd038b616"
+    "sortedContentDigestHex": "f13b7e140623a65c1e69f9ce7779476c23b6b2507762d17765353eb44a6f35e9"
   },
   "consumerRules": [
     {

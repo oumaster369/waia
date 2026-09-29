@@ -54,6 +54,15 @@ async function initializeRiskAccountStateV2Postgres(
   });
 }
 
+async function deleteOrgAuditLogs(sqlClient: postgres.Sql, organizationId: string) {
+  await sqlClient.unsafe("ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_block_delete");
+  try {
+    await sqlClient`DELETE FROM audit_logs WHERE organization_id = ${organizationId}::uuid`;
+  } finally {
+    await sqlClient.unsafe("ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_block_delete");
+  }
+}
+
 async function clearRisk(sqlClient: postgres.Sql, organizationId: string) {
   await deleteLiveCapitalEnvelopeRows(sqlClient, organizationId);
   await sqlClient.unsafe(
@@ -282,6 +291,8 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
     if (sqlClient) {
       await clearRisk(sqlClient, orgA);
       await clearRisk(sqlClient, orgB);
+      await deleteOrgAuditLogs(sqlClient, orgA);
+      await deleteOrgAuditLogs(sqlClient, orgB);
       await sqlClient.end({ timeout: 10 });
     }
     await cleanupWp13Org(url!, USER_A);

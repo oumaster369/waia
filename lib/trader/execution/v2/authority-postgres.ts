@@ -414,6 +414,7 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
   context: OrgContext,
   executionAttemptId: string,
   submit: ExecutionV2NetworkSubmitter<T>,
+  afterSubmitStarted?: () => Promise<void>,
 ): Promise<DispatchCommittedExecutionV2Result<T>> {
   const scoped = requireOrgContext(context.organizationId);
   const ready = await runWaiaPostgresTransaction(db, async (tx) => {
@@ -555,6 +556,7 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
     };
   });
   if (ready.status !== "READY") return ready;
+  if (afterSubmitStarted) await afterSubmitStarted();
   let refusal: string | null;
   try {
     refusal = await prePostNetworkRefusalV2(db, scoped, ready.attempt);

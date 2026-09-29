@@ -160,6 +160,15 @@ async function initializeRiskAccountStateV2Postgres(
   });
 }
 
+async function deleteOrgAuditLogs(sql: postgres.Sql, organizationId: string): Promise<void> {
+  await sql.unsafe("ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_block_delete");
+  try {
+    await sql`DELETE FROM audit_logs WHERE organization_id = ${organizationId}::uuid`;
+  } finally {
+    await sql.unsafe("ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_block_delete");
+  }
+}
+
 async function clearOrganization(sql: postgres.Sql, organizationId: string): Promise<void> {
   await deleteLiveCapitalEnvelopeRows(sql, organizationId);
   const guarded = [
@@ -384,6 +393,8 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     if (sql) {
       await clearOrganization(sql, orgA);
       await clearOrganization(sql, orgB);
+      await deleteOrgAuditLogs(sql, orgA);
+      await deleteOrgAuditLogs(sql, orgB);
       await sql.end({ timeout: 10 });
     }
     await cleanupWp13Org(url!, USER_A);
@@ -2363,13 +2374,6 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
     const service = createPostgresKillSwitchService(db);
     try {
-      await service.trip(
-        { actorType: "service", actorId: null },
-        requireOrgContext(orgA),
-        { scopeType: "organization", organizationId: orgA },
-        { scopeType: "organization", scopeRef: null, switchType: "EMERGENCY_STOP" },
-        { enforcementMode: "REJECT", origin: "manual", reason: "dee-1151 pre-post" },
-      );
       let posts = 0;
       const refused = await dispatchAndRecordExecutionAttemptV2(
         db,
@@ -2378,6 +2382,15 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
         async () => {
           posts += 1;
           throw new Error("post must not be sent");
+        },
+        async () => {
+          await service.trip(
+            { actorType: "service", actorId: null },
+            requireOrgContext(orgA),
+            { scopeType: "organization", organizationId: orgA },
+            { scopeType: "organization", scopeRef: null, switchType: "EMERGENCY_STOP" },
+            { enforcementMode: "REJECT", origin: "manual", reason: "dee-1151 pre-post" },
+          );
         },
       );
       expect(posts).toBe(0);
