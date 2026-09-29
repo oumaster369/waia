@@ -35,12 +35,16 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         // DEE-1135 pins the HTX account acquisition spec and its PostgreSQL journal
         // on the existing Reality boundary.
         // DEE-1151 adds paper and live callers that import Execution V2.
+        // skipBlindTail in scripts/trader/ri-evidence-campaign.ts changes an
+        // existing consumer's body. Counts and digests are recomputed on the merge.
         consumers: 148,
+        consumerDigestHex: "471d4249d7a689e085599495960b668704116f922936bd49710786b5f9f06a34",
         // DEE-1099 adds one read of freshly validated account permissions,
         // not a financial observation or a venue effect.
         connectorReferences: 26,
         sourceContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
-        consumerContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
+        consumerContentDigestHex:
+          "0e3c9506f7c2d833f457f60cf086f3f35e18a95bcc09054e5a8c9b2a001243e5",
       }),
     );
   });
@@ -49,10 +53,23 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
     const inventory = JSON.parse(readFileSync(INVENTORY, "utf8"));
     const file = "lib/trader/live/live-connector.ts";
     expect(inventory.admittedBoundaryFiles).not.toContain(file);
-    expect(inventory.explicitCompatibilityChecks.filter((entry: { file: string }) => entry.file === file))
-      .toEqual([{ file, method: "getAccountInfo", occurrences: 1, disposition: expect.stringContaining("CREDENTIAL_PERMISSION_CHECK_ONLY") }]);
-    const references = detectConnectorMethodReferencesInSource(readFileSync(join(ROOT, file), "utf8"), file,
-      ["getAccountInfo", "getBalances", "getOrder", "getTradeHistory", "placeOrder", "cancelOrder"]);
+    expect(
+      inventory.explicitCompatibilityChecks.filter(
+        (entry: { file: string }) => entry.file === file,
+      ),
+    ).toEqual([
+      {
+        file,
+        method: "getAccountInfo",
+        occurrences: 1,
+        disposition: expect.stringContaining("CREDENTIAL_PERMISSION_CHECK_ONLY"),
+      },
+    ]);
+    const references = detectConnectorMethodReferencesInSource(
+      readFileSync(join(ROOT, file), "utf8"),
+      file,
+      ["getAccountInfo", "getBalances", "getOrder", "getTradeHistory", "placeOrder", "cancelOrder"],
+    );
     expect(references.map(({ method }) => method)).toEqual(["getAccountInfo"]);
   });
 

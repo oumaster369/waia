@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -18,6 +19,13 @@ import {
 } from "@/lib/trader/discovery/discovery.types";
 import { runDiscoveryEvolutionPass } from "@/lib/trader/discovery/evolution-orchestrator";
 import { NoReinforcementGuardError } from "@/lib/trader/discovery/no-reinforcement-guard";
+import { AppendOnlyStrategyAdmissionJournal } from "@/lib/trader/research/strategy-admission-v1";
+import {
+  STRATEGY_ADMISSION_SPEC_SHA256,
+  admissionDateNets,
+  countsForDateNets,
+  passingIsDateNets,
+} from "./strategy-admission-date-nets";
 import {
   qualifyFutureCycleEpistemicEffectV2,
   type KnowledgeNavigatorCandidateV2,
@@ -25,6 +33,7 @@ import {
 } from "@/lib/trader/knowledge/navigator";
 import type { PaperClosedTrade } from "@/lib/trader/paper/paper-strategy-eval.types";
 import {
+  StrategyEvolutionResearchError,
   runStrategyEvolutionResearchPassV2,
   type PartitionWindowMetricV2,
   type QualificationEvaluationV2,
@@ -41,6 +50,13 @@ const DIGEST = {
 const PIT = "2026-02-01T12:00:00.000Z";
 const PRIOR_PIT = "2026-01-31T12:00:00.000Z";
 const CUTOFF = "2026-02-01T11:00:00.000Z";
+const IS_NETS = passingIsDateNets(2022);
+
+function freshJournal() {
+  const dir = mkdtempSync(join(tmpdir(), "waia-admission-"));
+  return AppendOnlyStrategyAdmissionJournal.openDurable(join(dir, "journal.jsonl"));
+}
+const VALIDATION_NETS = admissionDateNets(2024, "0.02", 5);
 
 const EX = {} as never;
 
@@ -71,7 +87,7 @@ function evaluation(overrides: Partial<QualificationEvaluationV2> = {}): Qualifi
     netEconomicResult: "2.5",
     maxDrawdown: "-1.0",
     tailEventCount: 1,
-    sampleSize: 12,
+    ...countsForDateNets(IS_NETS),
     incumbentComparisonDigestHex: DIGEST.b,
     ...overrides,
   };
@@ -82,7 +98,7 @@ function walkForwardEvaluation(): QualificationEvaluationV2 {
     netEconomicResult: "1.25",
     maxDrawdown: "-1.5",
     tailEventCount: 2,
-    sampleSize: 8,
+    ...countsForDateNets(VALIDATION_NETS),
     incumbentComparisonDigestHex: DIGEST.a,
   });
 }
@@ -99,6 +115,10 @@ function windowFor(
     maxDrawdown: source.maxDrawdown,
     tailEventCount: source.tailEventCount,
     closedTradeCount: source.sampleSize,
+    distinctDayCount: source.distinctDayCount,
+    positiveTradeCount: source.positiveTradeCount,
+    nonZeroTradeCount: source.nonZeroTradeCount,
+    ...(source.dateNets ? { dateNets: source.dateNets } : {}),
     incumbentComparisonDigestHex: source.incumbentComparisonDigestHex,
   };
 }
@@ -185,9 +205,12 @@ function enabledAdmission() {
     walkForward: walkForwardEvaluation(),
     developmentWindows: [windowFor("DEVELOPMENT", evaluation(), "dev-1")],
     walkForwardWindows: [windowFor("WALK_FORWARD", walkForwardEvaluation(), "wf-1")],
-    qualificationVerdict: "QUALIFIED" as const,
+    specSha256: STRATEGY_ADMISSION_SPEC_SHA256,
+    declaredFamilySize: 1,
     evidenceCutoffUtc: CUTOFF,
     symbol: "BTCUSDT",
+    journal: freshJournal(),
+    usedForDiscovery: false,
   };
 }
 
@@ -207,6 +230,22 @@ describe("DEE-1025 discovery research-v2 wiring", () => {
       skipped: true,
       reason: "discovery_run_disabled",
     });
+    expect(runStrategyEvolutionResearchPassV2).not.toHaveBeenCalled();
+  });
+
+  it("refuses a caller-supplied research-v2 verdict", async () => {
+    await expect(
+      runDiscoveryEvolutionPass(EX, {
+        runContext: runContext({
+          config: { ...DEFAULT_DISCOVERY_RUN_CONFIG, enabled: true },
+        }),
+        config: { ...DEFAULT_DISCOVERY_RUN_CONFIG, enabled: true },
+        bars: [],
+        closedTrades: [closedTrade({ fillId: "loss-1", tradePnl: "-8.25" })],
+        ...enabledAdmission(),
+        qualificationVerdict: "QUALIFIED",
+      } as never),
+    ).rejects.toBeInstanceOf(StrategyEvolutionResearchError);
     expect(runStrategyEvolutionResearchPassV2).not.toHaveBeenCalled();
   });
 
@@ -299,7 +338,7 @@ describe("DEE-1025 discovery research-v2 wiring", () => {
           netEconomicResult: "1",
           maxDrawdown: "-0.5",
           tailEventCount: 1,
-          sampleSize: 3,
+          ...countsForDateNets(IS_NETS.slice(0, 16)),
         }),
         "dev-1",
       ),
@@ -309,7 +348,7 @@ describe("DEE-1025 discovery research-v2 wiring", () => {
           netEconomicResult: "0.25",
           maxDrawdown: "-1.5",
           tailEventCount: 1,
-          sampleSize: 5,
+          ...countsForDateNets(IS_NETS.slice(16)),
         }),
         "dev-2",
       ),
@@ -334,7 +373,7 @@ describe("DEE-1025 discovery research-v2 wiring", () => {
       netEconomicResult: "1.25",
       maxDrawdown: "-1.5",
       tailEventCount: 2,
-      sampleSize: 8,
+      ...countsForDateNets(IS_NETS),
       incumbentComparisonDigestHex: DIGEST.b,
     });
     expect(v2Input?.walkForward).toEqual(walkForwardEvaluation());

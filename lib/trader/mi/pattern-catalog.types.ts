@@ -71,10 +71,23 @@ export type PatternCatalogExplanationPayload = {
   explanation: string;
 };
 
+export const PATTERN_CATALOG_HYPOTHESIS_STATUS = "candidate" as const;
+
+export type PatternCatalogDescriptiveHypothesis = {
+  status: typeof PATTERN_CATALOG_HYPOTHESIS_STATUS;
+  dataUse: "used_for_discovery";
+  patternKey: string;
+  subjectRef: string;
+  symbol: string;
+  evaluatedAt: string;
+  statement: string;
+};
+
 export type PatternCatalogPassResult = {
   schemaVersion: typeof PATTERN_CATALOG_SCHEMA_VERSION;
   subjectsProcessed: number;
   scoreRowsWritten: number;
   explanationRowsWritten: number;
   edgeRowsWritten: number;
+  hypotheses: readonly PatternCatalogDescriptiveHypothesis[];
 };

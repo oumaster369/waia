@@ -13,7 +13,8 @@ import {
   subtractDecimal,
 } from "@/lib/trader/risk/numeric";
 
-const SCORE_SCALE = 10000n;
+/** Weights on the z-score, dispersion, and event-risk components (sum = 10). */
+const MATCH_WEIGHT_SUM = 10n;
 
 function clampScore(value: string): string {
   if (compareDecimal(value, "0") < 0) {
@@ -77,11 +78,13 @@ export function computePatternMatchScore(input: {
   const volComponent = thresholdComponent(input.features.priceDispersion20, volThreshold);
   const eventRiskComponent = inverseThresholdComponent(input.features.eventRiskScore, eventRiskMax);
 
+  // Weighted mean on the 8-dp decimal scale. Dividing by 10_000 (a 4-dp
+  // display scale) collapsed every match to about 0.001, below the 0.30 gate.
   const weighted =
     (parseDecimal(zscoreComponent) * 4n +
       parseDecimal(volComponent) * 3n +
       parseDecimal(eventRiskComponent) * 3n) /
-    SCORE_SCALE;
+    MATCH_WEIGHT_SUM;
 
   return {
     zscoreComponent,
