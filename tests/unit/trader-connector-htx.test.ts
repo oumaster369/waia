@@ -515,11 +515,13 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
       side: "buy",
       type: "limit",
       status: "open",
-      price: "1.000000000000000000",
-      quantity: "5.000000000000000000",
-      filledQuantity: "0.0",
+      price: "1",
+      quantity: "5",
+      filledQuantity: "0",
     });
     expect(order.rawVenueObservation).toMatchObject({
+      amount: "5.000000000000000000",
+      price: "1.000000000000000000",
       "field-amount": "0.0",
       "field-cash-amount": "0.0",
       "field-fees": "0.0",
@@ -562,7 +564,9 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
       price: "1",
       quantity: "5",
     });
-    expect(order.filledQuantity).toBe("0.0");
+    expect(order.price).toBe("1");
+    expect(order.quantity).toBe("5");
+    expect(order.filledQuantity).toBe("0");
     expect(order.status).toBe("open");
   });
 
@@ -614,6 +618,101 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
     });
     expect(placementPosts).toBe(1);
     expect(confirmationGets).toBe(1);
+  });
+
+  it("fails unknown when a non-zero digit remains past the 8-digit venue scale", async () => {
+    const connector = await validatedHtx(tradeHandlers({
+      "/v1/order/orders/place": () => jsonResponse({ status: "ok", data: 357632718898331 }),
+      "/v1/order/orders/getClientOrder": () => jsonResponse({
+        status: "ok",
+        data: {
+          id: 357632718898331,
+          symbol: "adausdt",
+          "account-id": 13496526,
+          "client-order-id": "23456",
+          amount: "5.000000000000000000",
+          price: "1.000000001",
+          "created-at": 1630649406687,
+          type: "buy-limit",
+          "field-amount": "0.0",
+          "field-cash-amount": "0.0",
+          "field-fees": "0.0",
+          state: "submitted",
+        },
+      }),
+    }));
+    await expect(connector.placeOrder({
+      clientOrderId: "23456",
+      symbol: "BTC/USDT",
+      side: "buy",
+      type: "limit",
+      price: "1",
+      quantity: "5",
+    })).rejects.toMatchObject({
+      name: "HtxPlacementFailUnknownError",
+      rawVenueObservation: { confirmation: "UNMAPPABLE" },
+    });
+  });
+
+  it("accepts a negative maker-rebate fee and rejects a negative amount", async () => {
+    const rebate = await validatedHtx(tradeHandlers({
+      "/v1/order/orders/place": () => jsonResponse({ status: "ok", data: 357632718898331 }),
+      "/v1/order/orders/getClientOrder": () => jsonResponse({
+        status: "ok",
+        data: {
+          id: 357632718898331,
+          symbol: "adausdt",
+          "client-order-id": "23456",
+          amount: "5.000000000000000000",
+          price: "1.000000000000000000",
+          "created-at": 1630649406687,
+          type: "buy-limit",
+          "field-amount": "0.0",
+          "filled-fees": "-0.10",
+          "field-fees": "-0.1",
+          state: "submitted",
+        },
+      }),
+    }));
+    const order = await rebate.placeOrder({
+      clientOrderId: "23456",
+      symbol: "BTC/USDT",
+      side: "buy",
+      type: "limit",
+      price: "1",
+      quantity: "5",
+    });
+    expect(order).toMatchObject({ price: "1", quantity: "5", filledQuantity: "0", status: "open" });
+    expect(order.rawVenueObservation).toMatchObject({ "filled-fees": "-0.10", "field-fees": "-0.1" });
+
+    const negativeAmount = await validatedHtx(tradeHandlers({
+      "/v1/order/orders/place": () => jsonResponse({ status: "ok", data: 357632718898331 }),
+      "/v1/order/orders/getClientOrder": () => jsonResponse({
+        status: "ok",
+        data: {
+          id: 357632718898331,
+          symbol: "adausdt",
+          "client-order-id": "23456",
+          amount: "-5",
+          price: "1",
+          "created-at": 1630649406687,
+          type: "buy-limit",
+          "field-amount": "0",
+          state: "submitted",
+        },
+      }),
+    }));
+    await expect(negativeAmount.placeOrder({
+      clientOrderId: "23456",
+      symbol: "BTC/USDT",
+      side: "buy",
+      type: "limit",
+      price: "1",
+      quantity: "5",
+    })).rejects.toMatchObject({
+      name: "HtxPlacementFailUnknownError",
+      rawVenueObservation: { confirmation: "UNMAPPABLE" },
+    });
   });
 
   it("fails unknown when the acknowledgement is not confirmed by a client-order read", async () => {

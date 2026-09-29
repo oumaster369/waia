@@ -61,9 +61,12 @@ import {
   RiskV2AdmissionRefusedError,
   type AdmitRiskAllowanceV2Input,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
+import { HTX_DEFAULT_REST_HOST } from "@/lib/trader/connectors/htx/config";
+import { HtxExchangeConnector } from "@/lib/trader/connectors/htx/htx-exchange-connector";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
 import { createPostgresKillSwitchService } from "@/lib/trader/risk/kill-switch";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import { createPostgresExecutionV2Service } from "@/lib/trader/execution/v2/connector-dispatch";
 import { createAssertExecutionV2LiveAuthorized, createOrgScopedExecutionV2OrderPath } from "@/lib/trader/execution/v2/org-order-path";
 import { EXECUTION_V2_LIVE_GATE_REASONS } from "@/lib/trader/execution/v2/live-gates";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
@@ -539,7 +542,7 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
   }
 
   async function admittedBindInput(
-    options: { reduction?: boolean; validForMs?: number } = {},
+    options: { reduction?: boolean; validForMs?: number; symbol?: string; baseAsset?: string } = {},
   ): Promise<BindExecutionAuthorityV2Input> {
     const accountId = "atomic-bind";
     const state = account(accountId);
@@ -554,6 +557,8 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
         validForMs: options.validForMs ?? request.validForMs,
         verdict: {
           ...request.verdict,
+          ...(options.symbol ? { symbol: options.symbol } : {}),
+          ...(options.baseAsset ? { baseAsset: options.baseAsset } : {}),
           decision: {
             ...request.verdict.decision,
             action: options.reduction ? "REDUCE" : "ENTER_LONG",
@@ -2471,5 +2476,134 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     );
     expect(retryPosts).toBe(0);
     expect(retry.status).toBe("REFUSED_ALREADY_TERMINAL");
+  });
+
+  function publishedClientOrderFetch(body: Record<string, unknown>) {
+    let posts = 0;
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = new URL(typeof input === "string" ? input : input.toString());
+      const json = (payload: unknown, status = 200) =>
+        new Response(JSON.stringify(payload), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        });
+      if (url.pathname === "/v1/account/accounts") {
+        return json({ status: "ok", data: [{ id: 100009, type: "spot", state: "working" }] });
+      }
+      if (url.pathname === "/v2/user/uid") return json({ code: 200, data: 63628520 });
+      if (url.pathname === "/v2/user/api-key") {
+        return json({
+          code: 200,
+          data: [{ accessKey: "test-access-key", permission: "readOnly,trade", status: "normal" }],
+        });
+      }
+      if (url.pathname === "/v1/order/orders/place") {
+        posts += 1;
+        const posted = JSON.parse(String(init?.body)) as { "client-order-id": string };
+        body["client-order-id"] = posted["client-order-id"];
+        return json({ status: "ok", data: body.id });
+      }
+      if (url.pathname === "/v1/order/orders/getClientOrder") {
+        return json({ status: "ok", data: body });
+      }
+      throw new Error(`Unhandled HTX mock fetch: ${url.pathname}`);
+    };
+    return { fetchImpl, posts: () => posts };
+  }
+
+  it("DEE-1151 accepts a published getClientOrder body after venue decimals are normalized", async () => {
+    const input = await admittedBindInput({ symbol: "BTC/USDT", baseAsset: "BTC/" });
+    // Published GET /v1/order/orders/getClientOrder shape: field-* and 18 fractional zeros.
+    // Allowances seal symbol as base+quote, so this fixture's base is "BTC/" and the
+    // sealed symbol is BTC/USDT — the same string htxSymbolToInternal("btcusdt") returns.
+    const published: Record<string, unknown> = {
+      id: 357632718898331,
+      symbol: "btcusdt",
+      "account-id": 13496526,
+      amount: "0.001000000000000000",
+      price: "25000.000000000000000000",
+      "created-at": 1630649406687,
+      type: "buy-limit",
+      "field-amount": "0.0",
+      "field-cash-amount": "0.0",
+      "field-fees": "0.0",
+      "finished-at": 0,
+      source: "spot-api",
+      state: "submitted",
+      "canceled-at": 0,
+    };
+    const transport = publishedClientOrderFetch(published);
+    const connector = new HtxExchangeConnector({
+      apiKey: "test-access-key",
+      apiSecret: "test-secret-key",
+      restHost: HTX_DEFAULT_REST_HOST,
+      fetchImpl: transport.fetchImpl,
+    });
+    const validated = await connector.validateCredentials({
+      apiKey: "test-access-key",
+      apiSecret: "test-secret-key",
+    });
+    expect(validated.valid).toBe(true);
+    const service = createPostgresExecutionV2Service({
+      db,
+      connectorFor: () => connector,
+    });
+    const submitted = await service.submit({ organizationId: orgA }, input);
+    expect(transport.posts()).toBe(1);
+    expect(submitted.outcome.status).toBe("VENUE_ACCEPTED");
+    const reports = await listExecutionReportsV2Postgres(
+      db,
+      { organizationId: orgA },
+      submitted.authority.attempt.executionAttemptId,
+    );
+    expect(reports.at(-1)).toMatchObject({
+      reportType: "VENUE_ACCEPTED",
+      rawObservation: {
+        order: { price: "25000", quantity: "0.001", filledQuantity: "0", status: "open" },
+        connector: {
+          order: {
+            amount: "0.001000000000000000",
+            price: "25000.000000000000000000",
+            "field-amount": "0.0",
+          },
+        },
+      },
+    });
+  });
+
+  it("DEE-1151 does not accept a venue decimal with a non-zero digit past scale 8", async () => {
+    const input = await admittedBindInput({ symbol: "BTC/USDT", baseAsset: "BTC/" });
+    const published: Record<string, unknown> = {
+      id: 357632718898331,
+      symbol: "btcusdt",
+      "account-id": 13496526,
+      amount: "0.001000000000000000",
+      price: "25000.000000001",
+      "created-at": 1630649406687,
+      type: "buy-limit",
+      "field-amount": "0.0",
+      "field-cash-amount": "0.0",
+      "field-fees": "0.0",
+      state: "submitted",
+    };
+    const transport = publishedClientOrderFetch(published);
+    const connector = new HtxExchangeConnector({
+      apiKey: "test-access-key",
+      apiSecret: "test-secret-key",
+      restHost: HTX_DEFAULT_REST_HOST,
+      fetchImpl: transport.fetchImpl,
+    });
+    expect((await connector.validateCredentials({
+      apiKey: "test-access-key",
+      apiSecret: "test-secret-key",
+    })).valid).toBe(true);
+    const service = createPostgresExecutionV2Service({
+      db,
+      connectorFor: () => connector,
+    });
+    const submitted = await service.submit({ organizationId: orgA }, input);
+    expect(transport.posts()).toBe(1);
+    expect(submitted.outcome.status).toBe("RECONCILIATION_REQUIRED");
+    expect(submitted.outcome.status).not.toBe("VENUE_ACCEPTED");
   });
 });
