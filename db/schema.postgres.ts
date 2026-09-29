@@ -22,6 +22,7 @@ import {
   pgEnum,
   pgTable,
   type PgTableExtraConfigValue,
+  type PgColumn,
   primaryKey,
   smallint,
   text,
@@ -4646,12 +4647,129 @@ export const traderRuntimeControlLeaseEpochHistoryV2 = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
+    unique("noncapital_legacy_parent_tuple").on(t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.contentDigest),
     unique("trader_runtime_control_lease_epoch_history_v2_org_epoch_unique").on(
       t.organizationId,
       t.leaseEpoch,
     ),
   ],
 );
+
+/** DEE-1136: operational exclusion, never capital or scientific authority. */
+type NoncapitalOwnershipDomain = "CAPITAL_LEGACY_V2" | "RECORDED_ACQUISITION_V1" | "SAVED_RESEARCH_V1";
+function noncapitalLeaseHistoryColumns() { return {
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+  runtimeInstanceId: text("runtime_instance_id").notNull(), leaseEpoch: integer("lease_epoch").notNull(),
+  contentDigest: text("content_digest").primaryKey(), priorContentDigest: text("prior_content_digest"),
+  adjudicatedAtUtc: timestamp("adjudicated_at_utc", { withTimezone: true, mode: "string" }).notNull(),
+  validUntilUtc: timestamp("valid_until_utc", { withTimezone: true, mode: "string" }).notNull(),
+  durationMs: integer("duration_ms").notNull(), bodyJson: text("body_json").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+}; }
+function noncapitalLeaseHeadColumns() { return {
+  organizationId: uuid("organization_id").primaryKey().references(() => organizations.id),
+  runtimeInstanceId: text("runtime_instance_id").notNull(), leaseEpoch: integer("lease_epoch").notNull(),
+  contentDigest: text("content_digest").notNull(),
+  validUntilUtc: timestamp("valid_until_utc", { withTimezone: true, mode: "string" }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+}; }
+type NoncapitalLeaseColumns = { [K in keyof ReturnType<typeof noncapitalLeaseHistoryColumns>]: PgColumn };
+function noncapitalLeaseHistoryConstraints(t: NoncapitalLeaseColumns, prefix: string,
+  domain: "RECORDED_ACQUISITION_V1" | "SAVED_RESEARCH_V1", maximumDuration: number) { return [
+  unique(`${prefix}_epoch`).on(t.organizationId, t.leaseEpoch),
+  unique(`${prefix}_tuple`).on(t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.contentDigest),
+  unique(`${prefix}_head_parent`).on(t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.contentDigest, t.validUntilUtc),
+  unique(`${prefix}_org_digest`).on(t.organizationId, t.contentDigest),
+  foreignKey({ name: `${prefix}_prior`, columns: [t.organizationId, t.priorContentDigest], foreignColumns: [t.organizationId, t.contentDigest] }),
+  check(`${prefix}_identity`, sql`${t.runtimeInstanceId}=btrim(${t.runtimeInstanceId}) AND length(${t.runtimeInstanceId})>0
+    AND octet_length(${t.runtimeInstanceId})<=1024 AND ${t.leaseEpoch}>0 AND ${t.contentDigest} ~ '^[0-9a-f]{64}$'
+    AND (${t.priorContentDigest} IS NULL OR ${t.priorContentDigest} ~ '^[0-9a-f]{64}$')
+    AND (${t.leaseEpoch}=1)=(${t.priorContentDigest} IS NULL)`),
+  check(`${prefix}_time`, sql`isfinite(${t.adjudicatedAtUtc}) AND isfinite(${t.validUntilUtc})
+    AND date_trunc('milliseconds',${t.adjudicatedAtUtc})=${t.adjudicatedAtUtc}
+    AND date_trunc('milliseconds',${t.validUntilUtc})=${t.validUntilUtc}
+    AND ${t.durationMs} BETWEEN 1 AND ${sql.raw(String(maximumDuration))}
+    AND ${t.validUntilUtc}=${t.adjudicatedAtUtc}+${t.durationMs}*interval '1 millisecond'`),
+  check(`${prefix}_body`, sql`(octet_length(${t.bodyJson})<=4096 AND jsonb_typeof(${t.bodyJson}::jsonb)='object'
+    AND ${t.bodyJson}::jsonb - ARRAY['schemaVersion','ownershipDomain','organizationId','runtimeInstanceId','leaseEpoch','expectedPreviousDigest','adjudicatedAtUtc','validUntilUtc','durationMs']='{}'::jsonb
+    AND ${t.bodyJson}::jsonb->'schemaVersion'=to_jsonb('waia.trader.noncapital_domain_lease.v1'::text)
+    AND ${t.bodyJson}::jsonb->'ownershipDomain'=to_jsonb(${sql.raw(`'${domain}'`)}::text)
+    AND ${t.bodyJson}::jsonb->'organizationId'=to_jsonb(${t.organizationId}::text)
+    AND ${t.bodyJson}::jsonb->'runtimeInstanceId'=to_jsonb(${t.runtimeInstanceId})
+    AND ${t.bodyJson}::jsonb->'leaseEpoch'=to_jsonb(${t.leaseEpoch})
+    AND ${t.bodyJson}::jsonb->'expectedPreviousDigest'=coalesce(to_jsonb(${t.priorContentDigest}),'null'::jsonb)
+    AND ${t.bodyJson}::jsonb->'adjudicatedAtUtc'=to_jsonb(to_char(${t.adjudicatedAtUtc} at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+    AND ${t.bodyJson}::jsonb->'validUntilUtc'=to_jsonb(to_char(${t.validUntilUtc} at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+    AND ${t.bodyJson}::jsonb->'durationMs'=to_jsonb(${t.durationMs})
+    AND ${t.contentDigest}=encode(sha256(convert_to(${t.bodyJson},'UTF8')),'hex')) IS TRUE`),
+]; }
+export const traderRecordedAcquisitionLeaseHistoryV1 = pgTable("trader_recorded_acquisition_lease_history_v1",
+  noncapitalLeaseHistoryColumns(), t => noncapitalLeaseHistoryConstraints(t, "noncapital_acq", "RECORDED_ACQUISITION_V1", 2_147_483_647));
+export const traderSavedResearchLeaseHistoryV1 = pgTable("trader_saved_research_lease_history_v1",
+  noncapitalLeaseHistoryColumns(), t => noncapitalLeaseHistoryConstraints(t, "noncapital_saved", "SAVED_RESEARCH_V1", 120_000));
+export const traderRecordedAcquisitionLeaseHeadsV1 = pgTable("trader_recorded_acquisition_lease_heads_v1",
+  noncapitalLeaseHeadColumns(), t => [foreignKey({ name: "noncapital_acq_head_history",
+    columns: [t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.contentDigest, t.validUntilUtc], foreignColumns:
+      [traderRecordedAcquisitionLeaseHistoryV1.organizationId, traderRecordedAcquisitionLeaseHistoryV1.runtimeInstanceId,
+        traderRecordedAcquisitionLeaseHistoryV1.leaseEpoch, traderRecordedAcquisitionLeaseHistoryV1.contentDigest, traderRecordedAcquisitionLeaseHistoryV1.validUntilUtc] })]);
+export const traderSavedResearchLeaseHeadsV1 = pgTable("trader_saved_research_lease_heads_v1",
+  noncapitalLeaseHeadColumns(), t => [foreignKey({ name: "noncapital_saved_head_history",
+    columns: [t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.contentDigest, t.validUntilUtc], foreignColumns:
+      [traderSavedResearchLeaseHistoryV1.organizationId, traderSavedResearchLeaseHistoryV1.runtimeInstanceId,
+        traderSavedResearchLeaseHistoryV1.leaseEpoch, traderSavedResearchLeaseHistoryV1.contentDigest, traderSavedResearchLeaseHistoryV1.validUntilUtc] })]);
+export const traderRuntimeOwnershipRefsV1 = pgTable("trader_runtime_ownership_refs_v1", {
+  ownershipDomain: text("ownership_domain").$type<NoncapitalOwnershipDomain>().notNull(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+  runtimeInstanceId: text("runtime_instance_id").notNull(), leaseEpoch: integer("lease_epoch").notNull(),
+  leaseContentDigest: text("lease_content_digest").notNull(), capitalParentDigest: text("capital_parent_digest"),
+  acquisitionParentDigest: text("acquisition_parent_digest"), researchParentDigest: text("research_parent_digest"),
+}, t => [primaryKey({ columns: [t.ownershipDomain, t.organizationId, t.leaseContentDigest] }),
+  unique("noncapital_ownership_tuple").on(t.ownershipDomain, t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.leaseContentDigest),
+  check("noncapital_ownership_exact_parent", sql`(
+    (${t.ownershipDomain}='CAPITAL_LEGACY_V2' AND ${t.capitalParentDigest}=${t.leaseContentDigest} AND ${t.capitalParentDigest} IS NOT NULL AND ${t.acquisitionParentDigest} IS NULL AND ${t.researchParentDigest} IS NULL)
+    OR (${t.ownershipDomain}='RECORDED_ACQUISITION_V1' AND ${t.acquisitionParentDigest}=${t.leaseContentDigest} AND ${t.acquisitionParentDigest} IS NOT NULL AND ${t.capitalParentDigest} IS NULL AND ${t.researchParentDigest} IS NULL)
+    OR (${t.ownershipDomain}='SAVED_RESEARCH_V1' AND ${t.researchParentDigest}=${t.leaseContentDigest} AND ${t.researchParentDigest} IS NOT NULL AND ${t.capitalParentDigest} IS NULL AND ${t.acquisitionParentDigest} IS NULL)) IS TRUE`),
+  foreignKey({ name: "noncapital_ref_capital_parent", columns: [t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.capitalParentDigest], foreignColumns:
+    [traderRuntimeControlLeaseEpochHistoryV2.organizationId, traderRuntimeControlLeaseEpochHistoryV2.runtimeInstanceId,
+      traderRuntimeControlLeaseEpochHistoryV2.leaseEpoch, traderRuntimeControlLeaseEpochHistoryV2.contentDigest] }),
+  foreignKey({ name: "noncapital_ref_acquisition_parent", columns: [t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.acquisitionParentDigest], foreignColumns:
+    [traderRecordedAcquisitionLeaseHistoryV1.organizationId, traderRecordedAcquisitionLeaseHistoryV1.runtimeInstanceId,
+      traderRecordedAcquisitionLeaseHistoryV1.leaseEpoch, traderRecordedAcquisitionLeaseHistoryV1.contentDigest] }),
+  foreignKey({ name: "noncapital_ref_research_parent", columns: [t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.researchParentDigest], foreignColumns:
+    [traderSavedResearchLeaseHistoryV1.organizationId, traderSavedResearchLeaseHistoryV1.runtimeInstanceId,
+      traderSavedResearchLeaseHistoryV1.leaseEpoch, traderSavedResearchLeaseHistoryV1.contentDigest] }),
+  index("noncapital_ref_capital_idx").on(t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.capitalParentDigest).where(sql`${t.capitalParentDigest} IS NOT NULL`),
+  index("noncapital_ref_acquisition_idx").on(t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.acquisitionParentDigest).where(sql`${t.acquisitionParentDigest} IS NOT NULL`),
+  index("noncapital_ref_research_idx").on(t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.researchParentDigest).where(sql`${t.researchParentDigest} IS NOT NULL`),
+]);
+/** Closed record of pre-0225 receipts whose stored holder differs from the historical lease. Neither holder is rewritten. */
+export const traderRuntimeLegacyHolderDivergenceV1 = pgTable("trader_runtime_legacy_holder_divergence_v1", {
+  divergenceId: text("divergence_id").primaryKey(),
+  receiptTable: text("receipt_table").notNull(),
+  receiptKey: text("receipt_key").notNull(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+  receiptRuntimeInstanceId: text("receipt_runtime_instance_id").notNull(),
+  receiptLeaseEpoch: integer("receipt_lease_epoch").notNull(),
+  leaseContentDigest: text("lease_content_digest").notNull(),
+  leaseRuntimeInstanceId: text("lease_runtime_instance_id").notNull(),
+  leaseEpoch: integer("lease_epoch").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+}, t => [unique("legacy_holder_divergence_receipt").on(t.receiptTable, t.organizationId, t.receiptKey),
+  check("legacy_holder_divergence_distinct", sql`(${t.receiptRuntimeInstanceId} IS DISTINCT FROM ${t.leaseRuntimeInstanceId} OR ${t.receiptLeaseEpoch} IS DISTINCT FROM ${t.leaseEpoch}) IS TRUE`),
+  foreignKey({ name: "legacy_holder_divergence_lease", columns: [t.organizationId, t.leaseRuntimeInstanceId, t.leaseEpoch, t.leaseContentDigest],
+    foreignColumns: [traderRuntimeControlLeaseEpochHistoryV2.organizationId, traderRuntimeControlLeaseEpochHistoryV2.runtimeInstanceId,
+      traderRuntimeControlLeaseEpochHistoryV2.leaseEpoch, traderRuntimeControlLeaseEpochHistoryV2.contentDigest] })]);
+type OwnershipColumns = { ownershipDomain: PgColumn; organizationId: PgColumn; runtimeInstanceId: PgColumn; leaseEpoch: PgColumn; leaseContentDigest: PgColumn };
+function noncapitalReceiptOwnership(t: OwnershipColumns, number: number, domain: "RECORDED_ACQUISITION_V1" | "SAVED_RESEARCH_V1") { return [
+  check(`noncapital_receipt_domain_${number}`, sql`${t.ownershipDomain} IN ('CAPITAL_LEGACY_V2',${sql.raw(`'${domain}'`)})`),
+  foreignKey({ name: `noncapital_receipt_holder_${number}`, columns: [t.ownershipDomain, t.organizationId, t.leaseContentDigest],
+    foreignColumns: [traderRuntimeOwnershipRefsV1.ownershipDomain, traderRuntimeOwnershipRefsV1.organizationId, traderRuntimeOwnershipRefsV1.leaseContentDigest] }),
+  index(`noncapital_receipt_holder_${number}_idx`).on(t.ownershipDomain, t.organizationId, t.runtimeInstanceId, t.leaseEpoch, t.leaseContentDigest),
+]; }
+function savedCommandProfile(t: { ownershipDomain: PgColumn; bodyJson: PgColumn }, number: number) { return check(`noncapital_command_profile_${number}`,
+  sql`${t.ownershipDomain} <> 'SAVED_RESEARCH_V1' OR (jsonb_typeof(${t.bodyJson}::jsonb->'commandManifestDigest')='string'
+    AND (${t.bodyJson}::jsonb->>'commandManifestDigest') ~ '^[0-9a-f]{64}$'
+    AND (${t.bodyJson}::jsonb->>'commandManifestDigest') <> '5070c0aa8e42824892dd2915c5d70b21cac4e9a22aec5947a7255d62a3d8faf2') IS TRUE`); }
 
 /** Recorded NO_TRADE recovery receipts only; no source qualification or capital authority (DEE-1108). */
 export const traderRuntimeNoncapitalCyclesV2 = pgTable("trader_runtime_noncapital_cycles_v2", {
@@ -4665,30 +4783,38 @@ export const traderRuntimeNoncapitalCyclesV2 = pgTable("trader_runtime_noncapita
   canonicalJson: text("canonical_json").notNull(),
   runtimeInstanceId: text("runtime_instance_id").notNull(),
   leaseEpoch: integer("lease_epoch").notNull(),
-  leaseContentDigest: text("lease_content_digest").notNull()
-    .references(() => traderRuntimeControlLeaseEpochHistoryV2.contentDigest),
+  leaseContentDigest: text("lease_content_digest").notNull(),
+  ownershipDomain: text("ownership_domain").$type<NoncapitalOwnershipDomain>().notNull().default("CAPITAL_LEGACY_V2"),
   recordedAtUtc: timestamp("recorded_at_utc", { withTimezone: true, mode: "string" }).notNull(),
 }, t => [primaryKey({ name: "trader_runtime_noncapital_cycles_v2_pk",
-  columns: [t.organizationId, t.accountId, t.symbol, t.barInterval, t.pitAnchor] })]);
+  columns: [t.organizationId, t.accountId, t.symbol, t.barInterval, t.pitAnchor] }),
+  ...noncapitalReceiptOwnership(t, 0, "RECORDED_ACQUISITION_V1"),
+  unique("noncapital_affinity_parent_2").on(t.organizationId, t.accountId, t.symbol, t.barInterval, t.pitAnchor, t.ownershipDomain)]);
 
 /** DEE-1121: immutable observational packets; none of these rows grant trading authority. */
 function recordedAnalysisColumns() {
   return { organizationId: uuid("organization_id").notNull().references(() => organizations.id),
     sessionId: text("session_id").notNull(), contentDigest: text("content_digest").notNull(),
     bodyJson: text("body_json").notNull(), runtimeInstanceId: text("runtime_instance_id").notNull(),
-    leaseEpoch: integer("lease_epoch").notNull(), leaseContentDigest: text("lease_content_digest").notNull()
-      .references(() => traderRuntimeControlLeaseEpochHistoryV2.contentDigest) };
+    leaseEpoch: integer("lease_epoch").notNull(), leaseContentDigest: text("lease_content_digest").notNull(),
+    ownershipDomain: text("ownership_domain").$type<NoncapitalOwnershipDomain>().notNull().default("CAPITAL_LEGACY_V2") };
 }
 export const traderRecordedAnalysisSessionsV1 = pgTable("trader_recorded_analysis_sessions_v1", {
   ...recordedAnalysisColumns(),
-}, t => [primaryKey({ columns: [t.organizationId, t.sessionId] }), unique().on(t.organizationId, t.sessionId, t.contentDigest)]);
+}, t => [primaryKey({ columns: [t.organizationId, t.sessionId] }), unique().on(t.organizationId, t.sessionId, t.contentDigest),
+  ...noncapitalReceiptOwnership(t, 1, "RECORDED_ACQUISITION_V1"),
+  unique("noncapital_affinity_parent_0").on(t.organizationId, t.sessionId, t.contentDigest, t.ownershipDomain)]);
 export const traderRecordedAnalysisPacketsV1 = pgTable("trader_recorded_analysis_packets_v1", {
   ...recordedAnalysisColumns(), sequence: bigint("sequence", { mode: "number" }).notNull(),
   configDigest: text("config_digest").notNull(), analysisPitAnchor: timestamp("analysis_pit_anchor", { withTimezone: true, mode: "string" }).notNull(),
 }, t => [primaryKey({ columns: [t.organizationId, t.sessionId, t.sequence] }),
   unique().on(t.organizationId, t.sessionId, t.sequence, t.contentDigest),
   foreignKey({ columns: [t.organizationId, t.sessionId, t.configDigest], foreignColumns:
-    [traderRecordedAnalysisSessionsV1.organizationId, traderRecordedAnalysisSessionsV1.sessionId, traderRecordedAnalysisSessionsV1.contentDigest] })]);
+    [traderRecordedAnalysisSessionsV1.organizationId, traderRecordedAnalysisSessionsV1.sessionId, traderRecordedAnalysisSessionsV1.contentDigest] }),
+  ...noncapitalReceiptOwnership(t, 2, "RECORDED_ACQUISITION_V1"),
+  unique("noncapital_affinity_parent_1").on(t.organizationId, t.sessionId, t.sequence, t.contentDigest, t.ownershipDomain),
+  foreignKey({ name: "noncapital_affinity_0", columns: [t.organizationId, t.sessionId, t.configDigest, t.ownershipDomain], foreignColumns: [traderRecordedAnalysisSessionsV1.organizationId, traderRecordedAnalysisSessionsV1.sessionId, traderRecordedAnalysisSessionsV1.contentDigest, traderRecordedAnalysisSessionsV1.ownershipDomain] }),
+  index("noncapital_affinity_0_idx").on(t.organizationId, t.sessionId, t.configDigest, t.ownershipDomain)]);
 export const traderRecordedAnalysisCompanionsV1 = pgTable("trader_recorded_analysis_companions_v1", {
   ...recordedAnalysisColumns(), sequence: bigint("sequence", { mode: "number" }).notNull(), packetDigest: text("packet_digest").notNull(),
   accountId: text("account_id").notNull(), symbol: text("symbol").notNull(), barInterval: text("bar_interval").notNull(),
@@ -4699,7 +4825,12 @@ export const traderRecordedAnalysisCompanionsV1 = pgTable("trader_recorded_analy
     [traderRecordedAnalysisPacketsV1.organizationId, traderRecordedAnalysisPacketsV1.sessionId, traderRecordedAnalysisPacketsV1.sequence, traderRecordedAnalysisPacketsV1.contentDigest] }),
   foreignKey({ columns: [t.organizationId, t.accountId, t.symbol, t.barInterval, t.scheduledBarCloseTime], foreignColumns:
     [traderRuntimeNoncapitalCyclesV2.organizationId, traderRuntimeNoncapitalCyclesV2.accountId, traderRuntimeNoncapitalCyclesV2.symbol,
-      traderRuntimeNoncapitalCyclesV2.barInterval, traderRuntimeNoncapitalCyclesV2.pitAnchor] })]);
+      traderRuntimeNoncapitalCyclesV2.barInterval, traderRuntimeNoncapitalCyclesV2.pitAnchor] }),
+  ...noncapitalReceiptOwnership(t, 3, "RECORDED_ACQUISITION_V1"),
+  foreignKey({ name: "noncapital_affinity_1", columns: [t.organizationId, t.sessionId, t.sequence, t.packetDigest, t.ownershipDomain], foreignColumns: [traderRecordedAnalysisPacketsV1.organizationId, traderRecordedAnalysisPacketsV1.sessionId, traderRecordedAnalysisPacketsV1.sequence, traderRecordedAnalysisPacketsV1.contentDigest, traderRecordedAnalysisPacketsV1.ownershipDomain] }),
+  index("noncapital_affinity_1_idx").on(t.organizationId, t.sessionId, t.sequence, t.packetDigest, t.ownershipDomain),
+  foreignKey({ name: "noncapital_affinity_2", columns: [t.organizationId, t.accountId, t.symbol, t.barInterval, t.scheduledBarCloseTime, t.ownershipDomain], foreignColumns: [traderRuntimeNoncapitalCyclesV2.organizationId, traderRuntimeNoncapitalCyclesV2.accountId, traderRuntimeNoncapitalCyclesV2.symbol, traderRuntimeNoncapitalCyclesV2.barInterval, traderRuntimeNoncapitalCyclesV2.pitAnchor, traderRuntimeNoncapitalCyclesV2.ownershipDomain] }),
+  index("noncapital_affinity_2_idx").on(t.organizationId, t.accountId, t.symbol, t.barInterval, t.scheduledBarCloseTime, t.ownershipDomain)]);
 
 /** DEE-1126: purpose-bound research sidecars; neither row confers source or capital authority. */
 export const traderResearchUnderstandingAssignmentsV1 = pgTable("trader_research_understanding_assignments_v1", {
@@ -4709,7 +4840,9 @@ export const traderResearchUnderstandingAssignmentsV1 = pgTable("trader_research
   foreignKey({ columns: [t.profileId, t.organizationId, t.profileContentDigest], foreignColumns:
     [traderRequiredInformationProfileV2.id, traderRequiredInformationProfileV2.organizationId, traderRequiredInformationProfileV2.contentDigest] }),
   foreignKey({ columns: [t.organizationId, t.sourceSessionId, t.sourceConfigDigest], foreignColumns:
-    [traderRecordedAnalysisSessionsV1.organizationId, traderRecordedAnalysisSessionsV1.sessionId, traderRecordedAnalysisSessionsV1.contentDigest] })]);
+    [traderRecordedAnalysisSessionsV1.organizationId, traderRecordedAnalysisSessionsV1.sessionId, traderRecordedAnalysisSessionsV1.contentDigest] }),
+  ...noncapitalReceiptOwnership(t, 4, "SAVED_RESEARCH_V1"),
+  unique("noncapital_affinity_parent_3").on(t.organizationId, t.sessionId, t.contentDigest, t.ownershipDomain)]);
 export const traderResearchUnderstandingCompletionsV1 = pgTable("trader_research_understanding_completions_v1", {
   ...recordedAnalysisColumns(), sequence: bigint("sequence", { mode: "number" }).notNull(), assignmentDigest: text("assignment_digest").notNull(),
   sourceSessionId: text("source_session_id").notNull(), sourceSequence: bigint("source_sequence", { mode: "number" }).notNull(),
@@ -4719,21 +4852,28 @@ export const traderResearchUnderstandingCompletionsV1 = pgTable("trader_research
   foreignKey({ columns: [t.organizationId, t.sessionId, t.assignmentDigest], foreignColumns:
     [traderResearchUnderstandingAssignmentsV1.organizationId, traderResearchUnderstandingAssignmentsV1.sessionId, traderResearchUnderstandingAssignmentsV1.contentDigest] }),
   foreignKey({ columns: [t.organizationId, t.sourceSessionId, t.sourceSequence, t.packetDigest], foreignColumns:
-    [traderRecordedAnalysisPacketsV1.organizationId, traderRecordedAnalysisPacketsV1.sessionId, traderRecordedAnalysisPacketsV1.sequence, traderRecordedAnalysisPacketsV1.contentDigest] })]);
+    [traderRecordedAnalysisPacketsV1.organizationId, traderRecordedAnalysisPacketsV1.sessionId, traderRecordedAnalysisPacketsV1.sequence, traderRecordedAnalysisPacketsV1.contentDigest] }),
+  ...noncapitalReceiptOwnership(t, 5, "SAVED_RESEARCH_V1"),
+  foreignKey({ name: "noncapital_affinity_3", columns: [t.organizationId, t.sessionId, t.assignmentDigest, t.ownershipDomain], foreignColumns: [traderResearchUnderstandingAssignmentsV1.organizationId, traderResearchUnderstandingAssignmentsV1.sessionId, traderResearchUnderstandingAssignmentsV1.contentDigest, traderResearchUnderstandingAssignmentsV1.ownershipDomain] }),
+  index("noncapital_affinity_3_idx").on(t.organizationId, t.sessionId, t.assignmentDigest, t.ownershipDomain)]);
 
 /** DEE-1132: distinct research-only sidecars. Native links/append-only/fences live in0223. */
 function researchApplicationColumns() { return {
   organizationId: uuid("organization_id").notNull().references(() => organizations.id),
   contentDigest: text("content_digest").notNull(), bodyJson: text("body_json").notNull(),
   runtimeInstanceId: text("runtime_instance_id").notNull(), leaseEpoch: integer("lease_epoch").notNull(),
-  leaseContentDigest: text("lease_content_digest").notNull().references(() => traderRuntimeControlLeaseEpochHistoryV2.contentDigest),
+  leaseContentDigest: text("lease_content_digest").notNull(),
+  ownershipDomain: text("ownership_domain").$type<NoncapitalOwnershipDomain>().notNull().default("CAPITAL_LEGACY_V2"),
 }; }
 export const traderResearchApplicationAssignmentsV1 = pgTable("trader_research_application_assignments_v1", {
   ...researchApplicationColumns(), assignmentDigest: text("assignment_digest").notNull(),
   researchSessionId: text("research_session_id").notNull(), researchAssignmentDigest: text("research_assignment_digest").notNull(),
 }, t => [primaryKey({ columns: [t.organizationId, t.assignmentDigest] }),
   foreignKey({ columns: [t.organizationId, t.researchSessionId, t.researchAssignmentDigest], foreignColumns:
-    [traderResearchUnderstandingAssignmentsV1.organizationId, traderResearchUnderstandingAssignmentsV1.sessionId, traderResearchUnderstandingAssignmentsV1.contentDigest] })]);
+    [traderResearchUnderstandingAssignmentsV1.organizationId, traderResearchUnderstandingAssignmentsV1.sessionId, traderResearchUnderstandingAssignmentsV1.contentDigest] }),
+  ...noncapitalReceiptOwnership(t, 6, "SAVED_RESEARCH_V1"),
+  unique("noncapital_affinity_parent_4").on(t.organizationId, t.assignmentDigest, t.ownershipDomain),
+  savedCommandProfile(t, 0)]);
 export const traderResearchApplicationsV1 = pgTable("trader_research_applications_v1", {
   ...researchApplicationColumns(), applicationId: text("application_id").notNull(), assignmentDigest: text("assignment_digest").notNull(),
   previousSourceSequence: bigint("previous_source_sequence", { mode: "number" }).notNull(),
@@ -4743,14 +4883,24 @@ export const traderResearchApplicationsV1 = pgTable("trader_research_application
 }, t => [primaryKey({ columns: [t.organizationId, t.applicationId] }), unique().on(t.organizationId, t.applicationId, t.contentDigest),
   unique().on(t.organizationId, t.assignmentDigest, t.previousSourceSequence, t.currentSourceSequence),
   foreignKey({ columns: [t.organizationId, t.assignmentDigest], foreignColumns:
-    [traderResearchApplicationAssignmentsV1.organizationId, traderResearchApplicationAssignmentsV1.assignmentDigest] })]);
+    [traderResearchApplicationAssignmentsV1.organizationId, traderResearchApplicationAssignmentsV1.assignmentDigest] }),
+  ...noncapitalReceiptOwnership(t, 7, "SAVED_RESEARCH_V1"),
+  unique("noncapital_affinity_parent_5").on(t.organizationId, t.applicationId, t.contentDigest, t.ownershipDomain),
+  savedCommandProfile(t, 1),
+  foreignKey({ name: "noncapital_affinity_4", columns: [t.organizationId, t.assignmentDigest, t.ownershipDomain], foreignColumns: [traderResearchApplicationAssignmentsV1.organizationId, traderResearchApplicationAssignmentsV1.assignmentDigest, traderResearchApplicationAssignmentsV1.ownershipDomain] }),
+  index("noncapital_affinity_4_idx").on(t.organizationId, t.assignmentDigest, t.ownershipDomain)]);
 export const traderResearchApplicationAvailabilityV1 = pgTable("trader_research_application_availability_v1", {
   ...researchApplicationColumns(), applicationId: text("application_id").notNull(), applicationDigest: text("application_digest").notNull(),
   availableAt: timestamp("available_at", { withTimezone: true, mode: "string" }).notNull(),
   auditId: uuid("audit_id").notNull().references(() => auditLogs.id),
 }, t => [primaryKey({ columns: [t.organizationId, t.applicationId] }), unique().on(t.organizationId, t.applicationId, t.contentDigest),
   foreignKey({ columns: [t.organizationId, t.applicationId, t.applicationDigest], foreignColumns:
-    [traderResearchApplicationsV1.organizationId, traderResearchApplicationsV1.applicationId, traderResearchApplicationsV1.contentDigest] })]);
+    [traderResearchApplicationsV1.organizationId, traderResearchApplicationsV1.applicationId, traderResearchApplicationsV1.contentDigest] }),
+  ...noncapitalReceiptOwnership(t, 8, "SAVED_RESEARCH_V1"),
+  unique("noncapital_affinity_parent_7").on(t.organizationId, t.applicationId, t.contentDigest, t.ownershipDomain),
+  savedCommandProfile(t, 2),
+  foreignKey({ name: "noncapital_affinity_5", columns: [t.organizationId, t.applicationId, t.applicationDigest, t.ownershipDomain], foreignColumns: [traderResearchApplicationsV1.organizationId, traderResearchApplicationsV1.applicationId, traderResearchApplicationsV1.contentDigest, traderResearchApplicationsV1.ownershipDomain] }),
+  index("noncapital_affinity_5_idx").on(t.organizationId, t.applicationId, t.applicationDigest, t.ownershipDomain)]);
 export const traderResearchApplicationConsumptionsV1 = pgTable("trader_research_application_consumptions_v1", {
   ...researchApplicationColumns(), assignmentDigest: text("assignment_digest").notNull(), applicationId: text("application_id").notNull(),
   applicationDigest: text("application_digest").notNull(), availabilityDigest: text("availability_digest").notNull(),
@@ -4763,7 +4913,13 @@ export const traderResearchApplicationConsumptionsV1 = pgTable("trader_research_
   foreignKey({ columns: [t.organizationId, t.applicationId, t.applicationDigest], foreignColumns:
     [traderResearchApplicationsV1.organizationId, traderResearchApplicationsV1.applicationId, traderResearchApplicationsV1.contentDigest] }),
   foreignKey({ columns: [t.organizationId, t.applicationId, t.availabilityDigest], foreignColumns:
-    [traderResearchApplicationAvailabilityV1.organizationId, traderResearchApplicationAvailabilityV1.applicationId, traderResearchApplicationAvailabilityV1.contentDigest] })]);
+    [traderResearchApplicationAvailabilityV1.organizationId, traderResearchApplicationAvailabilityV1.applicationId, traderResearchApplicationAvailabilityV1.contentDigest] }),
+  ...noncapitalReceiptOwnership(t, 9, "SAVED_RESEARCH_V1"),
+  savedCommandProfile(t, 3),
+  foreignKey({ name: "noncapital_affinity_6", columns: [t.organizationId, t.applicationId, t.applicationDigest, t.ownershipDomain], foreignColumns: [traderResearchApplicationsV1.organizationId, traderResearchApplicationsV1.applicationId, traderResearchApplicationsV1.contentDigest, traderResearchApplicationsV1.ownershipDomain] }),
+  index("noncapital_affinity_6_idx").on(t.organizationId, t.applicationId, t.applicationDigest, t.ownershipDomain),
+  foreignKey({ name: "noncapital_affinity_7", columns: [t.organizationId, t.applicationId, t.availabilityDigest, t.ownershipDomain], foreignColumns: [traderResearchApplicationAvailabilityV1.organizationId, traderResearchApplicationAvailabilityV1.applicationId, traderResearchApplicationAvailabilityV1.contentDigest, traderResearchApplicationAvailabilityV1.ownershipDomain] }),
+  index("noncapital_affinity_7_idx").on(t.organizationId, t.applicationId, t.availabilityDigest, t.ownershipDomain)]);
 
 /** Capital-ineligible, pre-holdout Historical Simulation V2 reason ledger. Not canonical Reality. */
 export const traderHistoricalSimulationReasonLedgerV2 = pgTable(
@@ -9564,7 +9720,6 @@ export const traderRiskAccountInclusionsV1 = pgTable("trader_risk_account_inclus
     traderRiskAccountBasesV1.organizationId, traderRiskAccountBasesV1.accountId, traderRiskAccountBasesV1.contentDigest] }),
   foreignKey({ columns: [t.truthRecordId, t.organizationId, t.accountId], foreignColumns: [
     traderRealityTruthRecordsV2.id, traderRealityTruthRecordsV2.organizationId, traderRealityTruthRecordsV2.accountId] })]);
-
 /** DEE-1145: durable LiveCapitalEnvelopeV2. Amount columns have no default. The current pointer is the only mutable row. */
 export const traderLiveCapitalEnvelopesV2 = pgTable("trader_live_capital_envelopes_v2", {
   ...riskAccountRecordColumnsV1(), commandId: uuid("command_id").notNull(),

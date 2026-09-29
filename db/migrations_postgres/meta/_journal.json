@@ -1581,7 +1581,14 @@
       "idx": 225,
       "version": "7",
       "when": 1780000000225,
-      "tag": "0225_trader_live_capital_envelope_v2",
+      "tag": "0225_trader_noncapital_domain_ownership_v1",
+      "breakpoints": true
+    },
+    {
+      "idx": 226,
+      "version": "7",
+      "when": 1780000000226,
+      "tag": "0226_trader_live_capital_envelope_v2",
       "breakpoints": true
     }
   ]

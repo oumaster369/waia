@@ -6,6 +6,7 @@ const requiredFiles = [
   "postgres-execution-v2.test.ts",
   "postgres-execution-reality-delivery.test.ts",
   "postgres-risk-v2.test.ts",
+  "postgres-risk-validation-org-fk-v1.test.ts",
   "postgres-risk-limits-bootstrap.test.ts",
   "postgres-trader-service-actor-authorization.test.ts",
   "postgres-reality-v2.test.ts",
@@ -28,6 +29,7 @@ const requiredFiles = [
   "postgres-knowledge-snapshot-eligibility.test.ts",
   "postgres-historical-production-reconciliation-frontier-v1.test.ts",
   "postgres-research-application-v1.test.ts",
+  "postgres-runtime-domain-ownership-v1.test.ts",
   "postgres-live-capital-envelope-v2.test.ts",
 ];
 const report = JSON.parse(readFileSync(process.argv[2], "utf8"));

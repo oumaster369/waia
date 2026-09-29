@@ -11,7 +11,7 @@ import type { ApplicationRegistrationReadSetV1 } from "./specification";
 import { APPLICATION_LIMITS as L, applicationDigest, ResearchApplicationRefusal, requireApplication as check, type ResearchApplicationConfigurationV1 } from "./contract";
 
 export type ApplicationExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "execute">;
-const common = "organizationId contentDigest bodyJson runtimeInstanceId leaseEpoch leaseContentDigest";
+const common = "organizationId contentDigest bodyJson runtimeInstanceId leaseEpoch leaseContentDigest ownershipDomain";
 const specs = {
   assignment: [s.traderResearchApplicationAssignmentsV1, `${common} assignmentDigest researchSessionId researchAssignmentDigest`, L.assignment],
   application: [s.traderResearchApplicationsV1, `${common} applicationId assignmentDigest previousSourceSequence currentSourceSequence recordedAt auditId`, L.application],

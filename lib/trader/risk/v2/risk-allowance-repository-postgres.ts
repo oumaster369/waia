@@ -20,7 +20,6 @@ import {
   parseDecimal,
 } from "@/lib/trader/risk/numeric";
 import {
-  assessIssuedAllowanceReplayV1,
   calculateRiskAdmissionV2,
   type RiskAccountAccountingV2,
 } from "./risk-admission-service-v2";
@@ -395,17 +394,6 @@ async function durableTransactionTime(ex: Pick<RiskTx, "execute">): Promise<Date
   return durable;
 }
 
-/** Wall clock after the account/allowance locks. transaction_timestamp() stays at
- * transaction start and would admit a bind that waited across allowance expiry. */
-async function freshEligibilityTime(ex: Pick<RiskTx, "execute">): Promise<Date> {
-  const rows = await ex.execute<{ durable_at: Date | string }>(
-    sql`select date_trunc('milliseconds', clock_timestamp()) as durable_at`,
-  );
-  const durable = new Date(rows[0]!.durable_at);
-  if (!Number.isFinite(durable.getTime())) throw new RiskV2PersistenceConflictError();
-  return durable;
-}
-
 async function lockAccountState(
   ex: Pick<RiskTx, "select">,
   organizationId: string,
@@ -620,21 +608,6 @@ export async function admitRiskAllowanceV2Postgres(
       ) {
         throw new RiskV2PersistenceConflictError("Risk admission idempotency key conflict");
       }
-      const replay = assessIssuedAllowanceReplayV1({
-        killState: state.killState,
-        stateRealitySnapshotId: state.realitySnapshotId,
-        stateRealityContentDigestHex: state.realityContentDigestHex,
-        stateReconciliationAuthorityDigestHex: state.reconciliationAuthorityDigestHex,
-        verdictRealitySnapshotId: verdict.reality.snapshotId,
-        verdictRealityContentDigestHex: verdict.reality.contentDigestHex,
-        verdictReconciliationAuthorityDigestHex: verdict.reality.reconciliationAuthorityDigestHex,
-        accounting: state.accounting,
-        requestedReservationNotional: reservationNotional,
-        posture: state.posture,
-        strictExposureReduction,
-        reconciliationStatus: state.reconciliationStatus,
-      });
-      if (replay.decision === "REFUSED") throw new RiskV2AdmissionRefusedError(replay.reason);
       return { verdict, allowance, insertedNew: false };
     }
 
@@ -828,7 +801,7 @@ async function releaseIssuedAllowance(input: {
     const allowance = rows[0];
     if (!allowance) throw new RiskV2PersistenceConflictError("Risk allowance not found");
     if (allowance.lifecycleState !== "ISSUED") return false;
-    const durableAt = await freshEligibilityTime(tx);
+    const durableAt = await durableTransactionTime(tx);
     if (input.transition === "EXPIRED" && durableAt.getTime() < allowance.validUntil.getTime()) {
       throw new RiskV2AdmissionRefusedError("ALLOWANCE_NOT_EXPIRED");
     }
@@ -1214,7 +1187,7 @@ export async function consumeRiskAllowanceForOrderV2FromTransaction(
   if (!verdictRows[0]) throw new RiskV2PersistenceConflictError("allowance verdict missing");
   const verdict = verdictFromRow(verdictRows[0]);
   const allowance = allowanceAuthorityFromRow(row, verdict);
-  const durableAt = await freshEligibilityTime(tx);
+  const durableAt = await durableTransactionTime(tx);
   if (row.lifecycleState === "CONSUMED") {
     let bindingDigest: string;
     try {

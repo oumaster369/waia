@@ -124,7 +124,7 @@ describe("LiveCapitalEnvelopeV2 publication", () => {
     const source = [
       "lib/trader/risk/v2/live-capital-envelope-v2.ts",
       "lib/trader/risk/v2/live-capital-envelope-postgres.ts",
-      "db/migrations_postgres/0225_trader_live_capital_envelope_v2.sql",
+      "db/migrations_postgres/0226_trader_live_capital_envelope_v2.sql",
     ]
       .map((path) => readFileSync(path, "utf8"))
       .join("\n");

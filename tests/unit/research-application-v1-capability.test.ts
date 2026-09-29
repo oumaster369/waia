@@ -72,18 +72,18 @@ describe("actual saved application CLI admission", () => {
 import ts from "typescript";
 import { createRequire } from "node:module";
 import * as fs from "node:fs";
-import { APPLICATION_COMMAND_SOURCE_MANIFEST, APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST } from "@/lib/trader/paper/research-application-v1/computation-manifest";
-function actualInventoryWithCli(cli: string, selected: "application" | "understanding") {
+import { APPLICATION_COMMAND_SOURCE_MANIFEST, APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST, SAVED_DOMAIN_APPLICATION_COMMAND_SOURCE_MANIFEST, SAVED_DOMAIN_APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST } from "@/lib/trader/paper/research-application-v1/computation-manifest";
+function actualInventoryWithCli(cli: string, selected: "application" | "understanding", savedDomain = false) {
   const filename = `scripts/trader/generate-research-${selected}-manifest.ts`;
   const compiled = ts.transpileModule(readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
   const actualRequire = createRequire(`${process.cwd()}/package.json`), output: string[] = [];
   const exit = {};
   try {
     new Function("require", "exports", "process", "console", compiled)((name: string) => name === "node:fs" ? {
-      ...fs, readFileSync: (file: fs.PathOrFileDescriptor, ...rest: unknown[]) => String(file) === "scripts/trader/paper-bar-close-loop.ts"
+      ...fs, readFileSync: (file: fs.PathOrFileDescriptor, ...rest: unknown[]) => String(file) === (savedDomain ? "scripts/trader/saved-research.ts" : "scripts/trader/paper-bar-close-loop.ts")
         ? (rest[0] ? cli : Buffer.from(cli)) : Reflect.apply(fs.readFileSync, fs, [file, ...rest]),
       writeFileSync: () => { throw new Error("UNEXPECTED_INVENTORY_WRITE"); },
-    } : actualRequire(name), {}, { argv: ["node", filename, "--runtime"], exit: () => { throw exit; } }, { log: (v: string) => output.push(v) });
+    } : actualRequire(name), {}, { argv: ["node", filename, "--runtime", ...(savedDomain ? ["--saved-domain"] : [])], exit: () => { throw exit; } }, { log: (v: string) => output.push(v) });
   } catch (error) { if (error !== exit) throw error; }
   return JSON.parse(output.at(-1)!);
 }
@@ -95,10 +95,15 @@ describe("actual selected application and compatible Understanding capability in
     const entry = writer.statements.find((n): n is ts.FunctionDeclaration => ts.isFunctionDeclaration(n) && n.name?.text === "writeFixedResearchCompletion");
     expect(entry?.parameters.map(p => p.name.getText(writer))).toEqual(["db", "prepared", "suppliedHolder", "lifetime"]);
     expect(entry?.body?.getText(writer)).not.toMatch(/\.facts\b|suppliedOutput|evaluator|\.begin\(|\.transaction\(/);
-    expect(entry?.body?.getText(writer)).toContain("completions.get(prepared)");
-    expect(entry?.body?.getText(writer)).toContain("captured.lifetime === lifetime");
+    expect(entry?.body?.getText(writer)).toContain('return writeCompletionCore(db, prepared, { domain: "CAPITAL_LEGACY_V2", holder: copy(suppliedHolder) }, lifetime)');
+    const core = writer.statements.find((n): n is ts.FunctionDeclaration => ts.isFunctionDeclaration(n) && n.name?.text === "writeCompletionCore");
+    expect(core?.parameters.map(p => p.name.getText(writer))).toEqual(["db", "prepared", "lease", "lifetime"]);
+    expect(core?.body?.getText(writer)).toContain("completions.get(prepared)");
+    expect(core?.body?.getText(writer)).toContain("captured.lifetime === lifetime && captured.domain === lease.domain");
+    expect(core?.body?.getText(writer)).not.toMatch(/\.facts\b|suppliedOutput|evaluator|\.begin\(|\.transaction\(/);
     const owner = readFileSync("lib/trader/paper/research-application-v1/repository-postgres.ts", "utf8");
-    expect(owner).toContain("return bound.writeCompletion(prepared.prepared, holder)");
+    expect(owner).toContain("bound.writeCompletion(prepared.prepared, holder.value)");
+    expect(owner).toContain("bound.writeSavedDomainCompletion(prepared.prepared, holder.value)");
     expect(owner).not.toMatch(/createSavedResearchOwner|runSavedResearchLoop|writeFixedResearchCompletion\(|new ResearchReadBudget|claimRuntimeControlLeaseAtDatabaseTimeV2/);
     expect(readFileSync("lib/trader/paper/research-understanding-v1/repository-postgres.ts", "utf8"))
       .toContain('if (prepared.outcome === "REPLAYED") return { outcome: prepared.outcome, completion: prepared.completion };');
@@ -130,6 +135,27 @@ describe("actual selected application and compatible Understanding capability in
     expect(old.entries.map((v: { path: string }) => v.path)).toContain("lib/trader/paper/research-understanding-v1/completion-write-postgres.ts");
     expect(old.entries.map((v: { path: string }) => v.path)).not.toContain("lib/trader/paper/research-application-v1/repository-postgres.ts");
     expect(old.boundaries.cli).toContain("selected early");
+  });
+  it("pins the fixed saved entry point independently and applies the same forbidden capability boundary", () => {
+    const fixed = readFileSync("scripts/trader/saved-research.ts", "utf8");
+    const app = actualInventoryWithCli(fixed, "application", true), research = actualInventoryWithCli(fixed, "understanding", true);
+    expect(app.entries).toEqual(SAVED_DOMAIN_APPLICATION_COMMAND_SOURCE_MANIFEST);
+    expect(app.digest).toBe(SAVED_DOMAIN_APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST);
+    expect(app.digest).not.toBe(APPLICATION_COMMAND_SOURCE_MANIFEST_DIGEST);
+    for (const inventory of [app, research]) {
+      const paths = inventory.entries.map((v: { path: string }) => v.path);
+      expect(paths).toContain("scripts/trader/saved-research.ts");
+      expect(paths).toContain("lib/trader/runtime-authority/v2/noncapital-domain-lease-postgres-v1.ts");
+      expect(paths).not.toContain("scripts/trader/paper-bar-close-loop.ts");
+      expect(paths.join("\n")).not.toMatch(/paper-bar-close-loop-legacy|\/forecast\/|predictive-admission|\/execution\/|\/live\/|market-data-gateway|\/connectors\/|hypothesis-service|measurement-service/);
+    }
+    expect(research.entries.map((v: { path: string }) => v.path)).not.toContain("lib/trader/paper/research-application-v1/repository-postgres.ts");
+    for (const selected of ["application", "understanding"] as const) {
+      for (const changed of [fixed.replace("args = [...args];", 'args = [...args]; console.info("unreviewed");'),
+        fixed.replace('console.info(JSON.stringify({ kind: "saved_domain_research_application", ...result })); return result;', 'console.info("missing return");'),
+        fixed + '\nimport "@/lib/trader/intelligence/forecast/forecast-v1";\n'])
+        expect(() => actualInventoryWithCli(changed, selected, true)).toThrow();
+    }
   });
   it.each(["capture", "effect", "unknown-branch", "duplicate", "application-return", "understanding-return"])("rejects actual generator %s prefix/return corruption", kind => {
     let changed = cli;

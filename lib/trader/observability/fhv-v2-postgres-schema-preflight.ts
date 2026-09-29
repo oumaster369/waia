@@ -44,11 +44,10 @@ export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 207 as const;
 // It preserves legacy mode, adds no required FHV table or scientific authority.
 // 0223 adds isolated non-capital saved research application sidecars. It leaves
 // the required historical prefix, tables and FHV authority unchanged.
-// 0224 adds isolated current-account risk basis tables, deny-by-default RLS and
-// append-only guards. It adds no required FHV table, scientific authority or
-// change to the required prefix, and it is not an H2 or post-H2 operator step.
-// 0225 adds the durable LiveCapitalEnvelopeV2 producer tables. Amount columns
-// have no default. It adds no required FHV table or scientific authority.
+// 0224 adds current-account observation component records; 0225 adds fixed
+// noncapital lease attribution. 0226 adds the durable LiveCapitalEnvelopeV2
+// producer tables. Amount columns have no default. None of them changes the
+// required207 read frontier or adds a required FHV table.
 const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag: string }[] = [
   { idx: 208, when: 1780000000208, tag: "0208_historical_terminal_receipts_v1" },
   { idx: 209, when: 1780000000209, tag: "0209_ai_twin_epistemic_persistence_v1" },
@@ -67,7 +66,8 @@ const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag:
   { idx: 222, when: 1780000000222, tag: "0222_trader_historical_reconciliation_v1" },
   { idx: 223, when: 1780000000223, tag: "0223_trader_research_application_v1" },
   { idx: 224, when: 1780000000224, tag: "0224_trader_risk_current_account_basis" },
-  { idx: 225, when: 1780000000225, tag: "0225_trader_live_capital_envelope_v2" },
+  { idx: 225, when: 1780000000225, tag: "0225_trader_noncapital_domain_ownership_v1" },
+  { idx: 226, when: 1780000000226, tag: "0226_trader_live_capital_envelope_v2" },
 ];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [

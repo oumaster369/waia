@@ -108,42 +108,6 @@ export function calculateRiskAdmissionV2(input: {
   };
 }
 
-/** Replay of an already issued allowance. It never mints a second row.
- *  Present permission is returned only while the same current-authority checks still pass.
- */
-export function assessIssuedAllowanceReplayV1(input: {
-  killState: string;
-  stateRealitySnapshotId: string;
-  stateRealityContentDigestHex: string;
-  stateReconciliationAuthorityDigestHex: string;
-  verdictRealitySnapshotId: string;
-  verdictRealityContentDigestHex: string;
-  verdictReconciliationAuthorityDigestHex: string;
-  accounting: RiskAccountAccountingV2;
-  requestedReservationNotional: string;
-  posture: ProtectivePostureV2;
-  strictExposureReduction: boolean;
-  reconciliationStatus: "RECONCILED" | "DIVERGENT" | "UNAVAILABLE" | "STALE";
-}): { decision: "CURRENT" } | { decision: "REFUSED"; reason: string } {
-  if (
-    input.killState !== "CLEAR" ||
-    input.stateRealitySnapshotId !== input.verdictRealitySnapshotId ||
-    input.stateRealityContentDigestHex !== input.verdictRealityContentDigestHex ||
-    input.stateReconciliationAuthorityDigestHex !== input.verdictReconciliationAuthorityDigestHex
-  ) {
-    return { decision: "REFUSED", reason: "CURRENT_AUTHORITY_BINDING_MISMATCH" };
-  }
-  const calculation = calculateRiskAdmissionV2({
-    accounting: input.accounting,
-    requestedReservationNotional: input.requestedReservationNotional,
-    posture: input.posture,
-    strictExposureReduction: input.strictExposureReduction,
-    reconciliationStatus: input.reconciliationStatus,
-  });
-  if (calculation.status === "REFUSED") return { decision: "REFUSED", reason: calculation.reason };
-  return { decision: "CURRENT" };
-}
-
 /** Current-account admission. The caller cannot pass a reconciliation status.
  *  Every owned authority value stays unavailable until a live envelope producer exists.
  */

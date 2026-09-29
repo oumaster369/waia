@@ -216,6 +216,8 @@ export const MARKET_UNDERSTANDING_EXPORT_AND_PERSISTENCE_V1 = [
   {
     path: "lib/trader/paper/research-understanding-v1/repository-postgres.ts",
     disposition: "OWNED_RESEARCH_SIDECAR_FIXED_RECOMPUTATION_ONLY",
+    fixedOwners: ["createSavedResearchOwner", "createSavedDomainResearchOwner"],
+    fixedHeldDelegates: ["writeFixedResearchCompletion", "writeFixedSavedDomainResearchCompletion"],
     exactArtifact: true,
   },
   {

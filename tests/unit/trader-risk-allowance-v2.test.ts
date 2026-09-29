@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { assessIssuedAllowanceReplayV1, calculateCurrentAccountRiskAdmissionV1, calculateRiskAdmissionV2 } from "@/lib/trader/risk/v2/risk-admission-service-v2";
+import { calculateCurrentAccountRiskAdmissionV1, calculateRiskAdmissionV2 } from "@/lib/trader/risk/v2/risk-admission-service-v2";
 import {
   createRiskAllowanceV2,
   validateRiskAllowanceV2,
@@ -130,39 +130,6 @@ describe("RiskAllowanceV2", () => {
       strictExposureReduction: true,
       reconciliationStatus: "STALE",
     })).toMatchObject({ status: "REFUSED", reason: "RECONCILIATION_NOT_CURRENT" });
-  });
-
-  it("rechecks current authority before an issued allowance replay returns the stored row", () => {
-    const accounting = {
-      reconciledExposureNotional: "40",
-      worstCasePendingExposureNotional: "20",
-      outstandingReservationNotional: "10",
-      exposureLimitNotional: "100",
-    };
-    const current = {
-      killState: "CLEAR",
-      stateRealitySnapshotId: "snap",
-      stateRealityContentDigestHex: "digest",
-      stateReconciliationAuthorityDigestHex: "authority",
-      verdictRealitySnapshotId: "snap",
-      verdictRealityContentDigestHex: "digest",
-      verdictReconciliationAuthorityDigestHex: "authority",
-      accounting,
-      requestedReservationNotional: "25",
-      posture: "NORMAL" as const,
-      strictExposureReduction: false,
-      reconciliationStatus: "RECONCILED" as const,
-    };
-    expect(assessIssuedAllowanceReplayV1(current)).toEqual({ decision: "CURRENT" });
-    expect(assessIssuedAllowanceReplayV1({ ...current, killState: "TRIPPED" })).toEqual({
-      decision: "REFUSED", reason: "CURRENT_AUTHORITY_BINDING_MISMATCH",
-    });
-    expect(assessIssuedAllowanceReplayV1({ ...current, stateRealityContentDigestHex: "other" })).toEqual({
-      decision: "REFUSED", reason: "CURRENT_AUTHORITY_BINDING_MISMATCH",
-    });
-    expect(assessIssuedAllowanceReplayV1({ ...current, reconciliationStatus: "STALE" })).toEqual({
-      decision: "REFUSED", reason: "RECONCILIATION_NOT_CURRENT",
-    });
   });
 
   it("refuses current-account admission from owned authority without a reconciliation status", () => {

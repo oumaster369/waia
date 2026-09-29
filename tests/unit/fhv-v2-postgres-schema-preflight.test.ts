@@ -35,13 +35,13 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
   })();
 
   it("accepts all exact migration bytes applied by the full checkout migration job", () => {
-    expect(fullApplied).toHaveLength(226);
+    expect(fullApplied).toHaveLength(227);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: fullApplied }),
     ).not.toThrow();
   });
 
-  it("requires the complete Cody policy prefix and admits 0208-0225 only as explicit compatible additive", () => {
+  it("requires the complete Cody policy prefix and admits 0208-0226 only as explicit compatible additive", () => {
     const journal = JSON.parse(
       readFileSync(join(process.cwd(), "db/migrations_postgres/meta/_journal.json"), "utf8"),
     ) as { entries: Array<{ idx: number; when: number; tag: string }> };
@@ -70,7 +70,8 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
       "0222_trader_historical_reconciliation_v1",
       "0223_trader_research_application_v1",
       "0224_trader_risk_current_account_basis",
-      "0225_trader_live_capital_envelope_v2",
+      "0225_trader_noncapital_domain_ownership_v1",
+      "0226_trader_live_capital_envelope_v2",
     ]);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: baseline }),
@@ -241,6 +242,11 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
     },
   );
 
+  it.each([224, 225])("rejects altered compatible%s bytes without extending the required frontier", idx => {
+    expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive,
+      applied: fullApplied.map(row => row.createdAt === String(1780000000000 + idx) ? { ...row, hash: "0".repeat(64) } : row) })).toThrow();
+    expect(FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX).toBe(207);
+  });
   it("rejects changed compatible0223 bytes even when the complete journal is present", () => {
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({
@@ -334,8 +340,20 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
     ).toThrow("APPLIED_MIGRATION_HASH_MISMATCH");
   });
 
+  it("rejects changed compatible0226 bytes even when the complete journal is present", () => {
+    expect(() =>
+      assertFhvV2CanonicalMigrationsApplied({
+        canonical,
+        compatibleAdditive,
+        applied: fullApplied.map((row) => row.createdAt === "1780000000226"
+          ? { ...row, hash: "d".repeat(64) }
+          : row),
+      }),
+    ).toThrow("APPLIED_MIGRATION_HASH_MISMATCH");
+  });
+
   it.each(["idx", "when", "tag", "missing"] as const)(
-    "refuses changed0225 journal %s without admitting a future identity",
+    "refuses changed0226 journal %s without admitting a future identity",
     (field) => {
       const fixtureRoot = mkdtempSync(join(tmpdir(), "waia-fhv0225-"));
       const fixtureMigrations = join(fixtureRoot, "db/migrations_postgres");
@@ -345,7 +363,7 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
         const journal = JSON.parse(readFileSync(join(sourceMigrations, "meta/_journal.json"), "utf8")) as {
           entries: Array<{ idx: number; when: number; tag: string }>;
         };
-        const entry = journal.entries.find((row) => row.tag === "0225_trader_live_capital_envelope_v2")!;
+        const entry = journal.entries.find((row) => row.tag === "0226_trader_live_capital_envelope_v2")!;
         if (field === "missing") journal.entries = journal.entries.filter((row) => row !== entry);
         else if (field === "tag") entry.tag = "0226_unadmitted_future_migration";
         else entry[field] += 1;

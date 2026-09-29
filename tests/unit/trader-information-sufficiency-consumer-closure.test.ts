@@ -85,8 +85,13 @@ describe("DEE-689 information-sufficiency producer, consumer, and bypass closure
     expect(writer).toContain("await persistInformationSufficiencyReceiptWithinTransactionV2Postgres(db, context, output.receipt)");
     expect(writer).toContain("await requireInformationSufficiencyAuthorityWithinTransactionV2Postgres(db, context, saved.profile, output.receipt)");
     expect(writer).toContain("await readAssignment(db, context, request, inputBudget)");
-    expect(writer).toContain('check(captured && captured.lifetime === lifetime, "RESEARCH_COMPLETION_HANDLE_INVALID")');
+    expect(writer).toContain('check(captured && captured.lifetime === lifetime && captured.domain === lease.domain, "RESEARCH_COMPLETION_HANDLE_INVALID")');
     expect(shared).toContain("return writeFixedResearchCompletion(db, prepared, holder, accounting)");
+    expect(owner).toContain("export function createSavedDomainResearchOwner(");
+    expect(owner).toContain("const accounting = new HeldResearchAccounting()");
+    expect(owner).toContain("bound.writeSavedDomainCompletion(prepared.prepared, selectedHolder)");
+    expect(shared).toContain("return writeFixedSavedDomainResearchCompletion(db, prepared, holder, accounting)");
+    expect(writer).toContain('return writeCompletionCore(db, prepared, { domain: "SAVED_RESEARCH_V1", holder }, accounting)');
     expect(writer).not.toMatch(/\.transaction\(|\.begin\(|createSavedResearchOwner|createSavedApplicationOwner|persistRequiredInformationProfile/);
     expect(owner).not.toMatch(/persistInformationSufficiencyReceiptWithinTransaction|requireInformationSufficiencyAuthorityWithinTransaction/);
     expect(shared).toContain("const authorizedActor = await researchActor(db, context)");

@@ -16,6 +16,7 @@ const capitalFiles = [
   "postgres-execution-v2.test.ts",
   "postgres-execution-reality-delivery.test.ts",
   "postgres-risk-v2.test.ts",
+  "postgres-risk-validation-org-fk-v1.test.ts",
   "postgres-risk-limits-bootstrap.test.ts",
   "postgres-trader-service-actor-authorization.test.ts",
   "postgres-reality-v2.test.ts",
@@ -38,6 +39,7 @@ const capitalFiles = [
   "postgres-knowledge-snapshot-eligibility.test.ts",
   "postgres-historical-production-reconciliation-frontier-v1.test.ts",
   "postgres-research-application-v1.test.ts",
+  "postgres-runtime-domain-ownership-v1.test.ts",
   "postgres-live-capital-envelope-v2.test.ts",
 ];
 const capitalPassed = () => capitalFiles.map(name => ({ name: `/workspace/tests/integration/${name}`, status: "passed",
@@ -81,7 +83,7 @@ describe("mandatory PROFILE35 executed proof", () => {
     expect(run(passed(), { ...environment, WAIA_HISTORICAL_KNOWLEDGE_CONTINUATION_PROOF: "1" }).status).not.toBe(0);
     expect(run(passed(), { ...environment, WAIA_HISTORICAL_PG_RECONCILIATION_PROFILE: "LEGACY" }).status).not.toBe(0);
   });
-  it("wires the exact capital25 union and independent75-minute PROFILE35 job without changing generic LEGACY", () => {
+  it("wires the exact capital28 union and independent75-minute PROFILE35 job without changing generic LEGACY", () => {
     const workflow = parse(readFileSync(".github/workflows/postgres-integration.yml", "utf8"));
     const capital = workflow.jobs["capital-authority"];
     expect(capital["timeout-minutes"]).toBe(30);
@@ -92,7 +94,7 @@ describe("mandatory PROFILE35 executed proof", () => {
     const selected = (command.run.match(/tests\/integration\/[^\s]+\.test\.ts/g) as string[])
       .map(path => path.replace("tests/integration/", ""));
     expect(selected).toEqual(capitalFiles);
-    expect(new Set(selected).size).toBe(26);
+    expect(new Set(selected).size).toBe(28);
     const guard = readFileSync("scripts/postgres-validation/assert-capital-test-results.mjs", "utf8");
     const requiredArray = guard.match(/const requiredFiles = \[([\s\S]*?)\];/)?.[1];
     expect(requiredArray).toBeDefined();
@@ -115,10 +117,10 @@ describe("mandatory PROFILE35 executed proof", () => {
       expect(workflow.on.pull_request.paths).toContain(path);
     }
   });
-  it("accepts the exact synthetic25-file guard control", () => {
+  it("accepts the exact synthetic28-file guard control", () => {
     const result = runCapital();
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain("26 critical suites, no skipped tests");
+    expect(result.stdout).toContain("28 critical suites, no skipped tests");
   });
   it.each(capitalFiles)("refuses a report omitting mandatory %s", missing => {
     const result = runCapital(capitalPassed().filter(row => !row.name.endsWith(`/${missing}`)));
