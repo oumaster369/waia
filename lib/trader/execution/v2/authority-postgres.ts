@@ -561,7 +561,9 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
   try {
     refusal = await prePostNetworkRefusalV2(db, scoped, ready.attempt);
   } catch {
-    refusal = "PRE_POST_RECHECK_FAILED";
+    // A thrown read is not a venue reject. The caller records a non-terminal
+    // refusal and must not POST. A returned refusal string stays terminal.
+    refusal = "PRE_POST_RECHECK_UNAVAILABLE";
   }
   if (refusal) {
     return Object.freeze({

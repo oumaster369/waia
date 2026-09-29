@@ -271,12 +271,80 @@ function msToIso(ms?: number): string {
   return new Date(ms).toISOString();
 }
 
+/** Blank is absent. A non-decimal value is present and fail-unknown. */
+function readHtxDecimalAlias(
+  value: unknown,
+  field: string,
+  row: Readonly<Record<string, unknown>>,
+): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") throw new HtxUnknownOrderEvidenceError(field, row);
+  const trimmed = value.trim();
+  if (trimmed === "") return undefined;
+  if (!/^\d+(?:\.\d+)?$/.test(trimmed)) throw new HtxUnknownOrderEvidenceError(field, row);
+  return trimmed;
+}
+
+function htxDecimalStringsAgree(left: string, right: string): boolean {
+  const canonical = (value: string): string => {
+    const [wholeRaw, fractionRaw = ""] = value.split(".");
+    const whole = wholeRaw.replace(/^0+(?=\d)/, "");
+    const fraction = fractionRaw.replace(/0+$/, "");
+    return fraction.length > 0 ? `${whole}.${fraction}` : whole;
+  };
+  return canonical(left) === canonical(right);
+}
+
+/**
+ * Prefer the documented `filled-*` name. Accept the published detail-read
+ * `field-*` name when `filled-*` is absent. Both present and unequal is
+ * fail-unknown. Cash and fee pairs are checked the same way when a row
+ * carries them; absence is allowed because open-order rows omit them.
+ */
+function resolveHtxAliasedDecimal(
+  primary: unknown,
+  alias: unknown,
+  field: string,
+  row: Readonly<Record<string, unknown>>,
+  required: boolean,
+): string | undefined {
+  const primaryValue = readHtxDecimalAlias(primary, field, row);
+  const aliasValue = readHtxDecimalAlias(alias, field, row);
+  if (
+    primaryValue !== undefined &&
+    aliasValue !== undefined &&
+    !htxDecimalStringsAgree(primaryValue, aliasValue)
+  ) {
+    throw new HtxUnknownOrderEvidenceError(field, row);
+  }
+  const chosen = primaryValue ?? aliasValue;
+  if (chosen === undefined && required) throw new HtxUnknownOrderEvidenceError(field, row);
+  return chosen;
+}
+
 export function mapHtxOrder(row: HtxOrderRow): Order {
   const { side, type } = parseHtxOrderSideAndType(row.type, row);
   const orderId = requireHtxVenueIdentity(row.id, "order", row);
   const createdAt = msToIso(row["created-at"]);
   const quantity = requireHtxOrderEvidence(row.amount, "amount", row);
-  const filledQuantity = requireHtxOrderEvidence(row["filled-amount"], "filled amount", row);
+  const filledQuantity = resolveHtxAliasedDecimal(
+    row["filled-amount"],
+    row["field-amount"],
+    "filled amount",
+    row,
+    true,
+  );
+  void resolveHtxAliasedDecimal(
+    row["filled-cash-amount"],
+    row["field-cash-amount"],
+    "filled cash amount",
+    row,
+    false,
+  );
+  void resolveHtxAliasedDecimal(row["filled-fees"], row["field-fees"], "filled fees", row, false);
+  if (filledQuantity === undefined) {
+    throw new HtxUnknownOrderEvidenceError("filled amount", row);
+  }
 
   return {
     orderId,

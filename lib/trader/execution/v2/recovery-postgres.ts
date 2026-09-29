@@ -290,6 +290,19 @@ export async function dispatchAndRecordExecutionAttemptV2(
     return { status: "REFUSED_ALREADY_TERMINAL", attempt: null };
   }
   if (dispatched.status === "REFUSED_BEFORE_POST") {
+    if (dispatched.reason === "PRE_POST_RECHECK_UNAVAILABLE") {
+      const attempt = await markExecutionAttemptReconciliationRequiredV2Postgres(
+        db,
+        context,
+        executionAttemptId,
+        "PRE_POST_RECHECK_UNAVAILABLE",
+        { postSent: false },
+      );
+      if (!attempt) {
+        throw new Error("[trader] pre-POST unavailability could not be recorded");
+      }
+      return { status: "RECONCILIATION_REQUIRED", attempt };
+    }
     const report = deterministicVenueRejectReport(dispatched.attempt, {
       postSent: false,
       reason: dispatched.reason,

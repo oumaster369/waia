@@ -5,6 +5,20 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+const prePostGate = vi.hoisted(() => ({ fail: false }));
+
+vi.mock("@/lib/trader/execution/v2/pre-post-recheck-v2", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/trader/execution/v2/pre-post-recheck-v2")>();
+  return {
+    ...actual,
+    prePostNetworkRefusalV2: (...args: Parameters<typeof actual.prePostNetworkRefusalV2>) => {
+      if (prePostGate.fail) throw new Error("transient pre-post database failure");
+      return actual.prePostNetworkRefusalV2(...args);
+    },
+  };
+});
+
 import * as pgSchema from "@/db/schema.postgres";
 import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
@@ -385,6 +399,7 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
   }, 120_000);
 
   beforeEach(async () => {
+    prePostGate.fail = false;
     await clearOrganization(sql, orgA);
     await clearOrganization(sql, orgB);
   });
@@ -2408,5 +2423,53 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     } finally {
       await sql`delete from trader_kill_switches where organization_id = ${orgA}::uuid`;
     }
+  });
+
+  it("DEE-1151 keeps a transient pre-POST database failure non-terminal and does not post", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    const held = await pendingNotional(input.allowance.accountId);
+    let posts = 0;
+    prePostGate.fail = true;
+    const unavailable = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        posts += 1;
+        throw new Error("post must not be sent");
+      },
+    );
+    expect(posts).toBe(0);
+    expect(unavailable.status).toBe("RECONCILIATION_REQUIRED");
+    expect(await pendingNotional(input.allowance.accountId)).toBe(held);
+    const reports = await listExecutionReportsV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+    );
+    expect(reports.at(-1)).toMatchObject({
+      reportType: "RECONCILIATION_REQUIRED",
+      rawObservation: { cause: "PRE_POST_RECHECK_UNAVAILABLE", postSent: false },
+    });
+    const projection = await readExecutionAttemptProjectionV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+    );
+    expect(projection?.lifecycleState).toBe("RECONCILIATION_REQUIRED");
+    prePostGate.fail = false;
+    let retryPosts = 0;
+    const retry = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        retryPosts += 1;
+        throw new Error("post must not be sent");
+      },
+    );
+    expect(retryPosts).toBe(0);
+    expect(retry.status).toBe("REFUSED_ALREADY_TERMINAL");
   });
 });

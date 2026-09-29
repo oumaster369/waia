@@ -476,6 +476,146 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
     expect(otherOrderGets).toBe(0);
   });
 
+  it("confirms a resting order from the published getClientOrder field-* body", async () => {
+    // Huobi spot v1 example for GET /v1/order/orders/getClientOrder.
+    // The sample type is buy-limit-maker; this connector places buy-limit.
+    const published = {
+      id: 357632718898331,
+      symbol: "adausdt",
+      "account-id": 13496526,
+      "client-order-id": "23456",
+      amount: "5.000000000000000000",
+      price: "1.000000000000000000",
+      "created-at": 1630649406687,
+      type: "buy-limit",
+      "field-amount": "0.0",
+      "field-cash-amount": "0.0",
+      "field-fees": "0.0",
+      "finished-at": 0,
+      source: "spot-api",
+      state: "submitted",
+      "canceled-at": 0,
+    };
+    const connector = await validatedHtx(tradeHandlers({
+      "/v1/order/orders/place": () => jsonResponse({ status: "ok", data: published.id }),
+      "/v1/order/orders/getClientOrder": () => jsonResponse({ status: "ok", data: published }),
+    }));
+    const order = await connector.placeOrder({
+      clientOrderId: "23456",
+      symbol: "BTC/USDT",
+      side: "buy",
+      type: "limit",
+      price: "1",
+      quantity: "5",
+    });
+    expect(order).toMatchObject({
+      orderId: "357632718898331",
+      clientOrderId: "23456",
+      symbol: "ADA/USDT",
+      side: "buy",
+      type: "limit",
+      status: "open",
+      price: "1.000000000000000000",
+      quantity: "5.000000000000000000",
+      filledQuantity: "0.0",
+    });
+    expect(order.rawVenueObservation).toMatchObject({
+      "field-amount": "0.0",
+      "field-cash-amount": "0.0",
+      "field-fees": "0.0",
+    });
+    expect(order.rawVenueObservation).not.toHaveProperty("filled-amount");
+  });
+
+  it("accepts filled-amount and field-amount when both name the same quantity", async () => {
+    const connector = await validatedHtx(tradeHandlers({
+      "/v1/order/orders/place": () => jsonResponse({ status: "ok", data: 357632718898331 }),
+      "/v1/order/orders/getClientOrder": () => jsonResponse({
+        status: "ok",
+        data: {
+          id: 357632718898331,
+          symbol: "adausdt",
+          "account-id": 13496526,
+          "client-order-id": "23456",
+          amount: "5.000000000000000000",
+          price: "1.000000000000000000",
+          "created-at": 1630649406687,
+          type: "buy-limit",
+          "filled-amount": "0.0",
+          "field-amount": "0.00",
+          "filled-cash-amount": "0.0",
+          "field-cash-amount": "0",
+          "filled-fees": "0.10",
+          "field-fees": "0.1",
+          "finished-at": 0,
+          source: "spot-api",
+          state: "submitted",
+          "canceled-at": 0,
+        },
+      }),
+    }));
+    const order = await connector.placeOrder({
+      clientOrderId: "23456",
+      symbol: "BTC/USDT",
+      side: "buy",
+      type: "limit",
+      price: "1",
+      quantity: "5",
+    });
+    expect(order.filledQuantity).toBe("0.0");
+    expect(order.status).toBe("open");
+  });
+
+  it("fails unknown when filled-amount and field-amount disagree", async () => {
+    let placementPosts = 0;
+    let confirmationGets = 0;
+    const connector = await validatedHtx(tradeHandlers({
+      "/v1/order/orders/place": () => {
+        placementPosts += 1;
+        return jsonResponse({ status: "ok", data: 357632718898331 });
+      },
+      "/v1/order/orders/getClientOrder": () => {
+        confirmationGets += 1;
+        return jsonResponse({
+          status: "ok",
+          data: {
+            id: 357632718898331,
+            symbol: "adausdt",
+            "account-id": 13496526,
+            "client-order-id": "23456",
+            amount: "5.000000000000000000",
+            price: "1.000000000000000000",
+            "created-at": 1630649406687,
+            type: "buy-limit",
+            "filled-amount": "0.0",
+            "field-amount": "1.0",
+            "filled-cash-amount": "0.0",
+            "field-cash-amount": "0.0",
+            "filled-fees": "0.0",
+            "field-fees": "0.0",
+            "finished-at": 0,
+            source: "spot-api",
+            state: "submitted",
+            "canceled-at": 0,
+          },
+        });
+      },
+    }));
+    await expect(connector.placeOrder({
+      clientOrderId: "23456",
+      symbol: "BTC/USDT",
+      side: "buy",
+      type: "limit",
+      price: "1",
+      quantity: "5",
+    })).rejects.toMatchObject({
+      name: "HtxPlacementFailUnknownError",
+      rawVenueObservation: { confirmation: "UNMAPPABLE" },
+    });
+    expect(placementPosts).toBe(1);
+    expect(confirmationGets).toBe(1);
+  });
+
   it("fails unknown when the acknowledgement is not confirmed by a client-order read", async () => {
     let placementPosts = 0;
     let confirmationGets = 0;

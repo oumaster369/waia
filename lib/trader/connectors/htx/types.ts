@@ -44,7 +44,14 @@ export type HtxOrderRow = {
   amount?: string;
   "created-at"?: number;
   type: string;
+  /** Open-orders and history rows. Detail reads may send `field-amount` instead. */
   "filled-amount"?: string;
+  "filled-cash-amount"?: string;
+  "filled-fees"?: string;
+  /** `GET /v1/order/orders/{order-id}` and `getClientOrder` example name. */
+  "field-amount"?: string;
+  "field-cash-amount"?: string;
+  "field-fees"?: string;
   state: string;
 };
 
