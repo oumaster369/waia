@@ -250,15 +250,19 @@ describe("fixed public callers and historical command representation", () => {
     expect(body("consume") + body("completeConsumer")).not.toContain("recheckUnexpectedRoot");
     expect(text.match(/new HeldResearchAccounting\(/g)).toHaveLength(1);
   });
-  it("admits only three exact observational imports for acquisition and leaves saved capability absence strict", () => {
+  it("admits only the six approved observational imports for acquisition and leaves saved capability absence strict", () => {
     const file = "tests/helpers/noncapital-domain-process.ts", text = readFileSync(file, "utf8");
     const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
     const names = source.statements.filter(ts.isVariableStatement).flatMap(statement => [...statement.declarationList.declarations]);
     const declaration = names.find(value => value.name.getText(source) === "acquisitionObservationalImports")!;
     expect(declaration.initializer && ts.isArrayLiteralExpression(declaration.initializer)
       ? declaration.initializer.elements.map(value => ts.isStringLiteral(value) ? value.text : null) : null).toEqual([
-      "lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1.ts", "lib/trader/intelligence/evaluation-cycle.ts",
+      "lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1.ts",
+      "lib/trader/intelligence/evaluation-cycle.ts",
       "lib/trader/execution/v2/execution-admission-proof-v2.ts",
+      "lib/trader/execution/order-repository.types.ts",
+      "lib/trader/execution/cost-model.ts",
+      "lib/trader/execution/htr-historical-cost-model-authority.ts",
     ]);
     expect(text).toContain('input.route === "acquisition" && acquisitionObservationalImports.includes(file)');
     expect(text).toContain('input.route === "saved" && /market-data-gateway|htx-bar-poll-source/');
