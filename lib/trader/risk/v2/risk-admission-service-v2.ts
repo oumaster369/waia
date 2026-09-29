@@ -1,5 +1,6 @@
 import { compareDecimal, formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
 import type { ProtectivePostureV2 } from "./protective-posture-v2";
+import type { CurrentAccountAuthorityV1 } from "./risk-current-account-read-v1";
 import { evaluateProtectivePosturePermissionV2 } from "./protective-posture-v2";
 
 export type RiskAccountAccountingV2 = Readonly<{
@@ -105,4 +106,34 @@ export function calculateRiskAdmissionV2(input: {
       parseDecimal(remaining) - parseDecimal(reservation),
     ),
   };
+}
+
+/** Current-account admission. The caller cannot pass a reconciliation status.
+ *  Every owned authority value stays unavailable until a live envelope producer exists.
+ */
+export function calculateCurrentAccountRiskAdmissionV1(input: {
+  authority: CurrentAccountAuthorityV1;
+  accounting: RiskAccountAccountingV2;
+  requestedReservationNotional: string;
+  posture: ProtectivePostureV2;
+  strictExposureReduction: boolean;
+}): RiskAdmissionCalculationV2 & { basisDiagnostic: CurrentAccountAuthorityV1["reason"] } {
+  if (input.authority.current !== false) {
+    return {
+      status: "REFUSED",
+      reservationNotional: null,
+      remainingBeforeAdmissionNotional: "0",
+      remainingAfterAdmissionNotional: "0",
+      reason: "RECONCILIATION_NOT_CURRENT",
+      basisDiagnostic: "LIVE_CAPITAL_ENVELOPE_ABSENT",
+    };
+  }
+  const calculation = calculateRiskAdmissionV2({
+    accounting: input.accounting,
+    requestedReservationNotional: input.requestedReservationNotional,
+    posture: input.posture,
+    strictExposureReduction: input.strictExposureReduction,
+    reconciliationStatus: "UNAVAILABLE",
+  });
+  return { ...calculation, basisDiagnostic: input.authority.reason };
 }

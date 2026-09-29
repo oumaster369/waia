@@ -262,7 +262,8 @@ jobs:
             tests/integration/postgres-knowledge-snapshot-eligibility.test.ts \
             tests/integration/postgres-historical-production-reconciliation-frontier-v1.test.ts \
             tests/integration/postgres-research-application-v1.test.ts \
-            tests/integration/postgres-runtime-domain-ownership-v1.test.ts
+            tests/integration/postgres-runtime-domain-ownership-v1.test.ts \
+            tests/integration/postgres-live-capital-envelope-v2.test.ts
           node scripts/postgres-validation/assert-capital-test-results.mjs .tmp/capital-postgres-results.json
 
   historical-reconciliation-profile:

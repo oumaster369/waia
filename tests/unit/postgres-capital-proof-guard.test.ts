@@ -29,6 +29,7 @@ const required = [
   "postgres-historical-production-reconciliation-frontier-v1.test.ts",
   "postgres-research-application-v1.test.ts",
   "postgres-runtime-domain-ownership-v1.test.ts",
+  "postgres-live-capital-envelope-v2.test.ts",
 ];
 const passed = () => required.map((file) => ({
   name: `/workspace/tests/integration/${file}`, status: "passed",
@@ -42,10 +43,10 @@ function run(testResults: ReturnType<typeof passed>) {
 afterAll(() => { rmSync(directory, { recursive: true, force: true }); });
 
 describe("mandatory executed Postgres capital proof", () => {
-  it("accepts all twenty-seven actually executed critical suites", () => {
+  it("accepts all twenty-eight actually executed critical suites", () => {
     const result = run(passed());
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("27 critical suites, no skipped tests");
+    expect(result.stdout).toContain("28 critical suites, no skipped tests");
   });
   it.each(required)("rejects missing, skipped or failed proof for %s", (file) => {
     for (const mode of ["missing", "skipped", "failed", "empty", "duplicate"] as const) {
