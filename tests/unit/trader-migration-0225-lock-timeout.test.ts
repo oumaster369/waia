@@ -1,35 +1,33 @@
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-describe("migration 0225 lock budget (DEE-1151)", () => {
-  const sql = readFileSync(
-    "db/migrations_postgres/0225_trader_noncapital_domain_ownership_v1.sql",
-    "utf8",
-  );
+const MIGRATION = "db/migrations_postgres/0225_trader_noncapital_domain_ownership_v1.sql";
+const MAIN_0225_SHA256 = "3ea3246779f356ff7eceaf27ae3307f10beb6940435c92ae8fcc4ed6487931a3";
 
-  it("fails fast on lock waits and says writers must be stopped", () => {
-    expect(sql).toMatch(/writers of the locked tables stopped/i);
-    expect(sql).toMatch(/Do not apply it during a live session/i);
-    expect(sql).toContain("SET LOCAL");
-    const chunks = sql
-      .split("--> statement-breakpoint")
-      .map((chunk) => chunk.trim())
-      .filter((chunk) => chunk.length > 0);
-    const reset = chunks[chunks.length - 1] ?? "";
-    expect(reset).toContain("set_config('lock_timeout', '0', true)");
-    expect(reset).toContain("set_config('statement_timeout', '0', true)");
-    const executable = chunks.slice(0, -1).filter((chunk) => !chunk.startsWith("--") || chunk.includes("SELECT") || chunk.includes("LOCK") || chunk.includes("ALTER") || chunk.includes("CREATE"));
-    for (const chunk of executable) {
-      if (!/^(SELECT|LOCK|ALTER|CREATE|DROP|INSERT|UPDATE|DELETE|COMMENT|GRANT|REVOKE|DO)\b/m.test(chunk)) {
-        continue;
-      }
-      expect(chunk).toContain("set_config('lock_timeout', '5s', true)");
-      expect(chunk).toContain("set_config('statement_timeout', '120s', true)");
-    }
-    expect(sql).toContain("LOCK TABLE");
-    const lockChunk = executable.find((chunk) => chunk.includes("LOCK TABLE"));
-    expect(lockChunk?.indexOf("set_config('lock_timeout', '5s', true)")).toBeLessThan(
-      lockChunk?.indexOf("LOCK TABLE") ?? -1,
+describe("migration 0225 stays on the applied main hash (DEE-1151)", () => {
+  it("matches main byte-for-byte and keeps the lock budget on the migrate wrapper", () => {
+    const checkout = readFileSync(MIGRATION);
+    const mainBytes = execFileSync("git", ["show", `origin/main:${MIGRATION}`]);
+    const checkoutHash = createHash("sha256").update(checkout).digest("hex");
+    expect(checkoutHash).toBe(createHash("sha256").update(mainBytes).digest("hex"));
+    expect(checkoutHash).toBe(MAIN_0225_SHA256);
+    expect(checkout.toString("utf8")).not.toContain("set_config");
+
+    const wrapper = readFileSync(
+      "scripts/ops/postgres-migrate-with-session-lock-budget.ts",
+      "utf8",
+    );
+    expect(wrapper).toMatch(/writers of the locked tables stopped/);
+    expect(wrapper).toContain("SET lock_timeout");
+    expect(wrapper).toContain("SET statement_timeout");
+    expect(wrapper).toContain("migrate(");
+    expect(wrapper).not.toMatch(
+      /lock_timeout'\s*,\s*'0'|lock_timeout\s*=\s*'0'|statement_timeout\s*=\s*'0'/,
+    );
+    expect(readFileSync("package.json", "utf8")).toContain(
+      "tsx scripts/ops/postgres-migrate-with-session-lock-budget.ts",
     );
   });
 });

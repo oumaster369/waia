@@ -9,6 +9,7 @@ import {
   decideLiveCapitalEnvelopeWindowV2,
   liveCapitalBasisBindingV2,
   liveCapitalEnvelopeCommandSchemaV2,
+  readStoredSourceMethodQualifiedV2,
   sealLiveCapitalEnvelopeV2,
   type LiveCapitalEnvelopeCommandV2,
   type LiveCapitalEnvelopeStageV2,
@@ -114,8 +115,10 @@ async function journal(
     envelopeDigest: string | null;
     basisDigest: string | null;
     reason: string | null;
+    sourceMethodQualified?: boolean;
   },
 ): Promise<void> {
+  const qualified = fields.sourceMethodQualified === true;
   const sealed = sealRiskAccountRecordV1({
     schemaVersion: LIVE_CAPITAL_ENVELOPE_JOURNAL_V2,
     organizationId: command.organizationId,
@@ -125,6 +128,7 @@ async function journal(
     envelopeDigest: fields.envelopeDigest,
     basisDigest: fields.basisDigest,
     reason: fields.reason,
+    ...(qualified ? { sourceMethodQualified: qualified } : {}),
   });
   const text = bodyText(sealed);
   await tx`
@@ -180,8 +184,40 @@ function requireObservedOrganization(
     throw new RiskCurrentAccountRefusedV1("EXTERNAL_ORGANIZATION");
 }
 
+function windowRefusalReason(decision: {
+  decision: "PUBLISHED" | "REFUSED";
+  reason?: string;
+}): string {
+  if (decision.decision === "PUBLISHED") return "LIVE_CAPITAL_IDENTITY_CHANGED";
+  if (
+    decision.reason === "SOURCE_METHOD_UNQUALIFIED" ||
+    decision.reason === "LIVE_CAPITAL_ENVELOPE_STALE" ||
+    decision.reason === "LIVE_CAPITAL_ENVELOPE_ABSENT" ||
+    decision.reason === "LIVE_CAPITAL_IDENTITY_CHANGED" ||
+    decision.reason === "EXTERNAL_ORGANIZATION"
+  ) {
+    return decision.reason;
+  }
+  return "LIVE_CAPITAL_IDENTITY_CHANGED";
+}
+
+async function publishedSourceMethodQualified(
+  tx: Sql,
+  pointer: { organizationId: string; accountId: string },
+  envelopeDigest: string,
+): Promise<boolean> {
+  const rows = await tx<{ body_text: string }[]>`
+    select body_text from trader_live_capital_envelope_journal_v2
+    where organization_id = ${pointer.organizationId}::uuid
+      and account_id = ${pointer.accountId}
+      and stage = 'PUBLISHED'
+      and envelope_digest = ${envelopeDigest}
+    limit 1`;
+  return readStoredSourceMethodQualifiedV2(rows[0]?.body_text);
+}
+
 /** A stored PUBLISHED row is not authority by itself. Re-decide from the sealed body,
- * the database clock, and the caller's observed identity. */
+ * the database clock, the stored source-method flag, and the caller's observed identity. */
 async function recheckPublishedAuthorityV2(
   tx: Sql,
   observed: LiveCapitalObservedIdentityV2,
@@ -207,17 +243,13 @@ async function recheckPublishedAuthorityV2(
   const decision = decideLiveCapitalEnvelopeWindowV2({
     liveCapitalEnvelope: receipt,
     bound: { ...observed, nowUtc },
+    sourceMethodQualified: await publishedSourceMethodQualified(tx, pointer, envelopeDigest),
   });
   if (decision.decision === "PUBLISHED" && decision.basisDigest === basisDigest)
     return published(envelopeDigest, basisDigest, true);
   if (decision.decision === "REFUSED" && decision.reason === "EXTERNAL_ORGANIZATION")
     throw new RiskCurrentAccountRefusedV1("EXTERNAL_ORGANIZATION");
-  const reason =
-    decision.decision === "REFUSED" &&
-    (decision.reason === "LIVE_CAPITAL_ENVELOPE_STALE" ||
-      decision.reason === "LIVE_CAPITAL_ENVELOPE_ABSENT")
-      ? decision.reason
-      : "LIVE_CAPITAL_IDENTITY_CHANGED";
+  const reason = windowRefusalReason(decision);
   const rows = await loadJournal(tx, stored);
   if (!rows.some((row) => row.stage === "INVALIDATED")) {
     await journal(tx, stored, "INVALIDATED", {
@@ -399,6 +431,7 @@ export async function advanceLiveCapitalEnvelopeStageV2(
       envelopeDigest: receipt.contentDigest,
       basisDigest: basis.contentDigest,
       reason: null,
+      sourceMethodQualified: input.sourceMethodQualified === true,
     });
     return published(receipt.contentDigest, basis.contentDigest, false);
   });
@@ -472,12 +505,16 @@ export async function invalidateLiveCapitalEnvelopeV2(
     const decision = decideLiveCapitalEnvelopeWindowV2({
       liveCapitalEnvelope: receipt,
       bound: { ...input.observed, nowUtc },
+      sourceMethodQualified: await publishedSourceMethodQualified(
+        tx,
+        { organizationId: input.boundOrganizationId, accountId: pointerAccountId },
+        current.envelope_digest,
+      ),
     });
     if (decision.decision === "PUBLISHED" && current.basis_digest === decision.basisDigest) {
       return published(decision.envelopeDigest, decision.basisDigest, true);
     }
-    const reason =
-      decision.decision === "PUBLISHED" ? "LIVE_CAPITAL_IDENTITY_CHANGED" : decision.reason;
+    const reason = windowRefusalReason(decision);
     const rows = await loadJournal(tx, command);
     if (!rows.some((row) => row.stage === "INVALIDATED")) {
       await journal(tx, command, "INVALIDATED", {

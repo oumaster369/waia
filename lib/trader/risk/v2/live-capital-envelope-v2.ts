@@ -150,8 +150,10 @@ export type LiveCapitalPublicationV2 =
     };
 
 /**
- * Window and identity only. Publishing still requires an explicit human
- * source-method qualification; this function does not grant that.
+ * Window, identity, and the explicit human source-method flag.
+ * A missing flag, false, or any non-true value stays closed after the window
+ * checks. Nothing in this function turns the flag on. A legacy sealed body
+ * that does not carry the flag cannot size orders.
  */
 export function decideLiveCapitalEnvelopeWindowV2(input: { liveCapitalEnvelope: null }): {
   decision: "REFUSED";
@@ -160,10 +162,12 @@ export function decideLiveCapitalEnvelopeWindowV2(input: { liveCapitalEnvelope: 
 export function decideLiveCapitalEnvelopeWindowV2(input: {
   liveCapitalEnvelope: LiveCapitalEnvelopeReceiptV2;
   bound: LiveCapitalEnvelopeBoundV2;
+  sourceMethodQualified: boolean;
 }): LiveCapitalPublicationV2;
 export function decideLiveCapitalEnvelopeWindowV2(input: {
   liveCapitalEnvelope: LiveCapitalEnvelopeReceiptV2 | null;
   bound?: LiveCapitalEnvelopeBoundV2;
+  sourceMethodQualified?: boolean;
 }): LiveCapitalPublicationV2 {
   if (input.liveCapitalEnvelope === null)
     return { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" };
@@ -203,6 +207,15 @@ export function decideLiveCapitalEnvelopeWindowV2(input: {
       orderId: null,
     };
   }
+  if (input.sourceMethodQualified !== true) {
+    return {
+      decision: "REFUSED",
+      reason: "SOURCE_METHOD_UNQUALIFIED",
+      basisDigest: null,
+      allowanceId: null,
+      orderId: null,
+    };
+  }
   const basis = bindingFromReceipt(receipt);
   return {
     decision: "PUBLISHED",
@@ -211,6 +224,18 @@ export function decideLiveCapitalEnvelopeWindowV2(input: {
     allowanceId: null,
     orderId: null,
   };
+}
+
+/** True only for an explicit stored boolean true. Absent, false, and strings stay closed. */
+export function readStoredSourceMethodQualifiedV2(bodyText: string | null | undefined): boolean {
+  if (!bodyText) return false;
+  try {
+    const parsed: unknown = JSON.parse(bodyText);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return false;
+    return (parsed as { sourceMethodQualified?: unknown }).sourceMethodQualified === true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -236,21 +261,11 @@ export function decideLiveCapitalEnvelopePublicationV2(input: {
     return decideLiveCapitalEnvelopeWindowV2({ liveCapitalEnvelope: null });
   }
   if (!input.bound) refuse("ENVELOPE_UNBOUND");
-  const window = decideLiveCapitalEnvelopeWindowV2({
+  return decideLiveCapitalEnvelopeWindowV2({
     liveCapitalEnvelope: input.liveCapitalEnvelope,
     bound: input.bound,
+    sourceMethodQualified: input.sourceMethodQualified === true,
   });
-  if (window.decision !== "PUBLISHED") return window;
-  if (input.sourceMethodQualified !== true) {
-    return {
-      decision: "REFUSED",
-      reason: "SOURCE_METHOD_UNQUALIFIED",
-      basisDigest: null,
-      allowanceId: null,
-      orderId: null,
-    };
-  }
-  return window;
 }
 
 export function liveCapitalBasisBindingV2(

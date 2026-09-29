@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { HtxExchangeConnector } from "@/lib/trader/connectors/htx/htx-exchange-connector";
 import { createLiveHtxConnector } from "@/lib/trader/live/live-connector";
 import {
   assertLiveHtxExecutionAdmission,
@@ -32,6 +33,50 @@ function credential(scopes: readonly string[]) {
 }
 
 describe("live HTX execution admission (DEE-1151)", () => {
+  it("writes the kill switch separately from the telemetry field and still does not post", async () => {
+    const placeOrder = vi.fn(async () => ({ orderId: "must-not-post" }));
+    const writeKillSwitch = vi.fn(async () => "WRITTEN" as const);
+    const lines: string[] = [];
+    await expect(
+      assertLiveHtxExecutionAdmission({
+        organizationId: ORG,
+        credentialId: "cred-1",
+        credential: credential(["read"]),
+        sink: (line) => lines.push(line),
+        placeOrder,
+        writeKillSwitch,
+      }),
+    ).rejects.toThrow(LiveHtxExecutionAdmissionError);
+    expect(writeKillSwitch).toHaveBeenCalledWith("LIVE_HTX_CREDENTIAL_READ_ONLY");
+    expect(placeOrder).not.toHaveBeenCalled();
+    expect(JSON.parse(lines[0] ?? "{}")).toMatchObject({
+      kill_state_telemetry: "TRIPPED",
+      kill_switch_write: "WRITTEN",
+    });
+  });
+
+  it("drops the in-memory placement key so a later placeOrder cannot sign", async () => {
+    const fetchImpl = vi.fn(async () => Response.json({ status: "ok" })) as typeof fetch;
+    const connector = new HtxExchangeConnector({
+      apiKey: "synthetic-key",
+      apiSecret: "synthetic-secret",
+      fetchImpl,
+    });
+    connector.dropInMemoryCredentials();
+    await expect(
+      connector.placeOrder({
+        clientOrderId: "cid",
+        symbol: "BTCUSDT",
+        side: "buy",
+        type: "limit",
+        price: "1",
+        quantity: "1",
+        timeoutMs: 1000,
+      }),
+    ).rejects.toThrow(/in-memory credentials were dropped/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("admits only an explicit trade-scoped credential", () => {
     expect(
       classifyLiveHtxExecutionAdmission({
@@ -41,7 +86,7 @@ describe("live HTX execution admission (DEE-1151)", () => {
     ).toEqual({ decision: "ADMITTED" });
   });
 
-  it("fails closed with kill-state telemetry and does not post when credentials are absent or read-only", () => {
+  it("fails closed with kill-state telemetry and does not post when credentials are absent or read-only", async () => {
     const cases = [
       {
         reason: "LIVE_HTX_CREDENTIAL_ABSENT" as const,
@@ -62,7 +107,7 @@ describe("live HTX execution admission (DEE-1151)", () => {
     for (const item of cases) {
       const placeOrder = vi.fn(async () => ({ orderId: "must-not-post" }));
       const lines: string[] = [];
-      expect(() =>
+      await expect(
         assertLiveHtxExecutionAdmission({
           organizationId: ORG,
           credentialId: item.credentialId,
@@ -70,16 +115,18 @@ describe("live HTX execution admission (DEE-1151)", () => {
           sink: (line) => lines.push(line),
           placeOrder,
         }),
-      ).toThrow(LiveHtxExecutionAdmissionError);
+      ).rejects.toThrow(LiveHtxExecutionAdmissionError);
       expect(placeOrder).not.toHaveBeenCalled();
       const event = JSON.parse(lines[0] ?? "{}") as {
         outcome?: string;
-        kill_state?: string;
+        kill_state_telemetry?: string;
+        kill_switch_write?: string;
         error_class?: string;
       };
       expect(event).toMatchObject({
         outcome: item.reason,
-        kill_state: "TRIPPED",
+        kill_state_telemetry: "TRIPPED",
+        kill_switch_write: "NOT_ATTEMPTED",
         error_class: "LiveHtxExecutionAdmissionError",
       });
       expect(JSON.stringify(event)).not.toMatch(/apiKey|apiSecret|secret/i);
@@ -131,7 +178,8 @@ describe("live HTX execution admission (DEE-1151)", () => {
       expect(fetchImpl).not.toHaveBeenCalled();
       expect(JSON.parse(lines[0] ?? "{}")).toMatchObject({
         outcome: item.reason,
-        kill_state: "TRIPPED",
+        kill_state_telemetry: "TRIPPED",
+        kill_switch_write: "NOT_ATTEMPTED",
       });
     }
   });

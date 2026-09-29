@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   decideLiveCapitalEnvelopePublicationV2,
+  decideLiveCapitalEnvelopeWindowV2,
+  readStoredSourceMethodQualifiedV2,
   sealLiveCapitalEnvelopeV2,
   type LiveCapitalEnvelopeCommandV2,
 } from "@/lib/trader/risk/v2/live-capital-envelope-v2";
@@ -142,6 +144,31 @@ describe("LiveCapitalEnvelopeV2 publication", () => {
         expect(line).not.toMatch(/DEFAULT/i);
       }
     }
+  });
+
+  it("refuses order sizing when a stored basis has no explicit source-method qualification", () => {
+    const receipt = sealLiveCapitalEnvelopeV2(command);
+    const unqualified = decideLiveCapitalEnvelopeWindowV2({
+      liveCapitalEnvelope: receipt,
+      bound: bound(),
+      sourceMethodQualified: false,
+    });
+    expect(unqualified).toMatchObject({
+      decision: "REFUSED",
+      reason: "SOURCE_METHOD_UNQUALIFIED",
+    });
+    const qualified = decideLiveCapitalEnvelopeWindowV2({
+      liveCapitalEnvelope: receipt,
+      bound: bound(),
+      sourceMethodQualified: true,
+    });
+    expect(qualified.decision).toBe("PUBLISHED");
+    expect(readStoredSourceMethodQualifiedV2(null)).toBe(false);
+    expect(
+      readStoredSourceMethodQualifiedV2('{"schemaVersion":"live-capital-envelope-journal/v2"}'),
+    ).toBe(false);
+    expect(readStoredSourceMethodQualifiedV2('{"sourceMethodQualified":"true"}')).toBe(false);
+    expect(readStoredSourceMethodQualifiedV2('{"sourceMethodQualified":true}')).toBe(true);
   });
 
   it("does not set sourceMethodQualified true anywhere outside tests", () => {

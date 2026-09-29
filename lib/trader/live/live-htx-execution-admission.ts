@@ -17,11 +17,11 @@ export const LIVE_HTX_EXECUTION_ADMISSION_REASONS = [
   "LIVE_HTX_CREDENTIAL_READ_ONLY",
 ] as const;
 
-export type LiveHtxExecutionAdmissionReason =
-  (typeof LIVE_HTX_EXECUTION_ADMISSION_REASONS)[number];
+export type LiveHtxExecutionAdmissionReason = (typeof LIVE_HTX_EXECUTION_ADMISSION_REASONS)[number];
 
 export class LiveHtxExecutionAdmissionError extends Error {
-  readonly killState = "TRIPPED" as const;
+  /** Event marker only. The kill-switch row is `killSwitchWrite`, not this field. */
+  readonly telemetryKillState = "TRIPPED" as const;
 
   constructor(readonly code: LiveHtxExecutionAdmissionReason) {
     super(code);
@@ -41,11 +41,12 @@ export type LiveHtxExecutionAdmission =
   | Readonly<{
       decision: "REFUSED";
       reason: LiveHtxExecutionAdmissionReason;
-      killState: "TRIPPED";
+      /** Telemetry marker. This object does not write `trader_kill_switches`. */
+      telemetryKillState: "TRIPPED";
     }>;
 
 function refused(reason: LiveHtxExecutionAdmissionReason): LiveHtxExecutionAdmission {
-  return Object.freeze({ decision: "REFUSED", reason, killState: "TRIPPED" });
+  return Object.freeze({ decision: "REFUSED", reason, telemetryKillState: "TRIPPED" });
 }
 
 function metadataAllows(
@@ -92,18 +93,27 @@ export function classifyLiveHtxExecutionAdmission(input: {
 }
 
 /**
- * Fail closed before any exchange POST. Emits kill-state telemetry and throws.
+ * Fail closed before any exchange POST.
+ * `kill_state_telemetry` is the event field. `kill_switch_write` is the row
+ * write when `writeKillSwitch` is supplied; otherwise the event says
+ * `NOT_ATTEMPTED` and no switch row is inserted here.
  * `placeOrder`, when supplied, is not called.
  */
-export function assertLiveHtxExecutionAdmission(input: {
+export async function assertLiveHtxExecutionAdmission(input: {
   organizationId: string;
   credentialId: string | null | undefined;
   credential: LiveHtxExecutionCredentialView | null;
   sink?: WaiaTraderTelemetrySink;
   placeOrder?: () => Promise<unknown>;
-}): void {
+  writeKillSwitch?: (
+    reason: LiveHtxExecutionAdmissionReason,
+  ) => Promise<"WRITTEN" | "ALREADY_ACTIVE">;
+}): Promise<void> {
   const verdict = classifyLiveHtxExecutionAdmission(input);
   if (verdict.decision === "ADMITTED") return;
+  const killSwitchWrite = input.writeKillSwitch
+    ? await input.writeKillSwitch(verdict.reason)
+    : "NOT_ATTEMPTED";
   emitTraderTelemetry(
     {
       event: "waia_trader_event",
@@ -111,7 +121,8 @@ export function assertLiveHtxExecutionAdmission(input: {
       organization_id: input.organizationId,
       outcome: verdict.reason,
       severity: "critical",
-      kill_state: verdict.killState,
+      kill_state_telemetry: verdict.telemetryKillState,
+      kill_switch_write: killSwitchWrite,
       error_class: "LiveHtxExecutionAdmissionError",
     },
     input.sink,

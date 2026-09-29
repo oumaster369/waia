@@ -415,6 +415,7 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
   executionAttemptId: string,
   submit: ExecutionV2NetworkSubmitter<T>,
   afterSubmitStarted?: () => Promise<void>,
+  onRefusedBeforePost?: (reason: string) => void,
 ): Promise<DispatchCommittedExecutionV2Result<T>> {
   const scoped = requireOrgContext(context.organizationId);
   const ready = await runWaiaPostgresTransaction(db, async (tx) => {
@@ -566,6 +567,7 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
     refusal = "PRE_POST_RECHECK_UNAVAILABLE";
   }
   if (refusal) {
+    onRefusedBeforePost?.(refusal);
     return Object.freeze({
       status: "REFUSED_BEFORE_POST" as const,
       attempt: ready.attempt,

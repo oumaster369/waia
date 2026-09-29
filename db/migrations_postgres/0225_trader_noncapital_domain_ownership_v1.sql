@@ -6,16 +6,10 @@
 -- ledger. Bind the receipt to that historical lease by organization and digest.
 -- Do not copy either holder onto the other. Later inserts must match the
 -- ownership-ref tuple exactly.
--- DEE-1151: apply this file only with writers of the locked tables stopped.
--- Do not apply it during a live session or while those writers are running.
--- A timeout failure means stop the writers and retry the whole file; it is not
--- permission to apply concurrently. No original receipt or body is rewritten.
--- Each statement chunk sets transaction-local lock_timeout (5s) and
--- statement_timeout (120s), the SET LOCAL form via set_config(..., true), so a
--- lock wait fails fast instead of blocking writers. The closing chunk restores
--- both to 0 so a later migration in the same transaction is not left on this budget.
+-- Quiesce relevant writers before transactional apply; no original receipt/body rewrite.
+-- The ACCESS EXCLUSIVE locks below are applied only in a window with those writers stopped.
+SET LOCAL lock_timeout = '5s';
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 LOCK TABLE trader_recorded_analysis_companions_v1,
   trader_recorded_analysis_packets_v1,
   trader_recorded_analysis_sessions_v1,
@@ -28,10 +22,8 @@ LOCK TABLE trader_recorded_analysis_companions_v1,
   trader_runtime_control_lease_epoch_history_v2,
   trader_runtime_noncapital_cycles_v2 IN ACCESS EXCLUSIVE MODE;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_runtime_control_lease_epoch_history_v2 ADD CONSTRAINT noncapital_legacy_parent_tuple UNIQUE (organization_id,runtime_instance_id,lease_epoch,content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TABLE trader_recorded_acquisition_lease_history_v1 (
   organization_id uuid NOT NULL REFERENCES organizations(id),
   runtime_instance_id text NOT NULL CHECK (runtime_instance_id=btrim(runtime_instance_id) AND length(runtime_instance_id)>0 AND octet_length(runtime_instance_id)<=1024),
@@ -66,7 +58,6 @@ CREATE TABLE trader_recorded_acquisition_lease_history_v1 (
   ) IS TRUE)
 );
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TABLE trader_recorded_acquisition_lease_heads_v1 (
   organization_id uuid PRIMARY KEY REFERENCES organizations(id),
   runtime_instance_id text NOT NULL,
@@ -78,7 +69,6 @@ CREATE TABLE trader_recorded_acquisition_lease_heads_v1 (
     REFERENCES trader_recorded_acquisition_lease_history_v1(organization_id,runtime_instance_id,lease_epoch,content_digest,valid_until_utc)
 );
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TABLE trader_saved_research_lease_history_v1 (
   organization_id uuid NOT NULL REFERENCES organizations(id),
   runtime_instance_id text NOT NULL CHECK (runtime_instance_id=btrim(runtime_instance_id) AND length(runtime_instance_id)>0 AND octet_length(runtime_instance_id)<=1024),
@@ -113,7 +103,6 @@ CREATE TABLE trader_saved_research_lease_history_v1 (
   ) IS TRUE)
 );
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TABLE trader_saved_research_lease_heads_v1 (
   organization_id uuid PRIMARY KEY REFERENCES organizations(id),
   runtime_instance_id text NOT NULL,
@@ -125,7 +114,6 @@ CREATE TABLE trader_saved_research_lease_heads_v1 (
     REFERENCES trader_saved_research_lease_history_v1(organization_id,runtime_instance_id,lease_epoch,content_digest,valid_until_utc)
 );
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TABLE trader_runtime_ownership_refs_v1 (
   ownership_domain text NOT NULL CHECK (ownership_domain IN ('CAPITAL_LEGACY_V2','RECORDED_ACQUISITION_V1','SAVED_RESEARCH_V1')),
   organization_id uuid NOT NULL REFERENCES organizations(id), runtime_instance_id text NOT NULL,
@@ -149,16 +137,12 @@ CREATE TABLE trader_runtime_ownership_refs_v1 (
     REFERENCES trader_saved_research_lease_history_v1(organization_id,runtime_instance_id,lease_epoch,content_digest)
 );
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_ref_capital_idx ON trader_runtime_ownership_refs_v1 (organization_id,runtime_instance_id,lease_epoch,capital_parent_digest) WHERE capital_parent_digest IS NOT NULL;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_ref_acquisition_idx ON trader_runtime_ownership_refs_v1 (organization_id,runtime_instance_id,lease_epoch,acquisition_parent_digest) WHERE acquisition_parent_digest IS NOT NULL;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_ref_research_idx ON trader_runtime_ownership_refs_v1 (organization_id,runtime_instance_id,lease_epoch,research_parent_digest) WHERE research_parent_digest IS NOT NULL;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE FUNCTION public.trader_noncapital_ownership_reference_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
 BEGIN
   IF TG_TABLE_NAME='trader_runtime_control_lease_epoch_history_v2' THEN
@@ -174,21 +158,16 @@ BEGIN
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 INSERT INTO trader_runtime_ownership_refs_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest,capital_parent_digest)
 SELECT 'CAPITAL_LEGACY_V2',organization_id,runtime_instance_id,lease_epoch,content_digest,content_digest
 FROM trader_runtime_control_lease_epoch_history_v2;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TRIGGER noncapital_fixed_reference AFTER INSERT ON trader_runtime_control_lease_epoch_history_v2 FOR EACH ROW EXECUTE FUNCTION public.trader_noncapital_ownership_reference_v1();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TRIGGER noncapital_fixed_reference AFTER INSERT ON trader_recorded_acquisition_lease_history_v1 FOR EACH ROW EXECUTE FUNCTION public.trader_noncapital_ownership_reference_v1();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TRIGGER noncapital_fixed_reference AFTER INSERT ON trader_saved_research_lease_history_v1 FOR EACH ROW EXECUTE FUNCTION public.trader_noncapital_ownership_reference_v1();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE FUNCTION public.noncapital_acq_history_guard_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
 DECLARE prior public.trader_recorded_acquisition_lease_heads_v1%ROWTYPE; has_prior boolean; observed timestamptz;
 BEGIN
@@ -203,7 +182,6 @@ BEGIN
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE FUNCTION public.noncapital_acq_head_guard_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
 DECLARE lease public.trader_recorded_acquisition_lease_history_v1%ROWTYPE; observed timestamptz;
 BEGIN
@@ -226,7 +204,6 @@ BEGIN
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE FUNCTION public.noncapital_acq_commit_fence_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
 DECLARE current_head public.trader_recorded_acquisition_lease_heads_v1%ROWTYPE;
 BEGIN
@@ -239,19 +216,14 @@ BEGIN
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TRIGGER noncapital_history_claim BEFORE INSERT ON trader_recorded_acquisition_lease_history_v1 FOR EACH ROW EXECUTE FUNCTION public.noncapital_acq_history_guard_v1();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TRIGGER noncapital_head_change BEFORE INSERT OR UPDATE OR DELETE ON trader_recorded_acquisition_lease_heads_v1 FOR EACH ROW EXECUTE FUNCTION public.noncapital_acq_head_guard_v1();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE CONSTRAINT TRIGGER noncapital_lease_commit_fence AFTER INSERT OR UPDATE ON trader_recorded_acquisition_lease_history_v1 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.noncapital_acq_commit_fence_v1();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE CONSTRAINT TRIGGER noncapital_lease_commit_fence AFTER INSERT OR UPDATE ON trader_recorded_acquisition_lease_heads_v1 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.noncapital_acq_commit_fence_v1();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE FUNCTION public.noncapital_saved_history_guard_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
 DECLARE prior public.trader_saved_research_lease_heads_v1%ROWTYPE; has_prior boolean; observed timestamptz;
 BEGIN
@@ -266,7 +238,6 @@ BEGIN
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE FUNCTION public.noncapital_saved_head_guard_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
 DECLARE lease public.trader_saved_research_lease_history_v1%ROWTYPE; observed timestamptz;
 BEGIN
@@ -289,7 +260,6 @@ BEGIN
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE FUNCTION public.noncapital_saved_commit_fence_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
 DECLARE current_head public.trader_saved_research_lease_heads_v1%ROWTYPE;
 BEGIN
@@ -302,73 +272,50 @@ BEGIN
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TRIGGER noncapital_history_claim BEFORE INSERT ON trader_saved_research_lease_history_v1 FOR EACH ROW EXECUTE FUNCTION public.noncapital_saved_history_guard_v1();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TRIGGER noncapital_head_change BEFORE INSERT OR UPDATE OR DELETE ON trader_saved_research_lease_heads_v1 FOR EACH ROW EXECUTE FUNCTION public.noncapital_saved_head_guard_v1();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE CONSTRAINT TRIGGER noncapital_lease_commit_fence AFTER INSERT OR UPDATE ON trader_saved_research_lease_history_v1 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.noncapital_saved_commit_fence_v1();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE CONSTRAINT TRIGGER noncapital_lease_commit_fence AFTER INSERT OR UPDATE ON trader_saved_research_lease_heads_v1 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.noncapital_saved_commit_fence_v1();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TRIGGER noncapital_append_only BEFORE UPDATE OR DELETE ON trader_recorded_acquisition_lease_history_v1 FOR EACH ROW EXECUTE FUNCTION trader_runtime_authority_v2_append_only_guard();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TRIGGER noncapital_append_only BEFORE UPDATE OR DELETE ON trader_saved_research_lease_history_v1 FOR EACH ROW EXECUTE FUNCTION trader_runtime_authority_v2_append_only_guard();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TRIGGER noncapital_append_only BEFORE UPDATE OR DELETE ON trader_runtime_ownership_refs_v1 FOR EACH ROW EXECUTE FUNCTION trader_runtime_authority_v2_append_only_guard();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_recorded_acquisition_lease_history_v1 ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE POLICY noncapital_browser_deny ON trader_recorded_acquisition_lease_history_v1 FOR ALL TO authenticated,anon USING(false) WITH CHECK(false);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 REVOKE ALL ON public.trader_recorded_acquisition_lease_history_v1 FROM PUBLIC, anon, authenticated;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_recorded_acquisition_lease_heads_v1 ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE POLICY noncapital_browser_deny ON trader_recorded_acquisition_lease_heads_v1 FOR ALL TO authenticated,anon USING(false) WITH CHECK(false);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 REVOKE ALL ON public.trader_recorded_acquisition_lease_heads_v1 FROM PUBLIC, anon, authenticated;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_saved_research_lease_history_v1 ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE POLICY noncapital_browser_deny ON trader_saved_research_lease_history_v1 FOR ALL TO authenticated,anon USING(false) WITH CHECK(false);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 REVOKE ALL ON public.trader_saved_research_lease_history_v1 FROM PUBLIC, anon, authenticated;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_saved_research_lease_heads_v1 ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE POLICY noncapital_browser_deny ON trader_saved_research_lease_heads_v1 FOR ALL TO authenticated,anon USING(false) WITH CHECK(false);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 REVOKE ALL ON public.trader_saved_research_lease_heads_v1 FROM PUBLIC, anon, authenticated;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_runtime_ownership_refs_v1 ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE POLICY noncapital_browser_deny ON trader_runtime_ownership_refs_v1 FOR ALL TO authenticated,anon USING(false) WITH CHECK(false);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 REVOKE ALL ON public.trader_runtime_ownership_refs_v1 FROM PUBLIC, anon, authenticated;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TABLE trader_runtime_legacy_holder_divergence_v1 (
   divergence_id text PRIMARY KEY CHECK (divergence_id ~ '^[0-9a-f]{64}$'),
   receipt_table text NOT NULL CHECK (receipt_table IN ('trader_runtime_noncapital_cycles_v2','trader_recorded_analysis_sessions_v1','trader_recorded_analysis_packets_v1','trader_recorded_analysis_companions_v1','trader_research_understanding_assignments_v1','trader_research_understanding_completions_v1','trader_research_application_assignments_v1','trader_research_applications_v1','trader_research_application_availability_v1','trader_research_application_consumptions_v1')),
@@ -386,7 +333,6 @@ CREATE TABLE trader_runtime_legacy_holder_divergence_v1 (
   CONSTRAINT legacy_holder_divergence_receipt UNIQUE (receipt_table,organization_id,receipt_key)
 );
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 DO $dee1147$
 DECLARE spec record; remaining int;
 BEGIN
@@ -424,185 +370,125 @@ BEGIN
   IF remaining <> 0 THEN RAISE EXCEPTION 'NONCAPITAL_HOLDER_SUBSTITUTION_REFUSED'; END IF;
 END $dee1147$;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE FUNCTION public.trader_legacy_holder_divergence_closed_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
 BEGIN RAISE EXCEPTION 'LEGACY_HOLDER_DIVERGENCE_CLOSED'; END $$;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TRIGGER legacy_holder_divergence_closed BEFORE INSERT ON trader_runtime_legacy_holder_divergence_v1 FOR EACH ROW EXECUTE FUNCTION public.trader_legacy_holder_divergence_closed_v1();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE TRIGGER legacy_holder_divergence_append_only BEFORE UPDATE OR DELETE ON trader_runtime_legacy_holder_divergence_v1 FOR EACH ROW EXECUTE FUNCTION trader_runtime_authority_v2_append_only_guard();
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_runtime_legacy_holder_divergence_v1 ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE POLICY legacy_holder_divergence_browser_deny ON trader_runtime_legacy_holder_divergence_v1 FOR ALL TO authenticated,anon USING(false) WITH CHECK(false);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 REVOKE ALL ON public.trader_runtime_legacy_holder_divergence_v1 FROM PUBLIC, anon, authenticated;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_runtime_noncapital_cycles_v2 ADD COLUMN ownership_domain text NOT NULL DEFAULT 'CAPITAL_LEGACY_V2', ADD CONSTRAINT noncapital_receipt_domain_0 CHECK (ownership_domain IN ('CAPITAL_LEGACY_V2','RECORDED_ACQUISITION_V1'));
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_runtime_noncapital_cycles_v2 ADD CONSTRAINT noncapital_receipt_holder_0 FOREIGN KEY (ownership_domain,organization_id,lease_content_digest) REFERENCES trader_runtime_ownership_refs_v1(ownership_domain,organization_id,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_receipt_holder_0_idx ON trader_runtime_noncapital_cycles_v2(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_recorded_analysis_sessions_v1 ADD COLUMN ownership_domain text NOT NULL DEFAULT 'CAPITAL_LEGACY_V2', ADD CONSTRAINT noncapital_receipt_domain_1 CHECK (ownership_domain IN ('CAPITAL_LEGACY_V2','RECORDED_ACQUISITION_V1'));
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_recorded_analysis_sessions_v1 ADD CONSTRAINT noncapital_receipt_holder_1 FOREIGN KEY (ownership_domain,organization_id,lease_content_digest) REFERENCES trader_runtime_ownership_refs_v1(ownership_domain,organization_id,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_receipt_holder_1_idx ON trader_recorded_analysis_sessions_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_recorded_analysis_packets_v1 ADD COLUMN ownership_domain text NOT NULL DEFAULT 'CAPITAL_LEGACY_V2', ADD CONSTRAINT noncapital_receipt_domain_2 CHECK (ownership_domain IN ('CAPITAL_LEGACY_V2','RECORDED_ACQUISITION_V1'));
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_recorded_analysis_packets_v1 ADD CONSTRAINT noncapital_receipt_holder_2 FOREIGN KEY (ownership_domain,organization_id,lease_content_digest) REFERENCES trader_runtime_ownership_refs_v1(ownership_domain,organization_id,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_receipt_holder_2_idx ON trader_recorded_analysis_packets_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_recorded_analysis_companions_v1 ADD COLUMN ownership_domain text NOT NULL DEFAULT 'CAPITAL_LEGACY_V2', ADD CONSTRAINT noncapital_receipt_domain_3 CHECK (ownership_domain IN ('CAPITAL_LEGACY_V2','RECORDED_ACQUISITION_V1'));
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_recorded_analysis_companions_v1 ADD CONSTRAINT noncapital_receipt_holder_3 FOREIGN KEY (ownership_domain,organization_id,lease_content_digest) REFERENCES trader_runtime_ownership_refs_v1(ownership_domain,organization_id,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_receipt_holder_3_idx ON trader_recorded_analysis_companions_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_understanding_assignments_v1 ADD COLUMN ownership_domain text NOT NULL DEFAULT 'CAPITAL_LEGACY_V2', ADD CONSTRAINT noncapital_receipt_domain_4 CHECK (ownership_domain IN ('CAPITAL_LEGACY_V2','SAVED_RESEARCH_V1'));
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_understanding_assignments_v1 ADD CONSTRAINT noncapital_receipt_holder_4 FOREIGN KEY (ownership_domain,organization_id,lease_content_digest) REFERENCES trader_runtime_ownership_refs_v1(ownership_domain,organization_id,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_receipt_holder_4_idx ON trader_research_understanding_assignments_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_understanding_completions_v1 ADD COLUMN ownership_domain text NOT NULL DEFAULT 'CAPITAL_LEGACY_V2', ADD CONSTRAINT noncapital_receipt_domain_5 CHECK (ownership_domain IN ('CAPITAL_LEGACY_V2','SAVED_RESEARCH_V1'));
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_understanding_completions_v1 ADD CONSTRAINT noncapital_receipt_holder_5 FOREIGN KEY (ownership_domain,organization_id,lease_content_digest) REFERENCES trader_runtime_ownership_refs_v1(ownership_domain,organization_id,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_receipt_holder_5_idx ON trader_research_understanding_completions_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_application_assignments_v1 ADD COLUMN ownership_domain text NOT NULL DEFAULT 'CAPITAL_LEGACY_V2', ADD CONSTRAINT noncapital_receipt_domain_6 CHECK (ownership_domain IN ('CAPITAL_LEGACY_V2','SAVED_RESEARCH_V1'));
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_application_assignments_v1 ADD CONSTRAINT noncapital_receipt_holder_6 FOREIGN KEY (ownership_domain,organization_id,lease_content_digest) REFERENCES trader_runtime_ownership_refs_v1(ownership_domain,organization_id,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_receipt_holder_6_idx ON trader_research_application_assignments_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_applications_v1 ADD COLUMN ownership_domain text NOT NULL DEFAULT 'CAPITAL_LEGACY_V2', ADD CONSTRAINT noncapital_receipt_domain_7 CHECK (ownership_domain IN ('CAPITAL_LEGACY_V2','SAVED_RESEARCH_V1'));
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_applications_v1 ADD CONSTRAINT noncapital_receipt_holder_7 FOREIGN KEY (ownership_domain,organization_id,lease_content_digest) REFERENCES trader_runtime_ownership_refs_v1(ownership_domain,organization_id,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_receipt_holder_7_idx ON trader_research_applications_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_application_availability_v1 ADD COLUMN ownership_domain text NOT NULL DEFAULT 'CAPITAL_LEGACY_V2', ADD CONSTRAINT noncapital_receipt_domain_8 CHECK (ownership_domain IN ('CAPITAL_LEGACY_V2','SAVED_RESEARCH_V1'));
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_application_availability_v1 ADD CONSTRAINT noncapital_receipt_holder_8 FOREIGN KEY (ownership_domain,organization_id,lease_content_digest) REFERENCES trader_runtime_ownership_refs_v1(ownership_domain,organization_id,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_receipt_holder_8_idx ON trader_research_application_availability_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_application_consumptions_v1 ADD COLUMN ownership_domain text NOT NULL DEFAULT 'CAPITAL_LEGACY_V2', ADD CONSTRAINT noncapital_receipt_domain_9 CHECK (ownership_domain IN ('CAPITAL_LEGACY_V2','SAVED_RESEARCH_V1'));
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_application_consumptions_v1 ADD CONSTRAINT noncapital_receipt_holder_9 FOREIGN KEY (ownership_domain,organization_id,lease_content_digest) REFERENCES trader_runtime_ownership_refs_v1(ownership_domain,organization_id,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_receipt_holder_9_idx ON trader_research_application_consumptions_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_recorded_analysis_sessions_v1 ADD CONSTRAINT noncapital_affinity_parent_0 UNIQUE (organization_id,session_id,content_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_recorded_analysis_packets_v1 ADD CONSTRAINT noncapital_affinity_0 FOREIGN KEY (organization_id,session_id,config_digest,ownership_domain) REFERENCES trader_recorded_analysis_sessions_v1(organization_id,session_id,content_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_affinity_0_idx ON trader_recorded_analysis_packets_v1(organization_id,session_id,config_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_recorded_analysis_packets_v1 ADD CONSTRAINT noncapital_affinity_parent_1 UNIQUE (organization_id,session_id,sequence,content_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_recorded_analysis_companions_v1 ADD CONSTRAINT noncapital_affinity_1 FOREIGN KEY (organization_id,session_id,sequence,packet_digest,ownership_domain) REFERENCES trader_recorded_analysis_packets_v1(organization_id,session_id,sequence,content_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_affinity_1_idx ON trader_recorded_analysis_companions_v1(organization_id,session_id,sequence,packet_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_runtime_noncapital_cycles_v2 ADD CONSTRAINT noncapital_affinity_parent_2 UNIQUE (organization_id,account_id,symbol,bar_interval,pit_anchor,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_recorded_analysis_companions_v1 ADD CONSTRAINT noncapital_affinity_2 FOREIGN KEY (organization_id,account_id,symbol,bar_interval,scheduled_bar_close_time,ownership_domain) REFERENCES trader_runtime_noncapital_cycles_v2(organization_id,account_id,symbol,bar_interval,pit_anchor,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_affinity_2_idx ON trader_recorded_analysis_companions_v1(organization_id,account_id,symbol,bar_interval,scheduled_bar_close_time,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_understanding_assignments_v1 ADD CONSTRAINT noncapital_affinity_parent_3 UNIQUE (organization_id,session_id,content_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_understanding_completions_v1 ADD CONSTRAINT noncapital_affinity_3 FOREIGN KEY (organization_id,session_id,assignment_digest,ownership_domain) REFERENCES trader_research_understanding_assignments_v1(organization_id,session_id,content_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_affinity_3_idx ON trader_research_understanding_completions_v1(organization_id,session_id,assignment_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_application_assignments_v1 ADD CONSTRAINT noncapital_affinity_parent_4 UNIQUE (organization_id,assignment_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_applications_v1 ADD CONSTRAINT noncapital_affinity_4 FOREIGN KEY (organization_id,assignment_digest,ownership_domain) REFERENCES trader_research_application_assignments_v1(organization_id,assignment_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_affinity_4_idx ON trader_research_applications_v1(organization_id,assignment_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_applications_v1 ADD CONSTRAINT noncapital_affinity_parent_5 UNIQUE (organization_id,application_id,content_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_application_availability_v1 ADD CONSTRAINT noncapital_affinity_5 FOREIGN KEY (organization_id,application_id,application_digest,ownership_domain) REFERENCES trader_research_applications_v1(organization_id,application_id,content_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_affinity_5_idx ON trader_research_application_availability_v1(organization_id,application_id,application_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_application_consumptions_v1 ADD CONSTRAINT noncapital_affinity_6 FOREIGN KEY (organization_id,application_id,application_digest,ownership_domain) REFERENCES trader_research_applications_v1(organization_id,application_id,content_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_affinity_6_idx ON trader_research_application_consumptions_v1(organization_id,application_id,application_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_application_availability_v1 ADD CONSTRAINT noncapital_affinity_parent_7 UNIQUE (organization_id,application_id,content_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_application_consumptions_v1 ADD CONSTRAINT noncapital_affinity_7 FOREIGN KEY (organization_id,application_id,availability_digest,ownership_domain) REFERENCES trader_research_application_availability_v1(organization_id,application_id,content_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE INDEX noncapital_affinity_7_idx ON trader_research_application_consumptions_v1(organization_id,application_id,availability_digest,ownership_domain);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_application_assignments_v1 ADD CONSTRAINT noncapital_command_profile_0 CHECK (
   ownership_domain <> 'SAVED_RESEARCH_V1' OR (
     jsonb_typeof(body_json::jsonb->'commandManifestDigest')='string'
@@ -610,7 +496,6 @@ ALTER TABLE trader_research_application_assignments_v1 ADD CONSTRAINT noncapital
     AND (body_json::jsonb->>'commandManifestDigest') <> '5070c0aa8e42824892dd2915c5d70b21cac4e9a22aec5947a7255d62a3d8faf2'
   ) IS TRUE);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_applications_v1 ADD CONSTRAINT noncapital_command_profile_1 CHECK (
   ownership_domain <> 'SAVED_RESEARCH_V1' OR (
     jsonb_typeof(body_json::jsonb->'commandManifestDigest')='string'
@@ -618,7 +503,6 @@ ALTER TABLE trader_research_applications_v1 ADD CONSTRAINT noncapital_command_pr
     AND (body_json::jsonb->>'commandManifestDigest') <> '5070c0aa8e42824892dd2915c5d70b21cac4e9a22aec5947a7255d62a3d8faf2'
   ) IS TRUE);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_application_availability_v1 ADD CONSTRAINT noncapital_command_profile_2 CHECK (
   ownership_domain <> 'SAVED_RESEARCH_V1' OR (
     jsonb_typeof(body_json::jsonb->'commandManifestDigest')='string'
@@ -626,7 +510,6 @@ ALTER TABLE trader_research_application_availability_v1 ADD CONSTRAINT noncapita
     AND (body_json::jsonb->>'commandManifestDigest') <> '5070c0aa8e42824892dd2915c5d70b21cac4e9a22aec5947a7255d62a3d8faf2'
   ) IS TRUE);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 ALTER TABLE trader_research_application_consumptions_v1 ADD CONSTRAINT noncapital_command_profile_3 CHECK (
   ownership_domain <> 'SAVED_RESEARCH_V1' OR (
     jsonb_typeof(body_json::jsonb->'commandManifestDigest')='string'
@@ -634,7 +517,6 @@ ALTER TABLE trader_research_application_consumptions_v1 ADD CONSTRAINT noncapita
     AND (body_json::jsonb->>'commandManifestDigest') <> '5070c0aa8e42824892dd2915c5d70b21cac4e9a22aec5947a7255d62a3d8faf2'
   ) IS TRUE);
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 DO $$
 DECLARE target text; matched text[];
 BEGIN
@@ -649,7 +531,6 @@ BEGIN
   END LOOP;
 END $$;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE OR REPLACE FUNCTION public.trader_runtime_noncapital_cycles_v2_fence() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
 DECLARE owner record;
 BEGIN
@@ -670,7 +551,6 @@ BEGIN
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-SELECT set_config('lock_timeout', '5s', true), set_config('statement_timeout', '120s', true);
 CREATE OR REPLACE FUNCTION public.trader_recorded_analysis_v1_fence() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
 DECLARE owner record;
 BEGIN
@@ -693,6 +573,3 @@ BEGIN
   THEN RAISE EXCEPTION 'NONCAPITAL_RECEIPT_HOLDER_REFUSED'; END IF;
   RETURN NEW;
 END $$;
---> statement-breakpoint
-
-SELECT set_config('lock_timeout', '0', true), set_config('statement_timeout', '0', true);
