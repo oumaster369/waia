@@ -109,6 +109,8 @@ export function calculateRiskAdmissionV2(input: {
 
 /** Replay of an already issued allowance. It never mints a second row.
  *  Present permission is returned only while the same current-authority checks still pass.
+ *  outstandingReservationNotional must exclude this allowance's own reserved notional:
+ *  that amount is already inside the account total.
  */
 export function assessIssuedAllowanceReplayV1(input: {
   killState: string;
