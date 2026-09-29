@@ -28,8 +28,10 @@ import type { PaperCycleDeps, PaperCycleResult } from "@/lib/trader/paper/paper-
 import type { PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
 import { assertDee540BlindTailAuthorized } from "@/lib/trader/research/dee-540-blind-tail-gate";
 import {
-  M9_BLIND_AUTHORIZATION_SIDECAR_DIGEST_NONE,
-} from "@/lib/trader/research/m9-operator-authorization";
+  consumeDee540BlindTailAuthorization,
+  defaultDee540ConsumptionPath,
+} from "@/lib/trader/research/dee-540-authorization-store";
+import { M9_BLIND_AUTHORIZATION_SIDECAR_DIGEST_NONE } from "@/lib/trader/research/m9-operator-authorization";
 import {
   buildResearchEvaluationPlan,
   type ResearchEvaluationPlanV1,
@@ -80,7 +82,10 @@ import {
 } from "@/lib/trader/research/strategy-candidate-repository-postgres";
 import { validateResearchEvidenceProvenancePostgres } from "@/lib/trader/research/validate-research-evidence-provenance";
 import { assertResearchPipelineRegimeCoverage } from "@/lib/trader/research/regime-coverage";
-import { accountWalkForwardFromSingleEvaluation } from "@/lib/trader/research/walk-forward-engine";
+import {
+  accountWalkForwardFromFittedLookback,
+  metricsFromFittedLookback,
+} from "@/lib/trader/research/walk-forward-engine";
 import type { HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
 import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
 import type { IntelligenceCycleBundleRepository } from "@/lib/trader/intelligence/records/repository-adapters";
@@ -292,16 +297,20 @@ export async function runResearchPipelinePostgres(
     validationBars: splits.validation,
   });
 
-  // 2. DEE-540 blind-tail gate, then content-bound digest match (DEE-398 / ADR-0022).
-  // Runs immediately after sealing and before dataset persistence or any blind backtest.
-  // Missing authorization refuses the tail. The official 2025 holdout is not read.
+  // 2. DEE-540 verifies the grant before dataset persistence. Consumption is
+  // one-shot and happens immediately before the blind backtest, after the
+  // regime check, so a coverage failure cannot be used to retune on the tail.
+  // skipBlindTail does not self-authorize and does not read the holdout.
   const pipelineBacktest = input.pipelineBacktest;
-  const blindGrant = assertDee540BlindTailAuthorized({
-    operatorBlindAuthorization: pipelineBacktest?.operatorBlindAuthorization,
-    blindAuthorizationScope: pipelineBacktest?.blindAuthorizationScope,
-    officialHoldoutAccessRequested: pipelineBacktest?.officialHoldoutAccessRequested,
-  });
-  if (blindGrant.blindAuthorizationScope.blindDigest !== sealed.blindDigest) {
+  const skipBlindTail = pipelineBacktest?.skipBlindTail === true;
+  const blindGrant = skipBlindTail
+    ? null
+    : assertDee540BlindTailAuthorized({
+        operatorBlindAuthorization: pipelineBacktest?.operatorBlindAuthorization,
+        blindAuthorizationScope: pipelineBacktest?.blindAuthorizationScope,
+        officialHoldoutAccessRequested: pipelineBacktest?.officialHoldoutAccessRequested,
+      });
+  if (blindGrant && blindGrant.blindAuthorizationScope.blindDigest !== sealed.blindDigest) {
     throw new ResearchOrchestratorError(
       "M9_BLIND_AUTHORIZATION_CONTENT_MISMATCH",
       `authorized blindDigest (${blindGrant.blindAuthorizationScope.blindDigest.slice(0, 12)}…) does not match the ` +
@@ -313,7 +322,10 @@ export async function runResearchPipelinePostgres(
   const runtimeSidecarDigest = pipelineBacktest?.providerSidecar
     ? computeSidecarContentDigest(pipelineBacktest.providerSidecar)
     : M9_BLIND_AUTHORIZATION_SIDECAR_DIGEST_NONE;
-  if (runtimeSidecarDigest !== blindGrant.blindAuthorizationScope.sidecarContentDigest) {
+  if (
+    blindGrant &&
+    runtimeSidecarDigest !== blindGrant.blindAuthorizationScope.sidecarContentDigest
+  ) {
     throw new ResearchOrchestratorError(
       "M9_BLIND_AUTHORIZATION_CONTENT_MISMATCH",
       "authorized sidecarContentDigest does not match the runtime provider sidecar content " +
@@ -346,6 +358,8 @@ export async function runResearchPipelinePostgres(
       ...parseResearchParams(input.paramsJson),
       lookbackBars: String(parameterFit.fit.selectedLookback),
       researchParameterFit: "train_only",
+      evidenceBacktestUsesTrainFit: false,
+      trainFitAppliedTo: "walk_forward_window_slices",
       feeBps: parameterFit.fit.feeBps,
       slippageBps: parameterFit.fit.slippageBps,
     }),
@@ -434,13 +448,13 @@ export async function runResearchPipelinePostgres(
 
   await updateStrategyCandidateStatusPostgres(ex, input.context, candidate.id, "backtested");
 
-  const walkForward = await accountWalkForwardFromSingleEvaluation({
+  const walkForward = await accountWalkForwardFromFittedLookback({
     context: input.context,
     candidate: { ...candidate, status: "backtested" },
     trainBars: splits.train,
     validationBars: splits.validation,
     oosBarCount,
-    singleEvaluation: validationMetrics,
+    lookback: parameterFit.fit.selectedLookback,
     repository: {
       insertWalkForwardWindow: (context, row) => insertWalkForwardWindowPostgres(ex, context, row),
       updateStrategyCandidateStatus: (context, candidateId, status) =>
@@ -449,54 +463,15 @@ export async function runResearchPipelinePostgres(
     newId,
   });
 
-  // Blind gate: single-use blind-holdout lockout (`markStrategyCandidateBlindUsedPostgres` /
-  // `StrategyCandidateBlindLockoutError`), independent of and downstream from the
-  // content-bound operator authorization verification already enforced in step 2 above.
-  const blind = await runBlindHoldoutValidation({
-    context: input.context,
-    candidate: { ...candidate, status: "walk_forward_validated", blindUsed: false },
-    datasetId: dataset.id,
-    blindBars: splits.blind,
-    expectedBlindDigest: dataset.blindDigest,
-    runBacktest: async ({ bars, strategyId, strategyVersion }) => {
-      const repo = await resolveOrderRepository(input.createOrderRepository);
-      return runIsolatedResearchBacktest(
-        ex,
-        buildIsolatedBacktestInput(input, {
-          bars,
-          datasetId: dataset.id,
-          runId: backtestRunId,
-          split: "blind",
-          costModel,
-          orderRepository: repo,
-          accountKey,
-          defaultQuantity,
-          newId,
-          cycleIdPrefix: buildResearchBlindCycleIdPrefix(backtestRunId),
-        }),
-      );
-    },
-    repository: {
-      getBlindValidationResultForCandidate: (context, candidateId) =>
-        getBlindValidationResultForCandidatePostgres(ex, context, candidateId),
-      insertBlindValidationResult: (context, row) =>
-        insertBlindValidationResultPostgres(ex, context, row),
-      markStrategyCandidateBlindUsed: (context, candidateId) =>
-        markStrategyCandidateBlindUsedPostgres(ex, context, candidateId),
-      updateStrategyCandidateStatus: (context, candidateId, status) =>
-        updateStrategyCandidateStatusPostgres(ex, context, candidateId, status),
-    },
-    newId,
-  });
+  const emptyBlindMetrics = metricsFromFittedLookback([], parameterFit.fit.selectedLookback);
 
   if (requireMultiRegimeCoverage) {
-    const pipelineMetrics = [
+    const preBlindMetrics = [
       validationMetrics,
       ...walkForward.windows.map((window) => window.metrics),
-      blind.metrics,
     ];
     try {
-      assertResearchPipelineRegimeCoverage(pipelineMetrics);
+      assertResearchPipelineRegimeCoverage(preBlindMetrics);
     } catch (error) {
       if (error instanceof MultiRegimeCoverageError) {
         throw new ResearchPipelineRegimeFailureError(
@@ -507,12 +482,12 @@ export async function runResearchPipelinePostgres(
             candidateId: candidate.id,
             datasetId: dataset.id,
             backtestRunId,
-            blindValidationResultId: blind.result.id,
-            blindConsumed: true,
+            blindValidationResultId: "",
+            blindConsumed: false,
             walkForwardWindowCount: walkForward.windows.length,
             validationMetrics,
             walkForwardMetrics: walkForward.windows.map((window) => window.metrics),
-            blindMetrics: blind.metrics,
+            blindMetrics: emptyBlindMetrics,
           },
           error,
         );
@@ -520,6 +495,55 @@ export async function runResearchPipelinePostgres(
       throw error;
     }
   }
+
+  const blind = skipBlindTail
+    ? {
+        result: { id: "blind-tail-skipped" },
+        metrics: emptyBlindMetrics,
+      }
+    : await (async () => {
+        consumeDee540BlindTailAuthorization({
+          authorizationDigest: blindGrant!.operatorBlindAuthorization,
+          storePath:
+            pipelineBacktest?.blindAuthorizationConsumptionPath ?? defaultDee540ConsumptionPath(),
+        });
+        return runBlindHoldoutValidation({
+          context: input.context,
+          candidate: { ...candidate, status: "walk_forward_validated", blindUsed: false },
+          datasetId: dataset.id,
+          blindBars: splits.blind,
+          expectedBlindDigest: dataset.blindDigest,
+          runBacktest: async ({ bars, strategyId, strategyVersion }) => {
+            const repo = await resolveOrderRepository(input.createOrderRepository);
+            return runIsolatedResearchBacktest(
+              ex,
+              buildIsolatedBacktestInput(input, {
+                bars,
+                datasetId: dataset.id,
+                runId: backtestRunId,
+                split: "blind",
+                costModel,
+                orderRepository: repo,
+                accountKey,
+                defaultQuantity,
+                newId,
+                cycleIdPrefix: buildResearchBlindCycleIdPrefix(backtestRunId),
+              }),
+            );
+          },
+          repository: {
+            getBlindValidationResultForCandidate: (context, candidateId) =>
+              getBlindValidationResultForCandidatePostgres(ex, context, candidateId),
+            insertBlindValidationResult: (context, row) =>
+              insertBlindValidationResultPostgres(ex, context, row),
+            markStrategyCandidateBlindUsed: (context, candidateId) =>
+              markStrategyCandidateBlindUsedPostgres(ex, context, candidateId),
+            updateStrategyCandidateStatus: (context, candidateId, status) =>
+              updateStrategyCandidateStatusPostgres(ex, context, candidateId, status),
+          },
+          newId,
+        });
+      })();
 
   const evidenceDocument = buildResearchEvidenceDocument({
     organizationId: input.context.organizationId,

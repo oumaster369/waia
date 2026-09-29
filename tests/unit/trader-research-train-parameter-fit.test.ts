@@ -13,7 +13,10 @@ import {
   fitResearchParametersOnTrain,
   scoreLookbackOnBars,
 } from "@/lib/trader/research/research-train-parameter-fit";
-import { accountWalkForwardFromSingleEvaluation } from "@/lib/trader/research/walk-forward-engine";
+import {
+  accountWalkForwardFromFittedLookback,
+  metricsFromFittedLookback,
+} from "@/lib/trader/research/walk-forward-engine";
 import type {
   ResearchValidationMetrics,
   StrategyCandidate,
@@ -174,23 +177,29 @@ describe("research train parameter fit", () => {
       updatedAt: new Date("2026-03-02T00:00:00.000Z"),
     };
 
-    const result = await accountWalkForwardFromSingleEvaluation({
+    const result = await accountWalkForwardFromFittedLookback({
       context: { organizationId: "org-fit" },
       candidate,
       trainBars: train,
       validationBars: validation,
       oosBarCount: 2,
-      singleEvaluation,
+      lookback: 5,
       repository: { insertWalkForwardWindow, updateStrategyCandidateStatus },
       newId: () => "window-id",
     });
 
     expect(result.windows).toHaveLength(2);
-    expect(result.windows[0]?.metrics).toEqual(singleEvaluation);
-    expect(result.windows[1]?.metrics).toMatchObject({
+    expect(result.windows[0]?.metrics).not.toEqual(singleEvaluation);
+    expect(result.windows[0]?.metrics).toEqual(
+      metricsFromFittedLookback(validation.slice(0, 2), 5),
+    );
+    expect(result.windows[1]?.metrics).toEqual(
+      metricsFromFittedLookback(validation.slice(2, 4), 5),
+    );
+    expect(result.windows[0]?.outOfSampleDigest).not.toBe(result.windows[1]?.outOfSampleDigest);
+    expect(result.windows[0]?.metrics).toMatchObject({
       tradeCount: 0,
-      periodRealizedPnl: "0",
-      byRegime: [],
+      periodRealizedPnl: "0.00000000",
     });
     expect(insertWalkForwardWindow).toHaveBeenCalledTimes(2);
     expect(updateStrategyCandidateStatus).toHaveBeenCalledWith(
@@ -204,7 +213,12 @@ describe("research train parameter fit", () => {
       "utf8",
     );
     expect(orchestrator).not.toContain("runWalkForwardValidation");
-    expect(orchestrator).toContain("accountWalkForwardFromSingleEvaluation");
+    expect(orchestrator).toContain("accountWalkForwardFromFittedLookback");
+    expect(orchestrator).toContain("evidenceBacktestUsesTrainFit: false");
+    expect(orchestrator).toContain('trainFitAppliedTo: "walk_forward_window_slices"');
+    expect(orchestrator.indexOf("assertResearchPipelineRegimeCoverage(")).toBeLessThan(
+      orchestrator.indexOf("consumeDee540BlindTailAuthorization({"),
+    );
     const validationCalls = orchestrator.match(/runIsolatedResearchBacktest\(/g) ?? [];
     expect(validationCalls).toHaveLength(2);
   });

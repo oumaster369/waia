@@ -60,7 +60,13 @@ export function assertDee540BlindTailAuthorized(input: {
 export function resolveResearchPipelineCliBlindTail(
   flags: Map<string, string>,
 ): Dee540BlindTailGrant {
-  if (flags.get("official-holdout") === "true" || flags.get("partition") === "blind-holdout") {
+  const officialHoldout = flags.get("official-holdout");
+  if (
+    officialHoldout === "true" ||
+    officialHoldout === "1" ||
+    officialHoldout === "yes" ||
+    flags.get("partition") === "blind-holdout"
+  ) {
     return assertDee540BlindTailAuthorized({ officialHoldoutAccessRequested: true });
   }
   const operatorBlindAuthorization = flags.get("operator-blind-authorization");

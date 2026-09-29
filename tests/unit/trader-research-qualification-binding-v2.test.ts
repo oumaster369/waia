@@ -1,3 +1,7 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { buildClosedTradeOutcomeEvidencePackageV2 } from "@/lib/trader/research-v2/closed-trade-outcome-evidence-v2";
@@ -13,10 +17,11 @@ import {
   type QualificationRecordV2,
 } from "@/lib/trader/research-v2/qualification-records-v2";
 import { buildHumanPromotionProposalV2 } from "@/lib/trader/research-v2/human-promotion-proposal-v2";
+import { AppendOnlyStrategyAdmissionJournal } from "@/lib/trader/research/strategy-admission-v1";
 import {
   STRATEGY_ADMISSION_SPEC_SHA256,
-  admissionDateNets,
   countsForDateNets,
+  passingIsDateNets,
 } from "./strategy-admission-date-nets";
 
 function reseal<T extends { contentDigestHex: string }>(value: T): T {
@@ -78,15 +83,22 @@ function fixture() {
     netEconomicResult: "1",
     maxDrawdown: "-1",
     tailEventCount: 1,
-    ...countsForDateNets(admissionDateNets(2022, "0.01")),
+    ...countsForDateNets(passingIsDateNets(2022)),
     incumbentComparisonDigestHex: "c".repeat(64),
   };
+  const journalDir = mkdtempSync(join(tmpdir(), "waia-admission-"));
+  const journal = AppendOnlyStrategyAdmissionJournal.openDurable(join(journalDir, "journal.jsonl"));
+  journal.registerFamily(STRATEGY_ADMISSION_SPEC_SHA256, 1);
   const qualificationInput = {
     candidate,
     partition: "DEVELOPMENT" as const,
     evaluation,
     specSha256: STRATEGY_ADMISSION_SPEC_SHA256,
     declaredFamilySize: 1,
+    journal,
+    usedForDiscovery: false as const,
+    signalBarCloseUtc: cutoff,
+    entryTimeUtc: "2026-02-01T11:01:00.000Z",
   };
   const development = recordQualificationV2(qualificationInput);
   const walkForward = recordQualificationV2({

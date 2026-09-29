@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -18,10 +19,12 @@ import {
 } from "@/lib/trader/discovery/discovery.types";
 import { runDiscoveryEvolutionPass } from "@/lib/trader/discovery/evolution-orchestrator";
 import { NoReinforcementGuardError } from "@/lib/trader/discovery/no-reinforcement-guard";
+import { AppendOnlyStrategyAdmissionJournal } from "@/lib/trader/research/strategy-admission-v1";
 import {
   STRATEGY_ADMISSION_SPEC_SHA256,
   admissionDateNets,
   countsForDateNets,
+  passingIsDateNets,
 } from "./strategy-admission-date-nets";
 import {
   qualifyFutureCycleEpistemicEffectV2,
@@ -47,7 +50,12 @@ const DIGEST = {
 const PIT = "2026-02-01T12:00:00.000Z";
 const PRIOR_PIT = "2026-01-31T12:00:00.000Z";
 const CUTOFF = "2026-02-01T11:00:00.000Z";
-const IS_NETS = admissionDateNets(2022, "0.01");
+const IS_NETS = passingIsDateNets(2022);
+
+function freshJournal() {
+  const dir = mkdtempSync(join(tmpdir(), "waia-admission-"));
+  return AppendOnlyStrategyAdmissionJournal.openDurable(join(dir, "journal.jsonl"));
+}
 const VALIDATION_NETS = admissionDateNets(2024, "0.02", 5);
 
 const EX = {} as never;
@@ -201,6 +209,8 @@ function enabledAdmission() {
     declaredFamilySize: 1,
     evidenceCutoffUtc: CUTOFF,
     symbol: "BTCUSDT",
+    journal: freshJournal(),
+    usedForDiscovery: false,
   };
 }
 

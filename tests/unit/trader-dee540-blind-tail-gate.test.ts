@@ -1,9 +1,11 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { FHV_DATASET_PARTITIONS_V1 } from "@/lib/trader/market-data/dataset/fhv-dataset-manifest";
+import { consumeDee540BlindTailAuthorization } from "@/lib/trader/research/dee-540-authorization-store";
 import {
   DEE540_OFFICIAL_HOLDOUT_STATUS,
   assertDee540BlindTailAuthorized,
@@ -69,6 +71,14 @@ describe("DEE-540 blind tail gate", () => {
       "DEE540_OFFICIAL_HOLDOUT_SEALED",
     );
     expectGateCode(
+      () => resolveResearchPipelineCliBlindTail(new Map([["official-holdout", "1"]])),
+      "DEE540_OFFICIAL_HOLDOUT_SEALED",
+    );
+    expectGateCode(
+      () => resolveResearchPipelineCliBlindTail(new Map([["official-holdout", "yes"]])),
+      "DEE540_OFFICIAL_HOLDOUT_SEALED",
+    );
+    expectGateCode(
       () => resolveResearchPipelineCliBlindTail(new Map([["partition", "blind-holdout"]])),
       "DEE540_OFFICIAL_HOLDOUT_SEALED",
     );
@@ -107,6 +117,19 @@ describe("DEE-540 blind tail gate", () => {
     );
     expect(grant.officialHoldoutStatus).toBe("SEALED_NOT_ACCESSED");
     expect(grant.blindAuthorizationScope.blindDigest).toBe(scope.blindDigest);
+    const storePath = join(mkdtempSync(join(tmpdir(), "waia-dee540-")), "consumed.jsonl");
+    consumeDee540BlindTailAuthorization({
+      authorizationDigest: grant.operatorBlindAuthorization,
+      storePath,
+    });
+    expectGateCode(
+      () =>
+        consumeDee540BlindTailAuthorization({
+          authorizationDigest: grant.operatorBlindAuthorization,
+          storePath,
+        }),
+      "DEE540_AUTHORIZATION_ALREADY_CONSUMED",
+    );
   });
 
   it("checks the gate before listing bars or running the blind backtest", () => {
@@ -128,5 +151,16 @@ describe("DEE-540 blind tail gate", () => {
     expect(orchestrator.indexOf("assertDee540BlindTailAuthorized")).toBeLessThan(
       orchestrator.indexOf("resolveM9ResearchDatasetPostgres"),
     );
+    expect(orchestrator.indexOf("assertResearchPipelineRegimeCoverage(")).toBeLessThan(
+      orchestrator.indexOf("consumeDee540BlindTailAuthorization({"),
+    );
+    expect(orchestrator.indexOf("consumeDee540BlindTailAuthorization({")).toBeLessThan(
+      orchestrator.indexOf("return runBlindHoldoutValidation({"),
+    );
+    const campaign = readFileSync(
+      resolve(process.cwd(), "scripts/trader/ri-evidence-campaign.ts"),
+      "utf8",
+    );
+    expect(campaign).toContain("skipBlindTail: true");
   });
 });

@@ -6,17 +6,16 @@ import type { Bar } from "@/lib/trader/intelligence/types";
 import { WalkForwardValidationError } from "@/lib/trader/research/errors";
 import { collectRegimeLabelsFromMetrics } from "@/lib/trader/research/regime-coverage";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import { scoreLookbackOnBars } from "@/lib/trader/research/research-train-parameter-fit";
 import {
-  isResearchValidationMetricsV1,
-} from "@/lib/trader/research/research-validation-metrics-taxonomy";
-import type {
-  InsertWalkForwardWindowRow,
-  ResearchValidationMetrics,
-  ResearchValidationMetricsV2,
-  StrategyCandidate,
-  StrategyCandidateStatus,
-  WalkForwardWindowPlan,
-  WalkForwardWindowResult,
+  RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
+  type InsertWalkForwardWindowRow,
+  type ResearchValidationMetrics,
+  type ResearchValidationMetricsV1,
+  type StrategyCandidate,
+  type StrategyCandidateStatus,
+  type WalkForwardWindowPlan,
+  type WalkForwardWindowResult,
 } from "@/lib/trader/research/strategy-candidate.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
@@ -222,46 +221,34 @@ export async function runWalkForwardValidation(
   return { windows, regimeLabels };
 }
 
-function emptyMetricsLike(metrics: ResearchValidationMetrics): ResearchValidationMetrics {
-  if (isResearchValidationMetricsV1(metrics)) {
-    return {
-      schemaVersion: metrics.schemaVersion,
-      tradeCount: 0,
-      periodRealizedPnl: "0",
-      periodTotalFees: "0",
-      byRegime: [],
-    };
-  }
-  const v2 = metrics as ResearchValidationMetricsV2;
+/** Slice metrics from the train-fitted lookback. Short windows score as zero trades. */
+export function metricsFromFittedLookback(
+  bars: readonly Bar[],
+  lookback: number,
+): ResearchValidationMetricsV1 {
+  const short = bars.length < lookback + 2;
+  const score = short ? { net: 0, tradeCount: 0 } : scoreLookbackOnBars(bars, lookback);
+  const net = Number.isFinite(score.net) ? score.net : 0;
   return {
-    ...v2,
-    submittedOrders: 0,
-    acceptedOrders: 0,
-    filledOrders: 0,
-    openPositions: 0,
-    closedTrades: 0,
-    markToCloseTrades: 0,
-    realizedPnl: "0",
-    markedPnl: "0",
+    schemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
+    tradeCount: score.tradeCount,
+    periodRealizedPnl: net.toFixed(8),
     periodTotalFees: "0",
-    rejectedSignals: 0,
-    skippedSignals: 0,
     byRegime: [],
   };
 }
 
 /**
- * Records walk-forward windows as a partition of one validation evaluation.
- * Does not call a backtest. Window 0 carries that single evaluation; later
- * windows are empty so the same bars are not counted again as independent tests.
+ * Each window stores the fitted-lookback score of its own out-of-sample bars.
+ * The digest is that slice. The full validation backtest is not copied onto window 0.
  */
-export async function accountWalkForwardFromSingleEvaluation(input: {
+export async function accountWalkForwardFromFittedLookback(input: {
   context: OrgContext;
   candidate: StrategyCandidate;
   trainBars: readonly Bar[];
   validationBars: readonly Bar[];
   oosBarCount: number;
-  singleEvaluation: ResearchValidationMetrics;
+  lookback: number;
   repository: WalkForwardRepository;
   newId?: () => string;
 }): Promise<WalkForwardValidationResult> {
@@ -284,7 +271,7 @@ export async function accountWalkForwardFromSingleEvaluation(input: {
       windowIndex,
       input.oosBarCount,
     );
-    const metrics = windowIndex === 0 ? input.singleEvaluation : emptyMetricsLike(input.singleEvaluation);
+    const metrics = metricsFromFittedLookback(plan.outOfSampleBars, input.lookback);
     await input.repository.insertWalkForwardWindow(input.context, {
       id: newId(),
       candidateId: input.candidate.id,

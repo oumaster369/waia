@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+
 import { parseDecimal } from "@/lib/trader/risk/numeric";
 import { applyHolmAdjustment } from "@/lib/trader/research-v2/multiple-testing-holm-v2";
 
@@ -25,6 +29,36 @@ export const STRATEGY_ADMISSION_ALPHA = 0.05 as const;
 export const STRATEGY_ADMISSION_VALIDATION_MIN_T = 1.645 as const;
 export const STRATEGY_ADMISSION_DSR_MIN = 0.95 as const;
 export const STRATEGY_ADMISSION_DSR_FAMILY_MIN = 50 as const;
+/** §11: net above this per trade is too good to accept without an audit. */
+export const STRATEGY_ADMISSION_AUDIT_NET_PER_TRADE = 0.03 as const;
+export const STRATEGY_ADMISSION_AUDIT_P_RAW = 1e-6 as const;
+export const STRATEGY_ADMISSION_AUDIT_IS_SHARPE = 3 as const;
+export const STRATEGY_ADMISSION_QUARTER_POSITIVE_FRACTION = 0.75 as const;
+export const STRATEGY_ADMISSION_YEAR_POSITIVE_FRACTION = 2 / 3;
+
+export function defaultStrategyAdmissionJournalPath(): string {
+  const configured = process.env.WAIA_STRATEGY_ADMISSION_JOURNAL_PATH?.trim();
+  return configured && configured.length > 0
+    ? configured
+    : "var/waia/strategy-admission-journal.jsonl";
+}
+
+/** Stable hypothesis identity. Campaign id is not part of the key. */
+export function strategyAdmissionHypothesisId(
+  specSha256: string,
+  params: Readonly<Record<string, string>>,
+): string {
+  const configParams: Record<string, string> = {};
+  for (const key of Object.keys(params).sort()) {
+    configParams[key] = params[key] ?? "";
+  }
+  return createHash("sha256").update(JSON.stringify({ specSha256, configParams })).digest("hex");
+}
+
+/** Spec §7: Holm must be strictly below alpha. p = 0.05 does not pass. */
+export function strategyAdmissionHolmPasses(pHolm: number): boolean {
+  return pHolm < STRATEGY_ADMISSION_ALPHA;
+}
 
 const SPEC_SHA256 = /^[0-9a-f]{64}$/;
 const UTC_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -38,7 +72,8 @@ export type StrategyAdmissionVerdict =
   | "rejected"
   | "passed_is"
   | "passed_validation"
-  | "insufficient_data";
+  | "insufficient_data"
+  | "audit_required";
 
 export type StrategyAdmissionObservation = Readonly<{
   utcDate: string;
@@ -60,11 +95,20 @@ export type StrategyAdmissionInput = Readonly<{
   split: Exclude<StrategyAdmissionSplit, "holdout">;
   trials: readonly StrategyAdmissionTrial[];
   confirmatoryIndex: number;
+  /** Append-only journal that already holds this spec's family registration. */
+  journal: AppendOnlyStrategyAdmissionJournal;
   symbol?: string;
   fundingMean?: string | null;
-  usedForDiscovery?: boolean;
-  signalBarCloseUtc?: string;
-  entryTimeUtc?: string;
+  usedForDiscovery: boolean;
+  signalBarCloseUtc: string;
+  entryTimeUtc: string;
+  /** Minutes per bar. Horizon is converted to a date lag. Default 1. */
+  barIntervalMinutes?: number;
+  /**
+   * Recompute a sealed record. Does not require a prior family registration
+   * and does not consume a split.
+   */
+  replay?: boolean;
 }>;
 
 export type StrategyAdmissionFamilyTrial = Readonly<{
@@ -132,12 +176,87 @@ export type StrategyAdmissionJournalRow = Readonly<{
   directionTrialOrdinal: number;
 }>;
 
-/** Append-only per-configuration journal. Corrections are new rows. */
+type StrategyAdmissionJournalLine =
+  | {
+      recordType: "family_registration";
+      specSha256: string;
+      familySize: number;
+    }
+  | {
+      recordType: "run";
+      row: Omit<StrategyAdmissionJournalRow, "rowIndex" | "directionTrialOrdinal">;
+    };
+
+/**
+ * Append-only per-configuration journal. Corrections are new rows.
+ * A durable journal is a JSONL file. In-memory journals are not accepted
+ * for a validation consume.
+ */
 export class AppendOnlyStrategyAdmissionJournal {
-  private readonly rows: StrategyAdmissionJournalRow[] = [];
+  protected readonly rows: StrategyAdmissionJournalRow[] = [];
+  protected readonly families = new Map<string, number>();
+  durable = false;
+  private filePath: string | null = null;
+
+  /**
+   * Opens a JSONL journal, creating it when missing.
+   * Fails closed when the path cannot be created or read.
+   */
+  static openDurable(filePath: string): AppendOnlyStrategyAdmissionJournal {
+    if (!filePath.trim()) {
+      throw new StrategyAdmissionError("admission_journal_unavailable", "journal path is empty");
+    }
+    try {
+      mkdirSync(dirname(filePath), { recursive: true });
+      try {
+        writeFileSync(filePath, "", { flag: "wx" });
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "EEXIST") throw error;
+      }
+      const raw = readFileSync(filePath, "utf8");
+      const journal = new AppendOnlyStrategyAdmissionJournal();
+      journal.load(raw);
+      journal.filePath = filePath;
+      journal.durable = true;
+      return journal;
+    } catch (error) {
+      if (error instanceof StrategyAdmissionError) throw error;
+      throw new StrategyAdmissionError(
+        "admission_journal_unavailable",
+        error instanceof Error ? error.message : "journal unavailable",
+      );
+    }
+  }
 
   list(): readonly StrategyAdmissionJournalRow[] {
     return this.rows;
+  }
+
+  registeredFamilySize(specSha256: string): number | null {
+    return this.families.get(specSha256) ?? null;
+  }
+
+  /** Idempotent for the same size. A different size is a conflict. */
+  registerFamily(specSha256: string, familySize: number): void {
+    if (!SPEC_SHA256.test(specSha256)) {
+      throw new StrategyAdmissionError("spec_sha256_required");
+    }
+    if (!Number.isSafeInteger(familySize) || familySize < 1) {
+      throw new StrategyAdmissionError("declared_family_size_required");
+    }
+    const existing = this.families.get(specSha256);
+    if (existing !== undefined) {
+      if (existing !== familySize) {
+        throw new StrategyAdmissionError(
+          "family_size_mismatch",
+          `registered family is ${existing}, caller declared ${familySize}`,
+        );
+      }
+      return;
+    }
+    this.persist({ recordType: "family_registration", specSha256, familySize });
+    this.families.set(specSha256, familySize);
   }
 
   append(
@@ -155,21 +274,95 @@ export class AppendOnlyStrategyAdmissionJournal {
       directionTrialOrdinal,
       flags: Object.freeze([...row.flags]),
     });
+    const { rowIndex: _rowIndex, directionTrialOrdinal: _ordinal, ...persisted } = stored;
+    void _rowIndex;
+    void _ordinal;
+    this.persist({
+      recordType: "run",
+      row: { ...persisted, flags: [...stored.flags] },
+    });
     this.rows.push(stored);
     return stored;
   }
 
-  splitUseCount(hypothesisId: string, split: "validation" | "holdout"): number {
+  splitUseCount(input: {
+    specSha256: string;
+    hypothesisId: string;
+    split: "validation" | "holdout";
+  }): number {
     return this.rows.filter(
-      (row) => row.hypothesisId === hypothesisId && row.split === split && row.countsAsSplitUse,
+      (row) =>
+        row.specSha256 === input.specSha256 &&
+        row.hypothesisId === input.hypothesisId &&
+        row.split === input.split &&
+        row.countsAsSplitUse,
     ).length;
   }
 
-  assertSplitAvailable(hypothesisId: string, split: "validation" | "holdout"): void {
-    if (this.splitUseCount(hypothesisId, split) >= 1) {
+  assertSplitAvailable(input: {
+    specSha256: string;
+    hypothesisId: string;
+    split: "validation" | "holdout";
+  }): void {
+    if (this.splitUseCount(input) >= 1) {
       throw new StrategyAdmissionError(
         "split_already_used",
-        `${split} already used for ${hypothesisId}`,
+        `${input.split} already used for ${input.hypothesisId}`,
+      );
+    }
+  }
+
+  protected persist(line: StrategyAdmissionJournalLine): void {
+    if (!this.filePath) return;
+    try {
+      appendFileSync(this.filePath, `${JSON.stringify(line)}\n`, "utf8");
+    } catch (error) {
+      throw new StrategyAdmissionError(
+        "admission_journal_unavailable",
+        error instanceof Error ? error.message : "journal append failed",
+      );
+    }
+  }
+
+  protected load(raw: string): void {
+    const lines = raw.split("\n");
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      let parsed: StrategyAdmissionJournalLine;
+      try {
+        parsed = JSON.parse(trimmed) as StrategyAdmissionJournalLine;
+      } catch {
+        throw new StrategyAdmissionError(
+          "admission_journal_unavailable",
+          "journal line is not JSON",
+        );
+      }
+      if (parsed.recordType === "family_registration") {
+        const existing = this.families.get(parsed.specSha256);
+        if (existing !== undefined && existing !== parsed.familySize) {
+          throw new StrategyAdmissionError("family_size_mismatch");
+        }
+        this.families.set(parsed.specSha256, parsed.familySize);
+        continue;
+      }
+      if (parsed.recordType !== "run" || !parsed.row) {
+        throw new StrategyAdmissionError(
+          "admission_journal_unavailable",
+          "journal line has an unknown record type",
+        );
+      }
+      const direction = parsed.row.direction ?? "strategy";
+      const directionTrialOrdinal =
+        this.rows.filter((existing) => existing.direction === direction).length + 1;
+      this.rows.push(
+        Object.freeze({
+          ...parsed.row,
+          direction,
+          rowIndex: this.rows.length,
+          directionTrialOrdinal,
+          flags: Object.freeze([...(parsed.row.flags ?? [])]),
+        }),
       );
     }
   }
@@ -189,19 +382,40 @@ export function assertNoLookaheadEntry(input: {
   }
 }
 
-export function assertPerpFundingRecorded(input: {
-  symbol?: string;
-  fundingMean?: string | null;
-}): void {
+/** Positive funding is paid by a long. Returns the amount to subtract from net. */
+export function perpFundingDebit(input: { symbol?: string; fundingMean?: string | null }): number {
   const symbol = input.symbol ?? "";
   const perp = /perp|swap/i.test(symbol);
-  if (!perp) return;
+  if (!perp) return 0;
   if (input.fundingMean === undefined || input.fundingMean === null || input.fundingMean === "") {
     throw new StrategyAdmissionError(
       "perp_funding_required",
       "perp observations require recorded funding",
     );
   }
+  try {
+    parseDecimal(input.fundingMean);
+  } catch {
+    throw new StrategyAdmissionError(
+      "perp_funding_required",
+      "perp funding must be a finite number and is subtracted from net",
+    );
+  }
+  const value = Number(input.fundingMean);
+  if (!Number.isFinite(value)) {
+    throw new StrategyAdmissionError(
+      "perp_funding_required",
+      "perp funding must be a finite number and is subtracted from net",
+    );
+  }
+  return value;
+}
+
+export function assertPerpFundingRecorded(input: {
+  symbol?: string;
+  fundingMean?: string | null;
+}): void {
+  perpFundingDebit(input);
 }
 
 export function standardNormalCdf(x: number): number {
@@ -259,6 +473,80 @@ export function standardNormalQuantile(p: number): number {
     ((((((a[0]! * r + a[1]!) * r + a[2]!) * r + a[3]!) * r + a[4]!) * r + a[5]!) * q) /
     (((((b[0]! * r + b[1]!) * r + b[2]!) * r + b[3]!) * r + b[4]!) * r + 1)
   );
+}
+
+/** Lanczos approximation of ln Γ(z). */
+function logGamma(z: number): number {
+  const coefficients = [
+    676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+    12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7,
+  ];
+  if (z < 0.5) {
+    return Math.log(Math.PI / Math.sin(Math.PI * z)) - logGamma(1 - z);
+  }
+  const shifted = z - 1;
+  let series = 0.99999999999980993;
+  for (let index = 0; index < coefficients.length; index += 1) {
+    series += coefficients[index]! / (shifted + index + 1);
+  }
+  const t = shifted + coefficients.length - 0.5;
+  return 0.5 * Math.log(2 * Math.PI) + (shifted + 0.5) * Math.log(t) - t + Math.log(series);
+}
+
+function betacf(a: number, b: number, x: number): number {
+  const maxIterations = 200;
+  const epsilon = 3e-14;
+  const tiny = 1e-30;
+  const qab = a + b;
+  const qap = a + 1;
+  const qam = a - 1;
+  let c = 1;
+  let d = 1 - (qab * x) / qap;
+  if (Math.abs(d) < tiny) d = tiny;
+  d = 1 / d;
+  let h = d;
+  for (let m = 1; m <= maxIterations; m += 1) {
+    const m2 = 2 * m;
+    let aa = (m * (b - m) * x) / ((qam + m2) * (a + m2));
+    d = 1 + aa * d;
+    if (Math.abs(d) < tiny) d = tiny;
+    c = 1 + aa / c;
+    if (Math.abs(c) < tiny) c = tiny;
+    d = 1 / d;
+    h *= d * c;
+    aa = (-(a + m) * (qab + m) * x) / ((a + m2) * (qap + m2));
+    d = 1 + aa * d;
+    if (Math.abs(d) < tiny) d = tiny;
+    c = 1 + aa / c;
+    if (Math.abs(c) < tiny) c = tiny;
+    d = 1 / d;
+    const delta = d * c;
+    h *= delta;
+    if (Math.abs(delta - 1) < epsilon) break;
+  }
+  return h;
+}
+
+function regularizedIncompleteBeta(x: number, a: number, b: number): number {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const lnBeta = logGamma(a) + logGamma(b) - logGamma(a + b);
+  const front = Math.exp(a * Math.log(x) + b * Math.log(1 - x) - lnBeta);
+  if (x < (a + 1) / (a + b + 2)) {
+    return (front * betacf(a, b, x)) / a;
+  }
+  return 1 - (front * betacf(b, a, 1 - x)) / b;
+}
+
+/** One-sided upper tail of Student t with `df` degrees of freedom. */
+export function studentTOneSidedUpperTail(t: number, df: number): number {
+  if (t === Number.POSITIVE_INFINITY) return 0;
+  if (t === Number.NEGATIVE_INFINITY) return 1;
+  if (!Number.isFinite(t) || !Number.isFinite(df) || df <= 0) return 1;
+  const x = df / (df + t * t);
+  const survival = regularizedIncompleteBeta(x, df / 2, 0.5);
+  if (t >= 0) return Math.min(1, survival / 2);
+  return Math.min(1, 1 - survival / 2);
 }
 
 function formatStat(value: number): string {
@@ -319,18 +607,37 @@ function aggregateByDate(observations: readonly StrategyAdmissionObservation[]):
   return { events, dates };
 }
 
+/**
+ * Newey–West lag on a date-aggregated series, in dates.
+ * Horizon bars are converted to calendar days, then ceiled and capped at n−1.
+ */
+export function neweyWestDateLag(input: {
+  horizonBars: number;
+  barIntervalMinutes: number;
+  nDates: number;
+}): number {
+  if (!Number.isFinite(input.barIntervalMinutes) || input.barIntervalMinutes <= 0) {
+    throw new StrategyAdmissionError("bar_interval_invalid");
+  }
+  const days = Math.ceil((input.horizonBars * input.barIntervalMinutes) / 1440);
+  const lag = Math.max(1, days);
+  const cap = Math.max(0, input.nDates - 1);
+  return Math.min(lag, cap);
+}
+
 function neweyWestMean(
   values: readonly number[],
   lag: number,
-): { mean: number; se: number; t: number } {
+): { mean: number; se: number; t: number; lagUsed: number } {
   const count = values.length;
-  if (count < 1) return { mean: 0, se: 0, t: 0 };
+  if (count < 1) return { mean: 0, se: 0, t: 0, lagUsed: 0 };
   const mean = values.reduce((sum, value) => sum + value, 0) / count;
   if (count === 1) {
     return {
       mean,
       se: 0,
       t: mean > 0 ? Number.POSITIVE_INFINITY : mean < 0 ? Number.NEGATIVE_INFINITY : 0,
+      lagUsed: 0,
     };
   }
   const demeaned = values.map((value) => value - mean);
@@ -341,7 +648,7 @@ function neweyWestMean(
     }
     return sum / count;
   };
-  const maxLag = Math.max(1, Math.min(lag, count - 1));
+  const maxLag = Math.max(0, Math.min(Math.floor(lag), count - 1));
   let hac = gamma(0);
   for (let step = 1; step <= maxLag; step += 1) {
     const weight = 1 - step / (maxLag + 1);
@@ -356,18 +663,21 @@ function neweyWestMean(
           ? Number.NEGATIVE_INFINITY
           : 0
       : mean / se;
-  return { mean, se, t };
+  return { mean, se, t, lagUsed: maxLag };
 }
 
-function oneSidedP(t: number, side: StrategyAdmissionSide): number {
-  if (side === "two_sided") {
-    const upper = 1 - standardNormalCdf(t);
-    const lower = standardNormalCdf(t);
-    return Math.min(1, 2 * Math.min(upper, lower));
-  }
+function normalUpperTail(t: number): number {
   if (t === Number.POSITIVE_INFINITY) return 0;
   if (t === Number.NEGATIVE_INFINITY) return 1;
   return 1 - standardNormalCdf(t);
+}
+
+function oneSidedP(t: number, side: StrategyAdmissionSide, df: number | null): number {
+  const upper = df === null ? normalUpperTail(t) : studentTOneSidedUpperTail(t, df);
+  if (side === "two_sided") {
+    return Math.min(1, 2 * Math.min(upper, 1 - upper));
+  }
+  return upper;
 }
 
 function sampleThresholds(input: StrategyAdmissionInput): { minEvents: number; minDates: number } {
@@ -401,7 +711,7 @@ function sharpeMoments(values: readonly number[]): { sr: number; skew: number; k
   const demeaned = values.map((value) => value - mean);
   const variance = demeaned.reduce((sum, value) => sum + value * value, 0) / (count - 1);
   const std = Math.sqrt(variance);
-  if (std === 0) {
+  if (!(std > 1e-12)) {
     return {
       sr: mean > 0 ? Number.POSITIVE_INFINITY : mean < 0 ? Number.NEGATIVE_INFINITY : 0,
       skew: 0,
@@ -413,28 +723,40 @@ function sharpeMoments(values: readonly number[]): { sr: number; skew: number; k
   return { sr: mean / std, skew, kurt };
 }
 
+function srEstimationVariance(
+  moments: { sr: number; skew: number; kurt: number },
+  count: number,
+): number {
+  const numerator =
+    1 - moments.skew * moments.sr + ((moments.kurt - 1) / 4) * moments.sr * moments.sr;
+  return Math.max(numerator, 0) / (count - 1);
+}
+
 function deflatedSharpe(input: {
   confirmatory: readonly number[];
   trialSeries: readonly (readonly number[])[];
   familySize: number;
 }): number {
   const moments = sharpeMoments(input.confirmatory);
-  if (!Number.isFinite(moments.sr)) return moments.sr > 0 ? 1 : 0;
+  // A zero-std series has a non-finite Sharpe. That is not a pass.
+  if (!Number.isFinite(moments.sr)) return 0;
   const count = input.confirmatory.length;
-  if (count < 2 || input.familySize < 2) return 1;
+  if (count < 2 || input.familySize < 2) return 0;
   const trialSharpes = input.trialSeries
     .map((series) => sharpeMoments(series).sr)
     .filter((value) => Number.isFinite(value));
-  const variance = (() => {
-    if (trialSharpes.length >= 2) {
-      const mean = trialSharpes.reduce((sum, value) => sum + value, 0) / trialSharpes.length;
-      return (
-        trialSharpes.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
-        (trialSharpes.length - 1)
-      );
-    }
-    return 1 / (count - 1);
+  const crossSectional = (() => {
+    if (trialSharpes.length < 2) return Number.NaN;
+    const mean = trialSharpes.reduce((sum, value) => sum + value, 0) / trialSharpes.length;
+    return (
+      trialSharpes.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (trialSharpes.length - 1)
+    );
   })();
+  // Identical trials (or an undefined cross-section) use Bailey–López de Prado SR variance.
+  const variance =
+    Number.isFinite(crossSectional) && crossSectional > 0
+      ? crossSectional
+      : srEstimationVariance(moments, count);
   const n = input.familySize;
   const sr0 =
     Math.sqrt(Math.max(variance, 0)) *
@@ -473,6 +795,21 @@ export function assessStrategyAdmission(
   if (!Number.isSafeInteger(input.declaredFamilySize) || input.declaredFamilySize < 1) {
     throw new StrategyAdmissionError("declared_family_size_required");
   }
+  if (!input.replay) {
+    const registered = input.journal.registeredFamilySize(input.specSha256);
+    if (registered === null) {
+      throw new StrategyAdmissionError(
+        "family_size_not_preregistered",
+        "family size must be registered before the run",
+      );
+    }
+    if (registered !== input.declaredFamilySize) {
+      throw new StrategyAdmissionError(
+        "family_size_mismatch",
+        `registered family is ${registered}, caller declared ${input.declaredFamilySize}`,
+      );
+    }
+  }
   if (input.trials.length < 1 || input.trials.length > input.declaredFamilySize) {
     throw new StrategyAdmissionError(
       "family_size_exceeded",
@@ -489,30 +826,57 @@ export function assessStrategyAdmission(
   if (!Number.isSafeInteger(input.horizonBars) || input.horizonBars < 1) {
     throw new StrategyAdmissionError("horizon_invalid");
   }
-  assertPerpFundingRecorded(input);
-  if (input.signalBarCloseUtc !== undefined || input.entryTimeUtc !== undefined) {
-    assertNoLookaheadEntry({
-      signalBarCloseUtc: input.signalBarCloseUtc ?? "",
-      entryTimeUtc: input.entryTimeUtc ?? "",
-    });
+  const fundingDebit = perpFundingDebit(input);
+  if (typeof input.usedForDiscovery !== "boolean") {
+    throw new StrategyAdmissionError(
+      "used_for_discovery_required",
+      "usedForDiscovery must be declared before the run",
+    );
   }
+  if (!input.signalBarCloseUtc || !input.entryTimeUtc) {
+    throw new StrategyAdmissionError(
+      "look_ahead_entry",
+      "signal close and entry timestamps are required",
+    );
+  }
+  assertNoLookaheadEntry({
+    signalBarCloseUtc: input.signalBarCloseUtc,
+    entryTimeUtc: input.entryTimeUtc,
+  });
+  const barIntervalMinutes = input.barIntervalMinutes ?? 1;
 
   const flags: string[] = [];
   if (input.usedForDiscovery === true && input.split === "is") {
     flags.push("used_for_discovery");
   }
 
-  const signedTrials = input.trials.map((trial) =>
-    signedObservations(trial.observations, input.sideDeclared),
+  const fundedTrials = input.trials.map((trial) =>
+    fundingDebit === 0
+      ? trial.observations
+      : trial.observations.map((observation) => ({
+          utcDate: observation.utcDate,
+          net: formatStat(parseNet(observation.net) - fundingDebit),
+        })),
+  );
+  const signedTrials = fundedTrials.map((observations) =>
+    signedObservations(observations, input.sideDeclared),
   );
   const aggregated = signedTrials.map((observations) => aggregateByDate(observations));
+  const dateLagFor = (nDates: number) =>
+    neweyWestDateLag({
+      horizonBars: input.horizonBars,
+      barIntervalMinutes,
+      nDates,
+    });
+  const isPValue = input.split === "is";
   const rawP = aggregated.map((trial) => {
-    if (trial.dates.length < 1) return 1;
+    if (trial.dates.length < 2) return 1;
     const stats = neweyWestMean(
       trial.dates.map((point) => point.mean),
-      input.horizonBars,
+      dateLagFor(trial.dates.length),
     );
-    return oneSidedP(stats.t, input.sideDeclared === "short" ? "long" : input.sideDeclared);
+    const df = isPValue ? trial.dates.length - 1 : null;
+    return oneSidedP(stats.t, input.sideDeclared === "short" ? "long" : input.sideDeclared, df);
   });
   const adjusted = applyHolmAdjustment(
     rawP
@@ -527,7 +891,7 @@ export function assessStrategyAdmission(
 
   const confirmatory = aggregated[input.confirmatoryIndex]!;
   const dateMeans = confirmatory.dates.map((point) => point.mean);
-  const stats = neweyWestMean(dateMeans, input.horizonBars);
+  const stats = neweyWestMean(dateMeans, dateLagFor(confirmatory.dates.length));
   const pRaw = rawP[input.confirmatoryIndex] ?? 1;
   const pHolm = adjusted[input.confirmatoryIndex] ?? 1;
   const eventMean =
@@ -570,13 +934,20 @@ export function assessStrategyAdmission(
     if (mean > 0) positiveQuarters += 1;
   }
   const quarterCount = quarterSums.size;
-  const years = new Set(confirmatory.dates.map((point) => point.utcDate.slice(0, 4)));
-  let positiveYears = 0;
-  for (const year of years) {
-    const yearPoints = confirmatory.dates.filter((point) => point.utcDate.startsWith(year));
-    const mean = yearPoints.reduce((sum, point) => sum + point.mean, 0) / yearPoints.length;
-    if (mean > 0) positiveYears += 1;
+  const yearMeans = new Map<string, { sum: number; count: number }>();
+  for (const point of confirmatory.dates) {
+    const year = point.utcDate.slice(0, 4);
+    const current = yearMeans.get(year) ?? { sum: 0, count: 0 };
+    current.sum += point.mean;
+    current.count += 1;
+    yearMeans.set(year, current);
   }
+  let positiveYears = 0;
+  for (const value of yearMeans.values()) {
+    if (value.sum / value.count > 0) positiveYears += 1;
+  }
+  const yearCount = yearMeans.size;
+  const negativeYears = yearCount - positiveYears;
   const spanMs =
     confirmatory.dates.length < 2
       ? 0
@@ -606,7 +977,7 @@ export function assessStrategyAdmission(
   if (!sampleOk) reasons.push("INSUFFICIENT_DATA");
   if (flags.includes("used_for_discovery")) reasons.push("USED_FOR_DISCOVERY_NOT_IN_IS");
   if (sampleOk && stats.mean <= 0) reasons.push("NET_MEAN_DATE_NOT_POSITIVE");
-  if (sampleOk && input.split === "is" && pHolm > STRATEGY_ADMISSION_ALPHA) {
+  if (sampleOk && input.split === "is" && !strategyAdmissionHolmPasses(pHolm)) {
     reasons.push("HOLM_ADJUSTED_P_ABOVE_ALPHA");
   }
   if (sampleOk && input.split === "is" && !(withoutBestMean > 0)) {
@@ -614,9 +985,11 @@ export function assessStrategyAdmission(
   }
   const quarterRule =
     quarterCount >= STRATEGY_ADMISSION_MIN_QUARTERS &&
-    positiveQuarters / quarterCount >= 0.75 &&
-    positiveQuarters >= 3;
-  const yearRule = input.split === "is" && years.size >= 3 && positiveYears >= 2;
+    positiveQuarters / quarterCount >= STRATEGY_ADMISSION_QUARTER_POSITIVE_FRACTION;
+  const yearRule =
+    yearCount >= 1 &&
+    positiveYears / yearCount >= STRATEGY_ADMISSION_YEAR_POSITIVE_FRACTION &&
+    negativeYears <= 1;
   if (sampleOk && !(quarterRule || yearRule)) reasons.push("STABILITY_NOT_MET");
   if (
     sampleOk &&
@@ -628,9 +1001,19 @@ export function assessStrategyAdmission(
   if (sampleOk && dsr !== null && !(dsr >= STRATEGY_ADMISSION_DSR_MIN)) {
     reasons.push("DEFLATED_SHARPE_NOT_PASSED");
   }
+  const isSharpe = sharpeMoments(dateMeans).sr;
+  const tooGood =
+    input.split === "is" &&
+    sampleOk &&
+    (eventMean > STRATEGY_ADMISSION_AUDIT_NET_PER_TRADE ||
+      pRaw < STRATEGY_ADMISSION_AUDIT_P_RAW ||
+      (Number.isFinite(isSharpe) && isSharpe > STRATEGY_ADMISSION_AUDIT_IS_SHARPE) ||
+      isSharpe === Number.POSITIVE_INFINITY);
+  if (tooGood) reasons.push("AUDIT_REQUIRED");
 
   let verdict: StrategyAdmissionVerdict;
   if (reasons.includes("INSUFFICIENT_DATA")) verdict = "insufficient_data";
+  else if (reasons.includes("AUDIT_REQUIRED")) verdict = "audit_required";
   else if (reasons.length > 0) verdict = "rejected";
   else verdict = input.split === "is" ? "passed_is" : "passed_validation";
 
@@ -643,7 +1026,7 @@ export function assessStrategyAdmission(
     netMeanEvent: formatStat(eventMean),
     netMeanDate: formatStat(stats.mean),
     seMethod: "newey_west" as const,
-    nwLag: Math.max(1, input.horizonBars),
+    nwLag: stats.lagUsed,
     t: formatStat(stats.t),
     pRaw: formatStat(Math.min(1, Math.max(0, pRaw))),
     pHolm: formatStat(Math.min(1, Math.max(0, pHolm))),

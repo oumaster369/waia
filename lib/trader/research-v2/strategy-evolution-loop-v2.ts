@@ -16,6 +16,7 @@ import {
 } from "@/lib/trader/research-v2/multiple-testing-holm-v2";
 import {
   AppendOnlyStrategyAdmissionJournal,
+  strategyAdmissionHypothesisId,
   type StrategyAdmissionJournalRow,
   type StrategyAdmissionObservation,
 } from "@/lib/trader/research/strategy-admission-v1";
@@ -87,7 +88,13 @@ export type RunStrategyEvolutionResearchPassV2Input = Readonly<{
   declaredFamilySize: number;
   /** Other IS configurations in the pre-declared family. Holm uses the declared size. */
   additionalIsObservations?: readonly (readonly StrategyAdmissionObservation[])[];
-  journal?: AppendOnlyStrategyAdmissionJournal;
+  /** Durable append-only journal. An in-memory journal is refused. */
+  journal: AppendOnlyStrategyAdmissionJournal;
+  /** Required. Discovery data must be declared true and is rejected as IS evidence. */
+  usedForDiscovery: boolean;
+  signalBarCloseUtc?: string;
+  entryTimeUtc?: string;
+  barIntervalMinutes?: number;
   failureReasons?: readonly string[];
 }>;
 
@@ -169,8 +176,32 @@ export function runStrategyEvolutionResearchPassV2(
     researchCodeIdentity: input.researchCodeIdentity,
     costModelIdentity: input.costModelIdentity,
   });
-  const hypothesisId = `${input.campaignId}:hypothesis`;
-  const journal = input.journal ?? new AppendOnlyStrategyAdmissionJournal();
+  if (!input.journal?.durable) {
+    throw new StrategyEvolutionResearchError(
+      "admission_journal_unavailable",
+      "the research pass requires a durable admission journal",
+    );
+  }
+  if (typeof input.usedForDiscovery !== "boolean") {
+    throw new StrategyEvolutionResearchError("used_for_discovery_required");
+  }
+  const journal = input.journal;
+  const hypothesisId = strategyAdmissionHypothesisId(input.specSha256, generation.params);
+  journal.registerFamily(input.specSha256, input.declaredFamilySize);
+  const signalBarCloseUtc = input.signalBarCloseUtc ?? input.evidenceCutoffUtc;
+  const signalMs = Date.parse(signalBarCloseUtc);
+  const entryTimeUtc =
+    input.entryTimeUtc ??
+    (Number.isFinite(signalMs) ? new Date(signalMs + 60_000).toISOString() : "");
+  const admissionContext = {
+    hypothesisId,
+    usedForDiscovery: input.usedForDiscovery,
+    signalBarCloseUtc,
+    entryTimeUtc,
+    barIntervalMinutes: input.barIntervalMinutes,
+    symbol: input.symbol,
+    journal,
+  };
   const isFamily = [input.development.dateNets ?? [], ...(input.additionalIsObservations ?? [])];
   const development = recordQualificationV2({
     candidate,
@@ -181,37 +212,10 @@ export function runStrategyEvolutionResearchPassV2(
     declaredFamilySize: input.declaredFamilySize,
     familyObservations: isFamily,
     trialIndex: 0,
-    symbol: input.symbol,
+    ...admissionContext,
   });
-  const isPassed = development.verdict === "QUALIFIED";
-  if (isPassed) {
-    journal.assertSplitAvailable(hypothesisId, "validation");
-  }
-  const walkForward = recordQualificationV2({
-    candidate,
-    partition: "WALK_FORWARD",
-    evaluation: input.walkForward,
-    failureReasons: isPassed
-      ? input.failureReasons
-      : ["IS_NOT_PASSED", ...(input.failureReasons ?? [])],
-    specSha256: input.specSha256,
-    declaredFamilySize: input.declaredFamilySize,
-    familyObservations: [input.walkForward.dateNets ?? []],
-    trialIndex: 0,
-    symbol: input.symbol,
-  });
-  const multipleTesting: ResearchHypothesisFamilyV2 = {
-    schemaVersion: RESEARCH_HYPOTHESIS_FAMILY_V2_SCHEMA,
-    method: "holm",
-    familySize: development.admission.assessment.familySize,
-    alpha: "0.05",
-    trials: development.admission.assessment.familyTrials.map((trial) => ({
-      trialIndex: trial.trialIndex,
-      rawPValue: trial.rawPValue,
-      adjustedPValue: trial.adjustedPValue,
-      holmRank: trial.holmRank,
-    })),
-  };
+  const isPassed =
+    development.verdict === "QUALIFIED" && development.admission.assessment.verdict === "passed_is";
   journal.append({
     correctsRowIndex: null,
     hypothesisId,
@@ -232,28 +236,42 @@ export function runStrategyEvolutionResearchPassV2(
     flags: development.admission.assessment.flags,
     countsAsSplitUse: false,
   });
-  if (isPassed) {
-    journal.append({
-      correctsRowIndex: null,
-      hypothesisId,
-      specSha256: input.specSha256,
-      split: "validation",
-      familySize: input.declaredFamilySize,
-      configParamsJson: JSON.stringify(generation.params),
-      nEvents: walkForward.admission.assessment.nEvents,
-      nDates: walkForward.admission.assessment.nDates,
-      netMeanDate: walkForward.admission.assessment.netMeanDate,
-      seMethod: "newey_west",
-      nwLag: walkForward.admission.assessment.nwLag,
-      t: walkForward.admission.assessment.t,
-      pRaw: walkForward.admission.assessment.pRaw,
-      pHolm: walkForward.admission.assessment.pHolm,
-      verdict: walkForward.admission.assessment.verdict,
-      verdictReason: walkForward.failureReasons.join(",") || "passed",
-      flags: walkForward.admission.assessment.flags,
-      countsAsSplitUse: true,
-    });
-  }
+  const walkForward = isPassed
+    ? recordQualificationV2({
+        candidate,
+        partition: "WALK_FORWARD",
+        evaluation: input.walkForward,
+        failureReasons: input.failureReasons,
+        specSha256: input.specSha256,
+        declaredFamilySize: input.declaredFamilySize,
+        familyObservations: [input.walkForward.dateNets ?? []],
+        trialIndex: 0,
+        ...admissionContext,
+      })
+    : recordQualificationV2({
+        candidate,
+        partition: "WALK_FORWARD",
+        evaluation: input.walkForward,
+        failureReasons: input.failureReasons,
+        specSha256: input.specSha256,
+        declaredFamilySize: input.declaredFamilySize,
+        familyObservations: [input.walkForward.dateNets ?? []],
+        trialIndex: 0,
+        unscored: true,
+        ...admissionContext,
+      });
+  const multipleTesting: ResearchHypothesisFamilyV2 = {
+    schemaVersion: RESEARCH_HYPOTHESIS_FAMILY_V2_SCHEMA,
+    method: "holm",
+    familySize: development.admission.assessment.familySize,
+    alpha: "0.05",
+    trials: development.admission.assessment.familyTrials.map((trial) => ({
+      trialIndex: trial.trialIndex,
+      rawPValue: trial.rawPValue,
+      adjustedPValue: trial.adjustedPValue,
+      holmRank: trial.holmRank,
+    })),
+  };
   const knowledge = admitStrategyEvolutionKnowledgeV2({
     navigatorSelect: input.navigatorSelect,
     predictiveAdmissionVerdict: input.predictiveAdmissionVerdict,

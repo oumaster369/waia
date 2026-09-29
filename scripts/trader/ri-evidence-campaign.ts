@@ -239,6 +239,7 @@ async function main(): Promise<void> {
         oosBarCount,
         deps: { execution, reconciliation },
         createOrderRepository: () => createPostgresOrderRepository(db),
+        pipelineBacktest: { skipBlindTail: true },
       });
 
       const edgeVerified = result.evidenceDocument.evidenceBody.regimeCoverage.satisfiesRequirement;

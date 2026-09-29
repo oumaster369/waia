@@ -1,7 +1,9 @@
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import type { ResearchHypothesisFamilyV2 } from "@/lib/trader/research-v2/multiple-testing-holm-v2";
 import {
+  AppendOnlyStrategyAdmissionJournal,
   assessStrategyAdmission,
+  strategyAdmissionHypothesisId,
   StrategyAdmissionError,
   type StrategyAdmissionAssessment,
   type StrategyAdmissionKind,
@@ -44,10 +46,19 @@ export type QualificationEvaluationV2 = Readonly<{
 export type QualificationAdmissionV2 = Readonly<{
   specSha256: string;
   declaredFamilySize: number;
+  hypothesisId: string;
   kind: StrategyAdmissionKind;
   intraday: boolean;
   sideDeclared: StrategyAdmissionSide;
   horizonBars: number;
+  barIntervalMinutes: number;
+  usedForDiscovery: boolean;
+  signalBarCloseUtc: string;
+  entryTimeUtc: string;
+  symbol: string;
+  fundingMean: string | null;
+  /** False when IS did not qualify and validation was not scored. */
+  scored: boolean;
   familyObservationNets: readonly (readonly StrategyAdmissionObservation[])[];
   trialIndex: number;
   assessment: StrategyAdmissionAssessment;
@@ -123,6 +134,8 @@ const RECOMPUTED_FAILURE_REASONS = new Set([
   "DEFLATED_SHARPE_NOT_PASSED",
   "USED_FOR_DISCOVERY_NOT_IN_IS",
   "NET_ECONOMIC_RESULT_NOT_POSITIVE",
+  "AUDIT_REQUIRED",
+  "IS_NOT_PASSED",
 ]);
 
 function observationCounts(observations: readonly StrategyAdmissionObservation[]) {
@@ -133,6 +146,31 @@ function observationCounts(observations: readonly StrategyAdmissionObservation[]
     positiveTradeCount: observations.filter((row) => Number(row.net) > 0).length,
     nonZeroTradeCount: observations.filter((row) => Number(row.net) !== 0).length,
   };
+}
+
+function unscoredAdmissionAssessment(familySize: number): StrategyAdmissionAssessment {
+  return Object.freeze({
+    verdict: "rejected",
+    reasons: Object.freeze(["IS_NOT_PASSED"]),
+    flags: Object.freeze([]),
+    nEvents: 0,
+    nDates: 0,
+    netMeanEvent: "0.00000000",
+    netMeanDate: "0.00000000",
+    seMethod: "newey_west" as const,
+    nwLag: 0,
+    t: "nan",
+    pRaw: "1.00000000",
+    pHolm: "1.00000000",
+    ci95Low: "nan",
+    ci95High: "nan",
+    withoutBestDate: "nan",
+    bestDate: "",
+    byQuarter: Object.freeze({}),
+    familySize,
+    dsr: null,
+    familyTrials: Object.freeze([]),
+  });
 }
 
 function assertDateNetsMatchCounts(evaluation: QualificationEvaluationV2): void {
@@ -169,6 +207,15 @@ export function recordQualificationV2(
     usedForDiscovery?: boolean;
     symbol?: string;
     fundingMean?: string | null;
+    hypothesisId?: string;
+    signalBarCloseUtc?: string;
+    entryTimeUtc?: string;
+    barIntervalMinutes?: number;
+    journal?: AppendOnlyStrategyAdmissionJournal;
+    /** Recompute a sealed record without consuming the split again. */
+    replay?: boolean;
+    /** IS did not qualify. Validation is recorded as unscored and is not assessed. */
+    unscored?: boolean;
   } & { verdict?: never },
 ): QualificationRecordV2 {
   if (input.partition === "BLIND_HOLDOUT") {
@@ -222,33 +269,95 @@ export function recordQualificationV2(
     );
   }
   const split = partition === "DEVELOPMENT" ? "is" : "validation";
-  let assessment: StrategyAdmissionAssessment;
-  try {
-    assessment = assessStrategyAdmission({
+  const hypothesisId =
+    input.hypothesisId ?? strategyAdmissionHypothesisId(input.specSha256, input.candidate.params);
+  const barIntervalMinutes = input.barIntervalMinutes ?? 1;
+  const usedForDiscovery = input.usedForDiscovery;
+  const signalBarCloseUtc = input.signalBarCloseUtc;
+  const entryTimeUtc = input.entryTimeUtc;
+  if (typeof usedForDiscovery !== "boolean") {
+    throw new StrategyEvolutionResearchError("used_for_discovery_required");
+  }
+  if (!signalBarCloseUtc || !entryTimeUtc) {
+    throw new StrategyEvolutionResearchError(
+      "look_ahead_entry",
+      "signal close and entry timestamps are required",
+    );
+  }
+  const unscored = input.unscored === true;
+  if (!input.replay && !unscored && !input.journal?.durable) {
+    throw new StrategyEvolutionResearchError(
+      "admission_journal_unavailable",
+      "qualification requires a durable admission journal",
+    );
+  }
+  if (split === "validation" && !input.replay && !unscored) {
+    input.journal!.assertSplitAvailable({
       specSha256: input.specSha256,
-      declaredFamilySize: input.declaredFamilySize,
-      kind,
-      intraday,
-      sideDeclared,
-      horizonBars,
-      split,
-      trials: familyObservationNets.map((observations, index) => ({
-        hypothesisId: `${input.candidate.candidateId}:${index}`,
-        observations,
-      })),
-      confirmatoryIndex: trialIndex,
-      symbol: input.symbol,
-      fundingMean: input.fundingMean,
-      usedForDiscovery: input.usedForDiscovery,
+      hypothesisId,
+      split: "validation",
     });
-  } catch (error) {
-    if (error instanceof StrategyAdmissionError) {
-      throw new StrategyEvolutionResearchError(error.code, error.message);
-    }
-    throw error;
   }
 
-  const computedReasons = [...assessment.reasons];
+  let assessment: StrategyAdmissionAssessment;
+  if (unscored) {
+    assessment = unscoredAdmissionAssessment(input.declaredFamilySize);
+  } else {
+    try {
+      assessment = assessStrategyAdmission({
+        specSha256: input.specSha256,
+        declaredFamilySize: input.declaredFamilySize,
+        kind,
+        intraday,
+        sideDeclared,
+        horizonBars,
+        split,
+        trials: familyObservationNets.map((observations, index) => ({
+          hypothesisId: index === trialIndex ? hypothesisId : `${hypothesisId}:${index}`,
+          observations,
+        })),
+        confirmatoryIndex: trialIndex,
+        symbol: input.symbol,
+        fundingMean: input.fundingMean,
+        usedForDiscovery,
+        signalBarCloseUtc,
+        entryTimeUtc,
+        barIntervalMinutes,
+        journal: input.journal ?? new AppendOnlyStrategyAdmissionJournal(),
+        replay: input.replay === true,
+      });
+    } catch (error) {
+      if (error instanceof StrategyAdmissionError) {
+        throw new StrategyEvolutionResearchError(error.code, error.message);
+      }
+      throw error;
+    }
+  }
+
+  if (split === "validation" && !input.replay && !unscored) {
+    input.journal!.append({
+      correctsRowIndex: null,
+      hypothesisId,
+      specSha256: input.specSha256,
+      split: "validation",
+      familySize: input.declaredFamilySize,
+      configParamsJson: JSON.stringify(input.candidate.params),
+      nEvents: assessment.nEvents,
+      nDates: assessment.nDates,
+      netMeanDate: assessment.netMeanDate,
+      seMethod: "newey_west",
+      nwLag: assessment.nwLag,
+      t: assessment.t,
+      pRaw: assessment.pRaw,
+      pHolm: assessment.pHolm,
+      verdict: assessment.verdict,
+      verdictReason: assessment.reasons.join(",") || "passed",
+      flags: assessment.flags,
+      countsAsSplitUse: true,
+    });
+  }
+
+  const computedReasons = unscored ? ["IS_NOT_PASSED"] : [...assessment.reasons];
   if (compareDecimal(input.evaluation.netEconomicResult, "0") <= 0) {
     computedReasons.push("NET_ECONOMIC_RESULT_NOT_POSITIVE");
   }
@@ -259,12 +368,15 @@ export function recordQualificationV2(
     callerReasons.length === 0;
   const verdict: QualificationVerdictV2 = passed ? "QUALIFIED" : "REJECTED";
   const failureReasons = Object.freeze(
-    verdict === "REJECTED" ? [...computedReasons, ...callerReasons] : [],
+    verdict === "REJECTED" ? [...new Set([...computedReasons, ...callerReasons])] : [],
   );
-  const trial = assessment.familyTrials[trialIndex];
-  if (!trial) {
-    throw new StrategyEvolutionResearchError("QUALIFICATION_FAMILY_TRIAL_INVALID");
-  }
+  const trial = assessment.familyTrials[trialIndex] ?? {
+    trialIndex,
+    hypothesisId,
+    rawPValue: "1.00000000",
+    adjustedPValue: "1.00000000",
+    holmRank: 0,
+  };
   const countRows = familyObservationNets.map((observations) => observationCounts(observations));
   const multipleTesting: QualificationMultipleTestingV2 = Object.freeze({
     method: "holm" as const,
@@ -282,10 +394,18 @@ export function recordQualificationV2(
   const admission: QualificationAdmissionV2 = Object.freeze({
     specSha256: input.specSha256,
     declaredFamilySize: input.declaredFamilySize,
+    hypothesisId,
     kind,
     intraday,
     sideDeclared,
     horizonBars,
+    barIntervalMinutes,
+    usedForDiscovery,
+    signalBarCloseUtc,
+    entryTimeUtc,
+    symbol: input.symbol ?? "",
+    fundingMean: input.fundingMean ?? null,
+    scored: !unscored,
     familyObservationNets: Object.freeze(
       familyObservationNets.map((observations) => Object.freeze([...observations])),
     ),
@@ -364,8 +484,17 @@ export function assertQualificationPairForCandidateV2(input: {
       intraday: record.admission.intraday,
       sideDeclared: record.admission.sideDeclared,
       horizonBars: record.admission.horizonBars,
+      barIntervalMinutes: record.admission.barIntervalMinutes,
       familyObservations: record.admission.familyObservationNets,
       trialIndex: record.admission.trialIndex,
+      hypothesisId: record.admission.hypothesisId,
+      usedForDiscovery: record.admission.usedForDiscovery,
+      signalBarCloseUtc: record.admission.signalBarCloseUtc,
+      entryTimeUtc: record.admission.entryTimeUtc,
+      symbol: record.admission.symbol,
+      fundingMean: record.admission.fundingMean,
+      replay: true,
+      unscored: record.admission.scored === false,
     });
     if (replay.contentDigestHex !== record.contentDigestHex) {
       throw new StrategyEvolutionResearchError("QUALIFICATION_RECORD_INVALID");

@@ -16,6 +16,10 @@ import type { FutureCycleEpistemicEffectReceiptV2 } from "@/lib/trader/knowledge
 import type { PaperClosedTrade } from "@/lib/trader/paper/paper-strategy-eval.types";
 import type { ResearchRejectionRecord } from "@/lib/trader/research/research-rejection-record.types";
 import {
+  AppendOnlyStrategyAdmissionJournal,
+  defaultStrategyAdmissionJournalPath,
+} from "@/lib/trader/research/strategy-admission-v1";
+import {
   assertPartitionEvaluationMatchesWindowsV2,
   deriveQualificationEvaluationFromPartitionWindowsV2,
   deriveStrategyEvolutionGenerationV2,
@@ -66,6 +70,10 @@ export type DiscoveryEvolutionPassInput = {
   failureReasons?: readonly string[];
   specSha256?: string;
   declaredFamilySize?: number;
+  /** Durable admission journal. Opened at the default path when omitted. */
+  journal?: AppendOnlyStrategyAdmissionJournal;
+  journalPath?: string;
+  usedForDiscovery?: boolean;
   evidenceCutoffUtc?: string;
   symbol?: string;
   parentStrategies?: readonly StrategyParentRefV2[];
@@ -228,6 +236,19 @@ export async function runDiscoveryEvolutionPass(
   if (outcomes.length === 0 || symbol.trim() === "" || evidenceCutoffUtc.trim() === "") {
     return failClosed("research_v2_outcomes_required");
   }
+  if (typeof input.usedForDiscovery !== "boolean") {
+    return failClosed("used_for_discovery_required");
+  }
+  let journal = input.journal;
+  if (!journal?.durable) {
+    try {
+      journal = AppendOnlyStrategyAdmissionJournal.openDurable(
+        input.journalPath ?? defaultStrategyAdmissionJournalPath(),
+      );
+    } catch {
+      return failClosed("admission_journal_unavailable");
+    }
+  }
 
   const pass = runStrategyEvolutionResearchPassV2({
     organizationId: input.runContext.context.organizationId,
@@ -250,6 +271,8 @@ export async function runDiscoveryEvolutionPass(
     specSha256: input.specSha256 ?? "",
     declaredFamilySize: input.declaredFamilySize ?? 0,
     priorMemory: input.priorMemory,
+    journal,
+    usedForDiscovery: input.usedForDiscovery,
   });
 
   return {

@@ -1,3 +1,7 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_DISCOVERY_RUN_CONFIG } from "@/lib/trader/discovery/discovery.types";
@@ -6,6 +10,7 @@ import {
   STRATEGY_ADMISSION_SPEC_SHA256,
   admissionDateNets,
   countsForDateNets,
+  passingIsDateNets,
 } from "./strategy-admission-date-nets";
 import { NoReinforcementGuardError } from "@/lib/trader/discovery/no-reinforcement-guard";
 import {
@@ -70,7 +75,12 @@ function parent(id: string, digest: string): StrategyParentRefV2 {
   };
 }
 
-const IS_NETS = admissionDateNets(2022, "0.01");
+const IS_NETS = passingIsDateNets(2022);
+
+function freshJournal() {
+  const dir = mkdtempSync(join(tmpdir(), "waia-admission-"));
+  return AppendOnlyStrategyAdmissionJournal.openDurable(join(dir, "journal.jsonl"));
+}
 const VALIDATION_NETS = admissionDateNets(2024, "0.02", 5);
 
 function evaluation(overrides: Partial<QualificationEvaluationV2> = {}): QualificationEvaluationV2 {
@@ -178,6 +188,8 @@ function passInput(
     walkForward: walkForwardEvaluation(),
     specSha256: STRATEGY_ADMISSION_SPEC_SHA256,
     declaredFamilySize: 1,
+    journal: freshJournal(),
+    usedForDiscovery: false,
     ...overrides,
   };
 }
@@ -370,11 +382,40 @@ describe("DEE-646 strategy evolution research-v2 spine", () => {
   });
 
   it("blocks a second validation of the same hypothesis", () => {
-    const journal = new AppendOnlyStrategyAdmissionJournal();
+    const journal = freshJournal();
     runStrategyEvolutionResearchPassV2(passInput({ journal }));
-    expect(() => runStrategyEvolutionResearchPassV2(passInput({ journal }))).toThrow(
-      /split_already_used/,
+    expect(() =>
+      runStrategyEvolutionResearchPassV2(passInput({ journal, campaignId: "camp-other" })),
+    ).toThrow(/split_already_used/);
+  });
+
+  it("does not score validation when IS fails, and does not consume the split", () => {
+    const journal = freshJournal();
+    const failed = runStrategyEvolutionResearchPassV2(
+      passInput({
+        journal,
+        development: evaluation({
+          netEconomicResult: "1",
+          ...countsForDateNets(admissionDateNets(2022, "-0.01")),
+        }),
+      }),
     );
+    expect(failed.development.verdict).toBe("REJECTED");
+    expect(failed.walkForward.verdict).toBe("REJECTED");
+    expect(failed.walkForward.admission.scored).toBe(false);
+    expect(failed.walkForward.failureReasons).toContain("IS_NOT_PASSED");
+    expect(failed.walkForward.admission.assessment.verdict).toBe("rejected");
+    expect(
+      journal.splitUseCount({
+        specSha256: STRATEGY_ADMISSION_SPEC_SHA256,
+        hypothesisId: failed.development.admission.hypothesisId,
+        split: "validation",
+      }),
+    ).toBe(0);
+    const recovered = runStrategyEvolutionResearchPassV2(passInput({ journal }));
+    expect(recovered.development.verdict).toBe("QUALIFIED");
+    expect(recovered.walkForward.admission.scored).toBe(true);
+    expect(recovered.walkForward.verdict).toBe("QUALIFIED");
   });
 
   it("refuses a caller-supplied qualification verdict", () => {
