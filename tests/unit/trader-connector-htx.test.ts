@@ -8,9 +8,7 @@ import {
 } from "@/lib/trader/connectors";
 import { HTX_DEFAULT_REST_HOST } from "@/lib/trader/connectors/htx/config";
 import { HtxConnectorValidationError } from "@/lib/trader/connectors/htx/errors";
-import {
-  HTX_TRADE_PERMISSION_WARNING,
-} from "@/lib/trader/connectors/htx/mappers";
+import { HTX_TRADE_PERMISSION_WARNING } from "@/lib/trader/connectors/htx/mappers";
 
 const VALID_CREDS = {
   apiKey: "test-access-key",
@@ -309,21 +307,24 @@ describe("HtxExchangeConnector reads (DEE-195)", () => {
   });
 
   it("fails unknown on a missing venue order identity and preserves the raw row", async () => {
-    const connector = await validatedHtx(defaultHandlers({
-      "/v1/order/orders/": () => jsonResponse({
-        status: "ok",
-        data: {
-          symbol: "btcusdt",
-          price: "65000",
-          amount: "0.01",
-          "created-at": 1630633835224,
-          type: "buy-limit",
-          "filled-amount": "0",
-          state: "submitted",
-          "client-order-id": "client-1",
-        },
+    const connector = await validatedHtx(
+      defaultHandlers({
+        "/v1/order/orders/": () =>
+          jsonResponse({
+            status: "ok",
+            data: {
+              symbol: "btcusdt",
+              price: "65000",
+              amount: "0.01",
+              "created-at": 1630633835224,
+              type: "buy-limit",
+              "filled-amount": "0",
+              state: "submitted",
+              "client-order-id": "client-1",
+            },
+          }),
       }),
-    }));
+    );
     await expect(connector.getOrder("357630527817871")).rejects.toMatchObject({
       name: "HtxUnknownVenueIdentityError",
       rawVenueObservation: { symbol: "btcusdt", state: "submitted" },
@@ -345,9 +346,11 @@ describe("HtxExchangeConnector reads (DEE-195)", () => {
         "client-order-id": "client-1",
       };
       delete row[missingField];
-      const connector = await validatedHtx(defaultHandlers({
-        "/v1/order/orders/": () => jsonResponse({ status: "ok", data: row }),
-      }));
+      const connector = await validatedHtx(
+        defaultHandlers({
+          "/v1/order/orders/": () => jsonResponse({ status: "ok", data: row }),
+        }),
+      );
       await expect(connector.getOrder("357630527817871")).rejects.toMatchObject({
         name: "HtxUnknownOrderEvidenceError",
         rawVenueObservation: { id: 357630527817871, state: "submitted" },
@@ -365,21 +368,26 @@ describe("HtxExchangeConnector reads (DEE-195)", () => {
   });
 
   it("fails unknown rather than inventing missing trade fee evidence", async () => {
-    const connector = await validatedHtx(defaultHandlers({
-      "/v1/order/matchresults": () => jsonResponse({
-        status: "ok",
-        data: [{
-          id: 313288753120940,
-          symbol: "btcusdt",
-          "order-id": 345487249132375,
-          "trade-id": 1085,
-          price: "65000",
-          "created-at": 1630633835224,
-          type: "buy-market",
-          "filled-amount": "0.01",
-        }],
+    const connector = await validatedHtx(
+      defaultHandlers({
+        "/v1/order/matchresults": () =>
+          jsonResponse({
+            status: "ok",
+            data: [
+              {
+                id: 313288753120940,
+                symbol: "btcusdt",
+                "order-id": 345487249132375,
+                "trade-id": 1085,
+                price: "65000",
+                "created-at": 1630633835224,
+                type: "buy-market",
+                "filled-amount": "0.01",
+              },
+            ],
+          }),
       }),
-    }));
+    );
     await expect(connector.getTradeHistory({ symbol: "BTC/USDT" })).rejects.toMatchObject({
       name: "HtxUnknownTradeEvidenceError",
       rawVenueObservation: { "trade-id": 1085, "order-id": 345487249132375 },
@@ -401,9 +409,17 @@ describe("HtxExchangeConnector reads (DEE-195)", () => {
 // tests above retain read-only permission and must not gain effect authority.
 function tradeHandlers(overrides: Parameters<typeof defaultHandlers>[0] = {}) {
   return defaultHandlers({
-    "/v2/user/api-key": () => jsonResponse({ code: 200, data: [{
-      accessKey: VALID_CREDS.apiKey, permission: "readOnly,trade", status: "normal",
-    }] }),
+    "/v2/user/api-key": () =>
+      jsonResponse({
+        code: 200,
+        data: [
+          {
+            accessKey: VALID_CREDS.apiKey,
+            permission: "readOnly,trade",
+            status: "normal",
+          },
+        ],
+      }),
     ...overrides,
   });
 }
@@ -412,31 +428,78 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
   it("submits exactly one signed POST, performs no lookup, and preserves the raw acknowledgement", async () => {
     let placementPosts = 0;
     let orderGets = 0;
-    const connector = await validatedHtx(tradeHandlers({
-      "/v1/order/orders/place": (url, init) => {
-        placementPosts += 1;
-        expect(init?.method).toBe("POST");
-        expect(url.searchParams.has("Signature")).toBe(true);
-        return jsonResponse({ status: "ok", data: 357630527817872 });
-      },
-      "/v1/order/orders/": () => {
-        orderGets += 1;
-        return jsonResponse({ status: "ok", data: null });
-      },
-    }));
-    await expect(connector.placeOrder({
+    const connector = await validatedHtx(
+      tradeHandlers({
+        "/v1/order/orders/place": (url, init) => {
+          placementPosts += 1;
+          expect(init?.method).toBe("POST");
+          expect(url.searchParams.has("Signature")).toBe(true);
+          return jsonResponse({ status: "ok", data: 357630527817872 });
+        },
+        "/v1/order/orders/": () => {
+          orderGets += 1;
+          return jsonResponse({ status: "ok", data: null });
+        },
+      }),
+    );
+    const order = await connector.placeOrder({
       clientOrderId: "client-new-1",
       symbol: "BTC/USDT",
       side: "buy",
       type: "limit",
       price: "65000",
       quantity: "0.01",
-    })).rejects.toMatchObject({
-      name: "HtxPlacementFailUnknownError",
+    });
+    expect(order).toMatchObject({
+      orderId: "357630527817872",
+      clientOrderId: "client-new-1",
+      symbol: "BTC/USDT",
+      side: "buy",
+      type: "limit",
+      status: "open",
+      price: "65000",
+      quantity: "0.01",
+      filledQuantity: "0",
+      rawVenueObservation: { status: "ok", data: 357630527817872 },
+    });
+    expect(placementPosts).toBe(1);
+    expect(orderGets).toBe(0);
+  });
+
+  it("classifies an HTX business error as a reject and does not look the order up", async () => {
+    let placementPosts = 0;
+    let orderGets = 0;
+    const connector = await validatedHtx(
+      tradeHandlers({
+        "/v1/order/orders/place": () => {
+          placementPosts += 1;
+          return jsonResponse({
+            status: "error",
+            "err-code": "order-value-min-error",
+            "err-msg": "order value too small",
+            data: null,
+          });
+        },
+        "/v1/order/orders/": () => {
+          orderGets += 1;
+          return jsonResponse({ status: "ok", data: null });
+        },
+      }),
+    );
+    await expect(
+      connector.placeOrder({
+        clientOrderId: "client-reject-1",
+        symbol: "BTC/USDT",
+        side: "buy",
+        type: "limit",
+        price: "65000",
+        quantity: "0.01",
+      }),
+    ).rejects.toMatchObject({
+      name: "HtxPlacementRejectedError",
       rawVenueObservation: {
-        venueResponseObserved: true,
         httpStatus: 200,
-        responseBody: { status: "ok", data: 357630527817872 },
+        errCode: "order-value-min-error",
       },
     });
     expect(placementPosts).toBe(1);
@@ -444,25 +507,27 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
   });
 
   it("fails unknown on an unrecognized HTX state and preserves the raw row", async () => {
-    const connector = await validatedHtx(tradeHandlers({
-      "/v1/order/orders/": (url) => {
-        const orderId = url.pathname.split("/").pop()!;
-        return jsonResponse({
-          status: "ok",
-          data: {
-            id: Number(orderId),
-            symbol: "btcusdt",
-            price: "65000",
-            amount: "0.01",
-            "created-at": 1630633835224,
-            type: "buy-limit",
-            "filled-amount": "0",
-            state: "venue-state-not-in-contract",
-            "client-order-id": "client-1",
-          },
-        });
-      },
-    }));
+    const connector = await validatedHtx(
+      tradeHandlers({
+        "/v1/order/orders/": (url) => {
+          const orderId = url.pathname.split("/").pop()!;
+          return jsonResponse({
+            status: "ok",
+            data: {
+              id: Number(orderId),
+              symbol: "btcusdt",
+              price: "65000",
+              amount: "0.01",
+              "created-at": 1630633835224,
+              type: "buy-limit",
+              "filled-amount": "0",
+              state: "venue-state-not-in-contract",
+              "client-order-id": "client-1",
+            },
+          });
+        },
+      }),
+    );
     await expect(connector.getOrder("357630527817872")).rejects.toMatchObject({
       name: "HtxUnknownOrderStateError",
       rawVenueObservation: {
@@ -473,25 +538,27 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
   });
 
   it("fails unknown on undocumented HTX order mechanics and preserves the raw row", async () => {
-    const connector = await validatedHtx(tradeHandlers({
-      "/v1/order/orders/": (url) => {
-        const orderId = url.pathname.split("/").pop()!;
-        return jsonResponse({
-          status: "ok",
-          data: {
-            id: Number(orderId),
-            symbol: "btcusdt",
-            price: "65000",
-            amount: "0.01",
-            "created-at": 1630633835224,
-            type: "buy-stop-limit",
-            "filled-amount": "0",
-            state: "submitted",
-            "client-order-id": "client-1",
-          },
-        });
-      },
-    }));
+    const connector = await validatedHtx(
+      tradeHandlers({
+        "/v1/order/orders/": (url) => {
+          const orderId = url.pathname.split("/").pop()!;
+          return jsonResponse({
+            status: "ok",
+            data: {
+              id: Number(orderId),
+              symbol: "btcusdt",
+              price: "65000",
+              amount: "0.01",
+              "created-at": 1630633835224,
+              type: "buy-stop-limit",
+              "filled-amount": "0",
+              state: "submitted",
+              "client-order-id": "client-1",
+            },
+          });
+        },
+      }),
+    );
     await expect(connector.getOrder("357630527817872")).rejects.toMatchObject({
       name: "HtxUnknownOrderMechanicsError",
       rawVenueObservation: {
@@ -504,24 +571,28 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
   it.each([429, 503])("never retries an HTX placement HTTP %i response", async (status) => {
     let placementPosts = 0;
     let orderGets = 0;
-    const connector = await validatedHtx(tradeHandlers({
-      "/v1/order/orders/place": () => {
-        placementPosts += 1;
-        return jsonResponse({ status: "error", "err-code": `http-${status}` }, status);
-      },
-      "/v1/order/orders/": () => {
-        orderGets += 1;
-        return jsonResponse({ status: "ok", data: null });
-      },
-    }));
-    await expect(connector.placeOrder({
-      clientOrderId: `client-http-${status}`,
-      symbol: "BTC/USDT",
-      side: "buy",
-      type: "limit",
-      price: "65000",
-      quantity: "0.01",
-    })).rejects.toMatchObject({
+    const connector = await validatedHtx(
+      tradeHandlers({
+        "/v1/order/orders/place": () => {
+          placementPosts += 1;
+          return jsonResponse({ status: "error", "err-code": `http-${status}` }, status);
+        },
+        "/v1/order/orders/": () => {
+          orderGets += 1;
+          return jsonResponse({ status: "ok", data: null });
+        },
+      }),
+    );
+    await expect(
+      connector.placeOrder({
+        clientOrderId: `client-http-${status}`,
+        symbol: "BTC/USDT",
+        side: "buy",
+        type: "limit",
+        price: "65000",
+        quantity: "0.01",
+      }),
+    ).rejects.toMatchObject({
       name: "HtxPlacementFailUnknownError",
       rawVenueObservation: { venueResponseObserved: true, httpStatus: status },
     });
@@ -531,21 +602,26 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
 
   it("redacts echoed signed request credentials while retaining a response digest", async () => {
     let signature = "";
-    const connector = await validatedHtx(tradeHandlers({
-      "/v1/order/orders/place": (url) => {
-        signature = url.searchParams.get("Signature") ?? "";
-        return jsonResponse({
-          status: "error",
-          message: `proxy echoed ${url.toString()}`,
-          AccessKeyId: VALID_CREDS.apiKey,
-          nested: {
-            Signature: signature,
-            secret: VALID_CREDS.apiSecret,
-            [`echo-${VALID_CREDS.apiKey}-${signature}`]: "credential-bearing property name",
-          },
-        }, 502);
-      },
-    }));
+    const connector = await validatedHtx(
+      tradeHandlers({
+        "/v1/order/orders/place": (url) => {
+          signature = url.searchParams.get("Signature") ?? "";
+          return jsonResponse(
+            {
+              status: "error",
+              message: `proxy echoed ${url.toString()}`,
+              AccessKeyId: VALID_CREDS.apiKey,
+              nested: {
+                Signature: signature,
+                secret: VALID_CREDS.apiSecret,
+                [`echo-${VALID_CREDS.apiKey}-${signature}`]: "credential-bearing property name",
+              },
+            },
+            502,
+          );
+        },
+      }),
+    );
     let captured: unknown;
     try {
       await connector.placeOrder({
@@ -576,14 +652,16 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
 
   it("fails unknown after one transport attempt without claiming a venue response", async () => {
     let placementPosts = 0;
-    const connector = await validatedHtx(tradeHandlers({
-      "/v1/order/orders/place": () => {
-        placementPosts += 1;
-        throw new TypeError(
-          "https://api.huobi.pro/v1/order/orders/place?AccessKeyId=secret&Signature=secret",
-        );
-      },
-    }));
+    const connector = await validatedHtx(
+      tradeHandlers({
+        "/v1/order/orders/place": () => {
+          placementPosts += 1;
+          throw new TypeError(
+            "https://api.huobi.pro/v1/order/orders/place?AccessKeyId=secret&Signature=secret",
+          );
+        },
+      }),
+    );
     let captured: unknown;
     try {
       await connector.placeOrder({
@@ -611,24 +689,30 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
 
   it("preserves observed HTTP status when response body reading fails", async () => {
     let placementPosts = 0;
-    const connector = await validatedHtx(tradeHandlers({
-      "/v1/order/orders/place": () => {
-        placementPosts += 1;
-        return {
-          status: 503,
-          ok: false,
-          text: async () => { throw new Error("body stream failed"); },
-        } as unknown as Response;
-      },
-    }));
-    await expect(connector.placeOrder({
-      clientOrderId: "client-body-read-failure",
-      symbol: "BTC/USDT",
-      side: "buy",
-      type: "limit",
-      price: "65000",
-      quantity: "0.01",
-    })).rejects.toMatchObject({
+    const connector = await validatedHtx(
+      tradeHandlers({
+        "/v1/order/orders/place": () => {
+          placementPosts += 1;
+          return {
+            status: 503,
+            ok: false,
+            text: async () => {
+              throw new Error("body stream failed");
+            },
+          } as unknown as Response;
+        },
+      }),
+    );
+    await expect(
+      connector.placeOrder({
+        clientOrderId: "client-body-read-failure",
+        symbol: "BTC/USDT",
+        side: "buy",
+        type: "limit",
+        price: "65000",
+        quantity: "0.01",
+      }),
+    ).rejects.toMatchObject({
       name: "HtxPlacementFailUnknownError",
       rawVenueObservation: {
         venueResponseObserved: true,
@@ -642,21 +726,25 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
 
   it("bounds an unresponsive placement by the sealed timeout and fails unknown", async () => {
     let placementPosts = 0;
-    const connector = await validatedHtx(tradeHandlers({
-      "/v1/order/orders/place": () => {
-        placementPosts += 1;
-        return new Promise<Response>(() => undefined);
-      },
-    }));
-    await expect(connector.placeOrder({
-      clientOrderId: "client-policy-timeout",
-      symbol: "BTC/USDT",
-      side: "buy",
-      type: "limit",
-      price: "65000",
-      quantity: "0.01",
-      timeoutMs: 10,
-    })).rejects.toMatchObject({
+    const connector = await validatedHtx(
+      tradeHandlers({
+        "/v1/order/orders/place": () => {
+          placementPosts += 1;
+          return new Promise<Response>(() => undefined);
+        },
+      }),
+    );
+    await expect(
+      connector.placeOrder({
+        clientOrderId: "client-policy-timeout",
+        symbol: "BTC/USDT",
+        side: "buy",
+        type: "limit",
+        price: "65000",
+        quantity: "0.01",
+        timeoutMs: 10,
+      }),
+    ).rejects.toMatchObject({
       name: "HtxPlacementFailUnknownError",
       rawVenueObservation: {
         venueResponseObserved: false,
@@ -669,25 +757,29 @@ describe("HtxExchangeConnector write foundation (DEE-211)", () => {
 
   it("bounds an unresponsive response body by the same sealed timeout", async () => {
     let placementPosts = 0;
-    const connector = await validatedHtx(tradeHandlers({
-      "/v1/order/orders/place": () => {
-        placementPosts += 1;
-        return {
-          status: 202,
-          ok: true,
-          text: () => new Promise<string>(() => undefined),
-        } as unknown as Response;
-      },
-    }));
-    await expect(connector.placeOrder({
-      clientOrderId: "client-policy-body-timeout",
-      symbol: "BTC/USDT",
-      side: "buy",
-      type: "limit",
-      price: "65000",
-      quantity: "0.01",
-      timeoutMs: 10,
-    })).rejects.toMatchObject({
+    const connector = await validatedHtx(
+      tradeHandlers({
+        "/v1/order/orders/place": () => {
+          placementPosts += 1;
+          return {
+            status: 202,
+            ok: true,
+            text: () => new Promise<string>(() => undefined),
+          } as unknown as Response;
+        },
+      }),
+    );
+    await expect(
+      connector.placeOrder({
+        clientOrderId: "client-policy-body-timeout",
+        symbol: "BTC/USDT",
+        side: "buy",
+        type: "limit",
+        price: "65000",
+        quantity: "0.01",
+        timeoutMs: 10,
+      }),
+    ).rejects.toMatchObject({
       name: "HtxPlacementFailUnknownError",
       rawVenueObservation: {
         venueResponseObserved: true,

@@ -31,10 +31,12 @@ import {
   readExecutionAttemptProjectionV2Postgres,
   readExecutionAttemptV2Postgres,
 } from "@/lib/trader/execution/v2/repository-postgres";
+import { HtxPlacementRejectedError } from "@/lib/trader/connectors/htx/classify-htx-placement";
 import {
   dispatchAndRecordExecutionAttemptV2,
   recordProtectiveCancelAcknowledgementV2Postgres,
   requestProtectiveCancelV2Postgres,
+  resolveReconciliationRequiredV2Postgres,
 } from "@/lib/trader/execution/v2/recovery-postgres";
 import { divideDecimal } from "@/lib/trader/risk/numeric";
 import {
@@ -2207,5 +2209,132 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     const paper = await path.service.submit({ organizationId: orgA }, input);
     expect(placeOrder).toHaveBeenCalledTimes(1);
     expect(paper.outcome.status).toBe("VENUE_ACCEPTED");
+  });
+
+  async function pendingNotional(accountId: string): Promise<string> {
+    const rows = await sql<{ pending: string }[]>`
+      SELECT worst_case_pending_exposure_notional::text AS pending
+      FROM trader_risk_account_state_v2
+      WHERE organization_id = ${orgA}::uuid AND account_id = ${accountId}`;
+    return rows[0]?.pending ?? "";
+  }
+
+  it("DEE-1151 records an HTX business reject and releases the pending reserve", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    let posts = 0;
+    const rejected = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        posts += 1;
+        throw new HtxPlacementRejectedError("venue rejected the placement", {
+          httpStatus: 200,
+          errCode: "order-value-min-error",
+        });
+      },
+    );
+    expect(posts).toBe(1);
+    expect(rejected.status).toBe("VENUE_REJECTED");
+    expect(await pendingNotional(input.allowance.accountId)).toMatch(/^0(\.0+)?$/);
+    const again = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        posts += 1;
+        throw new Error("must not post again");
+      },
+    );
+    expect(again.status).toBe("REFUSED_ALREADY_TERMINAL");
+    expect(posts).toBe(1);
+    expect(await pendingNotional(input.allowance.accountId)).toMatch(/^0(\.0+)?$/);
+  });
+
+  it("DEE-1151 reduces reconciliation to a reject when the lookup is absent", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    const unknown = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        throw new Error("socket reset");
+      },
+    );
+    expect(unknown.status).toBe("RECONCILIATION_REQUIRED");
+    expect(await pendingNotional(input.allowance.accountId)).not.toMatch(/^0(\.0+)?$/);
+    const stayed = await resolveReconciliationRequiredV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => ({ status: "UNKNOWN" }),
+    );
+    expect(stayed.status).toBe("RECONCILIATION_REQUIRED");
+    expect(await pendingNotional(input.allowance.accountId)).not.toMatch(/^0(\.0+)?$/);
+    const absent = await resolveReconciliationRequiredV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => ({ status: "ABSENT" }),
+    );
+    expect(absent.status).toBe("VENUE_REJECTED");
+    expect(await pendingNotional(input.allowance.accountId)).toMatch(/^0(\.0+)?$/);
+    let lookups = 0;
+    const terminal = await resolveReconciliationRequiredV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        lookups += 1;
+        return { status: "ABSENT" };
+      },
+    );
+    expect(terminal.status).toBe("REFUSED_ALREADY_TERMINAL");
+    expect(lookups).toBe(0);
+  });
+
+  it("DEE-1151 reduces reconciliation to an accepted order without releasing the reserve", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    const unknown = await dispatchAndRecordExecutionAttemptV2(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => {
+        throw new Error("timeout");
+      },
+    );
+    expect(unknown.status).toBe("RECONCILIATION_REQUIRED");
+    const held = await pendingNotional(input.allowance.accountId);
+    const payload = bound.attempt.exactRequestPayload;
+    const found = await resolveReconciliationRequiredV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => ({
+        status: "FOUND",
+        observation: {
+          order: {
+            orderId: "htx-reconciled-1",
+            clientOrderId: payload.clientOrderId,
+            symbol: payload.symbol,
+            side: payload.side,
+            type: payload.type,
+            status: "open",
+            price: payload.price ?? undefined,
+            quantity: payload.quantity,
+            filledQuantity: "0",
+            createdAt: "2026-08-21T00:00:00.000Z",
+            updatedAt: "2026-08-21T00:00:01.000Z",
+          },
+          trades: [],
+          raw: { lookup: "FOUND" },
+        },
+      }),
+    );
+    expect(found.status).toBe("VENUE_ACCEPTED");
+    expect(await pendingNotional(input.allowance.accountId)).toBe(held);
   });
 });

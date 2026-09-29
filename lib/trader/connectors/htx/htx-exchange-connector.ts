@@ -29,6 +29,10 @@ import {
   htxHostFromUrl,
   resolveHtxRestHost,
 } from "@/lib/trader/connectors/htx/config";
+import {
+  classifyHtxPlacementHttp,
+  HtxPlacementRejectedError,
+} from "@/lib/trader/connectors/htx/classify-htx-placement";
 import { buildSignedPostQueryString } from "@/lib/trader/connectors/htx/signing";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import {
@@ -367,11 +371,13 @@ export class HtxExchangeConnector implements ExchangeConnector {
       if (timedOut) {
         throw new HtxPlacementFailUnknownError("transport result unknown", {
           venueResponseObserved: response !== undefined,
-          ...(response === undefined ? {} : {
-            httpStatus: response.status,
-            httpOk: response.ok,
-            responseBodyRead: "TIMED_OUT",
-          }),
+          ...(response === undefined
+            ? {}
+            : {
+                httpStatus: response.status,
+                httpOk: response.ok,
+                responseBodyRead: "TIMED_OUT",
+              }),
           transportFailure: "NETWORK_TIMEOUT",
           timeoutMs,
         });
@@ -392,10 +398,8 @@ export class HtxExchangeConnector implements ExchangeConnector {
     } finally {
       if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
     }
-    if (response === undefined) throw new Error("HTX placement response missing after completed request");
-    // HTX's placement acknowledgement contains only an order id. It cannot
-    // prove the exact client identity, mechanics, quantity, price, or fills,
-    // and no follow-up lookup is ratified. Preserve it and reconcile.
+    if (response === undefined)
+      throw new Error("HTX placement response missing after completed request");
     const responseBodyDigestHex = computeStableJsonDigest(responseBody);
     const safeResponseBody = redactSensitiveHtxObservation(responseBody, [
       this.placementApiKey,
@@ -403,13 +407,47 @@ export class HtxExchangeConnector implements ExchangeConnector {
       signedParams.get("Signature") ?? "",
       encodeURIComponent(signedParams.get("Signature") ?? ""),
     ]);
-    throw new HtxPlacementFailUnknownError("acknowledgement requires reconciliation", {
+    const classified = classifyHtxPlacementHttp({
+      httpStatus: response.status,
+      body: responseBody,
+    });
+    const observed = {
       venueResponseObserved: true,
       httpStatus: response.status,
       httpOk: response.ok,
       responseBody: safeResponseBody,
       responseBodyDigestHex,
-    });
+    };
+    if (classified.kind === "accepted") {
+      const observedAt = new Date().toISOString();
+      const rawVenueObservation =
+        typeof safeResponseBody === "object" &&
+        safeResponseBody !== null &&
+        !Array.isArray(safeResponseBody)
+          ? (safeResponseBody as Record<string, unknown>)
+          : observed;
+      return {
+        orderId: classified.orderId,
+        clientOrderId: input.clientOrderId,
+        symbol: input.symbol,
+        side: input.side,
+        type: input.type,
+        status: "open",
+        ...(input.price === undefined ? {} : { price: input.price }),
+        quantity: input.quantity,
+        filledQuantity: "0",
+        createdAt: observedAt,
+        updatedAt: observedAt,
+        rawVenueObservation,
+      };
+    }
+    if (classified.kind === "rejected") {
+      throw new HtxPlacementRejectedError("venue rejected the placement", {
+        ...observed,
+        errCode: classified.errCode,
+      });
+    }
+    throw new HtxPlacementFailUnknownError("acknowledgement requires reconciliation", observed);
   }
 
   async cancelOrder(orderId: string): Promise<Order> {
@@ -478,7 +516,10 @@ export class HtxExchangeConnector implements ExchangeConnector {
   private assertTradePermission(): void {
     this.assertValidated();
     if (!permissionIncludesTrade(this.permissionString!)) {
-      throw new HtxConnectorValidationError("TRADE_PERMISSION_REQUIRED", "HTX trade permission was not verified");
+      throw new HtxConnectorValidationError(
+        "TRADE_PERMISSION_REQUIRED",
+        "HTX trade permission was not verified",
+      );
     }
   }
 

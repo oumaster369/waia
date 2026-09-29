@@ -24,9 +24,10 @@ import {
   type ExecutionReportTypeV2,
   type ExecutionReportV2,
 } from "./contracts";
+import { releaseWorstCasePendingForRejectedAttemptV2 } from "./release-pending-reserve-v2";
 
 type ExecutionTx = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
-export type ExecutionV2Executor = Pick<ExecutionTx, "select" | "insert" | "update">;
+export type ExecutionV2Executor = Pick<ExecutionTx, "select" | "insert" | "update" | "execute">;
 type PolicyRow = typeof pgSchema.traderExecutionPoliciesV2.$inferSelect;
 type PlanRow = typeof pgSchema.traderExecutionPlansV2.$inferSelect;
 type AttemptRow = typeof pgSchema.traderExecutionAttemptsV2.$inferSelect;
@@ -81,7 +82,13 @@ const EXECUTION_ATTEMPT_TRANSITIONS_V2: Readonly<
   FILLED: [],
   CANCEL_REQUESTED: ["CANCELLED", "PARTIALLY_FILLED", "FILLED", "RECONCILIATION_REQUIRED"],
   CANCELLED: [],
-  RECONCILIATION_REQUIRED: ["RECONCILIATION_REQUIRED"],
+  RECONCILIATION_REQUIRED: [
+    "RECONCILIATION_REQUIRED",
+    "VENUE_ACCEPTED",
+    "VENUE_REJECTED",
+    "PARTIALLY_FILLED",
+    "FILLED",
+  ],
 });
 
 type RawEvidence = Readonly<Record<string, unknown>>;
@@ -130,6 +137,40 @@ function exactBoundOrderEvidence(
     );
   }
   return order;
+}
+
+function deterministicRejectEvidence(
+  attempt: ExecutionAttemptV2,
+  rawObservation: RawEvidence,
+): boolean {
+  const order = asEvidence(rawObservation.order);
+  if (!order) return false;
+  const payload = attempt.exactRequestPayload;
+  const expectedPrice = payload.price;
+  const observedPrice = order.price;
+  const priceMatches =
+    expectedPrice === null
+      ? observedPrice === null
+      : typeof observedPrice === "string" && compareDecimal(observedPrice, expectedPrice) === 0;
+  try {
+    return (
+      order.orderCreated === false &&
+      (order.orderId === null || order.orderId === undefined) &&
+      (order.venueOrderId === null || order.venueOrderId === undefined) &&
+      order.clientOrderId === attempt.clientOrderId &&
+      order.symbol === payload.symbol &&
+      order.side === payload.side &&
+      order.type === payload.type &&
+      order.status === "rejected" &&
+      priceMatches &&
+      typeof order.quantity === "string" &&
+      compareDecimal(order.quantity, payload.quantity) === 0 &&
+      typeof order.filledQuantity === "string" &&
+      compareDecimal(order.filledQuantity, "0") === 0
+    );
+  } catch {
+    return false;
+  }
 }
 
 function validateFillEvidence(
@@ -252,6 +293,14 @@ function lifecycleStateForReport(
       return "VENUE_ACCEPTED";
     }
     case "VENUE_REJECTED": {
+      if (venueOrderId === null) {
+        if (!deterministicRejectEvidence(attempt, rawObservation)) {
+          throw new ExecutionV2PersistenceConflictError(
+            "venue report lacks exact bound order evidence",
+          );
+        }
+        return "VENUE_REJECTED";
+      }
       const order = exactBoundOrderEvidence(attempt, rawObservation, venueOrderId, ["rejected"]);
       if (compareDecimal(String(order.filledQuantity), "0") !== 0) {
         throw new ExecutionV2PersistenceConflictError("rejected order cannot claim a fill");
@@ -904,6 +953,12 @@ export async function appendExecutionReportV2FromExecutor(
       `invalid Execution attempt transition ${currentLifecycle}->${lifecycleState}`,
     );
   }
+  const releasingPending =
+    lifecycleState === "VENUE_REJECTED" &&
+    !priorReports.some((report) => report.rawObservation.pendingReserveReleased === true);
+  const rawObservation = releasingPending
+    ? { ...input.rawObservation, pendingReserveReleased: true }
+    : input.rawObservation;
   const report = createExecutionReportV2({
     executionReportId: input.executionReportId,
     organizationId: scoped.organizationId,
@@ -913,7 +968,7 @@ export async function appendExecutionReportV2FromExecutor(
     reportSequence: row.nextReportSequence.toString(),
     reportType: input.reportType,
     source: input.source,
-    rawObservation: input.rawObservation,
+    rawObservation,
     venueOrderId: input.venueOrderId ?? null,
     observedAtUtc: input.observedAtUtc,
     previousReportDigestHex: row.lastReportDigest,
@@ -949,6 +1004,14 @@ export async function appendExecutionReportV2FromExecutor(
         eq(pgSchema.traderExecutionAttemptsV2.nextReportSequence, row.nextReportSequence),
       ),
     );
+  if (releasingPending) {
+    await releaseWorstCasePendingForRejectedAttemptV2(ex, {
+      organizationId: scoped.organizationId,
+      accountId: row.accountId,
+      riskAllowanceId: row.riskAllowanceId,
+      priorReports,
+    });
+  }
   return report;
 }
 
@@ -994,12 +1057,19 @@ export async function listExecutionReportPrefixV2Postgres(
   if (throughSequence < 0n || throughSequence > 256n || maximumRows !== 257) {
     throw new ExecutionV2PersistenceConflictError("unsupported bounded report prefix");
   }
-  const rows = await ex.select().from(pgSchema.traderExecutionReportsV2).where(and(
-    eq(pgSchema.traderExecutionReportsV2.organizationId, scoped.organizationId),
-    eq(pgSchema.traderExecutionReportsV2.accountId, context.accountId),
-    eq(pgSchema.traderExecutionReportsV2.executionAttemptId, executionAttemptId),
-    lte(pgSchema.traderExecutionReportsV2.reportSequence, throughSequence),
-  )).orderBy(asc(pgSchema.traderExecutionReportsV2.reportSequence)).limit(maximumRows);
+  const rows = await ex
+    .select()
+    .from(pgSchema.traderExecutionReportsV2)
+    .where(
+      and(
+        eq(pgSchema.traderExecutionReportsV2.organizationId, scoped.organizationId),
+        eq(pgSchema.traderExecutionReportsV2.accountId, context.accountId),
+        eq(pgSchema.traderExecutionReportsV2.executionAttemptId, executionAttemptId),
+        lte(pgSchema.traderExecutionReportsV2.reportSequence, throughSequence),
+      ),
+    )
+    .orderBy(asc(pgSchema.traderExecutionReportsV2.reportSequence))
+    .limit(maximumRows);
   return Object.freeze(rows.map(mapReport));
 }
 
