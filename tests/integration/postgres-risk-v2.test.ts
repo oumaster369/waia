@@ -679,6 +679,7 @@ describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () =>
     await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority);
     const locker = postgres(url!, { max: 1 });
     const expireClient = postgres(url!, { max: 1, connection: { application_name: "dee1135-fresh-clock" } });
+    let expiring: Promise<boolean> = Promise.resolve(false);
     const expireDb = drizzle(expireClient, { schema: pgSchema }) as WaiaPostgresDb;
     try {
       await locker`BEGIN`;
@@ -686,7 +687,7 @@ describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () =>
         SELECT account_id FROM trader_risk_account_state_v2
         WHERE organization_id = ${orgA}::uuid AND account_id = 'fresh-clock'
         FOR UPDATE`;
-      const expiring = expireRiskAllowanceV2Postgres(expireDb, { organizationId: orgA }, {
+      expiring = expireRiskAllowanceV2Postgres(expireDb, { organizationId: orgA }, {
         accountId: "fresh-clock",
         riskAllowanceId: authority.riskAllowanceId,
         eventId: uuid(657_900),
@@ -718,8 +719,9 @@ describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () =>
     } finally {
       await locker`ROLLBACK`.catch(() => undefined);
       await locker.end({ timeout: 5 });
+      await expiring.catch(() => undefined);
       await expireClient.end({ timeout: 5 });
     }
-  });
+  }, 30_000);
 
 });

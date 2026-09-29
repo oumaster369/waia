@@ -542,7 +542,7 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
 
     const [until] = await client<{ until: string }[]>`
       select to_char(
-        date_trunc('milliseconds', clock_timestamp() + interval '12 seconds') at time zone 'UTC',
+        date_trunc('milliseconds', clock_timestamp() + interval '6 seconds') at time zone 'UTC',
         'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as until`;
     const expiry = await publish("acct-expiry-after", {
       validFromUtc: OPEN.validFromUtc,
@@ -574,7 +574,7 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
       orders: 0,
       current_rows: 0,
     });
-  });
+  }, 60_000);
 
   it("pins the composite validation key and invoker search_path", async () => {
     const [unique] = await client<{ def: string }[]>`
