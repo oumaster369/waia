@@ -232,6 +232,47 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
     }
   });
 
+  it("refuses the first produce when observed policy, release, or account differs", async () => {
+    const { organizationId } = await seed();
+    const foreignPolicy = "ef".repeat(32);
+    const foreignRelease = "01".repeat(32);
+    const cases = [
+      { accountId: "acct-first-policy", observed: { policyDigest: foreignPolicy } },
+      { accountId: "acct-first-release", observed: { releaseSha: foreignRelease } },
+      { accountId: "acct-first-account", observed: { accountId: "other-observed-account" } },
+    ] as const;
+    for (const item of cases) {
+      const issued = command(organizationId, item.accountId);
+      const result = await produceLiveCapitalEnvelopeV2(client, {
+        command: issued,
+        boundOrganizationId: organizationId,
+        observed: watch(issued, item.observed),
+      });
+      expect(result).toMatchObject({
+        decision: "REFUSED",
+        reason: "LIVE_CAPITAL_IDENTITY_CHANGED",
+        allowanceId: null,
+        orderId: null,
+        venueEffects: "ZERO",
+        invalidated: true,
+      });
+      expect(result.decision).not.toBe("PUBLISHED");
+      const watchedAccount = "accountId" in item.observed ? item.observed.accountId : issued.accountId;
+      for (const accountId of new Set([issued.accountId, watchedAccount])) {
+        const [current] = await client<{ n: number }[]>`
+          select count(*)::int as n from trader_live_capital_envelope_current_v2
+          where organization_id = ${organizationId}::uuid and account_id = ${accountId}`;
+        expect(current!.n).toBe(0);
+      }
+    }
+    expect(await counts(organizationId)).toMatchObject({
+      current_rows: 0,
+      bases: 0,
+      allowances: 0,
+      orders: 0,
+    });
+  });
+
   it("invalidates a missing, stale, or changed envelope and leaves venue effects at zero", async () => {
     const { organizationId } = await seed();
     const accountId = "acct-invalidate";

@@ -326,13 +326,7 @@ export async function advanceLiveCapitalEnvelopeStageV2(
     const decision = decideLiveCapitalEnvelopePublicationV2({
       liveCapitalEnvelope: receipt,
       sourceMethodQualified: false,
-      bound: {
-        organizationId: command.organizationId,
-        accountId: command.accountId,
-        policyDigest: command.policyDigest,
-        releaseSha: command.releaseSha,
-        nowUtc,
-      },
+      bound: { ...input.observed, nowUtc },
     });
     const current = await loadCurrent(tx, command.organizationId, command.accountId);
     if (decision.decision !== "PUBLISHED") {
