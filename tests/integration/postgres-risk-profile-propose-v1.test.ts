@@ -1,0 +1,232 @@
+import { randomUUID } from "node:crypto";
+import postgres from "postgres";
+import { describe, expect, it } from "vitest";
+import { admitOpenProfileFrontierV1, cancelStoredProfileProposalV1, refuseProfileBackedExecutionV1, readStoredProfileAuthorityV1, refuseStoredProfileActivationV1, reproposeStoredProfileV1, retainProposedRiskAccountProfileV1, retainStoredRiskAccountReferenceV1, retainStoredRiskAccountAcquisitionJobV1, revokeStoredProfileAuthorityV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
+import { RiskCurrentAccountRefusedV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
+import {
+  createRiskAccountProfileV1,
+  createRiskAccountReferenceV1,
+  riskAccountDigestV1,
+  sealRiskAccountRecordV1,
+  RISK_ACCOUNT_CHANNELS_V1,
+  RISK_REFERENCE_METHOD_V1,
+  type RiskAccountProfileDraftV1,
+  type RiskReferenceMemberV1,
+} from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
+
+const url = process.env.DATABASE_URL_POSTGRES?.trim();
+const enabled = process.env.WAIA_PG_INTEGRATION === "1" && !!url && /waia_dee1121_dee1135_acquisition_/.test(url);
+const digest = riskAccountDigestV1;
+const start = "2026-09-27T12:00:00.000Z";
+const end = "2026-09-27T13:00:00.000Z";
+
+function proposalDraft(organizationId: string, accountId: string): RiskAccountProfileDraftV1 {
+  const source = "00000000-0000-4000-8000-000000113502";
+  const evidence = {
+    sourceId: source, captureReceiptDigest: digest("propose-capture"), storageBindingDigest: digest("propose-storage"),
+    validationReceiptDigest: digest("propose-validation"), rawBytesDigest: digest("propose-raw"),
+  };
+  return {
+    organizationId, accountId, credentialId: source, exchangeAccountId: "135", accountSourceId: source,
+    venue: "HTX", market: "SPOT", referenceCurrency: "USDT", assets: ["BTC", "USDT"],
+    instruments: [{ instrumentIdentityDigestHex: digest("BTC/USDT"), symbol: "BTC/USDT", baseAsset: "BTC", quoteAsset: "USDT", referenceSourceId: source }],
+    strategyId: "proposal-only", strategyVersion: "v1",
+    sourceContract: {
+      evidence, statementDigest: digest("propose-contract"), anchorMethod: "INDEPENDENT_SOURCE_ASSERTED_DATED_ACCOUNT",
+      validFromUtc: start, validUntilUtc: end, maxSourceAgeMs: 60000, maxReportClockSkewMs: 0,
+      coveredAssetSetDigest: digest(["BTC", "USDT"]),
+    },
+    mutationBounds: ["BTC", "USDT"].flatMap(asset => RISK_ACCOUNT_CHANNELS_V1.map(channel => ({
+      asset, channel, intervalStartUtc: start, intervalEndUtc: end,
+      maximumPositiveQuantity: "0.1", maximumNegativeQuantity: "0.1", contractStatementDigest: digest("propose-contract"),
+    }))),
+    reference: {
+      qualification: {
+        evidence, methodVersion: RISK_REFERENCE_METHOD_V1, statementDigest: digest("propose-method"),
+        validFromUtc: start, validUntilUtc: end,
+        reportTimeSemantics: "HTX_RESPONSE_GENERATION_WITH_QUALIFIED_SIDE_AGE_BOUND", venueDependence: "SINGLE_VENUE_HTX",
+      },
+      windowDurationMs: 1000, slotOffsetsMs: [0, 500], slotToleranceMs: 0, maxSideAgeMs: 10, validityMs: 30000,
+    },
+    allocation: {
+      evidence, statementDigest: digest("NOT_AN_ADOPTED_CAP"), allocationId: "INACTIVE_FIXTURE_ONLY", version: "v1",
+      approvedNotional: "1", allowedSymbols: ["BTC/USDT"], validFromUtc: start, validUntilUtc: end,
+    },
+    governance: { coolingOffMs: 1, reviewReason: "Retained proposal only; not an adopted cap or trading authority" },
+    work: { maxRawBytes: 4096, requestTimeoutMs: 1000, maxPages: 20, maxMembers: 50, maxLedgerEvents: 50, retentionSeconds: 3600 },
+  };
+}
+
+describe.skipIf(!enabled)("profile propose writes no current authority", () => {
+  it("retains one proposal and leaves the current pointer empty", async () => {
+    const sql = postgres(url!, { max: 1 });
+    const accountId = `propose-${randomUUID().slice(0, 8)}`;
+    try {
+      const [org] = await sql<{ id: string }[]>`select id from organizations limit 1`;
+      const [user] = await sql<{ id: string }[]>`select id from users limit 1`;
+      expect(org?.id).toBeTruthy();
+      expect(user?.id).toBeTruthy();
+      const [before] = await sql<{ allowances: number; orders: number; current_rows: number }[]>`select
+        (select count(*)::int from trader_risk_allowances_v2) as allowances,
+        (select count(*)::int from trader_orders) as orders,
+        (select count(*)::int from trader_risk_account_current_v1) as current_rows`;
+      const [audit] = await sql<{ id: string }[]>`insert into audit_logs
+        (id, actor_type, actor_id, action, entity_type, entity_id, organization_id, metadata_json)
+        values (${randomUUID()}::uuid, 'service', ${user!.id}, 'trader.risk_account_profile.propose',
+          'trader.risk_account_profile', ${accountId}, ${org!.id}::uuid, '{}'::jsonb)
+        returning id`;
+      await expect(retainProposedRiskAccountProfileV1(sql, {
+        profile: createRiskAccountProfileV1(proposalDraft(org!.id, `${accountId}-actor`)),
+        actorId: randomUUID(), auditId: audit!.id, commandId: randomUUID(),
+      })).rejects.toThrow(/PROFILE_AUDIT_ACTOR/);
+      const profile = createRiskAccountProfileV1(proposalDraft(org!.id, accountId));
+      const proposeCommand = randomUUID();
+      const retained = await retainProposedRiskAccountProfileV1(sql, {
+        profile, actorId: user!.id, auditId: audit!.id, commandId: proposeCommand,
+      });
+      expect(retained).toMatchObject({ decision: "RETAINED_NON_AUTHORITY", action: "PROPOSE", currentPointer: null, allowanceId: null, orderId: null });
+      expect(await retainProposedRiskAccountProfileV1(sql, {
+        profile, actorId: user!.id, auditId: audit!.id, commandId: proposeCommand,
+      })).toMatchObject({ profileDigest: retained.profileDigest, action: "PROPOSE" });
+      const source = "00000000-0000-4000-8000-000000113502";
+      const members: RiskReferenceMemberV1[] = [0, 500].map((offset, slot) => sealRiskAccountRecordV1({
+        schemaVersion: "risk-reference-member/v1" as const, organizationId: org!.id, accountId, profileDigest: profile.contentDigest,
+        windowId: "proposal-window", slot, instrumentIdentityDigestHex: digest("BTC/USDT"), symbol: "BTC/USDT", baseAsset: "BTC",
+        quoteAsset: "USDT" as const, sourceId: source, sourceReportTimeUtc: new Date(Date.parse(start) + offset).toISOString(),
+        availableAtUtc: new Date(Date.parse(start) + offset).toISOString(), captureReceiptDigest: digest(`ref-capture-${slot}`),
+        storageBindingDigest: digest(`ref-storage-${slot}`), validationReceiptDigest: digest(`ref-validation-${slot}`),
+        rawBytesDigest: digest(`ref-raw-${slot}`), rawMemberPath: "tick" as const, decoderVersion: "htx-merged-lossless-scale8/v1",
+        normalizedInputDigest: digest(`ref-normal-${slot}`), gatewayReceiptDigest: digest(`ref-gateway-${slot}`),
+        observationId: digest(`ref-observation-${slot}`), observationContentDigest: digest(`ref-content-${slot}`),
+        trustAsOfReceiptId: digest(`ref-trust-${slot}`), bid: "9", ask: "10", last: "1000",
+      }));
+      const reference = createRiskAccountReferenceV1({ profile, windowId: "proposal-window", windowStartUtc: start, assembledAtUtc: new Date(Date.parse(start) + 1000).toISOString(), members });
+      await expect(retainStoredRiskAccountReferenceV1(sql, { reference, actorId: user!.id, auditId: audit!.id })).rejects.toThrow(/REFERENCE_MEMBERS/);
+      const [references] = await sql<{ n: number }[]>`select count(*)::int n from trader_risk_account_references_v1 where account_id = ${accountId}`;
+      expect(references?.n).toBe(0);
+      await expect(retainStoredRiskAccountAcquisitionJobV1(sql, {
+        organizationId: org!.id, accountId, id: randomUUID(), profileDigest: profile.contentDigest,
+        referenceDigest: reference.contentDigest, actorId: user!.id, auditId: audit!.id,
+      })).rejects.toThrow(/REFERENCE_ABSENT/);
+      const [jobs] = await sql<{ n: number }[]>`select count(*)::int n from trader_risk_account_acquisition_jobs_v1 where account_id = ${accountId}`;
+      expect(jobs?.n).toBe(0);
+      const [afterReplay] = await sql<{ n: number }[]>`select count(*)::int n from trader_risk_account_profile_events_v1 where account_id = ${accountId}`;
+      expect(afterReplay?.n).toBe(1);
+      const [event] = await sql<{ action: string; n: number }[]>`select action, count(*)::int n
+        from trader_risk_account_profile_events_v1 where account_id = ${accountId} group by action`;
+      expect(event).toEqual({ action: "PROPOSE", n: 1 });
+      expect(await readStoredProfileAuthorityV1(sql, org!.id, accountId)).toEqual({
+        action: "PROPOSE", authority: "NONE", currentPointer: null, allocationCopied: false,
+      });
+      await expect(refuseStoredProfileActivationV1(sql, { organizationId: org!.id, accountId, action: "ACTIVATE" })).rejects.toBeInstanceOf(RiskCurrentAccountRefusedV1);
+      const [still] = await sql<{ action: string; n: number }[]>`select action, count(*)::int n
+        from trader_risk_account_profile_events_v1 where account_id = ${accountId} group by action`;
+      expect(still).toEqual({ action: "PROPOSE", n: 1 });
+      const cancelled = await cancelStoredProfileProposalV1(sql, {
+        organizationId: org!.id, accountId, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
+      });
+      expect(cancelled).toMatchObject({ decision: "RETAINED_NON_AUTHORITY", action: "CANCEL", currentPointer: null, allowanceId: null, orderId: null });
+      expect(await readStoredProfileAuthorityV1(sql, org!.id, accountId)).toEqual({
+        action: "CANCEL", authority: "NONE", currentPointer: null, allocationCopied: false,
+      });
+      await expect(cancelStoredProfileProposalV1(sql, {
+        organizationId: org!.id, accountId, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
+      })).rejects.toBeInstanceOf(RiskCurrentAccountRefusedV1);
+      const chain = await sql<{ action: string }[]>`select action from trader_risk_account_profile_events_v1
+        where account_id = ${accountId} order by event_sequence`;
+      expect(chain.map(row => row.action)).toEqual(["PROPOSE", "CANCEL"]);
+      await expect(revokeStoredProfileAuthorityV1(sql, { organizationId: org!.id, accountId })).rejects.toThrow(/PROFILE_AUTHORITY_ABSENT/);
+      const afterRevoke = await sql<{ action: string }[]>`select action from trader_risk_account_profile_events_v1
+        where account_id = ${accountId} order by event_sequence`;
+      expect(afterRevoke.map(row => row.action)).toEqual(["PROPOSE", "CANCEL"]);
+      await expect(reproposeStoredProfileV1(sql, {
+        organizationId: org!.id, accountId, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
+        profileDigest: "ab".repeat(32),
+      })).rejects.toThrow(/PROFILE_DIGEST_MISMATCH/);
+      const reopened = await reproposeStoredProfileV1(sql, {
+        organizationId: org!.id, accountId, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
+        profileDigest: retained.profileDigest,
+      });
+      expect(reopened).toMatchObject({ decision: "RETAINED_NON_AUTHORITY", action: "PROPOSE", currentPointer: null, allowanceId: null, orderId: null });
+      expect(await readStoredProfileAuthorityV1(sql, org!.id, accountId)).toEqual({
+        action: "PROPOSE", authority: "NONE", currentPointer: null, allocationCopied: false,
+      });
+      const reopenedChain = await sql<{ action: string }[]>`select action from trader_risk_account_profile_events_v1
+        where account_id = ${accountId} order by event_sequence`;
+      expect(reopenedChain.map(row => row.action)).toEqual(["PROPOSE", "CANCEL", "PROPOSE"]);
+      await expect(retainProposedRiskAccountProfileV1(sql, {
+        profile, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
+      })).rejects.toThrow(/PROFILE_PROPOSAL_EXISTS/);
+      const afterRepeat = await sql<{ action: string }[]>`select action from trader_risk_account_profile_events_v1
+        where account_id = ${accountId} order by event_sequence`;
+      expect(afterRepeat.map(row => row.action)).toEqual(["PROPOSE", "CANCEL", "PROPOSE"]);
+      const stored = await readStoredProfileAuthorityV1(sql, org!.id, accountId);
+      const observed = { decision: "OBSERVED", publication: { decision: "PUBLISHED", reason: "OK" }, exposureDelta: "2", pendingDelta: "-1" };
+      expect(admitOpenProfileFrontierV1({ storedAction: stored.action, observed })).toEqual({
+        decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
+        exposureDelta: "2", pendingDelta: "-1",
+      });
+      const suffix = {
+        predecessorHeadDigest: null, predecessorNextEventSequence: "1", predecessorNextAdmissionSequence: "1",
+        predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0",
+        openedAllowances: [], closedAllowances: [], alreadyDisposedTruthIds: [], events: [],
+        terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
+        terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+        terminalOpenAllowances: [], terminalConsumedAllowances: [],
+        organizationId: org!.id, accountId,
+        predecessorStateVersion: "1", terminalStateVersion: "1",
+        declaredMaxEvents: 4,
+      };
+      const envelope = {
+        organizationId: org!.id,
+        accountId,
+        policyDigest: "ab".repeat(32),
+        releaseSha: "cd".repeat(32),
+      };
+      await expect(refuseProfileBackedExecutionV1(sql, {
+        organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [], envelope,
+        suffix: { ...suffix, accountId: "other-account" },
+      })).rejects.toThrow(/SUFFIX_SCOPE_MISMATCH/);
+      await expect(refuseProfileBackedExecutionV1(sql, {
+        organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [], envelope,
+        suffix: { ...suffix, terminalReconciledExposureNotional: "1" },
+      })).rejects.toThrow(/SUFFIX_TERMINAL_MISMATCH/);
+      expect(await refuseProfileBackedExecutionV1(sql, {
+        organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [], envelope, suffix,
+      })).toEqual({
+        issue: { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null, exposureDelta: "2", pendingDelta: "-1" },
+        bind: { decision: "REFUSED", reason: "NO_CURRENT_POINTER", bindInvoked: false },
+      });
+      await cancelStoredProfileProposalV1(sql, {
+        organizationId: org!.id, accountId, actorId: user!.id, auditId: audit!.id, commandId: randomUUID(),
+      });
+      expect(await refuseProfileBackedExecutionV1(sql, { organizationId: org!.id, accountId, observed, unpublishedTruthRecordIds: [], envelope, suffix })).toEqual({
+        issue: { decision: "REFUSED", reason: "PROFILE_PROPOSAL_NOT_OPEN", allowanceId: null, orderId: null },
+        bind: { decision: "REFUSED", reason: "NO_CURRENT_POINTER", bindInvoked: false },
+      });
+      const coolId = `${accountId}-cool`;
+      const coolDraft = proposalDraft(org!.id, coolId);
+      coolDraft.governance = { coolingOffMs: 60_000, reviewReason: coolDraft.governance.reviewReason };
+      const [coolAudit] = await sql<{ id: string }[]>`insert into audit_logs
+        (id, actor_type, actor_id, action, entity_type, entity_id, organization_id, metadata_json)
+        values (${randomUUID()}::uuid, 'service', ${user!.id}, 'trader.risk_account_profile.propose',
+          'trader.risk_account_profile', ${coolId}, ${org!.id}::uuid, '{}'::jsonb)
+        returning id`;
+      await retainProposedRiskAccountProfileV1(sql, {
+        profile: createRiskAccountProfileV1(coolDraft), actorId: user!.id, auditId: coolAudit!.id, commandId: randomUUID(),
+      });
+      await expect(cancelStoredProfileProposalV1(sql, {
+        organizationId: org!.id, accountId: coolId, actorId: user!.id, auditId: coolAudit!.id, commandId: randomUUID(),
+      })).rejects.toThrow(/PROFILE_COOLING_OFF/);
+      const [coolEvents] = await sql<{ n: number }[]>`select count(*)::int n from trader_risk_account_profile_events_v1 where account_id = ${coolId}`;
+      expect(coolEvents?.n).toBe(1);
+      const [after] = await sql<{ allowances: number; orders: number; current_rows: number }[]>`select
+        (select count(*)::int from trader_risk_allowances_v2) as allowances,
+        (select count(*)::int from trader_orders) as orders,
+        (select count(*)::int from trader_risk_account_current_v1) as current_rows`;
+      expect(after).toEqual(before);
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+  });
+});

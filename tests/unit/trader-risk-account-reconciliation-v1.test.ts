@@ -1,9 +1,12 @@
+import { admitFoldedSuffixV1, admitOpenProfileFrontierV1, assertProfileCoolingElapsedV1, coolingOffMsFromProfileBodyV1, assertAuditActorMatchesV1, assertReferenceMembersRetainedV1, decideProfileCommandReplayV1, decideRiskAccountProfileCommandV1 } from "@/lib/trader/risk/v2/risk-account-profile-command-v1";
+import { classifyCurrentAccountRowV1 } from "@/lib/trader/risk/v2/risk-current-account-read-v1";
 import { describe, expect, it } from "vitest";
 import { createRealityProjectionV2, type RealityProjectionEntryV2 } from "@/lib/trader/reality/v2/contracts";
 import { createRiskAccountProfileV1, createRiskAccountReferenceV1, riskAccountDigestV1,
-  RISK_ACCOUNT_CHANNELS_V1, RISK_REFERENCE_METHOD_V1, sealRiskAccountRecordV1,
+  RISK_ACCOUNT_CHANNELS_V1, RISK_REFERENCE_METHOD_V1, RiskCurrentAccountRefusedV1, sealRiskAccountRecordV1,
   type RiskAccountProfileDraftV1, type RiskReferenceMemberV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
-import { availableRiskAccountQuantityV1, constructRiskAccountBasisV1,
+import { availableRiskAccountQuantityV1, constructRiskAccountBasisV1, compareExpectedAccountFrontierV1,
+  admitCurrentAccountBasisV1, authenticateExpectedEventSuffixV1, decideCurrentAccountBasisPublicationV1, foldExpectedEnforcementSuffixV1, holdUnpublishedInclusionsV1, observeSealedExpectedFrontierV1, retainObservedFrontierV1,
   type RiskAccountObligationV1, type RiskExpectedFrontierV1, type RiskIndependentInclusionV1 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
 
 // These pure values exercise arithmetic and refusal contracts only. No persisted authority,
@@ -65,15 +68,23 @@ function projection(btc: string, quote: string, at = start, extras: RealityProje
       entry("BALANCE", "USDT", { kind: "BALANCE", asset: "USDT", available: quote, locked: "0", total: quote }), ...extras,
     ] });
 }
+function obligation(id: string, quantity: string, side: "BUY" | "SELL" = "SELL"): RiskAccountObligationV1 {
+  return { allowanceId: id, allowanceContentDigest: digest(id), verdictId: `verdict-${id}`, verdictContentDigest: digest(`verdict-${id}`),
+    instrumentIdentityDigest: digest("BTC/USDT"), symbol: "BTC/USDT", baseAsset: "BTC", side, quantity,
+    reservedNotional: side === "BUY" ? "10" : "0", pendingNotional: "0", state: "ISSUED", orderId: null, orderBindingDigest: null };
+}
 function available(input: Omit<Parameters<typeof availableRiskAccountQuantityV1>[0], "evaluatedAtUtc" | "quoteAsset"> & {
   evaluatedAtUtc?: string; quoteAsset?: string;
 }) {
   return availableRiskAccountQuantityV1({ evaluatedAtUtc: time(2), quoteAsset: "USDT", ...input });
 }
-function obligation(id: string, quantity: string, side: "BUY" | "SELL" = "SELL"): RiskAccountObligationV1 {
-  return { allowanceId: id, allowanceContentDigest: digest(id), verdictId: `verdict-${id}`, verdictContentDigest: digest(`verdict-${id}`),
-    instrumentIdentityDigest: digest("BTC/USDT"), symbol: "BTC/USDT", baseAsset: "BTC", side, quantity,
-    reservedNotional: side === "BUY" ? "10" : "0", pendingNotional: "0", state: "ISSUED", orderId: null, orderBindingDigest: null };
+function basisHolding(obligations: RiskAccountObligationV1[]) {
+  const input = fixture(), prior = constructRiskAccountBasisV1(input);
+  const reservation = obligations.reduce((sum, row) => sum + Number(row.reservedNotional), 0);
+  return constructRiskAccountBasisV1({ ...input, predecessor: prior, publishedAtUtc: time(3),
+    expected: { ...prior.expected, stateVersion: "2", nextAdmissionSequence: "2", nextEventSequence: "2",
+      eventHeadDigest: digest("held"), reconciledExposureNotional: prior.accounting.reconciledExposureNotional,
+      pendingExposureNotional: prior.externalDebtNotional, reservationNotional: String(reservation), obligations } });
 }
 
 describe("current-account pure arithmetic and refusal values, without durable admission authority", () => {
@@ -105,22 +116,55 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     expect(() => constructRiskAccountBasisV1({ ...input, predecessor: prior, expected: prior.expected,
       reality: projection("2.1", "100", time(3)), publishedAtUtc: time(4) })).toThrow("STANDING_DIVERGENCE");
   });
-  it("charges other SELL obligations, ignores pending BUY as guaranteed inventory and exempts only the exact own SELL once", () => {
-    const basis = constructRiskAccountBasisV1(fixture()), own = obligation("own", "0.4"), other = obligation("other", "0.3");
-    const obligations = [own, other, obligation("buy", "100", "BUY")];
-    expect(available({ basis, asset: "BTC", obligations })).toBe("0.6");
-    expect(available({ basis, asset: "BTC", obligations,
-      own: { allowanceId: own.allowanceId, allowanceContentDigest: own.allowanceContentDigest,
-        orderId: null, quantity: "0.4" } })).toBe("1");
-    expect(() => available({ basis, asset: "BTC", obligations,
-      own: { allowanceId: "own", allowanceContentDigest: digest("forged"), orderId: null, quantity: "0.4" } })).toThrow("OWN_OBLIGATION_MISMATCH");
-    expect(() => available({ basis, asset: "BTC", obligations: [own, own] })).toThrow("DUPLICATE_OBLIGATION");
+  it("reads sealed obligations, exempts only the exact own SELL, and ignores a BUY as inventory", () => {
+    const own = obligation("own", "0.4"), sibling = obligation("sibling", "0.8");
+    const basis = basisHolding([own, sibling, obligation("buy", "100", "BUY")]);
+    const exact = { allowanceId: own.allowanceId, allowanceContentDigest: own.allowanceContentDigest, orderId: null, quantity: "0.4" };
+    expect(available({ basis, asset: "BTC" })).toBe("0.1");
+    expect(available({ basis, asset: "BTC", own: exact })).toBe("0.5");
+    expect(available({ basis, asset: "BTC", own: exact })).toBe("0.5");
+    expect(() => available({ basis, asset: "BTC",
+      own: { ...exact, allowanceContentDigest: digest("forged") } })).toThrow("OWN_OBLIGATION_MISMATCH");
+    expect(() => available({ basis, asset: "BTC",
+      own: { ...exact, quantity: "0.1" } })).toThrow("OWN_OBLIGATION_MISMATCH");
+    expect(() => available({ basis, asset: "BTC",
+      own: { ...exact, orderId: "other-order" } })).toThrow("OWN_OBLIGATION_MISMATCH");
+    expect(() => available({ basis, asset: "BTC",
+      own: { allowanceId: "buy", allowanceContentDigest: digest("buy"), orderId: null, quantity: "100" } })).toThrow("OWN_OBLIGATION_MISSING");
   });
-  it("floors depleted inventory at zero and never exempts a sibling or nonexistent own identity", () => {
+  it("floors two competing reductions and still charges the sibling when one identity is rechecked", () => {
+    const basis = basisHolding([obligation("a", "0.8"), obligation("b", "0.8")]);
+    expect(available({ basis, asset: "BTC" })).toBe("0");
+    expect(available({ basis, asset: "BTC",
+      own: { allowanceId: "a", allowanceContentDigest: digest("a"), orderId: null, quantity: "0.8" } })).toBe("0.5");
+    expect(() => available({ basis, asset: "BTC",
+      own: { allowanceId: "missing", allowanceContentDigest: digest("missing"), orderId: null, quantity: "0.8" } })).toThrow("OWN_OBLIGATION_MISSING");
+  });
+  it("refuses an evaluation that is not strictly before basis validity", () => {
+    const basis = basisHolding([obligation("other", "0.3")]);
+    expect(basis.validUntilUtc).toBe(time(31));
+    expect(availableRiskAccountQuantityV1({
+      basis, asset: "BTC", evaluatedAtUtc: time(30), quoteAsset: "USDT",
+    })).toBe("1");
+    expect(() => availableRiskAccountQuantityV1({
+      basis, asset: "BTC", evaluatedAtUtc: basis.validUntilUtc, quoteAsset: "USDT",
+    })).toThrow("BASIS_NOT_CURRENT");
+    expect(() => availableRiskAccountQuantityV1({
+      basis, asset: "BTC", evaluatedAtUtc: time(32), quoteAsset: "USDT",
+    })).toThrow("BASIS_NOT_CURRENT");
+  });
+  it("refuses quote-asset buying power because BUY reserves are not subtracted", () => {
     const basis = constructRiskAccountBasisV1(fixture());
-    expect(available({ basis, asset: "BTC", obligations: [obligation("other", "2")] })).toBe("0");
-    expect(() => available({ basis, asset: "BTC", obligations: [obligation("other", "1")],
-      own: { allowanceId: "missing", allowanceContentDigest: digest("missing"), orderId: null, quantity: "1" } })).toThrow("OWN_OBLIGATION_MISSING");
+    expect(basis.assets.some((row) => row.asset === "USDT")).toBe(true);
+    expect(() => availableRiskAccountQuantityV1({
+      basis, asset: "USDT", evaluatedAtUtc: time(2), quoteAsset: "USDT",
+    })).toThrow("QUOTE_BUYING_POWER_REFUSED");
+    expect(() => availableRiskAccountQuantityV1({
+      basis, asset: "BTC", evaluatedAtUtc: time(2), quoteAsset: "BTC",
+    })).toThrow("QUOTE_BUYING_POWER_REFUSED");
+    expect(() => availableRiskAccountQuantityV1({
+      basis, asset: "BTC", evaluatedAtUtc: time(2), quoteAsset: "",
+    })).toThrow("QUOTE_BUYING_POWER_REFUSED");
   });
   it("only releases the exact consumed charge after a matching independently settled fill and actual balance comparison", () => {
     const input = fixture(), prior = constructRiskAccountBasisV1(input);
@@ -161,21 +205,654 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     expect(() => constructRiskAccountBasisV1({ ...input, predecessor: prior,
       expected: { ...expected, reconciledExposureNotional: "0" } })).toThrow("PREDECESSOR_SCOPE_OR_TIME");
   });
-  it("refuses an evaluation that is not strictly before basis validity", () => {
-    const basis = constructRiskAccountBasisV1(fixture());
-    const obligations = [obligation("other", "0.3")];
-    expect(available({ basis, asset: "BTC", obligations, evaluatedAtUtc: time(30) })).toBe("1");
-    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations,
-      evaluatedAtUtc: basis.validUntilUtc, quoteAsset: "USDT" })).toThrow("BASIS_NOT_CURRENT");
-    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations,
-      evaluatedAtUtc: time(32), quoteAsset: "USDT" })).toThrow("BASIS_NOT_CURRENT");
+  it("refuses basis publication while the live capital envelope producer is absent", () => {
+    expect(decideCurrentAccountBasisPublicationV1({ liveCapitalEnvelope: null, sourceMethodQualified: false }))
+      .toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+    expect(decideCurrentAccountBasisPublicationV1({ liveCapitalEnvelope: null, sourceMethodQualified: true }))
+      .toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
   });
-  it("refuses quote-asset buying power because BUY reserves are not subtracted", () => {
-    const basis = constructRiskAccountBasisV1(fixture());
-    expect(basis.assets.some(row => row.asset === "USDT")).toBe(true);
-    expect(() => availableRiskAccountQuantityV1({ basis, asset: "USDT", obligations: [],
-      evaluatedAtUtc: time(2), quoteAsset: "USDT" })).toThrow("QUOTE_BUYING_POWER_REFUSED");
-    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations: [],
-      evaluatedAtUtc: time(2), quoteAsset: "BTC" })).toThrow("QUOTE_BUYING_POWER_REFUSED");
+
+  it("reports Expected versus Actual notionals without publishing authority", () => {
+    expect(compareExpectedAccountFrontierV1({
+      expectedExposureNotional: "10",
+      expectedPendingNotional: "1",
+      actualExposureNotional: "12",
+      actualPendingNotional: "0",
+      sourceMethodQualified: true,
+    })).toEqual({
+      decision: "OBSERVED",
+      publication: { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" },
+      exposureDelta: "2",
+      pendingDelta: "-1",
+    });
+    expect(retainObservedFrontierV1(compareExpectedAccountFrontierV1({
+      expectedExposureNotional: "10", expectedPendingNotional: "1",
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false,
+    }))).toEqual({ currentPointer: null, basisWrite: null, retention: "DELTA_ONLY" });
+    const retained = retainObservedFrontierV1(compareExpectedAccountFrontierV1({
+      expectedExposureNotional: "10", expectedPendingNotional: "1",
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: true,
+    }));
+    expect(admitCurrentAccountBasisV1(retained, {
+      authority: { current: false, reason: "NO_CURRENT_POINTER" },
+      accounting: { reconciledExposureNotional: "10", worstCasePendingExposureNotional: "1", outstandingReservationNotional: "0", exposureLimitNotional: "1000" },
+      requestedReservationNotional: "1", posture: "NORMAL", strictExposureReduction: false,
+    })).toEqual({
+      decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
+    });
   });
+  it("treats a missing or baseless current row as not current", () => {
+    expect(classifyCurrentAccountRowV1(null)).toEqual({ current: false, reason: "NO_CURRENT_POINTER" });
+    expect(classifyCurrentAccountRowV1({ basis_digest: null })).toEqual({ current: false, reason: "BASIS_ABSENT" });
+    expect(classifyCurrentAccountRowV1({ basis_digest: "ab".repeat(32) })).toEqual({
+      current: false, reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", basisDigest: "ab".repeat(32),
+    });
+  });
+  it("keeps profile propose non-authoritative and refuses activation", () => {
+    expect(decideRiskAccountProfileCommandV1({ action: "PROPOSE", liveCapitalEnvelope: null })).toEqual({
+      decision: "NON_AUTHORITY", action: "PROPOSE", currentPointer: null, basisWrite: null, allowanceId: null, orderId: null,
+    });
+    expect(() => decideRiskAccountProfileCommandV1({ action: "ACTIVATE", liveCapitalEnvelope: null })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(coolingOffMsFromProfileBodyV1(JSON.stringify({ governance: { coolingOffMs: 1 } }))).toBe(1);
+    expect(() => coolingOffMsFromProfileBodyV1("{")).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => assertProfileCoolingElapsedV1(1, 0, 0)).toThrow(RiskCurrentAccountRefusedV1);
+    assertProfileCoolingElapsedV1(1, 0, 1);
+    expect(decideProfileCommandReplayV1(null, { action: "PROPOSE", profileDigest: "p", actorId: "a" })).toBe("ABSENT");
+    expect(decideProfileCommandReplayV1({ action: "PROPOSE", profileDigest: "p", actorId: "a" }, { action: "PROPOSE", profileDigest: "p", actorId: "a" })).toBe("REPLAY");
+    expect(decideProfileCommandReplayV1({ action: "PROPOSE", profileDigest: "p", actorId: "a" }, { action: "CANCEL", profileDigest: null, actorId: "a" })).toBe("CONFLICT");
+    assertAuditActorMatchesV1({ actorId: "a", organizationId: "o" }, { actorId: "a", organizationId: "o" });
+    expect(() => assertAuditActorMatchesV1({ actorId: "other", organizationId: "o" }, { actorId: "a", organizationId: "o" })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => assertAuditActorMatchesV1(null, { actorId: "a", organizationId: "o" })).toThrow(RiskCurrentAccountRefusedV1);
+    assertReferenceMembersRetainedV1(["m1", "m2"], ["m2", "m1"]);
+    expect(() => assertReferenceMembersRetainedV1(["m1"], [])).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => assertReferenceMembersRetainedV1(["m1", "m1"], ["m1"])).toThrow(RiskCurrentAccountRefusedV1);
+  });
+  it("observes a sealed Expected frontier without publishing a limit", () => {
+    const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };
+    expect(observeSealedExpectedFrontierV1({
+      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: true,
+      externalDebtNotional: null,
+    })).toEqual({
+      decision: "OBSERVED",
+      publication: { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" },
+      exposureDelta: "2", pendingDelta: "-1",
+    });
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...expected, reservationNotional: "1" },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false,
+      externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false,
+      externalDebtNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false,
+      externalDebtNotional: "1",
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
+  it("holds a new inclusion unpublished and refuses a repeated truth record", () => {
+    const id = digest("inclusion-once");
+    expect(holdUnpublishedInclusionsV1({ truthRecordIds: [id], alreadyDisposedTruthIds: [] })).toEqual({
+      disposition: "HELD_UNPUBLISHED", truthRecordIds: [id], inclusionWrite: null, currentPointer: null,
+    });
+    expect(() => holdUnpublishedInclusionsV1({ truthRecordIds: [id], alreadyDisposedTruthIds: [id] })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => holdUnpublishedInclusionsV1({ truthRecordIds: [id, id], alreadyDisposedTruthIds: [] })).toThrow(RiskCurrentAccountRefusedV1);
+  });
+  it("refuses a consumed obligation whose order binding is not a digest", () => {
+    const consumed = { ...obligation("allow-1", "1", "BUY"), state: "CONSUMED" as const, orderId: "order-1",
+      orderBindingDigest: digest("bind-1"), pendingNotional: "1", reservedNotional: "0" };
+    const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1", obligations: [consumed] };
+    expect(observeSealedExpectedFrontierV1({
+      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0", referenceDigest: digest("ref-1"), priorReferenceDigest: null,
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...expected, obligations: [{ ...consumed, orderBindingDigest: "not-a-digest" }] },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0", referenceDigest: digest("ref-1"), priorReferenceDigest: null,
+    })).toThrow();
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...expected, obligations: [consumed, { ...consumed, allowanceId: "allow-2" }] },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0", referenceDigest: digest("ref-1"), priorReferenceDigest: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...expected, obligations: [{ ...consumed, quantity: "0" }] },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0", referenceDigest: digest("ref-1"), priorReferenceDigest: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...expected, obligations: [{ ...consumed, symbol: "ETH/USDT" }] },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0", referenceDigest: digest("ref-1"), priorReferenceDigest: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...expected, obligations: [{ ...consumed, instrumentIdentityDigest: "not-a-digest" }] },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0", referenceDigest: digest("ref-1"), priorReferenceDigest: null,
+    })).toThrow();
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+      referenceDigest: digest("ref-1"), priorReferenceDigest: digest("ref-2"),
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected, actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+      referenceDigest: digest("ref-1"), priorReferenceDigest: digest("ref-1"),
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
+  it("refuses an Expected frontier that rewinds a predecessor sequence", () => {
+    const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, predecessor: { ...initialExpected(), stateVersion: "2" },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected, predecessor: initialExpected(),
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
+  it("refuses an Expected frontier that disagrees with attested prior exposure", () => {
+    const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, priorReconciledExposureNotional: "9",
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected, priorReconciledExposureNotional: "10",
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
+  it("refuses an event head that disagrees with the next event sequence", () => {
+    const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...expected, eventHeadDigest: digest("head") },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...expected, nextEventSequence: "2" },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected: { ...expected, nextEventSequence: "2", eventHeadDigest: digest("head") },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
+  it("refuses a predecessor whose event head disagrees with its sequence", () => {
+    const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1",
+      nextEventSequence: "2", eventHeadDigest: digest("head") };
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, predecessor: { ...initialExpected(), nextEventSequence: "2" },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected, predecessor: { ...initialExpected(), nextEventSequence: "2", eventHeadDigest: digest("head") },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, predecessor: { ...initialExpected(), nextEventSequence: "2", eventHeadDigest: digest("prior-head") },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...expected, nextEventSequence: "3", eventHeadDigest: digest("head") },
+      predecessor: { ...initialExpected(), nextEventSequence: "2", eventHeadDigest: digest("head") },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected: { ...expected, nextEventSequence: "3", eventHeadDigest: digest("next-head") },
+      predecessor: { ...initialExpected(), nextEventSequence: "2", eventHeadDigest: digest("head") },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
+  it("refuses a predecessor obligation that fails the same identity rules", () => {
+    const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, predecessor: { ...initialExpected(), obligations: [obligation("allow-1", "0", "BUY")] },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, predecessor: { ...initialExpected(), reservationNotional: "1" },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, predecessor: { ...initialExpected(), reservationNotional: "10", obligations: [obligation("allow-1", "1", "BUY")] },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+  });
+  it("does not treat an unattested predecessor debt as zero", () => {
+    const expected = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };
+    const predecessor = { ...initialExpected(), pendingExposureNotional: "4" };
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, predecessor, priorExternalDebtNotional: "0",
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected, priorExternalDebtNotional: "4",
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected, predecessor, priorExternalDebtNotional: "4",
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
+  it("refuses a current obligation that repeats a consumed predecessor order", () => {
+    const consumed = { ...obligation("allow-1", "1", "BUY"), state: "CONSUMED" as const, orderId: "order-1",
+      orderBindingDigest: digest("bind-1"), pendingNotional: "1", reservedNotional: "0" };
+    const predecessor = { ...initialExpected(), pendingExposureNotional: "1", obligations: [consumed] };
+    const base = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" };
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...base, obligations: [consumed] }, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+      referenceDigest: digest("ref-1"),
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...base, obligations: [{ ...consumed, allowanceId: "allow-3" }] }, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+      referenceDigest: digest("ref-1"),
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    const fresh = { ...consumed, allowanceId: "allow-2", orderId: "order-2" };
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...base, obligations: [fresh] }, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+      referenceDigest: digest("ref-1"),
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected: { ...base, nextAdmissionSequence: "2", obligations: [fresh] }, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "0",
+      referenceDigest: digest("ref-1"),
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
+  it("keeps an issued predecessor obligation on the current frontier", () => {
+    const issued = obligation("allow-1", "1", "BUY");
+    const predecessor = { ...initialExpected(), reservationNotional: "10", obligations: [issued] };
+    const carried = { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1",
+      reservationNotional: "10", obligations: [issued] };
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" }, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: null,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...carried, obligations: [{ ...issued, quantity: "2" }] }, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+      referenceDigest: digest("ref-1"),
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...carried, obligations: [{ ...issued, instrumentIdentityDigest: digest("other-instrument") }] }, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+      referenceDigest: digest("ref-1"),
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => observeSealedExpectedFrontierV1({
+      expected: { ...carried, obligations: [{ ...issued, verdictId: "verdict-other" }] }, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+      referenceDigest: digest("ref-1"),
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(observeSealedExpectedFrontierV1({
+      expected: carried, predecessor,
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+      referenceDigest: digest("ref-1"),
+    }).publication).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
+
+  it("refuses to issue from an open profile proposal", () => {
+    const observed = observeSealedExpectedFrontierV1({
+      expected: { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1",
+    });
+    expect(admitOpenProfileFrontierV1({ storedAction: "PROPOSE", observed })).toEqual({
+      decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
+      exposureDelta: "2", pendingDelta: "-1",
+    });
+    expect(admitOpenProfileFrontierV1({
+      storedAction: "PROPOSE", observed: { ...observed, publication: { decision: "PUBLISHED", reason: "OK" } },
+    })).toEqual({
+      decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT", allowanceId: null, orderId: null,
+      exposureDelta: "2", pendingDelta: "-1",
+    });
+    expect(() => admitOpenProfileFrontierV1({ storedAction: "CANCEL", observed })).toThrow(RiskCurrentAccountRefusedV1);
+    const suffix = {
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1", predecessorNextAdmissionSequence: "1",
+      predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0",
+      openedAllowances: [], closedAllowances: [], alreadyDisposedTruthIds: [], events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+      terminalOpenAllowances: [], terminalConsumedAllowances: [],
+      organizationId: org, accountId: "synthetic-spot",
+      predecessorStateVersion: "1", terminalStateVersion: "1",
+      declaredMaxEvents: 4,
+    };
+    const account = { organizationId: org, accountId: "synthetic-spot" };
+    expect(admitFoldedSuffixV1({ storedAction: "PROPOSE", observed, account, unpublishedTruthRecordIds: [], suffix })).toMatchObject({
+      decision: "REFUSED", allowanceId: null, orderId: null,
+    });
+    expect(() => admitFoldedSuffixV1({
+      storedAction: "PROPOSE", observed, account, unpublishedTruthRecordIds: [], suffix: { ...suffix, terminalReconciledExposureNotional: "1" },
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => admitFoldedSuffixV1({
+      storedAction: "PROPOSE", observed, account: { ...account, accountId: "other-account" }, unpublishedTruthRecordIds: [], suffix,
+    })).toThrow(RiskCurrentAccountRefusedV1);
+  });
+  it("authenticates a gap-free Expected event suffix and refuses a gap or an undeclared length", () => {
+    const head = digest("suffix-event");
+    expect(authenticateExpectedEventSuffixV1({
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1", events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", declaredMaxEvents: 4, predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0", terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+    })).toEqual({ decision: "AUTHENTICATED", eventCount: 0, notionalsVerified: true, currentPointer: null });
+    expect(authenticateExpectedEventSuffixV1({
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1",
+      events: [{ sequence: "1", previousDigest: null, contentDigest: head }],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", declaredMaxEvents: 4, predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0", terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+    }).eventCount).toBe(1);
+    const second = digest("suffix-event-2");
+    expect(() => authenticateExpectedEventSuffixV1({
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1",
+      events: [{ sequence: "1", previousDigest: null, contentDigest: head }, { sequence: "2", previousDigest: head, contentDigest: second }, { sequence: "3", previousDigest: second, contentDigest: head }],
+      terminalHeadDigest: head, terminalNextEventSequence: "4", declaredMaxEvents: 4, predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0", terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => authenticateExpectedEventSuffixV1({
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1",
+      events: [{ sequence: "2", previousDigest: null, contentDigest: head }],
+      terminalHeadDigest: head, terminalNextEventSequence: "3", declaredMaxEvents: 4, predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0", terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => authenticateExpectedEventSuffixV1({
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1", events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", declaredMaxEvents: 0, predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0", terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => authenticateExpectedEventSuffixV1({
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1", events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", declaredMaxEvents: 4, predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0", terminalReconciledExposureNotional: "1", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+  });
+
+  it("folds issued then consumed enforcement into pending and refuses a stale reservation", () => {
+    const head = digest("fold-event");
+    const base = {
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1", predecessorNextAdmissionSequence: "1",
+      predecessorReconciledExposureNotional: "0", predecessorPendingExposureNotional: "0", predecessorReservationNotional: "0",
+      openedAllowances: [], closedAllowances: [], alreadyDisposedTruthIds: [], terminalOpenAllowances: [], terminalConsumedAllowances: [],
+      organizationId: org, accountId: "synthetic-spot",
+      predecessorStateVersion: "1", terminalStateVersion: "1",
+      declaredMaxEvents: 4,
+    };
+    const issued = { sequence: "1", previousDigest: null, contentDigest: head, type: "ALLOWANCE_ISSUED" as const, organizationId: org, accountId: "synthetic-spot", fromState: null, toState: "ISSUED" as const, allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, reasonCode: null , truthRecordId: null };
+    expect(foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, truthRecordId: null }],
+      terminalStateVersion: "2",
+    })).toEqual({ decision: "AUTHENTICATED", eventCount: 1, notionalsVerified: true, heldTruthRecordIds: [], currentPointer: null });
+    // Deliberately invalid runtime input: an open terminal row must not name an inclusion.
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, truthRecordId: digest("open-inclusion") }],
+      terminalStateVersion: "2",
+    } as unknown as Parameters<typeof foldExpectedEnforcementSuffixV1>[0])).toThrow(RiskCurrentAccountRefusedV1);
+    // Deliberately invalid runtime input: an open terminal row must not carry an order binding.
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1"), truthRecordId: null }],
+      terminalStateVersion: "2",
+    } as unknown as Parameters<typeof foldExpectedEnforcementSuffixV1>[0])).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-other", boundOrderId: null, boundOrderDigestHex: null, truthRecordId: null }],
+      terminalStateVersion: "2",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [{ ...issued, accountId: "other-account" }],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, truthRecordId: null }],
+      terminalStateVersion: "2",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [{ ...issued, reasonCode: "CURRENT_POSTURE_RESTRICTED" }],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, truthRecordId: null }],
+      terminalStateVersion: "2",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [{ ...issued, boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1"), truthRecordId: null }],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, truthRecordId: null }],
+      terminalStateVersion: "2",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [{ ...issued, toState: "CONSUMED" }],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, truthRecordId: null }],
+      terminalStateVersion: "2",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, truthRecordId: null }],
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    const reusedVerdict = digest("fold-reused-verdict");
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued, { ...issued, sequence: "2", previousDigest: head, contentDigest: reusedVerdict, allowanceId: "allow-2" }],
+      terminalHeadDigest: reusedVerdict, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "3",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "20",
+      terminalStateVersion: "3",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, predecessorReservationNotional: "10",
+      openedAllowances: [{ organizationId: org, accountId: "synthetic-spot", allowanceId: "allow-prior", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1" }],
+      events: [issued],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "20",
+      terminalStateVersion: "2",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, predecessorReservationNotional: "10",
+      openedAllowances: [{ organizationId: org, accountId: "other-account", allowanceId: "allow-prior", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-prior" }],
+      events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, predecessorPendingExposureNotional: "10",
+      closedAllowances: [{ organizationId: org, accountId: "synthetic-spot", allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-old", boundOrderId: "order-allow-old", boundOrderDigestHex: digest("order-allow-old"), disposition: "CONSUMED" , truthRecordId: null }],
+      events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    const { truthRecordId: _omittedTruth, ...issuedWithoutTruth } = issued;
+    void _omittedTruth;
+    // Deliberately invalid runtime input: an ISSUED event with truthRecordId omitted.
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issuedWithoutTruth],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, truthRecordId: null }],
+      terminalStateVersion: "2",
+    } as unknown as Parameters<typeof foldExpectedEnforcementSuffixV1>[0])).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [{ ...issued, truthRecordId: digest("issued-inclusion-refused") }],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, truthRecordId: null }],
+      terminalStateVersion: "2",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    const consumedHead = digest("fold-consumed");
+    expect(foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued, { sequence: "2", previousDigest: head, contentDigest: consumedHead, type: "ALLOWANCE_CONSUMED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "CONSUMED", allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1"), reasonCode: null , truthRecordId: null }],
+      terminalHeadDigest: consumedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+      terminalConsumedAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1"), truthRecordId: null }],
+      terminalStateVersion: "3",
+    }).eventCount).toBe(2);
+    const renewHead = digest("fold-renew");
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued, { sequence: "2", previousDigest: head, contentDigest: consumedHead, type: "ALLOWANCE_CONSUMED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "CONSUMED", allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: "order-allow-renew", boundOrderDigestHex: digest("order-allow-renew"), reasonCode: null , truthRecordId: null },
+        { sequence: "3", previousDigest: consumedHead, contentDigest: renewHead, type: "ALLOWANCE_ISSUED", organizationId: org, accountId: "synthetic-spot", fromState: null, toState: "ISSUED", allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, reasonCode: null , truthRecordId: null }],
+      terminalHeadDigest: renewHead, terminalNextEventSequence: "4", terminalNextAdmissionSequence: "3",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "10",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    const priorHead = digest("fold-prior-consume");
+    expect(foldExpectedEnforcementSuffixV1({
+      ...base, predecessorReservationNotional: "10",
+      openedAllowances: [{ organizationId: org, accountId: "synthetic-spot", allowanceId: "allow-prior", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-prior" }],
+      predecessorHeadDigest: null, predecessorNextEventSequence: "1",
+      events: [{ sequence: "1", previousDigest: null, contentDigest: priorHead, type: "ALLOWANCE_CONSUMED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "CONSUMED", allowanceId: "allow-prior", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-prior", boundOrderId: "order-allow-prior", boundOrderDigestHex: digest("order-allow-prior"), reasonCode: null , truthRecordId: null }],
+      terminalHeadDigest: priorHead, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "1",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+      terminalConsumedAllowances: [{ allowanceId: "allow-prior", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-prior", boundOrderId: "order-allow-prior", boundOrderDigestHex: digest("order-allow-prior"), truthRecordId: null }],
+      terminalStateVersion: "2",
+    }).eventCount).toBe(1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, closedAllowances: [{ organizationId: org, accountId: "synthetic-spot", allowanceId: "allow-1", reservedExposureNotional: "0", quantity: "1", disposition: "RELEASED", riskVerdictId: null, boundOrderId: null, boundOrderDigestHex: null, truthRecordId: null }],
+      events: [issued],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(foldExpectedEnforcementSuffixV1({
+      ...base, predecessorPendingExposureNotional: "10",
+      closedAllowances: [{ organizationId: org, accountId: "synthetic-spot", allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-old", riskVerdictId: "verdict-allow-old", boundOrderDigestHex: digest("order-allow-old"), disposition: "CONSUMED", truthRecordId: null }],
+      events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+      terminalConsumedAllowances: [{ allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-old", boundOrderId: "order-allow-old", boundOrderDigestHex: digest("order-allow-old"), truthRecordId: null }],
+    }).eventCount).toBe(0);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, predecessorPendingExposureNotional: "10",
+      closedAllowances: [{ organizationId: org, accountId: "synthetic-spot", allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-old", boundOrderId: "order-allow-old", boundOrderDigestHex: digest("order-allow-old"), disposition: "CONSUMED", truthRecordId: null }],
+      events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+      terminalConsumedAllowances: [{ allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-other", boundOrderId: "order-allow-old", boundOrderDigestHex: digest("order-allow-old"), truthRecordId: null }],
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, predecessorPendingExposureNotional: "10",
+      events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    const priorTruth = digest("prior-inclusion");
+    const reuseHead = digest("fold-reuse");
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, predecessorReservationNotional: "10", predecessorPendingExposureNotional: "10",
+      openedAllowances: [{ organizationId: org, accountId: "synthetic-spot", allowanceId: "allow-2", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-2" }],
+      closedAllowances: [{ organizationId: org, accountId: "synthetic-spot", allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-old", riskVerdictId: "verdict-allow-old", boundOrderDigestHex: digest("order-allow-old"), disposition: "CONSUMED", truthRecordId: priorTruth }],
+      events: [{ sequence: "1", previousDigest: null, contentDigest: reuseHead, type: "ALLOWANCE_CONSUMED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "CONSUMED", allowanceId: "allow-2", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-2", boundOrderId: "order-allow-2", boundOrderDigestHex: digest("order-allow-2"), reasonCode: null, truthRecordId: priorTruth }],
+      terminalHeadDigest: reuseHead, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "1",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "20", terminalReservationNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    const refusedHead = digest("fold-refused");
+    expect(foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued, { sequence: "2", previousDigest: head, contentDigest: refusedHead, type: "CONSUMPTION_REFUSED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "REVOKED", allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, reasonCode: "CURRENT_POSTURE_RESTRICTED" , truthRecordId: null }],
+      terminalHeadDigest: refusedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+      terminalStateVersion: "3",
+    }).eventCount).toBe(2);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued, { sequence: "2", previousDigest: head, contentDigest: refusedHead, type: "CONSUMPTION_REFUSED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "REVOKED", allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, reasonCode: "ALLOWANCE_EXPIRED" , truthRecordId: null }],
+      terminalHeadDigest: refusedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+      terminalStateVersion: "3",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    const expiredHead = digest("fold-expired");
+    expect(foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued, { sequence: "2", previousDigest: head, contentDigest: expiredHead, type: "ALLOWANCE_EXPIRED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "EXPIRED", allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, reasonCode: "ALLOWANCE_EXPIRED" , truthRecordId: null }],
+      terminalHeadDigest: expiredHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "0",
+      terminalStateVersion: "3",
+    }).eventCount).toBe(2);
+    const sharedOrder = digest("shared-order");
+    const sharedEvent = digest("fold-shared-order");
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, predecessorReservationNotional: "10", predecessorPendingExposureNotional: "10",
+      openedAllowances: [{ organizationId: org, accountId: "synthetic-spot", allowanceId: "allow-prior", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-prior" }],
+      closedAllowances: [{ organizationId: org, accountId: "synthetic-spot", allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-old", boundOrderId: "order-allow-old", boundOrderDigestHex: sharedOrder, disposition: "CONSUMED", truthRecordId: null }],
+      events: [{ sequence: "1", previousDigest: null, contentDigest: sharedEvent, type: "ALLOWANCE_CONSUMED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "CONSUMED", allowanceId: "allow-prior", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-prior", boundOrderId: "order-allow-prior", boundOrderDigestHex: sharedOrder, reasonCode: null , truthRecordId: null }],
+      terminalHeadDigest: sharedEvent, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "1",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "20", terminalReservationNotional: "0",
+      terminalStateVersion: "2",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    const inclusion = digest("suffix-inclusion");
+    const includedHead = digest("fold-included");
+    const included = [issued, { sequence: "2", previousDigest: head, contentDigest: includedHead, type: "ALLOWANCE_CONSUMED" as const, organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED" as const, toState: "CONSUMED" as const, allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1"), reasonCode: null, truthRecordId: inclusion }];
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [{ ...issued, truthRecordId: inclusion }],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(foldExpectedEnforcementSuffixV1({
+      ...base, events: included,
+      terminalHeadDigest: includedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+      terminalConsumedAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1"), truthRecordId: inclusion }],
+      terminalStateVersion: "3",
+    }).heldTruthRecordIds).toEqual([inclusion]);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: included,
+      terminalHeadDigest: includedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+      terminalConsumedAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1"), truthRecordId: null }],
+      terminalStateVersion: "3",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    const includedSuffix = { ...base, events: included, terminalHeadDigest: includedHead, terminalNextEventSequence: "3",
+      terminalNextAdmissionSequence: "2", terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+      terminalConsumedAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-1", boundOrderId: "order-allow-1", boundOrderDigestHex: digest("order-allow-1"), truthRecordId: inclusion }],
+      terminalStateVersion: "3" };
+    const account = { organizationId: org, accountId: "synthetic-spot" };
+    const observed = observeSealedExpectedFrontierV1({
+      expected: { ...initialExpected(), reconciledExposureNotional: "10", pendingExposureNotional: "1" },
+      actualExposureNotional: "12", actualPendingNotional: "0", sourceMethodQualified: false, externalDebtNotional: "1" });
+    expect(admitFoldedSuffixV1({ storedAction: "PROPOSE", observed, account, unpublishedTruthRecordIds: [inclusion], suffix: includedSuffix })).toMatchObject({
+      decision: "REFUSED", allowanceId: null, orderId: null });
+    expect(() => admitFoldedSuffixV1({ storedAction: "PROPOSE", observed, account, unpublishedTruthRecordIds: [], suffix: includedSuffix })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, alreadyDisposedTruthIds: [inclusion], events: included,
+      terminalHeadDigest: includedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued, { sequence: "2", previousDigest: head, contentDigest: consumedHead, type: "ALLOWANCE_CONSUMED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "CONSUMED", allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "2", riskVerdictId: "verdict-allow-1", boundOrderId: "order-allow-qty", boundOrderDigestHex: digest("order-allow-qty"), reasonCode: null , truthRecordId: null }],
+      terminalHeadDigest: consumedHead, terminalNextEventSequence: "3", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [{ ...issued, quantity: "0" }],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "0", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, truthRecordId: null }],
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, events: [issued],
+      terminalHeadDigest: head, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "2",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "0", terminalReservationNotional: "10",
+      terminalOpenAllowances: [{ allowanceId: "allow-1", reservedExposureNotional: "10", quantity: "2", riskVerdictId: "verdict-allow-1", boundOrderId: null, boundOrderDigestHex: null, truthRecordId: null }],
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, predecessorPendingExposureNotional: "10",
+      closedAllowances: [{ organizationId: org, accountId: "synthetic-spot", allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-old", riskVerdictId: "verdict-allow-old", boundOrderDigestHex: digest("order-allow-old"), disposition: "CONSUMED", truthRecordId: null }],
+      events: [],
+      terminalHeadDigest: null, terminalNextEventSequence: "1", terminalNextAdmissionSequence: "1",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "10", terminalReservationNotional: "0",
+      terminalConsumedAllowances: [{ allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "2", riskVerdictId: "verdict-allow-old", boundOrderId: "order-allow-old", boundOrderDigestHex: digest("order-allow-old"), truthRecordId: null }],
+    })).toThrow(RiskCurrentAccountRefusedV1);
+    expect(() => foldExpectedEnforcementSuffixV1({
+      ...base, predecessorReservationNotional: "10", predecessorPendingExposureNotional: "10",
+      openedAllowances: [{ organizationId: org, accountId: "synthetic-spot", allowanceId: "allow-prior", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-prior" }],
+      closedAllowances: [{ organizationId: org, accountId: "synthetic-spot", allowanceId: "allow-old", reservedExposureNotional: "10", quantity: "1", boundOrderId: "order-allow-prior", riskVerdictId: "verdict-allow-old", boundOrderDigestHex: digest("order-allow-prior"), disposition: "CONSUMED", truthRecordId: null }],
+      events: [{ sequence: "1", previousDigest: null, contentDigest: priorHead, type: "ALLOWANCE_CONSUMED", organizationId: org, accountId: "synthetic-spot", fromState: "ISSUED", toState: "CONSUMED", allowanceId: "allow-prior", reservedExposureNotional: "10", quantity: "1", riskVerdictId: "verdict-allow-prior", boundOrderId: "order-allow-prior", boundOrderDigestHex: digest("order-allow-prior"), reasonCode: null , truthRecordId: null }],
+      terminalHeadDigest: priorHead, terminalNextEventSequence: "2", terminalNextAdmissionSequence: "1",
+      terminalReconciledExposureNotional: "0", terminalPendingExposureNotional: "20", terminalReservationNotional: "0",
+      terminalStateVersion: "2",
+    })).toThrow(RiskCurrentAccountRefusedV1);
+  });
+
 });

@@ -18,6 +18,25 @@ import { acquireHtxAccountV1Postgres, createHtxAccountAcquisitionJobV1, readHtxA
   type HtxAccountAcquisitionJobV1 } from "@/lib/trader/reality/v2/htx-account-acquisition-postgres";
 import { decodeHtxAccountAcquisitionPageV1,
   type HtxAccountAcquisitionSpecV1 } from "@/lib/trader/reality/v2/htx-account-acquisition-v1";
+import { and, eq, sql as sqlQuery } from "drizzle-orm";
+import {
+  bindExecutionAuthorityV2Postgres,
+  dispatchCommittedExecutionAttemptV2,
+  ExecutionV2AuthorityRefusedError,
+  type BindExecutionAuthorityV2Input,
+} from "@/lib/trader/execution/v2/authority-postgres";
+import {
+  createExecutionPolicyBindingV2,
+  validateExecutionPolicyBindingV2,
+} from "@/lib/trader/execution/v2/contracts";
+import { listExecutionReportsV2Postgres } from "@/lib/trader/execution/v2/repository-postgres";
+import { divideDecimal } from "@/lib/trader/risk/numeric";
+import {
+  admitRiskAllowanceV2Postgres,
+  initializeRiskAccountStateV2Postgres,
+  RiskV2AdmissionRefusedError,
+  type AdmitRiskAllowanceV2Input,
+} from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import { createRiskAccountProfileV1, createRiskAccountReferenceV1, riskAccountDigestV1,
   sealRiskAccountRecordV1, RISK_ACCOUNT_CHANNELS_V1, RISK_REFERENCE_METHOD_V1,
   type RiskReferenceMemberV1 } from "@/lib/trader/risk/v2/risk-account-source-profile-v1";
@@ -393,4 +412,1006 @@ describe.skipIf(!enabled || !url)("Postgres DEE-1135 observation-only acquisitio
     const guards = await owner.sql`SELECT tgname,tgenabled FROM pg_trigger WHERE tgrelid='trader_htx_account_acquisitions_v1'::regclass AND NOT tgisinternal`;
     expect(guards.every(row => row.tgenabled === "O")).toBe(true); receipt("isolation-and-guards", { job: f.job.id, guards, constraintOutcomes, rows: (await snapshot(f)).journal.length });
   }, 90000);
+});
+
+// ---------------------------------------------------------------------------
+// C01 — allowance-expiry / lock-wait baseline (separate org; ordinary paper).
+// Hypothesis schedules observe production owners; no activated 1135 basis.
+// ---------------------------------------------------------------------------
+const c01Receipt = (stage: string, body: unknown) =>
+  console.log(
+    JSON.stringify({ kind: "DEE1135_C01_RECEIPT", stage, body }, (_k, v) =>
+      typeof v === "bigint" ? v.toString() : v instanceof Error ? errorShape(v) : v,
+    ),
+  );
+const c01Hex = (seed: string) => createHash("sha256").update(seed).digest("hex");
+type C01LockTx = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
+type C01LockTrace = Record<string, unknown>[];
+type C01CompletedSelect = {
+  toSQL(): { sql: string; params: unknown[] };
+  execute(...args: unknown[]): Promise<unknown>;
+};
+type C01ProofState = {
+  account: { r: string; p: string; next: string; head: string | null } | null;
+  allowance: Record<string, unknown>[];
+  events: { type: string; sequence: string; previous: string | null; digest: string }[];
+  reports: { type: string; sequence: string; previous: string | null; digest: string }[];
+  counts: Record<string, number>;
+};
+
+function c01NativeCauses(error: unknown): Record<string, unknown>[] {
+  const causes: Record<string, unknown>[] = [];
+  const seen = new Set<unknown>();
+  while (error && typeof error === "object" && !seen.has(error)) {
+    seen.add(error);
+    const cause = error as Error & {
+      code?: string;
+      detail?: string;
+      reason?: string;
+      cause?: unknown;
+    };
+    causes.push({
+      name: cause.name,
+      message: cause.message,
+      code: cause.code,
+      detail: cause.detail,
+      reason: cause.reason,
+    });
+    error = cause.cause;
+  }
+  if (error && typeof error !== "object") causes.push({ value: String(error) });
+  return causes;
+}
+function c01Settled<T>(operation: Promise<T>) {
+  return operation.then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error, causes: c01NativeCauses(error) }),
+  );
+}
+
+describe.skipIf(!enabled || !url)("Postgres DEE-1135 C01 allowance-expiry baseline", () => {
+  const c01Clients: { client: postgres.Sql; label: string; pid: number }[] = [];
+  let c01Sql: postgres.Sql;
+  let c01Db: WaiaPostgresDb;
+  let c01Org: string;
+  let c01ActorId: string;
+
+  function c01Account(accountId: string) {
+    return {
+      accountId,
+      posture: "NORMAL" as const,
+      killState: "CLEAR" as const,
+      reconciliationStatus: "RECONCILED" as const,
+      realitySnapshotId: `reality-${accountId}`,
+      realityContentDigestHex: c01Hex(`reality-${accountId}`),
+      reconciliationAuthorityDigestHex: c01Hex(`reconciliation-${accountId}`),
+      reconciledInstrumentExposures: [
+        {
+          instrumentIdentityDigestHex: c01Hex("BTCUSDT-SPOT"),
+          symbol: "BTCUSDT",
+          baseQuantity: "0",
+        },
+      ],
+      accounting: {
+        reconciledExposureNotional: "0",
+        worstCasePendingExposureNotional: "0",
+        outstandingReservationNotional: "0",
+        exposureLimitNotional: "100",
+      },
+    };
+  }
+
+  function c01Admission(accountId: string): AdmitRiskAllowanceV2Input {
+    return {
+      accountId,
+      riskVerdictId: randomUUID(),
+      riskAllowanceId: randomUUID(),
+      issuanceEventId: randomUUID(),
+      nonce: randomUUID(),
+      validForMs: 30_000,
+      verdict: {
+        venue: "HTX",
+        market: "SPOT",
+        symbol: "BTCUSDT",
+        baseAsset: "BTC",
+        quoteAsset: "USDT",
+        instrumentIdentityDigestHex: c01Hex("BTCUSDT-SPOT"),
+        decision: {
+          decisionId: `decision-c01-paper-${accountId}`,
+          semanticDigestHex: c01Hex(`decision-semantic-c01-${accountId}`),
+          contentDigestHex: c01Hex(`decision-content-c01-${accountId}`),
+          action: "ENTER_LONG",
+          economicSizeSetId: `decision-c01-sizes-${accountId}`,
+          economicSizeSetDigestHex: c01Hex(`decision-c01-sizes-${accountId}`),
+          forecastId: `forecast-c01-${accountId}`,
+          forecastContentDigestHex: c01Hex(`forecast-c01-${accountId}`),
+          canonicalCausalLineageDigestHex: c01Hex(`causal-lineage-c01-${accountId}`),
+        },
+        riskPolicyVersion: "risk-v2-c01",
+        riskPolicyDigestHex: c01Hex(`risk-v2-c01-${accountId}`),
+        limitVersions: [{ layer: "L2", version: "position-v1", digestHex: c01Hex("position-v1") }],
+        reality: {
+          snapshotId: `reality-${accountId}`,
+          contentDigestHex: c01Hex(`reality-${accountId}`),
+          asOfUtc: "2026-08-21T00:00:00.000Z",
+          reconciliationAuthorityDigestHex: c01Hex(`reconciliation-${accountId}`),
+          reconciliationStatus: "RECONCILED",
+        },
+        referencePrice: {
+          authorityId: "test-median",
+          authorityVersion: "v1",
+          contentDigestHex: c01Hex("test-median-v1"),
+          price: divideDecimal("25", "0.001"),
+        },
+        verdict: "APPROVE_CLAMPED",
+        approvedQualifiedQuantity: "0.001",
+        bindingLayers: ["L2"],
+        reasonCodes: ["POSITION_LIMIT_BINDING"],
+      },
+    };
+  }
+
+  async function c01AdmittedBindInput(
+    options: { validForMs?: number } = {},
+  ): Promise<BindExecutionAuthorityV2Input> {
+    const accountId = `c01-${randomUUID()}`;
+    await initializeRiskAccountStateV2Postgres(
+      c01Db,
+      { organizationId: c01Org },
+      c01Account(accountId),
+    );
+    const request = c01Admission(accountId);
+    const admitted = await admitRiskAllowanceV2Postgres(
+      c01Db,
+      { organizationId: c01Org },
+      {
+        ...request,
+        validForMs: options.validForMs ?? request.validForMs,
+      },
+    );
+    const allowance = admitted.allowance;
+    const now = Date.now();
+    const opensAtUtc = new Date(now - 60_000).toISOString();
+    const closesAtUtc = new Date(now + 120_000).toISOString();
+    const policy = createExecutionPolicyBindingV2({
+      executionPolicyId: randomUUID(),
+      organizationId: c01Org,
+      policyVersion: `htx-c01-paper-v1-${accountId}`,
+      decisionId: allowance.decision.decisionId,
+      decisionContentDigestHex: allowance.decision.contentDigestHex,
+      decisionExecutionPolicyDigestHex: c01Hex(`c01-decision-execution-policy-${accountId}`),
+      economicSizeSetDigestHex: allowance.decision.economicSizeSetDigestHex,
+      venue: "HTX",
+      market: "SPOT",
+      instrumentIdentityDigestHex: allowance.instrumentIdentityDigestHex,
+      allowedOrderTypes: ["limit"],
+      allowedTimeInForce: ["GTC"],
+      allowedLiquidityRoles: ["MAKER"],
+      priceCollar: {
+        minimumPrice: "24000",
+        maximumPrice: "26000",
+        authorityDigestHex: c01Hex(`c01-collar-${accountId}`),
+      },
+      quantityRules: {
+        minimumQuantity: "0.001",
+        quantityStep: "0.001",
+        roundingMode: "EXACT",
+        economicQualifiedQuantities: ["0.001"],
+      },
+      slicingPolicy: { maximumSlices: 1, completePlanRequired: true },
+      retryPolicy: {
+        maximumNetworkSubmissions: 1,
+        sameIdentityRetryAllowed: false,
+        venueIdempotencyProven: false,
+      },
+      cancelPolicy: {
+        protectiveCancelAllowed: true,
+        replacementRequiresPresealedOrFreshAuthority: true,
+      },
+      timeoutMs: 5_000,
+      uncertaintyHandling: "RECONCILIATION_REQUIRED",
+      effectiveFromUtc: new Date(now - 120_000).toISOString(),
+      effectiveUntilUtc: new Date(now + 120_000).toISOString(),
+    });
+    return {
+      allowance,
+      policy,
+      plan: {
+        approvedNotionalCeiling: "25",
+        plannedQuantity: "0.001",
+        orderType: "limit",
+        liquidityRole: "MAKER",
+        limitPrice: "25000",
+        timeInForce: "GTC",
+        timingWindow: { opensAtUtc, closesAtUtc },
+        childSlices: [{ sequence: 1, quantity: "0.001", limitPrice: "25000" }],
+        sealedAtUtc: opensAtUtc,
+      },
+      executionMode: "paper",
+      credentialId: null,
+      strategySignalId: `signal-c01-${accountId}`,
+      allocationDecisionId: `allocation-c01-${accountId}`,
+    };
+  }
+
+  async function c01LockProofState(input: BindExecutionAuthorityV2Input): Promise<C01ProofState> {
+    const accountId = input.allowance.accountId;
+    const [state] = await c01Sql<
+      {
+        r: string;
+        p: string;
+        next: string;
+        head: string | null;
+      }[]
+    >`SELECT outstanding_reservation_notional::text AS r,
+      worst_case_pending_exposure_notional::text AS p,
+      next_enforcement_event_sequence::text AS next, last_enforcement_event_digest AS head
+      FROM trader_risk_account_state_v2
+      WHERE organization_id = ${c01Org}::uuid AND account_id = ${accountId}`;
+    const allowance = await c01Sql`SELECT lifecycle_state, bound_order_id, bound_order_digest,
+      last_enforcement_event_sequence::text, last_enforcement_event_digest, content_digest,
+      expired_at, revoked_at
+      FROM trader_risk_allowances_v2
+      WHERE organization_id = ${c01Org}::uuid AND id = ${input.allowance.riskAllowanceId}::uuid`;
+    const events = await c01Sql<
+      {
+        type: string;
+        sequence: string;
+        previous: string | null;
+        digest: string;
+      }[]
+    >`SELECT event_type AS type, event_sequence::text AS sequence,
+      previous_event_digest AS previous, content_digest AS digest
+      FROM trader_risk_enforcement_events_v2
+      WHERE organization_id = ${c01Org}::uuid AND account_id = ${accountId}
+      ORDER BY event_sequence LIMIT 8`;
+    const reports = await c01Sql<
+      {
+        type: string;
+        sequence: string;
+        previous: string | null;
+        digest: string;
+      }[]
+    >`SELECT report_type AS type, report_sequence::text AS sequence,
+      previous_report_digest AS previous, content_digest AS digest
+      FROM trader_execution_reports_v2
+      WHERE organization_id = ${c01Org}::uuid AND account_id = ${accountId}
+      ORDER BY report_sequence LIMIT 8`;
+    const [counts] = await c01Sql`SELECT
+      (SELECT count(*)::int FROM trader_execution_policies_v2 p
+        WHERE p.organization_id = ${c01Org}::uuid
+          AND EXISTS (
+            SELECT 1 FROM trader_execution_plans_v2 pl
+            WHERE pl.organization_id = p.organization_id AND pl.execution_policy_id = p.id
+              AND pl.account_id = ${accountId})) AS policies,
+      (SELECT count(*)::int FROM trader_execution_plans_v2
+        WHERE organization_id = ${c01Org}::uuid AND account_id = ${accountId}) AS plans,
+      (SELECT count(*)::int FROM trader_orders o
+        WHERE o.organization_id = ${c01Org}::uuid
+          AND o.risk_allowance_id = ${input.allowance.riskAllowanceId}::uuid) AS orders,
+      (SELECT count(*)::int FROM trader_execution_attempts_v2
+        WHERE organization_id = ${c01Org}::uuid AND account_id = ${accountId}) AS attempts,
+      (SELECT count(*)::int FROM trader_execution_reports_v2
+        WHERE organization_id = ${c01Org}::uuid AND account_id = ${accountId}) AS reports,
+      (SELECT count(*)::int FROM trader_risk_enforcement_events_v2
+        WHERE organization_id = ${c01Org}::uuid AND account_id = ${accountId}) AS events`;
+    return {
+      account: state ?? null,
+      allowance,
+      events,
+      reports,
+      counts: counts as Record<string, number>,
+    };
+  }
+
+  function c01LockClient(
+    label: string,
+    trace: C01LockTrace,
+    pause?: { resource: "account" | "attempt"; identity: string },
+  ) {
+    const client = postgres(url!, {
+      max: 1,
+      connect_timeout: 5,
+      connection: { application_name: `dee1135-c01-${label}` },
+    });
+    const plainDb = drizzle(client, { schema }) as WaiaPostgresDb;
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const actor = {
+      client,
+      plainDb,
+      db: plainDb,
+      label,
+      pid: 0,
+      tx: null as C01LockTx | null,
+      paused: false,
+      release,
+    };
+    c01Clients.push(actor);
+    actor.db = new Proxy(plainDb, {
+      get(target, property) {
+        if (property !== "transaction") {
+          const value = Reflect.get(target, property);
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+        return async (
+          run: (tx: C01LockTx) => Promise<unknown>,
+          config?: Parameters<WaiaPostgresDb["transaction"]>[1],
+        ) => {
+          try {
+            const result = await target.transaction(async (tx) => {
+              actor.tx = tx;
+              await tx.execute(sqlQuery`SET LOCAL lock_timeout = '10s'`);
+              await tx.execute(sqlQuery`SET LOCAL statement_timeout = '15s'`);
+              await tx.execute(sqlQuery`SET LOCAL idle_in_transaction_session_timeout = '20s'`);
+              const [identity] = await tx.execute<{
+                pid: number;
+                at: Date;
+                deadlock_before_timeout: boolean;
+              }>(
+                sqlQuery`SELECT pg_backend_pid() AS pid, clock_timestamp() AS at,
+                  current_setting('deadlock_timeout')::interval < interval '10 seconds'
+                    AS deadlock_before_timeout`,
+              );
+              actor.pid = identity!.pid;
+              trace.push({ actor: label, kind: "transaction-start", ...identity });
+              expect(identity!.deadlock_before_timeout).toBe(true);
+              const observed = new Proxy(tx, {
+                get(realTx, key) {
+                  if (key === "select")
+                    return (...args: unknown[]) => {
+                      const builder = Reflect.apply(realTx.select, realTx, args) as ReturnType<
+                        C01LockTx["select"]
+                      >;
+                      const from = builder.from.bind(builder);
+                      builder.from = ((...fromArgs: unknown[]) => {
+                        const query = Reflect.apply(from, builder, fromArgs) as C01CompletedSelect;
+                        const execute = query.execute.bind(query);
+                        query.execute = async (...executeArgs: unknown[]) => {
+                          const statement = query.toSQL();
+                          const rows = await execute(...executeArgs);
+                          const resource = (
+                            [
+                              ["account", "trader_risk_account_state_v2"],
+                              ["attempt", "trader_execution_attempts_v2"],
+                            ] as const
+                          ).find(([, table]) => statement.sql.includes(`"${table}"`))?.[0];
+                          if (resource && /\bfor update\b/i.test(statement.sql)) {
+                            const [wall] = await realTx.execute<{ at: Date }>(
+                              sqlQuery`SELECT clock_timestamp() AS at`,
+                            );
+                            trace.push({
+                              actor: label,
+                              kind: "lock-acquired",
+                              resource,
+                              at: wall!.at,
+                              sql: statement.sql,
+                              params: statement.params,
+                              rowCount: Array.isArray(rows) ? rows.length : null,
+                            });
+                            if (!actor.paused && resource === pause?.resource) {
+                              expect(statement.params).toContain(c01Org);
+                              expect(statement.params).toContain(pause.identity);
+                              expect(rows).toHaveLength(1);
+                              actor.paused = true;
+                              await released;
+                            }
+                          }
+                          return rows;
+                        };
+                        return query;
+                      }) as typeof builder.from;
+                      return builder;
+                    };
+                  if (key === "execute")
+                    return async (...args: Parameters<C01LockTx["execute"]>) => {
+                      const rows = await realTx.execute(...args);
+                      const first = (rows as unknown as { durable_at?: Date | string }[])[0];
+                      if (first?.durable_at) {
+                        trace.push({
+                          actor: label,
+                          kind: "clock",
+                          at: new Date(first.durable_at).toISOString(),
+                        });
+                      }
+                      return rows;
+                    };
+                  const value = Reflect.get(realTx, key);
+                  return typeof value === "function" ? value.bind(realTx) : value;
+                },
+              });
+              return run(observed);
+            }, config);
+            const [settledAt] = await plainDb.execute<{ at: Date }>(
+              sqlQuery`SELECT clock_timestamp() AS at`,
+            );
+            trace.push({ actor: label, kind: "committed", at: settledAt!.at });
+            return result;
+          } catch (error) {
+            trace.push({ actor: label, kind: "rolled-back", causes: c01NativeCauses(error) });
+            throw error;
+          } finally {
+            actor.tx = null;
+          }
+        };
+      },
+    });
+    return actor;
+  }
+
+  async function c01ObserveAccountWait(
+    holder: ReturnType<typeof c01LockClient>,
+    binder: ReturnType<typeof c01LockClient>,
+    trace: C01LockTrace,
+  ) {
+    await expect.poll(() => binder.pid, { timeout: 5_000 }).not.toBe(0);
+    expect(binder.pid).not.toBe(holder.pid);
+    await expect
+      .poll(
+        async () => {
+          await holder.tx!.execute(sqlQuery`SELECT pg_stat_clear_snapshot()`);
+          const rows = await holder.tx!.execute<{
+            pid: number;
+            query: string;
+            blockers: number[];
+            wait_event: string | null;
+          }>(
+            sqlQuery`SELECT pid, query, wait_event, pg_blocking_pids(pid) AS blockers FROM pg_stat_activity
+          WHERE pid = ${binder.pid} AND wait_event_type = 'Lock'
+            AND ${holder.pid} = ANY(pg_blocking_pids(pid))`,
+          );
+          const waiting = rows[0];
+          if (
+            !waiting?.query.includes("trader_risk_account_state_v2") ||
+            !/\bfor update\b/i.test(waiting.query)
+          ) {
+            return false;
+          }
+          const [wall] = await holder.tx!.execute<{ at: Date }>(
+            sqlQuery`SELECT clock_timestamp() AS at`,
+          );
+          trace.push({
+            kind: "observed-server-wait",
+            resource: "account",
+            holderPid: holder.pid,
+            binderPid: binder.pid,
+            waiting,
+            at: wall!.at,
+          });
+          return true;
+        },
+        { timeout: 5_000 },
+      )
+      .toBe(true);
+  }
+
+  async function c01WaitPastDeadline(
+    holder: ReturnType<typeof c01LockClient>,
+    deadline: string,
+    trace: C01LockTrace,
+  ) {
+    const [before] = await holder.tx!.execute<{ at: Date }>(
+      sqlQuery`SELECT clock_timestamp() AS at`,
+    );
+    trace.push({ kind: "before-deadline", at: before!.at, deadline });
+    expect(new Date(before!.at).getTime()).toBeLessThan(new Date(deadline).getTime());
+    await expect
+      .poll(
+        async () => {
+          const [row] = await holder.tx!.execute<{ at: Date }>(
+            sqlQuery`SELECT clock_timestamp() AS at`,
+          );
+          if (new Date(row!.at).getTime() < new Date(deadline).getTime()) return false;
+          trace.push({ kind: "deadline-reached", at: row!.at, deadline });
+          return true;
+        },
+        { timeout: 8_000 },
+      )
+      .toBe(true);
+  }
+
+  async function c01FinishProof(
+    test: string,
+    input: BindExecutionAuthorityV2Input,
+    trace: C01LockTrace,
+    actors: ReturnType<typeof c01LockClient>[],
+    operations: Promise<unknown>[],
+  ) {
+    actors.forEach((actor) => actor.release());
+    const outcomes = await Promise.all(operations);
+    const [postSettlement] = await c01Sql<{ at: Date }[]>`SELECT clock_timestamp() AS at`;
+    trace.push({ kind: "post-settlement", at: postSettlement!.at });
+    c01Receipt(test, { phase: "settled", trace, outcomes });
+    try {
+      const state = await c01LockProofState(input);
+      c01Receipt(test, { phase: "durable-state", state });
+      return { outcomes, state, postSettlement: postSettlement!.at };
+    } finally {
+      const closed = await Promise.allSettled(
+        actors.map((actor) => actor.client.end({ timeout: 5 })),
+      );
+      c01Receipt(test, { phase: "closed", closed: closed.map((x) => x.status) });
+      expect(closed.every((result) => result.status === "fulfilled")).toBe(true);
+    }
+  }
+
+  beforeAll(async () => {
+    const parsed = new URL(url!);
+    expect(parsed.hostname).toBe("127.0.0.1");
+    expect(parsed.port).toBe("54329");
+    c01Sql = postgres(url!, {
+      max: 4,
+      prepare: false,
+      connect_timeout: 10,
+      connection: {
+        application_name: "dee1135-c01-owner",
+        statement_timeout: 30000,
+        lock_timeout: 10000,
+      },
+    });
+    c01Db = drizzle(c01Sql, { schema }) as WaiaPostgresDb;
+    const [identity] = await c01Sql`SELECT pg_backend_pid() AS pid, current_database() AS database,
+      current_user AS role, current_setting('server_version_num') AS version,
+      current_setting('session_replication_role') AS replication_role`;
+    expect(identity).toMatchObject({
+      role: "waia_validate",
+      version: "160014",
+      replication_role: "origin",
+    });
+    expect(String(identity!.database)).toMatch(/^waia_dee1121_dee1135_acquisition_[a-z0-9_]+$/);
+    c01ActorId = randomUUID();
+    await c01Sql`INSERT INTO auth.users(id) VALUES(${c01ActorId}::uuid)`;
+    await c01Db.insert(schema.users).values({
+      id: c01ActorId,
+      identityLabel: "DEE1135 C01 paper fixture",
+      email: `${c01ActorId}@waia.invalid`,
+      passwordHash: null,
+    });
+    c01Org = await ensureUserCoreSeedPostgres(c01Db, {
+      userId: c01ActorId,
+      displayName: "DEE1135 C01 paper",
+    });
+    c01Receipt("c01-org", {
+      organizationId: c01Org,
+      actorId: c01ActorId,
+      pid: identity!.pid,
+      note: "separate from acquisition org; ordinary paper Risk/Execution only",
+    });
+  }, 60_000);
+
+  afterAll(async () => {
+    const outcomes = await Promise.allSettled([
+      ...c01Clients.map((c) => c.client.end({ timeout: 5 })),
+      c01Sql ? c01Sql.end({ timeout: 5 }) : Promise.resolve(),
+    ]);
+    c01Receipt("c01-client-closure", {
+      outcomes: outcomes.map((x) =>
+        x.status === "fulfilled"
+          ? { status: x.status }
+          : { status: x.status, reason: errorShape(x.reason) },
+      ),
+    });
+    expect(outcomes.every((x) => x.status === "fulfilled")).toBe(true);
+  }, 60_000);
+
+  it("C01 initial bind across allowance-only expiry", async () => {
+    const input = await c01AdmittedBindInput({ validForMs: 3_000 });
+    const allowanceDeadline = input.allowance.validUntilUtc;
+    const before = await c01LockProofState(input);
+    const trace: C01LockTrace = [{ kind: "before", state: before, allowanceDeadline }];
+    const holder = c01LockClient("allowance-expiry-holder", trace, {
+      resource: "account",
+      identity: input.allowance.accountId,
+    });
+    const binder = c01LockClient("allowance-expiry-bind", trace);
+    const operations: Promise<unknown>[] = [];
+    let proof!: Awaited<ReturnType<typeof c01FinishProof>>;
+    try {
+      operations.push(
+        c01Settled(
+          holder.db.transaction(async (tx) => {
+            await tx
+              .select()
+              .from(schema.traderRiskAccountStateV2)
+              .where(
+                and(
+                  eq(schema.traderRiskAccountStateV2.organizationId, c01Org),
+                  eq(schema.traderRiskAccountStateV2.accountId, input.allowance.accountId),
+                ),
+              )
+              .for("update");
+          }),
+        ),
+      );
+      await expect.poll(() => holder.paused, { timeout: 5_000 }).toBe(true);
+      const [preBind] = await holder.tx!.execute<{ at: Date }>(
+        sqlQuery`SELECT clock_timestamp() AS at`,
+      );
+      expect(new Date(preBind!.at).getTime()).toBeLessThan(new Date(allowanceDeadline).getTime());
+      operations.push(
+        c01Settled(bindExecutionAuthorityV2Postgres(binder.db, { organizationId: c01Org }, input)),
+      );
+      await c01ObserveAccountWait(holder, binder, trace);
+      const binderStart = trace.find(
+        (e) => e.actor === binder.label && e.kind === "transaction-start",
+      );
+      expect(binderStart).toBeTruthy();
+      expect(new Date(String((binderStart as { at: Date }).at)).getTime()).toBeLessThan(
+        new Date(allowanceDeadline).getTime(),
+      );
+      await c01WaitPastDeadline(holder, allowanceDeadline, trace);
+    } catch (error) {
+      trace.push({ kind: "harness-failure", causes: c01NativeCauses(error) });
+      throw error;
+    } finally {
+      proof = await c01FinishProof(
+        "initial-bind/allowance-only-expiry",
+        input,
+        trace,
+        [binder, holder],
+        operations,
+      );
+    }
+    // Late-bind hypothesis: production rechecks allowance under lock after the wait.
+    c01Receipt("initial-bind-classification", {
+      outcomes: proof.outcomes,
+      before,
+      after: proof.state,
+      hypothesis: "initial-bind-across-allowance-only-expiry",
+    });
+    expect(proof.outcomes).toMatchObject([
+      { ok: true },
+      {
+        ok: false,
+        causes: expect.arrayContaining([expect.objectContaining({ reason: "ALLOWANCE_EXPIRED" })]),
+      },
+    ]);
+    expect(proof.state).toEqual(before);
+    expect(proof.state.allowance[0]).toMatchObject({ lifecycle_state: "ISSUED" });
+    expect(proof.state.counts).toMatchObject({ orders: 0, attempts: 0, reports: 0, events: 1 });
+  }, 30_000);
+
+  it("C01 exact unsubmitted replay across allowance-only expiry", async () => {
+    const input = await c01AdmittedBindInput({ validForMs: 3_000 });
+    const original = await bindExecutionAuthorityV2Postgres(
+      c01Db,
+      { organizationId: c01Org },
+      input,
+    );
+    expect(original.consumedNow).toBe(true);
+    const before = await c01LockProofState(input);
+    expect(before.allowance[0]).toMatchObject({ lifecycle_state: "CONSUMED" });
+    expect(before.counts.orders).toBe(1);
+    const allowanceDeadline = input.allowance.validUntilUtc;
+    const trace: C01LockTrace = [
+      {
+        kind: "before",
+        state: before,
+        allowanceDeadline,
+        originalAttempt: original.attempt.executionAttemptId,
+      },
+    ];
+    const holder = c01LockClient("replay-expiry-holder", trace, {
+      resource: "account",
+      identity: input.allowance.accountId,
+    });
+    const binder = c01LockClient("replay-expiry-bind", trace);
+    const operations: Promise<unknown>[] = [];
+    let proof!: Awaited<ReturnType<typeof c01FinishProof>>;
+    try {
+      operations.push(
+        c01Settled(
+          holder.db.transaction(async (tx) => {
+            await tx
+              .select()
+              .from(schema.traderRiskAccountStateV2)
+              .where(
+                and(
+                  eq(schema.traderRiskAccountStateV2.organizationId, c01Org),
+                  eq(schema.traderRiskAccountStateV2.accountId, input.allowance.accountId),
+                ),
+              )
+              .for("update");
+          }),
+        ),
+      );
+      await expect.poll(() => holder.paused, { timeout: 5_000 }).toBe(true);
+      const [preReplay] = await holder.tx!.execute<{ at: Date }>(
+        sqlQuery`SELECT clock_timestamp() AS at`,
+      );
+      expect(new Date(preReplay!.at).getTime()).toBeLessThan(new Date(allowanceDeadline).getTime());
+      operations.push(
+        c01Settled(bindExecutionAuthorityV2Postgres(binder.db, { organizationId: c01Org }, input)),
+      );
+      await c01ObserveAccountWait(holder, binder, trace);
+      await c01WaitPastDeadline(holder, allowanceDeadline, trace);
+    } catch (error) {
+      trace.push({ kind: "harness-failure", causes: c01NativeCauses(error) });
+      throw error;
+    } finally {
+      proof = await c01FinishProof(
+        "unsubmitted-replay/allowance-only-expiry",
+        input,
+        trace,
+        [binder, holder],
+        operations,
+      );
+    }
+    c01Receipt("replay-classification", {
+      outcomes: proof.outcomes,
+      before,
+      after: proof.state,
+      hypothesis: "exact-unsubmitted-replay-across-allowance-only-expiry",
+    });
+    expect(proof.outcomes[0]).toMatchObject({ ok: true });
+    expect(proof.outcomes[1]).toMatchObject({
+      ok: false,
+      error: expect.any(RiskV2AdmissionRefusedError),
+      causes: expect.arrayContaining([expect.objectContaining({ reason: "ALLOWANCE_EXPIRED" })]),
+    });
+    expect(proof.state.counts.orders).toBe(1);
+    expect(proof.state.counts.attempts).toBe(1);
+    expect(proof.state.events.filter((e) => e.type === "ALLOWANCE_CONSUMED")).toHaveLength(1);
+    expect(proof.state.account).toEqual(before.account);
+    expect(proof.state.allowance).toEqual(before.allowance);
+  }, 30_000);
+
+  it("C01 still-current lock-wait with one inert dispatch", async () => {
+    const input = await c01AdmittedBindInput({ validForMs: 60_000 });
+    const original = await bindExecutionAuthorityV2Postgres(
+      c01Db,
+      { organizationId: c01Org },
+      input,
+    );
+    const before = await c01LockProofState(input);
+    const trace: C01LockTrace = [{ kind: "before", state: before }];
+    const dispatcher = c01LockClient("still-current-dispatch", trace, {
+      resource: "account",
+      identity: input.allowance.accountId,
+    });
+    const binder = c01LockClient("still-current-replay", trace);
+    const operations: Promise<unknown>[] = [];
+    let callbacks = 0;
+    let proof!: Awaited<ReturnType<typeof c01FinishProof>>;
+    try {
+      operations.push(
+        c01Settled(
+          dispatchCommittedExecutionAttemptV2(
+            dispatcher.db,
+            { organizationId: c01Org },
+            original.attempt.executionAttemptId,
+            async () => {
+              callbacks += 1;
+              trace.push({ kind: "inert-callback", callbacks });
+              const reports = await listExecutionReportsV2Postgres(
+                dispatcher.plainDb,
+                { organizationId: c01Org },
+                original.attempt.executionAttemptId,
+              );
+              expect(
+                reports.filter((report) => report.reportType === "SUBMIT_STARTED"),
+              ).toHaveLength(1);
+              await dispatcher.plainDb.transaction(async (tx) => {
+                await tx.execute(sqlQuery`SET LOCAL lock_timeout = '2s'`);
+                await tx.execute(sqlQuery`SET LOCAL statement_timeout = '5s'`);
+                await tx
+                  .select()
+                  .from(schema.traderRiskAccountStateV2)
+                  .where(
+                    and(
+                      eq(schema.traderRiskAccountStateV2.organizationId, c01Org),
+                      eq(schema.traderRiskAccountStateV2.accountId, input.allowance.accountId),
+                    ),
+                  )
+                  .for("update");
+              });
+              trace.push({ kind: "callback-commit-and-lock-release-observed" });
+              return { synthetic: true };
+            },
+          ),
+        ),
+      );
+      await expect.poll(() => dispatcher.paused, { timeout: 5_000 }).toBe(true);
+      operations.push(
+        c01Settled(bindExecutionAuthorityV2Postgres(binder.db, { organizationId: c01Org }, input)),
+      );
+      await c01ObserveAccountWait(dispatcher, binder, trace);
+    } catch (error) {
+      trace.push({ kind: "harness-failure", causes: c01NativeCauses(error) });
+      throw error;
+    } finally {
+      proof = await c01FinishProof(
+        "still-current/inert-dispatch",
+        input,
+        trace,
+        [binder, dispatcher],
+        operations,
+      );
+    }
+    expect(proof.outcomes).toMatchObject([
+      { ok: true, value: { status: "SUBMITTED" } },
+      {
+        ok: true,
+        value: {
+          consumedNow: false,
+          plan: original.plan,
+          attempt: original.attempt,
+          order: original.order,
+        },
+      },
+    ]);
+    expect(callbacks).toBe(1);
+    const repeat = await c01Settled(
+      dispatchCommittedExecutionAttemptV2(
+        c01Db,
+        { organizationId: c01Org },
+        original.attempt.executionAttemptId,
+        async () => {
+          callbacks += 1;
+          return { forbiddenResend: true };
+        },
+      ),
+    );
+    c01Receipt("repeat-dispatch", { repeat, callbacks });
+    expect(repeat).toMatchObject({ ok: true, value: { status: "REFUSED_ALREADY_STARTED" } });
+    expect(callbacks).toBe(1);
+    expect(proof.state.counts.orders).toBe(1);
+    expect(proof.state.events.filter((e) => e.type === "ALLOWANCE_CONSUMED")).toHaveLength(1);
+  }, 30_000);
+
+  it("C01 allowance expired before transaction entry", async () => {
+    const input = await c01AdmittedBindInput({ validForMs: 2_000 });
+    const allowanceDeadline = input.allowance.validUntilUtc;
+    const before = await c01LockProofState(input);
+    const trace: C01LockTrace = [{ kind: "before", state: before, allowanceDeadline }];
+    const holder = c01LockClient("expired-before-entry-holder", trace, {
+      resource: "account",
+      identity: input.allowance.accountId,
+    });
+    const binder = c01LockClient("expired-before-entry-bind", trace);
+    const operations: Promise<unknown>[] = [];
+    let proof!: Awaited<ReturnType<typeof c01FinishProof>>;
+    try {
+      operations.push(
+        c01Settled(
+          holder.db.transaction(async (tx) => {
+            await tx
+              .select()
+              .from(schema.traderRiskAccountStateV2)
+              .where(
+                and(
+                  eq(schema.traderRiskAccountStateV2.organizationId, c01Org),
+                  eq(schema.traderRiskAccountStateV2.accountId, input.allowance.accountId),
+                ),
+              )
+              .for("update");
+          }),
+        ),
+      );
+      await expect.poll(() => holder.paused, { timeout: 5_000 }).toBe(true);
+      await c01WaitPastDeadline(holder, allowanceDeadline, trace);
+      operations.push(
+        c01Settled(bindExecutionAuthorityV2Postgres(binder.db, { organizationId: c01Org }, input)),
+      );
+      await c01ObserveAccountWait(holder, binder, trace);
+      const binderStart = trace.find(
+        (e) => e.actor === binder.label && e.kind === "transaction-start",
+      );
+      expect(binderStart).toBeTruthy();
+      expect(new Date(String((binderStart as { at: Date }).at)).getTime()).toBeGreaterThanOrEqual(
+        new Date(allowanceDeadline).getTime(),
+      );
+    } catch (error) {
+      trace.push({ kind: "harness-failure", causes: c01NativeCauses(error) });
+      throw error;
+    } finally {
+      proof = await c01FinishProof(
+        "expired-before-entry",
+        input,
+        trace,
+        [binder, holder],
+        operations,
+      );
+    }
+    c01Receipt("expired-before-entry-classification", {
+      outcomes: proof.outcomes,
+      before,
+      after: proof.state,
+      note: "binder refusal must roll back Risk tentative expiry/release inside the outer transaction",
+    });
+    expect(proof.outcomes).toMatchObject([
+      { ok: true },
+      {
+        ok: false,
+        causes: expect.arrayContaining([expect.objectContaining({ reason: "ALLOWANCE_EXPIRED" })]),
+      },
+    ]);
+    // Standalone Risk consume would commit EXPIRED; binder outer rollback keeps ISSUED.
+    expect(proof.state).toEqual(before);
+    expect(proof.state.allowance[0]).toMatchObject({ lifecycle_state: "ISSUED", expired_at: null });
+    expect(proof.state.events.map((e) => e.type)).toEqual(["ALLOWANCE_ISSUED"]);
+    expect(proof.state.counts).toMatchObject({ orders: 0, attempts: 0, events: 1 });
+  }, 30_000);
+
+  it("C01 accepted plan-window boundary across a wait", async () => {
+    const original = await c01AdmittedBindInput({ validForMs: 60_000 });
+    const [clock] = await c01Sql<
+      { deadline: Date | string }[]
+    >`SELECT clock_timestamp() + interval '3 seconds' AS deadline`;
+    const deadlineDate = new Date(clock!.deadline);
+    expect(Number.isFinite(deadlineDate.getTime())).toBe(true);
+    const deadline = deadlineDate.toISOString();
+    const input = {
+      ...original,
+      plan: {
+        ...original.plan,
+        timingWindow: { ...original.plan.timingWindow, closesAtUtc: deadline },
+      },
+    };
+    expect(validateExecutionPolicyBindingV2(input.policy)).toBe(true);
+    const before = await c01LockProofState(input);
+    const trace: C01LockTrace = [{ kind: "before", state: before, deadline }];
+    const holder = c01LockClient("plan-window-holder", trace, {
+      resource: "account",
+      identity: input.allowance.accountId,
+    });
+    const binder = c01LockClient("plan-window-bind", trace);
+    const operations: Promise<unknown>[] = [];
+    let proof!: Awaited<ReturnType<typeof c01FinishProof>>;
+    try {
+      operations.push(
+        c01Settled(
+          holder.db.transaction(async (tx) => {
+            await tx
+              .select()
+              .from(schema.traderRiskAccountStateV2)
+              .where(
+                and(
+                  eq(schema.traderRiskAccountStateV2.organizationId, c01Org),
+                  eq(schema.traderRiskAccountStateV2.accountId, input.allowance.accountId),
+                ),
+              )
+              .for("update");
+          }),
+        ),
+      );
+      await expect.poll(() => holder.paused, { timeout: 5_000 }).toBe(true);
+      operations.push(
+        c01Settled(bindExecutionAuthorityV2Postgres(binder.db, { organizationId: c01Org }, input)),
+      );
+      await c01ObserveAccountWait(holder, binder, trace);
+      await c01WaitPastDeadline(holder, deadline, trace);
+    } catch (error) {
+      trace.push({ kind: "harness-failure", causes: c01NativeCauses(error) });
+      throw error;
+    } finally {
+      proof = await c01FinishProof(
+        "plan-window/account-wait",
+        input,
+        trace,
+        [binder, holder],
+        operations,
+      );
+    }
+    c01Receipt("plan-window-classification", {
+      outcomes: proof.outcomes,
+      before,
+      after: proof.state,
+    });
+    expect(proof.outcomes).toMatchObject([
+      { ok: true },
+      {
+        ok: false,
+        error: expect.any(ExecutionV2AuthorityRefusedError),
+        causes: expect.arrayContaining([
+          expect.objectContaining({ reason: "EXECUTION_WINDOW_CLOSED" }),
+        ]),
+      },
+    ]);
+    expect(proof.state).toEqual(before);
+    expect(proof.state.allowance[0]).toMatchObject({ lifecycle_state: "ISSUED" });
+    expect(proof.state.counts).toMatchObject({ orders: 0, attempts: 0, reports: 0 });
+  }, 30_000);
 });

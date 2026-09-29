@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 
 // Opt-in native suites can exit successfully while skipped. This guard requires
-// executed evidence from all four files in the separate, serial PG17 lane.
+// executed evidence from all five files in the separate, serial PG17 lane.
 const requiredFiles = [
   "account-observation-migration-postgres.test.ts",
   "trader-account-observation-postgres.test.ts",
   "account-observation-reader-postgres.test.ts",
   "account-observation-credential-postgres.test.ts",
+  "account-observation-risk-owner-postgres.test.ts",
 ];
 const refuse = (reason) => {
   throw new Error(`Required account observation proof missing, failed or skipped: ${reason}`);
@@ -18,7 +19,7 @@ try {
   refuse("unreadable or malformed result report");
 }
 if (!report || !Array.isArray(report.testResults) || report.testResults.length !== requiredFiles.length) {
-  refuse("expected exactly four suite results");
+  refuse("expected exactly five suite results");
 }
 for (const file of requiredFiles) {
   const results = report.testResults.filter((result) =>
@@ -34,4 +35,4 @@ for (const file of requiredFiles) {
     refuse(file);
   }
 }
-console.log("Verified executed PostgreSQL proof: 4 account observation suites, no skipped tests.");
+console.log("Verified executed PostgreSQL proof: 5 account observation suites, no skipped tests.");

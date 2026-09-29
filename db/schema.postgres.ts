@@ -9720,3 +9720,40 @@ export const traderRiskAccountInclusionsV1 = pgTable("trader_risk_account_inclus
     traderRiskAccountBasesV1.organizationId, traderRiskAccountBasesV1.accountId, traderRiskAccountBasesV1.contentDigest] }),
   foreignKey({ columns: [t.truthRecordId, t.organizationId, t.accountId], foreignColumns: [
     traderRealityTruthRecordsV2.id, traderRealityTruthRecordsV2.organizationId, traderRealityTruthRecordsV2.accountId] })]);
+/** DEE-1145: durable LiveCapitalEnvelopeV2. Amount columns have no default. The current pointer is the only mutable row. */
+export const traderLiveCapitalEnvelopesV2 = pgTable("trader_live_capital_envelopes_v2", {
+  ...riskAccountRecordColumnsV1(), commandId: uuid("command_id").notNull(),
+  policyDigest: text("policy_digest").notNull(), releaseSha: text("release_sha").notNull(),
+  capitalNotional: text("capital_notional").notNull(), lossLimitNotional: text("loss_limit_notional").notNull(),
+  validFrom: timestamp("valid_from", { withTimezone: true, mode: "date" }).notNull(),
+  validUntil: timestamp("valid_until", { withTimezone: true, mode: "date" }).notNull(),
+}, t => [primaryKey({ columns: [t.organizationId, t.accountId, t.contentDigest] }),
+  unique().on(t.organizationId, t.accountId, t.commandId)]);
+
+export const traderLiveCapitalEnvelopeJournalV2 = pgTable("trader_live_capital_envelope_journal_v2", {
+  ...riskAccountRecordColumnsV1(), commandId: uuid("command_id").notNull(), stage: text("stage").notNull(),
+  envelopeDigest: text("envelope_digest"), basisDigest: text("basis_digest"), reason: text("reason"),
+}, t => [primaryKey({ columns: [t.organizationId, t.accountId, t.contentDigest] }),
+  unique().on(t.organizationId, t.accountId, t.commandId, t.stage)]);
+
+export const traderLiveCapitalBasisBindingsV2 = pgTable("trader_live_capital_basis_bindings_v2", {
+  ...riskAccountRecordColumnsV1(), envelopeDigest: text("envelope_digest").notNull(),
+  policyDigest: text("policy_digest").notNull(), releaseSha: text("release_sha").notNull(),
+}, t => [primaryKey({ columns: [t.organizationId, t.accountId, t.contentDigest] }),
+  unique().on(t.organizationId, t.accountId, t.envelopeDigest),
+  foreignKey({ columns: [t.organizationId, t.accountId, t.envelopeDigest], foreignColumns: [
+    traderLiveCapitalEnvelopesV2.organizationId, traderLiveCapitalEnvelopesV2.accountId, traderLiveCapitalEnvelopesV2.contentDigest] })]);
+
+export const traderLiveCapitalEnvelopeCurrentV2 = pgTable("trader_live_capital_envelope_current_v2", {
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+  accountId: text("account_id").notNull(), commandId: uuid("command_id").notNull(),
+  envelopeDigest: text("envelope_digest").notNull(), policyDigest: text("policy_digest").notNull(),
+  releaseSha: text("release_sha").notNull(), basisDigest: text("basis_digest"),
+  revision: bigint("revision", { mode: "bigint" }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull(),
+}, t => [primaryKey({ columns: [t.organizationId, t.accountId] }),
+  unique().on(t.organizationId, t.accountId, t.commandId),
+  foreignKey({ columns: [t.organizationId, t.accountId, t.envelopeDigest], foreignColumns: [
+    traderLiveCapitalEnvelopesV2.organizationId, traderLiveCapitalEnvelopesV2.accountId, traderLiveCapitalEnvelopesV2.contentDigest] }),
+  foreignKey({ columns: [t.organizationId, t.accountId, t.basisDigest], foreignColumns: [
+    traderLiveCapitalBasisBindingsV2.organizationId, traderLiveCapitalBasisBindingsV2.accountId, traderLiveCapitalBasisBindingsV2.contentDigest] })]);

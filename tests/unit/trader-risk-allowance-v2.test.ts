@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { assessIssuedAllowanceReplayV1, calculateRiskAdmissionV2 } from "@/lib/trader/risk/v2/risk-admission-service-v2";
+import {
+  assessIssuedAllowanceReplayV1,
+  calculateCurrentAccountRiskAdmissionV1,
+  calculateRiskAdmissionV2,
+} from "@/lib/trader/risk/v2/risk-admission-service-v2";
 import {
   createRiskAllowanceV2,
   validateRiskAllowanceV2,
@@ -56,45 +60,58 @@ describe("RiskAllowanceV2", () => {
 
   it("rejects expired-at-issue, HALT/KILLED, and invalid CLOSE_ONLY authority", () => {
     const valid = allowance();
-    const { schemaVersion: _schema, lifecycleState: _state, semanticDigestHex: _semantic,
-      contentDigestHex: _content, ...draft } = valid;
+    const {
+      schemaVersion: _schema,
+      lifecycleState: _state,
+      semanticDigestHex: _semantic,
+      contentDigestHex: _content,
+      ...draft
+    } = valid;
     void _schema;
     void _state;
     void _semantic;
     void _content;
     expect(() => createRiskAllowanceV2({ ...draft, validUntilUtc: draft.issuedAtUtc })).toThrow();
     expect(() => createRiskAllowanceV2({ ...draft, postureAtIssuance: "HALT" })).toThrow();
-    expect(() => createRiskAllowanceV2({
-      ...draft,
-      postureAtIssuance: "CLOSE_ONLY",
-      strictExposureReduction: false,
-    })).toThrow();
-    expect(() => createRiskAllowanceV2({
-      ...draft,
-      strictExposureReduction: true,
-      reservedExposureNotional: "0",
-    })).toThrow(/reduction proof\/action mismatch/);
-    expect(() => createRiskAllowanceV2({
-      ...draft,
-      decision: { ...draft.decision, action: "REDUCE" },
-      strictExposureReduction: true,
-      reservedExposureNotional: "1",
-    })).toThrow(/must not reserve increasing exposure/);
+    expect(() =>
+      createRiskAllowanceV2({
+        ...draft,
+        postureAtIssuance: "CLOSE_ONLY",
+        strictExposureReduction: false,
+      }),
+    ).toThrow();
+    expect(() =>
+      createRiskAllowanceV2({
+        ...draft,
+        strictExposureReduction: true,
+        reservedExposureNotional: "0",
+      }),
+    ).toThrow(/reduction proof\/action mismatch/);
+    expect(() =>
+      createRiskAllowanceV2({
+        ...draft,
+        decision: { ...draft.decision, action: "REDUCE" },
+        strictExposureReduction: true,
+        reservedExposureNotional: "1",
+      }),
+    ).toThrow(/must not reserve increasing exposure/);
   });
 
   it("accounts for reconciled, worst-case pending, and outstanding reservations", () => {
-    expect(calculateRiskAdmissionV2({
-      accounting: {
-        reconciledExposureNotional: "40",
-        worstCasePendingExposureNotional: "20",
-        outstandingReservationNotional: "10",
-        exposureLimitNotional: "100",
-      },
-      requestedReservationNotional: "25",
-      posture: "NORMAL",
-      strictExposureReduction: false,
-      reconciliationStatus: "RECONCILED",
-    })).toEqual({
+    expect(
+      calculateRiskAdmissionV2({
+        accounting: {
+          reconciledExposureNotional: "40",
+          worstCasePendingExposureNotional: "20",
+          outstandingReservationNotional: "10",
+          exposureLimitNotional: "100",
+        },
+        requestedReservationNotional: "25",
+        posture: "NORMAL",
+        strictExposureReduction: false,
+        reconciliationStatus: "RECONCILED",
+      }),
+    ).toEqual({
       status: "ADMITTED",
       reservationNotional: "25",
       remainingBeforeAdmissionNotional: "30",
@@ -109,27 +126,63 @@ describe("RiskAllowanceV2", () => {
       outstandingReservationNotional: "10",
       exposureLimitNotional: "100",
     };
-    expect(calculateRiskAdmissionV2({
+    expect(
+      calculateRiskAdmissionV2({
+        accounting,
+        requestedReservationNotional: "31",
+        posture: "NORMAL",
+        strictExposureReduction: false,
+        reconciliationStatus: "RECONCILED",
+      }),
+    ).toMatchObject({ status: "REFUSED", reason: "RESERVATION_EXCEEDS_REMAINING_ENVELOPE" });
+    expect(
+      calculateRiskAdmissionV2({
+        accounting,
+        requestedReservationNotional: "0",
+        posture: "KILLED",
+        strictExposureReduction: true,
+        reconciliationStatus: "RECONCILED",
+      }),
+    ).toMatchObject({ status: "REFUSED", reason: "POSTURE_REFUSED" });
+    expect(
+      calculateRiskAdmissionV2({
+        accounting,
+        requestedReservationNotional: "0",
+        posture: "CLOSE_ONLY",
+        strictExposureReduction: true,
+        reconciliationStatus: "STALE",
+      }),
+    ).toMatchObject({ status: "REFUSED", reason: "RECONCILIATION_NOT_CURRENT" });
+  });
+
+  it("refuses current-account admission from owned authority without a reconciliation status", () => {
+    const accounting = {
+      reconciledExposureNotional: "40",
+      worstCasePendingExposureNotional: "20",
+      outstandingReservationNotional: "10",
+      exposureLimitNotional: "100",
+    };
+    const request = {
       accounting,
-      requestedReservationNotional: "31",
-      posture: "NORMAL",
+      requestedReservationNotional: "1",
+      posture: "NORMAL" as const,
       strictExposureReduction: false,
-      reconciliationStatus: "RECONCILED",
-    })).toMatchObject({ status: "REFUSED", reason: "RESERVATION_EXCEEDS_REMAINING_ENVELOPE" });
-    expect(calculateRiskAdmissionV2({
-      accounting,
-      requestedReservationNotional: "0",
-      posture: "KILLED",
-      strictExposureReduction: true,
-      reconciliationStatus: "RECONCILED",
-    })).toMatchObject({ status: "REFUSED", reason: "POSTURE_REFUSED" });
-    expect(calculateRiskAdmissionV2({
-      accounting,
-      requestedReservationNotional: "0",
-      posture: "CLOSE_ONLY",
-      strictExposureReduction: true,
-      reconciliationStatus: "STALE",
-    })).toMatchObject({ status: "REFUSED", reason: "RECONCILIATION_NOT_CURRENT" });
+    };
+    for (const authority of [
+      { current: false as const, reason: "NO_CURRENT_POINTER" as const },
+      { current: false as const, reason: "BASIS_ABSENT" as const },
+      {
+        current: false as const,
+        reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" as const,
+        basisDigest: "ab".repeat(32),
+      },
+    ]) {
+      expect(calculateCurrentAccountRiskAdmissionV1({ ...request, authority })).toMatchObject({
+        status: "REFUSED",
+        reason: "RECONCILIATION_NOT_CURRENT",
+        basisDiagnostic: authority.reason,
+      });
+    }
   });
 
   it("rechecks current authority before an issued allowance replay returns the stored row", () => {
@@ -155,13 +208,18 @@ describe("RiskAllowanceV2", () => {
     };
     expect(assessIssuedAllowanceReplayV1(current)).toEqual({ decision: "CURRENT" });
     expect(assessIssuedAllowanceReplayV1({ ...current, killState: "TRIPPED" })).toEqual({
-      decision: "REFUSED", reason: "CURRENT_AUTHORITY_BINDING_MISMATCH",
+      decision: "REFUSED",
+      reason: "CURRENT_AUTHORITY_BINDING_MISMATCH",
     });
-    expect(assessIssuedAllowanceReplayV1({ ...current, stateRealityContentDigestHex: "other" })).toEqual({
-      decision: "REFUSED", reason: "CURRENT_AUTHORITY_BINDING_MISMATCH",
+    expect(
+      assessIssuedAllowanceReplayV1({ ...current, stateRealityContentDigestHex: "other" }),
+    ).toEqual({
+      decision: "REFUSED",
+      reason: "CURRENT_AUTHORITY_BINDING_MISMATCH",
     });
     expect(assessIssuedAllowanceReplayV1({ ...current, reconciliationStatus: "STALE" })).toEqual({
-      decision: "REFUSED", reason: "RECONCILIATION_NOT_CURRENT",
+      decision: "REFUSED",
+      reason: "RECONCILIATION_NOT_CURRENT",
     });
   });
 });
