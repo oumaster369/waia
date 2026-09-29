@@ -565,10 +565,13 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
       deps: { ...seeded.session.deps, execution },
     },
     cleanup: () => {
-      void deleteLiveCapitalEnvelopeRows(sqlClient, seeded.context.organizationId).finally(() => {
-        seeded.cleanup();
-        void sqlClient.end({ timeout: 5 });
-      });
+      // Close the shared FHV SQLite before returning. The next it.each case
+      // starts as soon as this returns; deferring session.cleanup() until the
+      // envelope delete settles closes that next session mid-submit.
+      seeded.cleanup();
+      return deleteLiveCapitalEnvelopeRows(sqlClient, seeded.context.organizationId).finally(() =>
+        sqlClient.end({ timeout: 5 }),
+      );
     },
   };
 }
