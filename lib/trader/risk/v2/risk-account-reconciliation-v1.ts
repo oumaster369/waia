@@ -432,10 +432,14 @@ export function constructRiskAccountBasisV1(input: {
 }
 
 /** Exact identity exception only: its own already counted obligation is not charged twice.
- *  Obligations come from the sealed basis. A caller cannot omit a sibling reduction. */
+ *  Obligations come from the sealed basis. A caller cannot omit a sibling reduction.
+ *  A positive answer requires the evaluation instant to be strictly before basis validUntilUtc.
+ *  Quote-asset buying power is refused: BUY-order reserves are not subtracted here. */
 export function availableRiskAccountQuantityV1(input: {
   basis: RiskAccountBasisV1;
   asset: string;
+  evaluatedAtUtc: string;
+  quoteAsset: string;
   own?: {
     allowanceId: string;
     allowanceContentDigest: string;
@@ -444,6 +448,11 @@ export function availableRiskAccountQuantityV1(input: {
   };
 }): string {
   assertRiskAccountRecordSealV1(input.basis);
+  const evaluatedAt = Date.parse(riskAccountTimeSchemaV1.parse(input.evaluatedAtUtc));
+  const validUntil = Date.parse(riskAccountTimeSchemaV1.parse(input.basis.validUntilUtc));
+  if (!(evaluatedAt < validUntil)) refuse("BASIS_NOT_CURRENT");
+  if (input.quoteAsset.length === 0 || input.asset === input.quoteAsset)
+    refuse("QUOTE_BUYING_POWER_REFUSED");
   const asset = input.basis.assets.find((row) => row.asset === input.asset);
   if (!asset) return refuse("INVENTORY_ASSET_MISSING");
   let lower = nonnegative(asset.guaranteedLowerQuantity),

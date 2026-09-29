@@ -73,6 +73,11 @@ function obligation(id: string, quantity: string, side: "BUY" | "SELL" = "SELL")
     instrumentIdentityDigest: digest("BTC/USDT"), symbol: "BTC/USDT", baseAsset: "BTC", side, quantity,
     reservedNotional: side === "BUY" ? "10" : "0", pendingNotional: "0", state: "ISSUED", orderId: null, orderBindingDigest: null };
 }
+function available(input: Omit<Parameters<typeof availableRiskAccountQuantityV1>[0], "evaluatedAtUtc" | "quoteAsset"> & {
+  evaluatedAtUtc?: string; quoteAsset?: string;
+}) {
+  return availableRiskAccountQuantityV1({ evaluatedAtUtc: time(2), quoteAsset: "USDT", ...input });
+}
 function basisHolding(obligations: RiskAccountObligationV1[]) {
   const input = fixture(), prior = constructRiskAccountBasisV1(input);
   const reservation = obligations.reduce((sum, row) => sum + Number(row.reservedNotional), 0);
@@ -115,25 +120,51 @@ describe("current-account pure arithmetic and refusal values, without durable ad
     const own = obligation("own", "0.4"), sibling = obligation("sibling", "0.8");
     const basis = basisHolding([own, sibling, obligation("buy", "100", "BUY")]);
     const exact = { allowanceId: own.allowanceId, allowanceContentDigest: own.allowanceContentDigest, orderId: null, quantity: "0.4" };
-    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC" })).toBe("0.1");
-    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC", own: exact })).toBe("0.5");
-    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC", own: exact })).toBe("0.5");
-    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC",
+    expect(available({ basis, asset: "BTC" })).toBe("0.1");
+    expect(available({ basis, asset: "BTC", own: exact })).toBe("0.5");
+    expect(available({ basis, asset: "BTC", own: exact })).toBe("0.5");
+    expect(() => available({ basis, asset: "BTC",
       own: { ...exact, allowanceContentDigest: digest("forged") } })).toThrow("OWN_OBLIGATION_MISMATCH");
-    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC",
+    expect(() => available({ basis, asset: "BTC",
       own: { ...exact, quantity: "0.1" } })).toThrow("OWN_OBLIGATION_MISMATCH");
-    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC",
+    expect(() => available({ basis, asset: "BTC",
       own: { ...exact, orderId: "other-order" } })).toThrow("OWN_OBLIGATION_MISMATCH");
-    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC",
+    expect(() => available({ basis, asset: "BTC",
       own: { allowanceId: "buy", allowanceContentDigest: digest("buy"), orderId: null, quantity: "100" } })).toThrow("OWN_OBLIGATION_MISSING");
   });
   it("floors two competing reductions and still charges the sibling when one identity is rechecked", () => {
     const basis = basisHolding([obligation("a", "0.8"), obligation("b", "0.8")]);
-    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC" })).toBe("0");
-    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC",
+    expect(available({ basis, asset: "BTC" })).toBe("0");
+    expect(available({ basis, asset: "BTC",
       own: { allowanceId: "a", allowanceContentDigest: digest("a"), orderId: null, quantity: "0.8" } })).toBe("0.5");
-    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC",
+    expect(() => available({ basis, asset: "BTC",
       own: { allowanceId: "missing", allowanceContentDigest: digest("missing"), orderId: null, quantity: "0.8" } })).toThrow("OWN_OBLIGATION_MISSING");
+  });
+  it("refuses an evaluation that is not strictly before basis validity", () => {
+    const basis = basisHolding([obligation("other", "0.3")]);
+    expect(basis.validUntilUtc).toBe(time(31));
+    expect(availableRiskAccountQuantityV1({
+      basis, asset: "BTC", evaluatedAtUtc: time(30), quoteAsset: "USDT",
+    })).toBe("1");
+    expect(() => availableRiskAccountQuantityV1({
+      basis, asset: "BTC", evaluatedAtUtc: basis.validUntilUtc, quoteAsset: "USDT",
+    })).toThrow("BASIS_NOT_CURRENT");
+    expect(() => availableRiskAccountQuantityV1({
+      basis, asset: "BTC", evaluatedAtUtc: time(32), quoteAsset: "USDT",
+    })).toThrow("BASIS_NOT_CURRENT");
+  });
+  it("refuses quote-asset buying power because BUY reserves are not subtracted", () => {
+    const basis = constructRiskAccountBasisV1(fixture());
+    expect(basis.assets.some((row) => row.asset === "USDT")).toBe(true);
+    expect(() => availableRiskAccountQuantityV1({
+      basis, asset: "USDT", evaluatedAtUtc: time(2), quoteAsset: "USDT",
+    })).toThrow("QUOTE_BUYING_POWER_REFUSED");
+    expect(() => availableRiskAccountQuantityV1({
+      basis, asset: "BTC", evaluatedAtUtc: time(2), quoteAsset: "BTC",
+    })).toThrow("QUOTE_BUYING_POWER_REFUSED");
+    expect(() => availableRiskAccountQuantityV1({
+      basis, asset: "BTC", evaluatedAtUtc: time(2), quoteAsset: "",
+    })).toThrow("QUOTE_BUYING_POWER_REFUSED");
   });
   it("only releases the exact consumed charge after a matching independently settled fill and actual balance comparison", () => {
     const input = fixture(), prior = constructRiskAccountBasisV1(input);
