@@ -32,15 +32,17 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
     await expect(prepareHistoricalReconciliationFixture(env)).rejects.toThrow("DEE1130_BOOTSTRAP_REFUSED");
     expect(postgres).not.toHaveBeenCalled();
   });
-  it("captures all225 actual source SQL files and exact seed bytes without any connection", () => {
+  it("captures all226 actual source SQL files and exact seed bytes without any connection", () => {
     const source = readBootstrapSources();
-    expect(source.migrations).toHaveLength(225);
+    expect(source.migrations).toHaveLength(226);
     expect(source.migrations.slice(0, 222).at(-1)!.entry.tag).toBe("0221_trader_research_understanding_v1");
     expect(source.migrations[222]!.entry.tag).toBe("0222_trader_historical_reconciliation_v1");
     expect(source.migrations[223]!.entry).toEqual({ idx: 223, version: "7", when: 1780000000223,
       tag: "0223_trader_research_application_v1", breakpoints: true });
     expect(source.migrations[224]!.entry).toEqual({ idx: 224, version: "7", when: 1780000000224,
       tag: "0224_trader_risk_current_account_basis", breakpoints: true });
+    expect(source.migrations[225]!.entry).toEqual({ idx: 225, version: "7", when: 1780000000225,
+      tag: "0225_trader_live_capital_envelope_v2", breakpoints: true });
     for (const item of source.migrations) {
       expect(item.bytes).toEqual(readFileSync(`db/migrations_postgres/${item.entry.tag}.sql`));
       expect(item.identity.hash).toBe(createHash("sha256").update(item.bytes).digest("hex"));
@@ -54,8 +56,8 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
     "refuses %s before migration input can be prepared", change => {
       const value = journal();
       if (change === "missing-prefix") value.entries.splice(40, 1);
-      if (change === "extra-future") value.entries.push({ ...value.entries[224], idx: 225,
-        when: 1780000000225, tag: "0225_unadmitted_future_migration" });
+      if (change === "extra-future") value.entries.push({ ...value.entries[225], idx: 226,
+        when: 1780000000226, tag: "0226_unadmitted_future_migration" });
       if (change === "wrong-idx") value.entries[222].idx = 223;
       if (change === "wrong-tag") value.entries[222].tag = "0222_unreviewed_table";
       if (change === "path-traversal") value.entries[10].tag = "../untrusted";
@@ -82,13 +84,25 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
   it.each(["missing", "malformed", "idx", "tag", "when", "version", "breakpoints"] as const)(
     "refuses %s0224 without changing the retained223 prefix boundary", field => {
       const value = journal();
-      if (field === "missing") value.entries.pop();
+      if (field === "missing") value.entries.splice(224, 1);
       else if (field === "malformed") value.entries[224] = null;
       else if (field === "idx") value.entries[224].idx = 225;
       else if (field === "tag") value.entries[224].tag = "0224_unadmitted_basis";
       else if (field === "when") value.entries[224].when++;
       else if (field === "version") value.entries[224].version = "8";
       else value.entries[224].breakpoints = false;
+      expect(() => assertBootstrapJournal(value)).toThrow("JOURNAL");
+    });
+  it.each(["missing", "malformed", "idx", "tag", "when", "version", "breakpoints"] as const)(
+    "refuses %s0225 without changing the retained224 prefix boundary", field => {
+      const value = journal();
+      if (field === "missing") value.entries.pop();
+      else if (field === "malformed") value.entries[225] = null;
+      else if (field === "idx") value.entries[225].idx = 226;
+      else if (field === "tag") value.entries[225].tag = "0225_unadmitted_envelope";
+      else if (field === "when") value.entries[225].when++;
+      else if (field === "version") value.entries[225].version = "8";
+      else value.entries[225].breakpoints = false;
       expect(() => assertBootstrapJournal(value)).toThrow("JOURNAL");
     });
   it("refuses any modified seed, including whitespace, without trusting row count", () => {

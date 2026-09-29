@@ -28,6 +28,7 @@ const requiredFiles = [
   "postgres-knowledge-snapshot-eligibility.test.ts",
   "postgres-historical-production-reconciliation-frontier-v1.test.ts",
   "postgres-research-application-v1.test.ts",
+  "postgres-live-capital-envelope-v2.test.ts",
 ];
 const report = JSON.parse(readFileSync(process.argv[2], "utf8"));
 for (const file of requiredFiles) {

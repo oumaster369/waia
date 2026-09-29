@@ -12,6 +12,7 @@ import {
   type CurrentAccountAuthorityV1,
 } from "@/lib/trader/risk/v2/risk-current-account-read-v1";
 import { foldExpectedEnforcementSuffixV1, holdUnpublishedInclusionsV1 } from "@/lib/trader/risk/v2/risk-account-reconciliation-v1";
+import { readLiveCapitalBasisAdmissionV2 } from "@/lib/trader/risk/v2/live-capital-envelope-postgres";
 
 type FoldedSuffixInputV1 = Parameters<typeof foldExpectedEnforcementSuffixV1>[0];
 
@@ -54,17 +55,36 @@ export function decideRiskAccountProfileCommandV1(input: {
 }
 
 /** Current-account bind entry. It does not call the ordinary paper binder.
- *  Every readable pointer still refuses, because no live envelope producer exists.
+ *  A published LiveCapitalEnvelopeV2 basis is mandatory. It still does not submit an order.
  */
 export async function gateCurrentAccountExecutionBindV1(
   sql: postgres.Sql,
   organizationId: string,
   accountId: string,
-): Promise<{
-  decision: "REFUSED";
-  reason: CurrentAccountAuthorityV1["reason"];
-  bindInvoked: false;
-}> {
+): Promise<
+  | {
+      decision: "BASIS_BOUND";
+      reason: null;
+      bindInvoked: false;
+      basisDigest: string;
+      envelopeDigest: string;
+    }
+  | {
+      decision: "REFUSED";
+      reason: CurrentAccountAuthorityV1["reason"] | "LIVE_CAPITAL_ENVELOPE_STALE" | "LIVE_CAPITAL_IDENTITY_CHANGED";
+      bindInvoked: false;
+    }
+> {
+  const basis = await readLiveCapitalBasisAdmissionV2(sql, organizationId, accountId);
+  if (basis.decision === "BASIS_BOUND") {
+    return {
+      decision: "BASIS_BOUND", reason: null, bindInvoked: false,
+      basisDigest: basis.basisDigest, envelopeDigest: basis.envelopeDigest,
+    };
+  }
+  if (basis.reason !== "LIVE_CAPITAL_ENVELOPE_ABSENT") {
+    return { decision: "REFUSED", reason: basis.reason, bindInvoked: false };
+  }
   const authority = await readCurrentAccountAuthorityV1(sql, organizationId, accountId);
   return { decision: "REFUSED", reason: authority.reason, bindInvoked: false };
 }

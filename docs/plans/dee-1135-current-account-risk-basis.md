@@ -22,7 +22,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "An acquisition job is stored only when the reference header already exists. A missing reference refuses and writes nothing. Do not mark WP-1 complete or open the PR yet."
+  nextAction: "DEE-1145 is the durable LiveCapitalEnvelopeV2 producer only. completedWorkPackages stays empty: the envelope does not close WP-1, WP-2, WP-3, or WP-4. Human still decides real capital and loss-limit amounts, HTX qualification, and activation."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -263,8 +263,8 @@ Completion requires every admitted implementation boundary above, the positive a
 - [x] Reused clean free checkout branched from exact accepted f01; initial sole-plan stage is preserved at 30d54e4b.
 - [x] Root accepts this concrete plan and grants executable work.
 - [ ] WP-1 actual issuer/schema/contract implementation and source proof.
-- [ ] WP-2 actual acquisition/publisher/ledger implementation and source proof.
-- [ ] WP-3 complete consumer/writer closure and frozen full native inventory.
+- [ ] WP-2 actual acquisition/publisher/ledger implementation and source proof. DEE-1145 removes only the envelope-absent publication refusal in front of this publisher. Acquisition, the independent ledger, and suffix fold remain open.
+- [ ] WP-3 complete consumer/writer closure and frozen full native inventory. Issue, bind, and start can require the published envelope basis and still perform no venue submit.
 - [ ] Actual full native, units/readiness and independent source/outcome review.
 - [ ] One PR, complete applicable exact-head CI and checked merge.
 
@@ -272,7 +272,7 @@ The initial plan-only stage ended at clean `30d54e4b388936986274f5a44e5707c2851d
 
 Partial source checkpoints on 2026-09-27: the strict quote decoder/private encrypted byte-store controls passed 30 tests with zero skips, scoped lint and compiler; independent finite S1/S2 closure report `f5ac8dd767894bd33c4b3bb8adacac36bf3e2bd7841d50561ff9c004fdceb2c1`, freeze `e49d58906eb5c2df746c79a0c8526cdff16d8963105b110c836c3dbce0756a19`, accepts only that collector seam. Initial failed WIP receipts remain preserved. The separate fixed account-acquisition GET lane, lossless observational decoder and existing observation compatibility suites passed 139 tests across four files with zero skips at 21:34:37.284–21:34:40.492 UTC; scoped lint and compiler then passed through 21:35:00.810 UTC. The new append-only acquisition journal has compiler coverage only; no PostgreSQL execution or full publisher acceptance is claimed. Its bounded START/PREPARED/PAGE/TERMINAL records preserve request/raw/prefix identities; interrupted jobs are not automatically stolen or retried. Endpoint protocol closure retains PARTIAL whole-account coverage and UNKNOWN state-valid time.
 
-The concrete upstream-owner gap is now explicit: DEE-340/351's repaired QualificationTuple/EvidenceBundle/Human promotion/LiveCapitalEnvelope producer is not implemented at f01, and existing predictive/volume receipts do not qualify the temporal quote method. Root selected consuming exact typed durable dependencies from those real semantic owners; DEE-1135 will not mint an alternative L1 allocation, scientific qualification, generic external-signature registry or approving callback. OrgLiveEnable, V1 strategy promotion, raw VALID, active Source and admin profile adoption cannot substitute. Full positive software/native acceptance stays pending the actual upstream issuer software; synthetic tests must invoke that real software chain and cannot directly insert an approving basis or stand-in capital cap. Independent acquisition/journal/currentness/locking work continues within the admitted map. Actual HTX qualification, real financial inputs and Human promotion/activation remain unperformed.
+The concrete upstream-owner gap is now explicit: DEE-340/351's repaired QualificationTuple/EvidenceBundle/Human promotion/LiveCapitalEnvelope producer was not implemented at f01, and existing predictive/volume receipts do not qualify the temporal quote method. DEE-1145 later adds the durable envelope producer on this branch; that addition does not supply real amounts, qualification, or activation, and it does not close a work package. Root selected consuming exact typed durable dependencies from those real semantic owners; DEE-1135 will not mint an alternative L1 allocation, scientific qualification, generic external-signature registry or approving callback. OrgLiveEnable, V1 strategy promotion, raw VALID, active Source and admin profile adoption cannot substitute. Full positive software/native acceptance stays pending the actual upstream issuer software; synthetic tests must invoke that real software chain and cannot directly insert an approving basis or stand-in capital cap. Independent acquisition/journal/currentness/locking work continues within the admitted map. Actual HTX qualification, real financial inputs and Human promotion/activation remain unperformed.
 
 The initial acquisition review found A1: individually valid conditional timestamps could have `lastActTime < orderOrigTime`. The separately frozen correction rejects that chronology without manufacturing a replacement time; its actual 16-case suite, scoped lint and compiler passed at 21:47:07.076–21:47:13.585 UTC. External package `dee1135-acquisition-a1-correction` has report `fcb9559a9e713a5c43cda6dbc0b8c072aebd5f7945134408fbd438088f173e72` and twelve-artifact freeze `0eaf897b1edc16930656237d7afab6fe6ebd291d39d0497e9ceb075045b4ed96`. The original 139-case checkpoint stays immutable. A1 does not close journal persistence, runtime composition or upstream issuer obligations.
 

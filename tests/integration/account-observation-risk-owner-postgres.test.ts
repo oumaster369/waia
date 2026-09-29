@@ -333,8 +333,8 @@ describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational
       const folder = "db/migrations_postgres";
       const journal = JSON.parse(readFileSync(`${folder}/meta/_journal.json`, "utf8")) as {
         entries: { idx: number; tag: string; when: number }[] };
-      expect(journal.entries).toHaveLength(225);
-      expect(journal.entries.at(-1)).toMatchObject({ idx: 224, tag: "0224_trader_risk_current_account_basis", when: 1780000000224 });
+      expect(journal.entries).toHaveLength(226);
+      expect(journal.entries.at(-1)).toMatchObject({ idx: 225, tag: "0225_trader_live_capital_envelope_v2", when: 1780000000225 });
       await migrate(db(), { migrationsFolder: folder });
       const actual = await owner.sql`SELECT hash,created_at::text AS when FROM drizzle.__drizzle_migrations ORDER BY created_at`;
       expect(actual).toEqual(journal.entries.map(entry => ({ hash: hash(readFileSync(`${folder}/${entry.tag}.sql`)), when: String(entry.when) })));

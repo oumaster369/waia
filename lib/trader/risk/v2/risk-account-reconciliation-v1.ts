@@ -7,6 +7,12 @@ import {
   type RealityProjectionV2,
 } from "@/lib/trader/reality/v2/contracts";
 import {
+  decideLiveCapitalEnvelopePublicationV2,
+  type LiveCapitalEnvelopeBoundV2,
+  type LiveCapitalEnvelopeReceiptV2,
+  type LiveCapitalPublicationV2,
+} from "@/lib/trader/risk/v2/live-capital-envelope-v2";
+import {
   assertRiskAccountRecordSealV1,
   exactRiskAccountNotionalV1,
   parseRiskAccountProfileV1,
@@ -461,15 +467,35 @@ export function availableRiskAccountQuantityV1(input: {
   return formatDecimal(lower > 0n ? lower : 0n);
 }
 
-/** Publication stays closed until a real LiveCapitalEnvelopeV2 producer exists.
- *  A qualified method flag, profile allocation, or caller digest cannot approve. */
+/** A null envelope stays refused. A sealed LiveCapitalEnvelopeV2 receipt can publish the basis.
+ *  A qualified method flag is not authority.
+ */
 export function decideCurrentAccountBasisPublicationV1(input: {
   liveCapitalEnvelope: null;
   sourceMethodQualified: boolean;
-}): { decision: "REFUSED"; reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" } {
-  void input.liveCapitalEnvelope;
-  void input.sourceMethodQualified;
-  return { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" };
+}): { decision: "REFUSED"; reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" };
+export function decideCurrentAccountBasisPublicationV1(input: {
+  liveCapitalEnvelope: LiveCapitalEnvelopeReceiptV2;
+  sourceMethodQualified: boolean;
+  bound: LiveCapitalEnvelopeBoundV2;
+}): LiveCapitalPublicationV2;
+export function decideCurrentAccountBasisPublicationV1(input: {
+  liveCapitalEnvelope: LiveCapitalEnvelopeReceiptV2 | null;
+  sourceMethodQualified: boolean;
+  bound?: LiveCapitalEnvelopeBoundV2;
+}): LiveCapitalPublicationV2 {
+  if (input.liveCapitalEnvelope === null) {
+    return decideLiveCapitalEnvelopePublicationV2({
+      liveCapitalEnvelope: null,
+      sourceMethodQualified: input.sourceMethodQualified,
+    });
+  }
+  if (!input.bound) throw new RiskCurrentAccountRefusedV1("ENVELOPE_UNBOUND");
+  return decideLiveCapitalEnvelopePublicationV2({
+    liveCapitalEnvelope: input.liveCapitalEnvelope,
+    sourceMethodQualified: input.sourceMethodQualified,
+    bound: input.bound,
+  });
 }
 
 /** Observed Expected versus Actual notionals. The delta is not a limit and cannot publish. */
