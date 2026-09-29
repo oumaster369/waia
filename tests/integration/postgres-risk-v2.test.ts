@@ -11,6 +11,7 @@ import {
   consumeRiskAllowanceForOrderV2Postgres,
   initializeRiskAccountStateV2Postgres,
   readRiskAccountStateV2Postgres,
+  expireRiskAllowanceV2Postgres,
   revokeRiskAllowanceV2Postgres,
   RiskV2AdmissionRefusedError,
   type AdmitRiskAllowanceV2Input,
@@ -652,4 +653,73 @@ describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () =>
     `;
     expect(grants).toEqual([]);
   });
+
+  it("refuses an allowance replay against drifted reality when the stored verdict still binds", async () => {
+    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("stored-replay"));
+    const input = admission({ accountId: "stored-replay", identity: 40, reservation: "10" });
+    await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, input);
+    const drifted = "reality-stored-replay-drift";
+    await sqlClient`
+      UPDATE trader_risk_account_state_v2
+      SET reality_snapshot_id = ${drifted}
+      WHERE organization_id = ${orgA}::uuid AND account_id = 'stored-replay'`;
+    await expect(admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, {
+      ...input,
+      verdict: { ...input.verdict, reality: { ...input.verdict.reality, snapshotId: drifted } },
+    })).rejects.toMatchObject({ reason: "CURRENT_AUTHORITY_BINDING_MISMATCH" });
+    const [count] = await sqlClient<{ n: number }[]>`
+      select count(*)::int as n from trader_risk_allowances_v2
+      where organization_id = ${orgA}::uuid and account_id = 'stored-replay'`;
+    expect(count!.n).toBe(1);
+  });
+
+  it("expires an allowance on the clock after the account lock, not the transaction start", async () => {
+    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("fresh-clock"));
+    const authority = { ...admission({ accountId: "fresh-clock", identity: 41, reservation: "10" }), validForMs: 8_000 };
+    await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority);
+    const locker = postgres(url!, { max: 1 });
+    const expireClient = postgres(url!, { max: 1, connection: { application_name: "dee1135-fresh-clock" } });
+    const expireDb = drizzle(expireClient, { schema: pgSchema }) as WaiaPostgresDb;
+    try {
+      await locker`BEGIN`;
+      await locker`
+        SELECT account_id FROM trader_risk_account_state_v2
+        WHERE organization_id = ${orgA}::uuid AND account_id = 'fresh-clock'
+        FOR UPDATE`;
+      const expiring = expireRiskAllowanceV2Postgres(expireDb, { organizationId: orgA }, {
+        accountId: "fresh-clock",
+        riskAllowanceId: authority.riskAllowanceId,
+        eventId: uuid(657_900),
+        reasonCode: "ALLOWANCE_EXPIRED",
+      });
+      const started = Date.now();
+      let waiting = false;
+      while (Date.now() - started < 10_000) {
+        const [row] = await sqlClient<{ n: number }[]>`
+          select count(*)::int as n from pg_stat_activity
+          where datname = current_database()
+            and application_name = 'dee1135-fresh-clock'
+            and wait_event_type = 'Lock'`;
+        if (row!.n > 0) { waiting = true; break; }
+        await new Promise((resolve) => setTimeout(resolve, 40));
+      }
+      expect(waiting).toBe(true);
+      const [stillOpen] = await sqlClient<{ open: boolean }[]>`
+        select valid_until > clock_timestamp() as open
+        from trader_risk_allowances_v2
+        where id = ${authority.riskAllowanceId}::uuid`;
+      expect(stillOpen!.open).toBe(true);
+      await locker`
+        select pg_sleep(greatest(0, extract(epoch from (
+          (select valid_until from trader_risk_allowances_v2 where id = ${authority.riskAllowanceId}::uuid)
+          - clock_timestamp())) + 0.05))`;
+      await locker`COMMIT`;
+      await expect(expiring).resolves.toBe(true);
+    } finally {
+      await locker`ROLLBACK`.catch(() => undefined);
+      await locker.end({ timeout: 5 });
+      await expireClient.end({ timeout: 5 });
+    }
+  });
+
 });

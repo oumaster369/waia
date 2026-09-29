@@ -625,9 +625,9 @@ export async function admitRiskAllowanceV2Postgres(
         stateRealitySnapshotId: state.realitySnapshotId,
         stateRealityContentDigestHex: state.realityContentDigestHex,
         stateReconciliationAuthorityDigestHex: state.reconciliationAuthorityDigestHex,
-        verdictRealitySnapshotId: input.verdict.reality.snapshotId,
-        verdictRealityContentDigestHex: input.verdict.reality.contentDigestHex,
-        verdictReconciliationAuthorityDigestHex: input.verdict.reality.reconciliationAuthorityDigestHex,
+        verdictRealitySnapshotId: verdict.reality.snapshotId,
+        verdictRealityContentDigestHex: verdict.reality.contentDigestHex,
+        verdictReconciliationAuthorityDigestHex: verdict.reality.reconciliationAuthorityDigestHex,
         accounting: state.accounting,
         requestedReservationNotional: reservationNotional,
         posture: state.posture,
@@ -828,7 +828,7 @@ async function releaseIssuedAllowance(input: {
     const allowance = rows[0];
     if (!allowance) throw new RiskV2PersistenceConflictError("Risk allowance not found");
     if (allowance.lifecycleState !== "ISSUED") return false;
-    const durableAt = await durableTransactionTime(tx);
+    const durableAt = await freshEligibilityTime(tx);
     if (input.transition === "EXPIRED" && durableAt.getTime() < allowance.validUntil.getTime()) {
       throw new RiskV2AdmissionRefusedError("ALLOWANCE_NOT_EXPIRED");
     }
