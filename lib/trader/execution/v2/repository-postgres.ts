@@ -265,15 +265,22 @@ function lifecycleStateForReport(
   plan: ExecutionPlanV2,
   priorReports: readonly ExecutionReportV2[],
 ): ExecutionAttemptLifecycleStateV2 {
-  const connectorReport = [
-    "VENUE_ACCEPTED",
-    "VENUE_REJECTED",
-    "VENUE_STATUS_OBSERVED",
-    "CANCEL_ACKNOWLEDGED",
-    "FILL_REPORT_OBSERVED",
-    "CONNECTOR_UNCERTAIN",
-  ].includes(reportType);
-  if ((connectorReport && source !== "CONNECTOR") || (!connectorReport && source !== "EXECUTION")) {
+  const localPostRefusal =
+    reportType === "VENUE_REJECTED" && source === "EXECUTION" && rawObservation.postSent === false;
+  const connectorReport =
+    !localPostRefusal &&
+    [
+      "VENUE_ACCEPTED",
+      "VENUE_REJECTED",
+      "VENUE_STATUS_OBSERVED",
+      "CANCEL_ACKNOWLEDGED",
+      "FILL_REPORT_OBSERVED",
+      "CONNECTOR_UNCERTAIN",
+    ].includes(reportType);
+  if (
+    !localPostRefusal &&
+    ((connectorReport && source !== "CONNECTOR") || (!connectorReport && source !== "EXECUTION"))
+  ) {
     throw new ExecutionV2PersistenceConflictError(
       "Execution report source does not match report type",
     );
@@ -293,6 +300,18 @@ function lifecycleStateForReport(
       return "VENUE_ACCEPTED";
     }
     case "VENUE_REJECTED": {
+      if (rawObservation.postSent === false) {
+        if (
+          source !== "EXECUTION" ||
+          venueOrderId !== null ||
+          !deterministicRejectEvidence(attempt, rawObservation)
+        ) {
+          throw new ExecutionV2PersistenceConflictError(
+            "venue report lacks exact bound order evidence",
+          );
+        }
+        return "VENUE_REJECTED";
+      }
       if (venueOrderId === null) {
         if (!deterministicRejectEvidence(attempt, rawObservation)) {
           throw new ExecutionV2PersistenceConflictError(

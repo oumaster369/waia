@@ -48,6 +48,8 @@ import {
   type AdmitRiskAllowanceV2Input,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
+import { createPostgresKillSwitchService } from "@/lib/trader/risk/kill-switch";
+import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { createAssertExecutionV2LiveAuthorized, createOrgScopedExecutionV2OrderPath } from "@/lib/trader/execution/v2/org-order-path";
 import { EXECUTION_V2_LIVE_GATE_REASONS } from "@/lib/trader/execution/v2/live-gates";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
@@ -2336,5 +2338,44 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     );
     expect(found.status).toBe("VENUE_ACCEPTED");
     expect(await pendingNotional(input.allowance.accountId)).toBe(held);
+  });
+
+  it("DEE-1151 does not post after SUBMIT_STARTED when a kill switch is tripped", async () => {
+    const input = await admittedBindInput();
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    const service = createPostgresKillSwitchService(db);
+    try {
+      await service.trip(
+        { actorType: "service", actorId: null },
+        requireOrgContext(orgA),
+        { scopeType: "organization", organizationId: orgA },
+        { scopeType: "organization", scopeRef: null, switchType: "EMERGENCY_STOP" },
+        { enforcementMode: "REJECT", origin: "manual", reason: "dee-1151 pre-post" },
+      );
+      let posts = 0;
+      const refused = await dispatchAndRecordExecutionAttemptV2(
+        db,
+        { organizationId: orgA },
+        bound.attempt.executionAttemptId,
+        async () => {
+          posts += 1;
+          throw new Error("post must not be sent");
+        },
+      );
+      expect(posts).toBe(0);
+      expect(refused.status).toBe("VENUE_REJECTED");
+      expect(await pendingNotional(input.allowance.accountId)).toMatch(/^0(\.0+)?$/);
+      const reports = await listExecutionReportsV2Postgres(
+        db,
+        { organizationId: orgA },
+        bound.attempt.executionAttemptId,
+      );
+      expect(reports.at(-1)?.rawObservation).toMatchObject({
+        postSent: false,
+        reason: "KILL_SWITCH_TRIPPED",
+      });
+    } finally {
+      await sql`delete from trader_kill_switches where organization_id = ${orgA}::uuid`;
+    }
   });
 });

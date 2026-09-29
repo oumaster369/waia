@@ -43,6 +43,7 @@ import {
   readExecutionPolicyV2Postgres,
 } from "./repository-postgres";
 import { assertExecutionV2LiveGatesPostgres, ExecutionV2LiveGateRefusedError } from "./live-gates";
+import { prePostNetworkRefusalV2 } from "./pre-post-recheck-v2";
 
 type PlanMechanicsV2 = Omit<CreateExecutionPlanV2Input, "executionPlanId" | "allowance" | "policy">;
 
@@ -397,7 +398,8 @@ export type ExecutionV2NetworkSubmitter<T> = (
 export type DispatchCommittedExecutionV2Result<T> =
   | Readonly<{ status: "SUBMITTED"; attempt: ExecutionAttemptV2; rawResult: T }>
   | Readonly<{ status: "FAIL_UNKNOWN"; attempt: ExecutionAttemptV2; error: unknown }>
-  | Readonly<{ status: "REFUSED_ALREADY_STARTED"; lifecycleState: string }>;
+  | Readonly<{ status: "REFUSED_ALREADY_STARTED"; lifecycleState: string }>
+  | Readonly<{ status: "REFUSED_BEFORE_POST"; attempt: ExecutionAttemptV2; reason: string }>;
 
 /**
  * Serializes current Risk admission with the one durable SUBMIT_STARTED record,
@@ -549,6 +551,19 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
     };
   });
   if (ready.status !== "READY") return ready;
+  let refusal: string | null;
+  try {
+    refusal = await prePostNetworkRefusalV2(db, scoped, ready.attempt);
+  } catch {
+    refusal = "PRE_POST_RECHECK_FAILED";
+  }
+  if (refusal) {
+    return Object.freeze({
+      status: "REFUSED_BEFORE_POST" as const,
+      attempt: ready.attempt,
+      reason: refusal,
+    });
+  }
   try {
     const rawResult = await submit(ready.attempt.exactRequestPayload, {
       executionAttemptId: ready.attempt.executionAttemptId,

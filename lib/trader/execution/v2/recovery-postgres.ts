@@ -287,6 +287,24 @@ export async function dispatchAndRecordExecutionAttemptV2(
     }
     return { status: "REFUSED_ALREADY_TERMINAL", attempt: null };
   }
+  if (dispatched.status === "REFUSED_BEFORE_POST") {
+    const report = deterministicVenueRejectReport(dispatched.attempt, {
+      postSent: false,
+      reason: dispatched.reason,
+    });
+    const recorded = await appendReports(db, context, executionAttemptId, [
+      {
+        ...report,
+        source: "EXECUTION",
+        rawObservation: {
+          ...report.rawObservation,
+          postSent: false,
+          reason: dispatched.reason,
+        },
+      },
+    ]);
+    return { status: "VENUE_REJECTED", attempt: recorded };
+  }
   if (dispatched.status === "FAIL_UNKNOWN") {
     if (dispatched.error instanceof HtxPlacementRejectedError) {
       const recorded = await appendReports(db, context, executionAttemptId, [
