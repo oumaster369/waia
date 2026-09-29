@@ -17,6 +17,7 @@ import {
   readRiskAccountStateV2Postgres,
   revalidateConsumedRiskAllowanceForExecutionV2,
   RiskV2AdmissionRefusedError,
+  terminalizeIssuedAllowanceIfBindWouldRefuseV2,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import type { RiskAllowanceV2 } from "@/lib/trader/risk/v2/risk-allowance-v2";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
@@ -165,150 +166,200 @@ export async function bindExecutionAuthorityV2Postgres(
         })
       : null;
 
-  return runWaiaPostgresTransaction(db, async (tx) => {
+  const consumptionInput = {
+    accountId: input.allowance.accountId,
+    riskAllowanceId: input.allowance.riskAllowanceId,
+    riskAllowanceContentDigestHex: input.allowance.contentDigestHex,
+    effectNotionalCeiling: plan.approvedNotionalCeiling,
+    nonce: input.allowance.nonce,
+    consumptionEventId,
+    order: {
+      id: orderId,
+      executionMode: input.executionMode,
+      symbol: plan.symbol,
+      side: plan.side,
+      type: plan.orderType,
+      price: plan.limitPrice,
+      quantity: plan.plannedQuantity,
+      clientOrderId,
+      idempotencyKey: `execution-v2-${plan.contentDigestHex}`,
+      strategySignalId: input.strategySignalId,
+      allocationDecisionId: input.allocationDecisionId,
+      credentialId: input.credentialId,
+      openingCausalLineageJson: openingLineage
+        ? serializeOpeningCausalLineageV1(openingLineage)
+        : null,
+      openingCausalLineageDigest: openingLineage?.contentDigest ?? null,
+    },
+  };
+  const outcome = await runWaiaPostgresTransaction(db, async (tx) => {
     const durableAt = await durableTransactionTime(tx);
     requireCurrentWindow(plan, input.policy, durableAt);
     // Match dispatch/revocation before plan insertion takes the allowance lock.
     if (!(await readRiskAccountStateV2Postgres(tx, scoped, input.allowance.accountId, true))) {
       throw new RiskV2AdmissionRefusedError("RISK_ACCOUNT_STATE_MISSING");
     }
-    const storedPolicy = await insertExecutionPolicyV2Postgres(tx, scoped, input.policy);
-    if (storedPolicy.contentDigestHex !== input.policy.contentDigestHex) {
-      throw new ExecutionV2AuthorityRefusedError("POLICY_SEAL_MISMATCH");
-    }
-    const storedPlan = await insertExecutionPlanV2Postgres(tx, scoped, plan);
-    requireCurrentWindow(plan, input.policy, await durableTransactionTime(tx));
-    const consumed = await consumeRiskAllowanceForOrderV2FromTransaction(tx, scoped, {
-      accountId: input.allowance.accountId,
-      riskAllowanceId: input.allowance.riskAllowanceId,
-      riskAllowanceContentDigestHex: storedPlan.riskAllowanceContentDigestHex,
-      effectNotionalCeiling: storedPlan.approvedNotionalCeiling,
-      nonce: input.allowance.nonce,
-      consumptionEventId,
-      order: {
-        id: orderId,
-        executionMode: input.executionMode,
-        symbol: storedPlan.symbol,
-        side: storedPlan.side,
-        type: storedPlan.orderType,
-        price: storedPlan.limitPrice,
-        quantity: storedPlan.plannedQuantity,
-        clientOrderId,
-        idempotencyKey: `execution-v2-${storedPlan.contentDigestHex}`,
-        strategySignalId: input.strategySignalId,
-        allocationDecisionId: input.allocationDecisionId,
-        credentialId: input.credentialId,
-        openingCausalLineageJson: openingLineage
-          ? serializeOpeningCausalLineageV1(openingLineage)
-          : null,
-        openingCausalLineageDigest: openingLineage?.contentDigest ?? null,
-      },
-    });
-    if (consumed.status !== "CONSUMED") {
-      throw new ExecutionV2AuthorityRefusedError(consumed.reason);
-    }
+    // Terminalize an ineligible allowance before policy/plan inserts, then commit
+    // that write. The refusal is thrown only after this transaction returns.
+    const earlyRefusal = await terminalizeIssuedAllowanceIfBindWouldRefuseV2(
+      tx,
+      scoped,
+      consumptionInput,
+    );
+    if (earlyRefusal) return { status: "REFUSED" as const, reason: earlyRefusal.reason };
+    // Inserts and the order bind sit in a savepoint. A later consumption refusal
+    // rolls back only those rows; the allowance terminalization is rewritten after.
+    await tx.execute(sql`SAVEPOINT bind_authority_effects`);
+    let effectsOpen = true;
+    const releaseEffects = async () => {
+      await tx.execute(sql`RELEASE SAVEPOINT bind_authority_effects`);
+      effectsOpen = false;
+    };
+    try {
+      const storedPolicy = await insertExecutionPolicyV2Postgres(tx, scoped, input.policy);
+      if (storedPolicy.contentDigestHex !== input.policy.contentDigestHex) {
+        throw new ExecutionV2AuthorityRefusedError("POLICY_SEAL_MISMATCH");
+      }
+      const storedPlan = await insertExecutionPlanV2Postgres(tx, scoped, plan);
+      requireCurrentWindow(plan, input.policy, await durableTransactionTime(tx));
+      const consumed = await consumeRiskAllowanceForOrderV2FromTransaction(tx, scoped, {
+        ...consumptionInput,
+        riskAllowanceContentDigestHex: storedPlan.riskAllowanceContentDigestHex,
+        effectNotionalCeiling: storedPlan.approvedNotionalCeiling,
+      });
+      if (consumed.status !== "CONSUMED") {
+        await tx.execute(sql`ROLLBACK TO SAVEPOINT bind_authority_effects`);
+        effectsOpen = false;
+        const refusal = await terminalizeIssuedAllowanceIfBindWouldRefuseV2(
+          tx,
+          scoped,
+          consumptionInput,
+        );
+        return { status: "REFUSED" as const, reason: refusal?.reason ?? consumed.reason };
+      }
 
-    if (!consumed.consumedNow) {
-      const existing = await readExecutionAttemptProjectionV2Postgres(tx, scoped, attemptId, true);
-      const orderRows = await tx
-        .select({
-          executionPlanId: pgSchema.traderOrders.executionPlanId,
-          executionPlanDigest: pgSchema.traderOrders.executionPlanDigest,
-          executionAttemptId: pgSchema.traderOrders.executionAttemptId,
-          executionAttemptDigest: pgSchema.traderOrders.executionAttemptDigest,
+      if (!consumed.consumedNow) {
+        const existing = await readExecutionAttemptProjectionV2Postgres(
+          tx,
+          scoped,
+          attemptId,
+          true,
+        );
+        const orderRows = await tx
+          .select({
+            executionPlanId: pgSchema.traderOrders.executionPlanId,
+            executionPlanDigest: pgSchema.traderOrders.executionPlanDigest,
+            executionAttemptId: pgSchema.traderOrders.executionAttemptId,
+            executionAttemptDigest: pgSchema.traderOrders.executionAttemptDigest,
+          })
+          .from(pgSchema.traderOrders)
+          .where(
+            and(
+              eq(pgSchema.traderOrders.id, consumed.order.id),
+              eq(pgSchema.traderOrders.organizationId, scoped.organizationId),
+            ),
+          )
+          .limit(1);
+        const orderProjection = orderRows[0];
+        if (
+          !existing ||
+          !orderProjection ||
+          existing.attempt.executionPlanContentDigestHex !== storedPlan.contentDigestHex ||
+          existing.attempt.orderId !== consumed.order.id ||
+          orderProjection.executionPlanId !== storedPlan.executionPlanId ||
+          orderProjection.executionPlanDigest !== storedPlan.contentDigestHex ||
+          orderProjection.executionAttemptId !== existing.attempt.executionAttemptId ||
+          orderProjection.executionAttemptDigest !== existing.attempt.contentDigestHex
+        ) {
+          throw new ExecutionV2AuthorityRefusedError("INCOMPLETE_OR_CONFLICTING_RESTART_BINDING");
+        }
+        requireCurrentWindow(plan, input.policy, await durableTransactionTime(tx));
+        await releaseEffects();
+        return {
+          status: "BOUND" as const,
+          value: Object.freeze({
+            plan: storedPlan,
+            attempt: existing.attempt,
+            order: Object.freeze({
+              ...consumed.order,
+              executionPlanId: orderProjection.executionPlanId!,
+              executionPlanDigest: orderProjection.executionPlanDigest!,
+              executionAttemptId: orderProjection.executionAttemptId!,
+              executionAttemptDigest: orderProjection.executionAttemptDigest!,
+            }),
+            consumedNow: false,
+          }),
+        };
+      }
+
+      const boundAt = await durableTransactionTime(tx);
+      requireCurrentWindow(plan, input.policy, boundAt);
+      const attempt = createExecutionAttemptV2({
+        executionAttemptId: attemptId,
+        orderId,
+        plan: storedPlan,
+        riskAllowanceContentDigestHex: input.allowance.contentDigestHex,
+        boundAtUtc: boundAt.toISOString(),
+      });
+      await tx
+        .update(pgSchema.traderOrders)
+        .set({
+          executionPlanId: storedPlan.executionPlanId,
+          executionPlanDigest: storedPlan.contentDigestHex,
+          executionAttemptId: attempt.executionAttemptId,
+          executionAttemptDigest: attempt.contentDigestHex,
         })
-        .from(pgSchema.traderOrders)
         .where(
           and(
-            eq(pgSchema.traderOrders.id, consumed.order.id),
+            eq(pgSchema.traderOrders.id, orderId),
             eq(pgSchema.traderOrders.organizationId, scoped.organizationId),
           ),
-        )
-        .limit(1);
-      const orderProjection = orderRows[0];
-      if (
-        !existing ||
-        !orderProjection ||
-        existing.attempt.executionPlanContentDigestHex !== storedPlan.contentDigestHex ||
-        existing.attempt.orderId !== consumed.order.id ||
-        orderProjection.executionPlanId !== storedPlan.executionPlanId ||
-        orderProjection.executionPlanDigest !== storedPlan.contentDigestHex ||
-        orderProjection.executionAttemptId !== existing.attempt.executionAttemptId ||
-        orderProjection.executionAttemptDigest !== existing.attempt.contentDigestHex
-      ) {
-        throw new ExecutionV2AuthorityRefusedError("INCOMPLETE_OR_CONFLICTING_RESTART_BINDING");
+        );
+      const storedAttempt = await insertExecutionAttemptV2Postgres(tx, scoped, attempt);
+      for (const [reportType, rawObservation] of [
+        ["PLAN_SEALED", { executionPlanContentDigestHex: storedPlan.contentDigestHex }],
+        ["ALLOWANCE_CLAIMED", { riskAllowanceContentDigestHex: input.allowance.contentDigestHex }],
+        ["ATTEMPT_BOUND", { effectIdentityDigestHex: storedAttempt.effectIdentityDigestHex }],
+      ] as const) {
+        await appendExecutionReportV2FromExecutor(tx, scoped, {
+          executionReportId: deterministicExecutionUuidV2("report", {
+            executionAttemptContentDigestHex: storedAttempt.contentDigestHex,
+            reportType,
+          }),
+          accountId: storedAttempt.accountId,
+          executionAttemptId: storedAttempt.executionAttemptId,
+          reportType,
+          source: "EXECUTION",
+          rawObservation,
+          observedAtUtc: boundAt.toISOString(),
+        });
       }
       requireCurrentWindow(plan, input.policy, await durableTransactionTime(tx));
-      return Object.freeze({
-        plan: storedPlan,
-        attempt: existing.attempt,
-        order: Object.freeze({
-          ...consumed.order,
-          executionPlanId: orderProjection.executionPlanId!,
-          executionPlanDigest: orderProjection.executionPlanDigest!,
-          executionAttemptId: orderProjection.executionAttemptId!,
-          executionAttemptDigest: orderProjection.executionAttemptDigest!,
+      await releaseEffects();
+      return {
+        status: "BOUND" as const,
+        value: Object.freeze({
+          plan: storedPlan,
+          attempt: storedAttempt,
+          order: Object.freeze({
+            ...consumed.order,
+            executionPlanId: storedPlan.executionPlanId,
+            executionPlanDigest: storedPlan.contentDigestHex,
+            executionAttemptId: storedAttempt.executionAttemptId,
+            executionAttemptDigest: storedAttempt.contentDigestHex,
+          }),
+          consumedNow: true,
         }),
-        consumedNow: false,
-      });
+      };
+    } catch (error) {
+      if (effectsOpen) {
+        await tx.execute(sql`ROLLBACK TO SAVEPOINT bind_authority_effects`);
+      }
+      throw error;
     }
-
-    const boundAt = await durableTransactionTime(tx);
-    requireCurrentWindow(plan, input.policy, boundAt);
-    const attempt = createExecutionAttemptV2({
-      executionAttemptId: attemptId,
-      orderId,
-      plan: storedPlan,
-      riskAllowanceContentDigestHex: input.allowance.contentDigestHex,
-      boundAtUtc: boundAt.toISOString(),
-    });
-    await tx
-      .update(pgSchema.traderOrders)
-      .set({
-        executionPlanId: storedPlan.executionPlanId,
-        executionPlanDigest: storedPlan.contentDigestHex,
-        executionAttemptId: attempt.executionAttemptId,
-        executionAttemptDigest: attempt.contentDigestHex,
-      })
-      .where(
-        and(
-          eq(pgSchema.traderOrders.id, orderId),
-          eq(pgSchema.traderOrders.organizationId, scoped.organizationId),
-        ),
-      );
-    const storedAttempt = await insertExecutionAttemptV2Postgres(tx, scoped, attempt);
-    for (const [reportType, rawObservation] of [
-      ["PLAN_SEALED", { executionPlanContentDigestHex: storedPlan.contentDigestHex }],
-      ["ALLOWANCE_CLAIMED", { riskAllowanceContentDigestHex: input.allowance.contentDigestHex }],
-      ["ATTEMPT_BOUND", { effectIdentityDigestHex: storedAttempt.effectIdentityDigestHex }],
-    ] as const) {
-      await appendExecutionReportV2FromExecutor(tx, scoped, {
-        executionReportId: deterministicExecutionUuidV2("report", {
-          executionAttemptContentDigestHex: storedAttempt.contentDigestHex,
-          reportType,
-        }),
-        accountId: storedAttempt.accountId,
-        executionAttemptId: storedAttempt.executionAttemptId,
-        reportType,
-        source: "EXECUTION",
-        rawObservation,
-        observedAtUtc: boundAt.toISOString(),
-      });
-    }
-    requireCurrentWindow(plan, input.policy, await durableTransactionTime(tx));
-    return Object.freeze({
-      plan: storedPlan,
-      attempt: storedAttempt,
-      order: Object.freeze({
-        ...consumed.order,
-        executionPlanId: storedPlan.executionPlanId,
-        executionPlanDigest: storedPlan.contentDigestHex,
-        executionAttemptId: storedAttempt.executionAttemptId,
-        executionAttemptDigest: storedAttempt.contentDigestHex,
-      }),
-      consumedNow: true,
-    });
   });
+  if (outcome.status === "REFUSED") throw new ExecutionV2AuthorityRefusedError(outcome.reason);
+  return outcome.value;
 }
 
 export type ExecutionV2NetworkSubmitter<T> = (

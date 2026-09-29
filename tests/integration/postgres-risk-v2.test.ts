@@ -14,6 +14,7 @@ import {
   expireRiskAllowanceV2Postgres,
   revokeRiskAllowanceV2Postgres,
   RiskV2AdmissionRefusedError,
+  RiskV2PersistenceConflictError,
   type AdmitRiskAllowanceV2Input,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
@@ -317,6 +318,53 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
       nextEnforcementEventSequence: "2",
       accounting: { outstandingReservationNotional: "60" },
     });
+  });
+
+  it("refuses a replay that fits only when a foreign reservation is ignored", async () => {
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      account("replay-foreign"),
+    );
+    const foreign = admission({ accountId: "replay-foreign", identity: 90, reservation: "30" });
+    const target = admission({ accountId: "replay-foreign", identity: 91, reservation: "40" });
+    await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, foreign);
+    await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, target);
+    await sqlClient`
+      UPDATE trader_risk_account_state_v2
+      SET reconciled_exposure_notional = 25,
+          worst_case_pending_exposure_notional = 20
+      WHERE organization_id = ${orgA}::uuid AND account_id = 'replay-foreign'`;
+    await expect(
+      admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, target),
+    ).rejects.toMatchObject({
+      name: "RiskV2AdmissionRefusedError",
+      reason: "RESERVATION_EXCEEDS_REMAINING_ENVELOPE",
+    });
+    const rows = await sqlClient<{ id: string; lifecycle_state: string }[]>`
+      select id::text as id, lifecycle_state
+      from trader_risk_allowances_v2
+      where organization_id = ${orgA}::uuid and account_id = 'replay-foreign'
+      order by id`;
+    expect(rows).toEqual([
+      { id: foreign.riskAllowanceId, lifecycle_state: "ISSUED" },
+      { id: target.riskAllowanceId, lifecycle_state: "REVOKED" },
+    ]);
+    await expect(
+      readRiskAccountStateV2Postgres(db, { organizationId: orgA }, "replay-foreign"),
+    ).resolves.toMatchObject({
+      accounting: {
+        outstandingReservationNotional: "30",
+        reconciledExposureNotional: "25",
+        worstCasePendingExposureNotional: "20",
+      },
+    });
+    const [event] = await sqlClient<{ event_type: string }[]>`
+      select event_type from trader_risk_enforcement_events_v2
+      where organization_id = ${orgA}::uuid and account_id = 'replay-foreign'
+        and risk_allowance_id = ${target.riskAllowanceId}::uuid
+      order by event_sequence desc limit 1`;
+    expect(event!.event_type).toBe("ALLOWANCE_REVOKED");
   });
 
   it("replays an issued allowance without charging its own reservation twice", async () => {
@@ -813,7 +861,13 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
       select event_type from trader_risk_enforcement_events_v2
       where organization_id = ${orgA}::uuid and account_id = 'stored-replay'
       order by event_sequence desc limit 1`;
-    expect(event!.event_type).toBe("CONSUMPTION_REFUSED");
+    expect(event!.event_type).toBe("ALLOWANCE_REVOKED");
+    await expect(
+      admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, input),
+    ).rejects.toBeInstanceOf(RiskV2AdmissionRefusedError);
+    await expect(
+      admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, input),
+    ).rejects.not.toBeInstanceOf(RiskV2PersistenceConflictError);
   });
 
   it("expires an allowance on the clock after the account lock, not the transaction start", async () => {

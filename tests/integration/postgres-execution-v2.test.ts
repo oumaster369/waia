@@ -27,7 +27,6 @@ import {
   insertExecutionAttemptV2Postgres,
   insertExecutionPlanV2Postgres,
   insertExecutionPolicyV2Postgres,
-  ExecutionV2PersistenceConflictError,
   listExecutionReportsV2Postgres,
   readExecutionAttemptProjectionV2Postgres,
   readExecutionAttemptV2Postgres,
@@ -679,7 +678,7 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     }
     expect(proof.outcomes).toMatchObject([
       { ok: true, value: true },
-      { ok: false, error: expect.any(ExecutionV2PersistenceConflictError) },
+      { ok: false, error: expect.any(ExecutionV2AuthorityRefusedError) },
     ]);
     expect(trace.find((event) => event.actor === binder.label && event.kind === "lock-acquired")?.resource).toBe("account");
     expect(proof.state.allowance[0]!.lifecycle_state).toBe("REVOKED");
@@ -1316,7 +1315,7 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     expect(networkCalls).toBe(1);
   });
 
-  it("rechecks current Risk authority under lock and rolls back a TOCTOU bind", async () => {
+  it("rechecks current Risk authority under lock and commits revocation of a TOCTOU bind", async () => {
     const input = await admittedBindInput();
     await sql`
       UPDATE trader_risk_account_state_v2 SET kill_state = 'TRIPPED'
@@ -1328,12 +1327,17 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     const rows = await sql<
       {
         lifecycle_state: string;
+        reservation: string;
+        policy_count: string;
         plan_count: string;
         order_count: string;
         attempt_count: string;
       }[]
     >`
       SELECT a.lifecycle_state,
+        s.outstanding_reservation_notional::text AS reservation,
+        (SELECT count(*)::text FROM trader_execution_policies_v2
+          WHERE organization_id = ${orgA}::uuid) AS policy_count,
         (SELECT count(*)::text FROM trader_execution_plans_v2
           WHERE organization_id = ${orgA}::uuid) AS plan_count,
         (SELECT count(*)::text FROM trader_orders
@@ -1341,10 +1345,14 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
         (SELECT count(*)::text FROM trader_execution_attempts_v2
           WHERE organization_id = ${orgA}::uuid) AS attempt_count
       FROM trader_risk_allowances_v2 a
+      JOIN trader_risk_account_state_v2 s
+        ON s.organization_id = a.organization_id AND s.account_id = a.account_id
       WHERE a.organization_id = ${orgA}::uuid AND a.id = ${input.allowance.riskAllowanceId}::uuid
     `;
     expect(rows[0]).toEqual({
-      lifecycle_state: "ISSUED",
+      lifecycle_state: "REVOKED",
+      reservation: "0.00000000",
+      policy_count: "0",
       plan_count: "0",
       order_count: "0",
       attempt_count: "0",
@@ -1413,6 +1421,51 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       bound.attempt.executionAttemptId,
     );
     expect(reports.some((report) => report.reportType === "SUBMIT_STARTED")).toBe(false);
+  });
+
+  async function expectBindRefusalLeavesNoAuthority(
+    input: BindExecutionAuthorityV2Input,
+    reason: string,
+    lifecycle: "EXPIRED" | "REVOKED",
+  ) {
+    await expect(
+      bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input),
+    ).rejects.toMatchObject({ name: "ExecutionV2AuthorityRefusedError", reason });
+    const [allowance] = await sql<{ lifecycle_state: string; reservation: string }[]>`
+      SELECT a.lifecycle_state, s.outstanding_reservation_notional::text AS reservation
+      FROM trader_risk_allowances_v2 a
+      JOIN trader_risk_account_state_v2 s
+        ON s.organization_id = a.organization_id AND s.account_id = a.account_id
+      WHERE a.organization_id = ${orgA}::uuid AND a.id = ${input.allowance.riskAllowanceId}::uuid`;
+    expect(allowance).toEqual({ lifecycle_state: lifecycle, reservation: "0.00000000" });
+    const [counts] = await sql<
+      { policies: number; plans: number; attempts: number; orders: number }[]
+    >`
+      SELECT
+        (SELECT count(*)::int FROM trader_execution_policies_v2 WHERE organization_id = ${orgA}::uuid) AS policies,
+        (SELECT count(*)::int FROM trader_execution_plans_v2 WHERE organization_id = ${orgA}::uuid) AS plans,
+        (SELECT count(*)::int FROM trader_execution_attempts_v2 WHERE organization_id = ${orgA}::uuid) AS attempts,
+        (SELECT count(*)::int FROM trader_orders WHERE organization_id = ${orgA}::uuid) AS orders`;
+    expect(counts).toEqual({ policies: 0, plans: 0, attempts: 0, orders: 0 });
+  }
+
+  it("commits expiry when bind is refused after validUntil and inserts no authority", async () => {
+    const input = await admittedBindInput({ validForMs: 1_500 });
+    await sql`SELECT pg_sleep(2)`;
+    await expectBindRefusalLeavesNoAuthority(input, "ALLOWANCE_EXPIRED", "EXPIRED");
+  }, 30_000);
+
+  it("commits revocation when bind is refused by kill and inserts no authority", async () => {
+    const input = await admittedBindInput();
+    await sql`
+      UPDATE trader_risk_account_state_v2
+      SET kill_state = 'TRIPPED'
+      WHERE organization_id = ${orgA}::uuid AND account_id = ${input.allowance.accountId}`;
+    await expectBindRefusalLeavesNoAuthority(
+      input,
+      "CURRENT_AUTHORITY_BINDING_MISMATCH",
+      "REVOKED",
+    );
   });
 
   it("refuses a consumed allowance expiring before the still-open execution window", async () => {

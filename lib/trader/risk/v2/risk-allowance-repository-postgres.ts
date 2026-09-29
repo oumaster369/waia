@@ -597,7 +597,7 @@ export async function admitRiskAllowanceV2Postgres(
       const row = rows[0];
       if (!row) throw new RiskV2PersistenceConflictError();
       if (row.lifecycleState !== "ISSUED") {
-        throw new RiskV2PersistenceConflictError("idempotent admission found terminal allowance");
+        throw new RiskV2AdmissionRefusedError(`ALLOWANCE_${row.lifecycleState}`);
       }
       const allowance = allowanceAuthorityFromRow(row, verdict);
       if (
@@ -624,6 +624,7 @@ export async function admitRiskAllowanceV2Postgres(
           eventId: randomUUID(),
           reason,
           durableAt,
+          withoutOrder: true,
         });
         return { status: "REFUSED" as const, reason };
       };
@@ -992,6 +993,47 @@ export function computeRiskAllowanceOrderBindingDigestV2(input: {
   });
 }
 
+function issuedConsumptionBindingOrRefusal(input: {
+  organizationId: string;
+  state: RiskAccountStateV2;
+  allowance: RiskAllowanceV2;
+  riskAllowanceContentDigestHex?: string;
+  effectNotionalCeiling?: string;
+  order: ConsumeRiskAllowanceForOrderV2Input["order"];
+  nonce: string;
+  durableAt: Date;
+}): { status: "ELIGIBLE"; bindingDigest: string } | { status: "REFUSED"; reason: string } {
+  try {
+    requireOrderMatchesAllowanceV2({
+      state: input.state,
+      allowance: input.allowance,
+      riskAllowanceContentDigestHex: input.riskAllowanceContentDigestHex,
+      effectNotionalCeiling: input.effectNotionalCeiling,
+      order: input.order,
+      nonce: input.nonce,
+      durableAt: input.durableAt,
+    });
+    return {
+      status: "ELIGIBLE",
+      bindingDigest: computeRiskAllowanceOrderBindingDigestV2({
+        organizationId: input.organizationId,
+        accountId: input.state.accountId,
+        allowance: input.allowance,
+        effectNotionalCeiling: input.effectNotionalCeiling,
+        order: { ...input.order, venue: input.allowance.venue },
+      }),
+    };
+  } catch (error) {
+    return {
+      status: "REFUSED",
+      reason:
+        error instanceof RiskV2AdmissionRefusedError
+          ? error.reason
+          : "ORDER_DOES_NOT_MATCH_ALLOWANCE",
+    };
+  }
+}
+
 async function refuseIssuedAllowanceConsumptionV2(input: {
   tx: RiskTx;
   state: RiskAccountStateV2;
@@ -999,6 +1041,8 @@ async function refuseIssuedAllowanceConsumptionV2(input: {
   eventId: string;
   reason: string;
   durableAt: Date;
+  /** Admit replay has no order. Consumption refusal keeps CONSUMPTION_REFUSED. */
+  withoutOrder?: boolean;
 }): Promise<RefusedRiskAllowanceForOrderV2> {
   const expired = input.reason === "ALLOWANCE_EXPIRED";
   const toState = expired ? ("EXPIRED" as const) : ("REVOKED" as const);
@@ -1009,7 +1053,11 @@ async function refuseIssuedAllowanceConsumptionV2(input: {
     eventSequence: input.state.nextEnforcementEventSequence,
     riskVerdictId: input.row.riskVerdictId,
     riskAllowanceId: input.row.id,
-    eventType: expired ? "ALLOWANCE_EXPIRED" : "CONSUMPTION_REFUSED",
+    eventType: expired
+      ? "ALLOWANCE_EXPIRED"
+      : input.withoutOrder
+        ? "ALLOWANCE_REVOKED"
+        : "CONSUMPTION_REFUSED",
     fromState: "ISSUED",
     toState,
     reasonCode: input.reason,
@@ -1056,6 +1104,95 @@ async function refuseIssuedAllowanceConsumptionV2(input: {
     riskAllowanceId: input.row.id,
     reason: input.reason,
   };
+}
+
+/**
+ * Bind calls this before policy/plan inserts. An ineligible ISSUED allowance is
+ * terminalized here so the caller can commit that write and refuse outside the
+ * transaction. An eligible or already-consumed allowance is left untouched and
+ * is not locked, preserving account-then-allowance lock order on the success path.
+ */
+export async function terminalizeIssuedAllowanceIfBindWouldRefuseV2(
+  tx: RiskTx,
+  context: OrgContext,
+  input: ConsumeRiskAllowanceForOrderV2Input,
+): Promise<RefusedRiskAllowanceForOrderV2 | null> {
+  const scoped = requireOrgContext(context.organizationId);
+  const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
+  const rows = await tx
+    .select()
+    .from(pgSchema.traderRiskAllowancesV2)
+    .where(
+      and(
+        eq(pgSchema.traderRiskAllowancesV2.id, input.riskAllowanceId),
+        eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
+        eq(pgSchema.traderRiskAllowancesV2.accountId, input.accountId),
+      ),
+    );
+  const row = rows[0];
+  if (!row) throw new RiskV2AdmissionRefusedError("ALLOWANCE_NOT_FOUND");
+  if (row.lifecycleState === "CONSUMED") return null;
+  if (row.lifecycleState !== "ISSUED") {
+    return {
+      status: "REFUSED",
+      order: null,
+      riskAllowanceId: row.id,
+      reason: `ALLOWANCE_${row.lifecycleState}`,
+    };
+  }
+  const verdictRows = await tx
+    .select()
+    .from(pgSchema.traderRiskVerdictsV2)
+    .where(
+      and(
+        eq(pgSchema.traderRiskVerdictsV2.id, row.riskVerdictId),
+        eq(pgSchema.traderRiskVerdictsV2.organizationId, scoped.organizationId),
+        eq(pgSchema.traderRiskVerdictsV2.accountId, input.accountId),
+      ),
+    )
+    .limit(1);
+  if (!verdictRows[0]) throw new RiskV2PersistenceConflictError("allowance verdict missing");
+  const allowance = allowanceAuthorityFromRow(row, verdictFromRow(verdictRows[0]));
+  const durableAt = await freshEligibilityTime(tx);
+  const decision = issuedConsumptionBindingOrRefusal({
+    organizationId: scoped.organizationId,
+    state,
+    allowance,
+    riskAllowanceContentDigestHex: input.riskAllowanceContentDigestHex,
+    effectNotionalCeiling: input.effectNotionalCeiling,
+    order: input.order,
+    nonce: input.nonce,
+    durableAt,
+  });
+  if (decision.status === "ELIGIBLE") return null;
+  const lockedRows = await tx
+    .select()
+    .from(pgSchema.traderRiskAllowancesV2)
+    .where(
+      and(
+        eq(pgSchema.traderRiskAllowancesV2.id, input.riskAllowanceId),
+        eq(pgSchema.traderRiskAllowancesV2.organizationId, scoped.organizationId),
+        eq(pgSchema.traderRiskAllowancesV2.accountId, input.accountId),
+      ),
+    )
+    .for("update");
+  const locked = lockedRows[0];
+  if (!locked || locked.lifecycleState !== "ISSUED") {
+    return {
+      status: "REFUSED",
+      order: null,
+      riskAllowanceId: row.id,
+      reason: locked ? `ALLOWANCE_${locked.lifecycleState}` : "ALLOWANCE_NOT_FOUND",
+    };
+  }
+  return refuseIssuedAllowanceConsumptionV2({
+    tx,
+    state,
+    row: locked,
+    eventId: input.consumptionEventId,
+    reason: decision.reason,
+    durableAt,
+  });
 }
 
 function requireOrderMatchesAllowanceV2(input: {
@@ -1300,38 +1437,27 @@ export async function consumeRiskAllowanceForOrderV2FromTransaction(
       reason: `ALLOWANCE_${row.lifecycleState}`,
     };
   }
-  let bindingDigest: string;
-  try {
-    requireOrderMatchesAllowanceV2({
-      state,
-      allowance,
-      riskAllowanceContentDigestHex: input.riskAllowanceContentDigestHex,
-      effectNotionalCeiling: input.effectNotionalCeiling,
-      order: input.order,
-      nonce: input.nonce,
-      durableAt,
-    });
-    bindingDigest = computeRiskAllowanceOrderBindingDigestV2({
-      organizationId: scoped.organizationId,
-      accountId: input.accountId,
-      allowance,
-      effectNotionalCeiling: input.effectNotionalCeiling,
-      order: { ...input.order, venue: allowance.venue },
-    });
-  } catch (error) {
-    const reason =
-      error instanceof RiskV2AdmissionRefusedError
-        ? error.reason
-        : "ORDER_DOES_NOT_MATCH_ALLOWANCE";
+  const decision = issuedConsumptionBindingOrRefusal({
+    organizationId: scoped.organizationId,
+    state,
+    allowance,
+    riskAllowanceContentDigestHex: input.riskAllowanceContentDigestHex,
+    effectNotionalCeiling: input.effectNotionalCeiling,
+    order: input.order,
+    nonce: input.nonce,
+    durableAt,
+  });
+  if (decision.status === "REFUSED") {
     return refuseIssuedAllowanceConsumptionV2({
       tx,
       state,
       row,
       eventId: input.consumptionEventId,
-      reason,
+      reason: decision.reason,
       durableAt,
     });
   }
+  const bindingDigest = decision.bindingDigest;
   const order = await createOrderPostgres(tx, scoped, {
     ...input.order,
     venue: allowance.venue,
