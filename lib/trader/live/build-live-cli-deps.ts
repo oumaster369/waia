@@ -21,7 +21,7 @@ import {
 } from "@/lib/trader/execution";
 import { createExecutionLiveAuthorizationHook } from "@/lib/trader/live/assert-live-path-authorized";
 import {
-  assertExecutionV2LiveAuthorized,
+  createAssertExecutionV2LiveAuthorized,
   createOrgScopedExecutionV2OrderPath,
 } from "@/lib/trader/execution/v2/org-order-path";
 import {
@@ -126,7 +126,7 @@ export async function buildLiveCliPostgresDeps(
   const orderPath = createOrgScopedExecutionV2OrderPath({
     db,
     connectorFor: (mode) => connectorForMode(mode),
-    assertLiveAuthorized: assertExecutionV2LiveAuthorized,
+    assertLiveAuthorized: createAssertExecutionV2LiveAuthorized(db, input.env),
   });
 
   const reconciliation = createPostgresReconciliationService(db, {

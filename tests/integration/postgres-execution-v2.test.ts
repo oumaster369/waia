@@ -46,7 +46,8 @@ import {
   type AdmitRiskAllowanceV2Input,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
-import { createOrgScopedExecutionV2OrderPath } from "@/lib/trader/execution/v2/org-order-path";
+import { createAssertExecutionV2LiveAuthorized, createOrgScopedExecutionV2OrderPath } from "@/lib/trader/execution/v2/org-order-path";
+import { EXECUTION_V2_LIVE_GATE_REASONS } from "@/lib/trader/execution/v2/live-gates";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import {
   deleteLiveCapitalEnvelopeRows,
@@ -2172,5 +2173,39 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       result.authority.attempt.executionAttemptId,
     );
     expect(projection?.lifecycleState).toBe("VENUE_ACCEPTED");
+  });
+
+  it("DEE-1151 refuses a live bind when a live gate is absent and still admits paper", async () => {
+    const input = await admittedBindInput();
+    const live = { ...input, executionMode: "live" as const };
+    const before = await lockProofState(input);
+    await expect(
+      bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, live),
+    ).rejects.toBeInstanceOf(ExecutionV2AuthorityRefusedError);
+    await expect(
+      createAssertExecutionV2LiveAuthorized(db)({ organizationId: orgA }, live),
+    ).rejects.toBeInstanceOf(ExecutionV2AuthorityRefusedError);
+    try {
+      await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, live);
+      throw new Error("live bind should have refused");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ExecutionV2AuthorityRefusedError);
+      expect(EXECUTION_V2_LIVE_GATE_REASONS).toContain(
+        (error as ExecutionV2AuthorityRefusedError).reason,
+      );
+    }
+    const after = await lockProofState(input);
+    expect(after.allowance).toEqual(before.allowance);
+    expect(after.counts).toEqual(before.counts);
+    const connector = new MockExchangeConnector();
+    await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
+    const placeOrder = vi.spyOn(connector, "placeOrder");
+    const path = createOrgScopedExecutionV2OrderPath({
+      db,
+      connectorFor: () => connector,
+    });
+    const paper = await path.service.submit({ organizationId: orgA }, input);
+    expect(placeOrder).toHaveBeenCalledTimes(1);
+    expect(paper.outcome.status).toBe("VENUE_ACCEPTED");
   });
 });

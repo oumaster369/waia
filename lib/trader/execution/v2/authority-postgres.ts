@@ -42,6 +42,7 @@ import {
   readExecutionPlanV2Postgres,
   readExecutionPolicyV2Postgres,
 } from "./repository-postgres";
+import { assertExecutionV2LiveGatesPostgres, ExecutionV2LiveGateRefusedError } from "./live-gates";
 
 type PlanMechanicsV2 = Omit<CreateExecutionPlanV2Input, "executionPlanId" | "allowance" | "policy">;
 
@@ -53,6 +54,8 @@ export type BindExecutionAuthorityV2Input = Readonly<{
   credentialId: string | null;
   strategySignalId: string | null;
   allocationDecisionId: string | null;
+  strategyId?: string | null;
+  strategyVersion?: string | null;
 }>;
 
 export type BoundExecutionAuthorityV2 = Readonly<{
@@ -198,6 +201,18 @@ export async function bindExecutionAuthorityV2Postgres(
     // Match dispatch/revocation before plan insertion takes the allowance lock.
     if (!(await readRiskAccountStateV2Postgres(tx, scoped, input.allowance.accountId, true))) {
       throw new RiskV2AdmissionRefusedError("RISK_ACCOUNT_STATE_MISSING");
+    }
+    // Live gates run under the account lock, before any allowance consume.
+    // A refusal rolls the transaction back and leaves the ISSUED allowance reserved.
+    if (input.executionMode === "live") {
+      try {
+        await assertExecutionV2LiveGatesPostgres(tx, scoped, input);
+      } catch (error) {
+        if (error instanceof ExecutionV2LiveGateRefusedError) {
+          throw new ExecutionV2AuthorityRefusedError(error.reason);
+        }
+        throw error;
+      }
     }
     // Terminalize an allowance that is unfit on its own before policy/plan inserts,
     // then commit that write. A malformed request throws here so the transaction

@@ -4,14 +4,17 @@ import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2", async (load) => {
-  const actual = await load<typeof import("@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2")>();
+  const actual =
+    await load<
+      typeof import("@/lib/trader/intelligence/forecast-v2/forecast-runtime-authority-v2")
+    >();
   return { ...actual, requireForecastRuntimeAuthorizedOutcomeV2: vi.fn((value) => value) };
 });
 
 import type { ExchangeConnector } from "@/lib/trader/connectors/exchange-connector";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
-  assertExecutionV2LiveAuthorized,
+  createAssertExecutionV2LiveAuthorized,
   createOrgScopedExecutionV2OrderPath,
 } from "@/lib/trader/execution/v2/org-order-path";
 import type { BindExecutionAuthorityV2Input } from "@/lib/trader/execution/v2/authority-postgres";
@@ -64,8 +67,9 @@ describe("Execution V2 org order path (DEE-1151 P0-1)", () => {
     expect(paper).toContain("buildPreQualificationPaperEnvelope");
     expect(paper).toContain("executionV2: orderPath.service");
     expect(paper).not.toContain("assertExecutionV2LiveAuthorized");
+    expect(paper).not.toContain("createAssertExecutionV2LiveAuthorized");
     expect(live).toContain("createOrgScopedExecutionV2OrderPath");
-    expect(live).toContain("assertExecutionV2LiveAuthorized");
+    expect(live).toContain("createAssertExecutionV2LiveAuthorized");
     expect(live).toContain("executionV2: orderPath.service");
     expect(live).not.toContain("canonicalOrdinaryCapitalEnvelopeV2:");
   });
@@ -77,9 +81,9 @@ describe("Execution V2 org order path (DEE-1151 P0-1)", () => {
       db: {} as WaiaPostgresDb,
       connectorFor,
     });
-    await expect(
-      path.service.submit(requireOrgContext(ORG), liveRequest()),
-    ).rejects.toThrow("Execution V2 live path is not authorized");
+    await expect(path.service.submit(requireOrgContext(ORG), liveRequest())).rejects.toThrow(
+      "Execution V2 live path is not authorized",
+    );
     expect(connectorFor).not.toHaveBeenCalled();
     expect(exchange.placeOrder).not.toHaveBeenCalled();
   });
@@ -90,11 +94,9 @@ describe("Execution V2 org order path (DEE-1151 P0-1)", () => {
     const path = createOrgScopedExecutionV2OrderPath({
       db: {} as WaiaPostgresDb,
       connectorFor,
-      assertLiveAuthorized: assertExecutionV2LiveAuthorized,
+      assertLiveAuthorized: createAssertExecutionV2LiveAuthorized({} as WaiaPostgresDb),
     });
-    await expect(
-      path.service.submit(requireOrgContext(ORG), liveRequest()),
-    ).rejects.toThrow("EXECUTION_V2_LIVE_GATES_ABSENT");
+    await expect(path.service.submit(requireOrgContext(ORG), liveRequest())).rejects.toThrow();
     expect(connectorFor).not.toHaveBeenCalled();
     expect(exchange.placeOrder).not.toHaveBeenCalled();
   });

@@ -4,7 +4,7 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
 
-import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import {
   admitRiskAllowanceV2Postgres,
@@ -13,12 +13,16 @@ import {
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import type { CanonicalDecisionCapitalAuthorityV2Deps } from "@/lib/trader/runtime-v2/decision-capital-authority-v2";
 
-import type { BindExecutionAuthorityV2Input } from "./authority-postgres";
+import {
+  ExecutionV2AuthorityRefusedError,
+  type BindExecutionAuthorityV2Input,
+} from "./authority-postgres";
 import {
   createPostgresExecutionV2Service,
   type ExecutionV2ConnectorResolver,
   type ExecutionV2SubmissionResult,
 } from "./connector-dispatch";
+import { assertExecutionV2LiveGatesPostgres, ExecutionV2LiveGateRefusedError } from "./live-gates";
 
 export type ExecutionV2OrderService = ReturnType<typeof createPostgresExecutionV2Service>;
 
@@ -27,15 +31,26 @@ const UNQUALIFIED_DECISION_DIGEST = createHash("sha256")
   .digest("hex");
 
 /**
- * Live submit stays refused until the bind-path gates exist.
- * A missing hook and a present-but-ungated hook are different refusals.
+ * Pre-bind live gate. Bind repeats the same read inside its transaction, so a
+ * hook that returns without checking cannot admit a live order.
  */
-export const assertExecutionV2LiveAuthorized: (
-  context: OrgContext,
-  request: BindExecutionAuthorityV2Input,
-) => Promise<void> = async () => {
-  throw new Error("EXECUTION_V2_LIVE_GATES_ABSENT");
-};
+export function createAssertExecutionV2LiveAuthorized(
+  db: WaiaPostgresDb,
+  env?: Record<string, unknown>,
+): (context: OrgContext, request: BindExecutionAuthorityV2Input) => Promise<void> {
+  return async (context, request) => {
+    await runWaiaPostgresTransaction(db, async (tx) => {
+      try {
+        await assertExecutionV2LiveGatesPostgres(tx, context, request, env);
+      } catch (error) {
+        if (error instanceof ExecutionV2LiveGateRefusedError) {
+          throw new ExecutionV2AuthorityRefusedError(error.reason);
+        }
+        throw error;
+      }
+    });
+  };
+}
 
 export type ExecutionV2AdmitAndSubmitInput = Readonly<{
   admission: AdmitRiskAllowanceV2Input;
