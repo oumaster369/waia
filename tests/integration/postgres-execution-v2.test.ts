@@ -73,6 +73,7 @@ import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import {
   deleteLiveCapitalEnvelopeRows,
   publishMirroredLiveCapitalEnvelopeV2,
+  TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
 } from "../helpers/live-capital-test-envelope";
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
 
@@ -171,6 +172,7 @@ async function initializeRiskAccountStateV2Postgres(
 ) {
   await initializeRiskAccountStateRaw(database, context, state);
   await publishMirroredLiveCapitalEnvelopeV2({
+    sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
     organizationId: context.organizationId,
     accountId: state.accountId,
     exposureLimitNotional: state.accounting.exposureLimitNotional,

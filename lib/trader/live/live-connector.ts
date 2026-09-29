@@ -5,9 +5,11 @@ if (process.env.VITEST !== "true") {
   require("server-only");
 }
 
+import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import type { ExchangeConnector } from "@/lib/trader/connectors/exchange-connector";
 import { createExchangeConnector } from "@/lib/trader/connectors/registry";
 import type { CredentialService } from "@/lib/trader/credentials/types";
+import { assertLiveHtxExecutionAdmission } from "@/lib/trader/live/live-htx-execution-admission";
 import {
   requireHtxStoredPermissionMetadata,
   resolveHtxSecureCredential,
@@ -20,6 +22,7 @@ export type CreateLiveHtxConnectorInput = {
   credentialId: string;
   credentialService: CredentialService;
   fetchImpl?: typeof fetch;
+  telemetrySink?: WaiaTraderTelemetrySink;
 };
 
 /** Build a validated HTX live connector from stored credentials (CLI/host path only). */
@@ -28,15 +31,31 @@ export async function createLiveHtxConnector(
 ): Promise<ExchangeConnector> {
   const scoped = requireOrgContext(input.context.organizationId);
   const metadata = await input.credentialService.listCredentialMetadata(scoped);
-  const credential = metadata.find((row) => row.id === input.credentialId);
-  if (!credential || credential.status !== "active" || credential.venue !== "htx") {
+  const credential = metadata.find((row) => row.id === input.credentialId) ?? null;
+  const activeHtx =
+    credential && credential.status === "active" && credential.venue === "htx" ? credential : null;
+  assertLiveHtxExecutionAdmission({
+    organizationId: scoped.organizationId,
+    credentialId: input.credentialId,
+    credential: activeHtx
+      ? {
+          status: activeHtx.status,
+          venue: activeHtx.venue,
+          exchangeAccountId: activeHtx.exchangeAccountId,
+          permissionMetadata: activeHtx.permissionMetadata,
+        }
+      : null,
+    sink: input.telemetrySink,
+  });
+  if (!activeHtx) {
     throw new Error("[trader/live] active HTX credential not found");
   }
 
   requireHtxStoredPermissionMetadata({
-    purpose: "trade", venue: credential.venue,
-    exchangeAccountId: credential.exchangeAccountId,
-    permissionMetadata: credential.permissionMetadata,
+    purpose: "trade",
+    venue: activeHtx.venue,
+    exchangeAccountId: activeHtx.exchangeAccountId,
+    permissionMetadata: activeHtx.permissionMetadata,
   });
 
   const decrypted = await input.credentialService.getDecryptedCredentials(
@@ -45,10 +64,10 @@ export async function createLiveHtxConnector(
   );
   const resolved = resolveHtxSecureCredential({
     purpose: "trade",
-    venue: credential.venue,
-    exchangeAccountId: credential.exchangeAccountId,
+    venue: activeHtx.venue,
+    exchangeAccountId: activeHtx.exchangeAccountId,
     credentials: decrypted,
-    permissionMetadata: credential.permissionMetadata,
+    permissionMetadata: activeHtx.permissionMetadata,
   });
   const connector = createExchangeConnector("htx", {
     credentials: toHtxExchangeConnectorConfig(resolved),
@@ -63,10 +82,14 @@ export async function createLiveHtxConnector(
     throw new Error("[trader/live] HTX exact stored account admission failed");
   }
   const account = await connector.getAccountInfo();
-  if (account.accountId !== resolved.spotAccountId || account.venue !== "htx" ||
-      account.marketType !== "spot" || !account.permissions.includes("read") ||
-      !account.permissions.includes("trade") ||
-      account.permissions.some((scope) => scope !== "read" && scope !== "trade")) {
+  if (
+    account.accountId !== resolved.spotAccountId ||
+    account.venue !== "htx" ||
+    account.marketType !== "spot" ||
+    !account.permissions.includes("read") ||
+    !account.permissions.includes("trade") ||
+    account.permissions.some((scope) => scope !== "read" && scope !== "trade")
+  ) {
     throw new Error("[trader/live] HTX fresh trade permission admission failed");
   }
   return connector;

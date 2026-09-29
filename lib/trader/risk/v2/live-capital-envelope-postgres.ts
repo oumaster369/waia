@@ -6,6 +6,7 @@ import {
   LIVE_CAPITAL_ENVELOPE_V2,
   assertLiveCapitalEnvelopeReceiptV2,
   decideLiveCapitalEnvelopePublicationV2,
+  decideLiveCapitalEnvelopeWindowV2,
   liveCapitalBasisBindingV2,
   liveCapitalEnvelopeCommandSchemaV2,
   sealLiveCapitalEnvelopeV2,
@@ -203,9 +204,8 @@ async function recheckPublishedAuthorityV2(
   if (receipt.contentDigest !== envelopeDigest)
     throw new RiskCurrentAccountRefusedV1("RECORD_SEAL");
   const nowUtc = await dbNow(tx);
-  const decision = decideLiveCapitalEnvelopePublicationV2({
+  const decision = decideLiveCapitalEnvelopeWindowV2({
     liveCapitalEnvelope: receipt,
-    sourceMethodQualified: false,
     bound: { ...observed, nowUtc },
   });
   if (decision.decision === "PUBLISHED" && decision.basisDigest === basisDigest)
@@ -239,6 +239,8 @@ export async function advanceLiveCapitalEnvelopeStageV2(
     boundOrganizationId: string;
     stage: LiveCapitalEnvelopeStageV2;
     observed: LiveCapitalObservedIdentityV2;
+    /** Explicit human qualification. Omitted and false both fail closed. */
+    sourceMethodQualified?: boolean;
   },
 ): Promise<LiveCapitalEnvelopeResultV2> {
   requireObservedOrganization(input.observed, input.boundOrganizationId);
@@ -325,7 +327,7 @@ export async function advanceLiveCapitalEnvelopeStageV2(
     const nowUtc = await dbNow(tx);
     const decision = decideLiveCapitalEnvelopePublicationV2({
       liveCapitalEnvelope: receipt,
-      sourceMethodQualified: false,
+      sourceMethodQualified: input.sourceMethodQualified === true,
       bound: { ...input.observed, nowUtc },
     });
     const current = await loadCurrent(tx, command.organizationId, command.accountId);
@@ -409,6 +411,8 @@ export async function produceLiveCapitalEnvelopeV2(
     command: LiveCapitalEnvelopeCommandV2;
     boundOrganizationId: string;
     observed: LiveCapitalObservedIdentityV2;
+    /** Explicit human qualification. Omitted and false both fail closed. */
+    sourceMethodQualified?: boolean;
   },
 ): Promise<LiveCapitalEnvelopeResultV2> {
   let last = refused("CAPTURED");
@@ -465,9 +469,8 @@ export async function invalidateLiveCapitalEnvelopeV2(
     if (receipt.contentDigest !== current.envelope_digest)
       throw new RiskCurrentAccountRefusedV1("RECORD_SEAL");
     const nowUtc = await dbNow(tx);
-    const decision = decideLiveCapitalEnvelopePublicationV2({
+    const decision = decideLiveCapitalEnvelopeWindowV2({
       liveCapitalEnvelope: receipt,
-      sourceMethodQualified: false,
       bound: { ...input.observed, nowUtc },
     });
     if (decision.decision === "PUBLISHED" && current.basis_digest === decision.basisDigest) {

@@ -82,7 +82,7 @@ describe("DEE-956 exact HTX admission", () => {
     };
     await expect(createLiveHtxConnector({
       context: { organizationId: "mock-org-956" }, credentialId: "mock-credential", credentialService: service, fetchImpl,
-    })).rejects.toThrow("PERMISSION_METADATA_UNVERIFIED");
+    })).rejects.toThrow("LIVE_HTX_CREDENTIAL_ABSENT");
     expect(getDecryptedCredentials).not.toHaveBeenCalled();
     expect(fetchImpl).not.toHaveBeenCalled();
   });

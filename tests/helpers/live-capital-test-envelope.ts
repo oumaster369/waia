@@ -5,6 +5,12 @@ import postgres from "postgres";
 import { formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
 import { produceLiveCapitalEnvelopeV2 } from "@/lib/trader/risk/v2/live-capital-envelope-postgres";
 
+/**
+ * Explicit stand-in for a Human source-method qualification.
+ * Production code must not import this. Omitting the flag fails closed.
+ */
+export const TEST_HUMAN_SOURCE_METHOD_QUALIFIED = true;
+
 const POLICY = "ab".repeat(32);
 const RELEASE = "cd".repeat(32);
 const OPEN = {
@@ -15,8 +21,12 @@ const OPEN = {
 /**
  * Test-only publisher. Copies an existing exposure limit into capital and loss.
  * It does not choose a production capital amount.
+ *
+ * `sourceMethodQualified` is required and is never defaulted to true.
+ * Callers that need a published basis pass the explicit human-fixture flag.
  */
 export async function publishMirroredLiveCapitalEnvelopeV2(input: {
+  sourceMethodQualified: boolean;
   organizationId: string;
   accountId: string;
   exposureLimitNotional: string;
@@ -57,6 +67,7 @@ export async function publishMirroredLiveCapitalEnvelopeV2(input: {
       await deleteLiveCapitalEnvelopeRows(sql, input.organizationId, input.accountId);
     }
     const result = await produceLiveCapitalEnvelopeV2(sql, {
+      sourceMethodQualified: input.sourceMethodQualified,
       command: {
         commandId: randomUUID(),
         organizationId: input.organizationId,

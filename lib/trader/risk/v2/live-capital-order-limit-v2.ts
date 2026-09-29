@@ -5,7 +5,7 @@ import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { compareDecimal, formatDecimal, minDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
 import {
   LIVE_CAPITAL_ENVELOPE_V2,
-  decideLiveCapitalEnvelopePublicationV2,
+  decideLiveCapitalEnvelopeWindowV2,
   liveCapitalEnvelopeCommandSchemaV2,
   sealLiveCapitalEnvelopeV2,
 } from "@/lib/trader/risk/v2/live-capital-envelope-v2";
@@ -136,9 +136,8 @@ export async function requireLiveCapitalOrderLimitV2(
     throw new LiveCapitalOrderLimitRefusedError("LIVE_CAPITAL_IDENTITY_CHANGED");
   }
   const nowUtc = await clockNowUtc(tx);
-  const publication = decideLiveCapitalEnvelopePublicationV2({
+  const publication = decideLiveCapitalEnvelopeWindowV2({
     liveCapitalEnvelope: receipt,
-    sourceMethodQualified: false,
     bound: {
       organizationId,
       accountId,

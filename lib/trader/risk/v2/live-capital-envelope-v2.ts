@@ -135,7 +135,8 @@ export type LiveCapitalPublicationV2 =
       reason:
         | "LIVE_CAPITAL_ENVELOPE_STALE"
         | "LIVE_CAPITAL_IDENTITY_CHANGED"
-        | "EXTERNAL_ORGANIZATION";
+        | "EXTERNAL_ORGANIZATION"
+        | "SOURCE_METHOD_UNQUALIFIED";
       basisDigest: null;
       allowanceId: null;
       orderId: null;
@@ -148,22 +149,22 @@ export type LiveCapitalPublicationV2 =
       orderId: null;
     };
 
-/** Null envelope stays the closed refusal. A sealed receipt can publish the basis binding. */
-export function decideLiveCapitalEnvelopePublicationV2(input: {
-  liveCapitalEnvelope: null;
-  sourceMethodQualified: boolean;
-}): { decision: "REFUSED"; reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" };
-export function decideLiveCapitalEnvelopePublicationV2(input: {
+/**
+ * Window and identity only. Publishing still requires an explicit human
+ * source-method qualification; this function does not grant that.
+ */
+export function decideLiveCapitalEnvelopeWindowV2(input: { liveCapitalEnvelope: null }): {
+  decision: "REFUSED";
+  reason: "LIVE_CAPITAL_ENVELOPE_ABSENT";
+};
+export function decideLiveCapitalEnvelopeWindowV2(input: {
   liveCapitalEnvelope: LiveCapitalEnvelopeReceiptV2;
-  sourceMethodQualified: boolean;
   bound: LiveCapitalEnvelopeBoundV2;
 }): LiveCapitalPublicationV2;
-export function decideLiveCapitalEnvelopePublicationV2(input: {
+export function decideLiveCapitalEnvelopeWindowV2(input: {
   liveCapitalEnvelope: LiveCapitalEnvelopeReceiptV2 | null;
-  sourceMethodQualified: boolean;
   bound?: LiveCapitalEnvelopeBoundV2;
 }): LiveCapitalPublicationV2 {
-  void input.sourceMethodQualified;
   if (input.liveCapitalEnvelope === null)
     return { decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" };
   if (!input.bound) refuse("ENVELOPE_UNBOUND");
@@ -210,6 +211,46 @@ export function decideLiveCapitalEnvelopePublicationV2(input: {
     allowanceId: null,
     orderId: null,
   };
+}
+
+/**
+ * Basis publication. `sourceMethodQualified` must be the explicit human decision.
+ * A missing flag, false, or any non-true value stays closed. Nothing in this
+ * function turns the flag on.
+ */
+export function decideLiveCapitalEnvelopePublicationV2(input: {
+  liveCapitalEnvelope: null;
+  sourceMethodQualified: boolean;
+}): { decision: "REFUSED"; reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" };
+export function decideLiveCapitalEnvelopePublicationV2(input: {
+  liveCapitalEnvelope: LiveCapitalEnvelopeReceiptV2;
+  sourceMethodQualified: boolean;
+  bound: LiveCapitalEnvelopeBoundV2;
+}): LiveCapitalPublicationV2;
+export function decideLiveCapitalEnvelopePublicationV2(input: {
+  liveCapitalEnvelope: LiveCapitalEnvelopeReceiptV2 | null;
+  sourceMethodQualified: boolean;
+  bound?: LiveCapitalEnvelopeBoundV2;
+}): LiveCapitalPublicationV2 {
+  if (input.liveCapitalEnvelope === null) {
+    return decideLiveCapitalEnvelopeWindowV2({ liveCapitalEnvelope: null });
+  }
+  if (!input.bound) refuse("ENVELOPE_UNBOUND");
+  const window = decideLiveCapitalEnvelopeWindowV2({
+    liveCapitalEnvelope: input.liveCapitalEnvelope,
+    bound: input.bound,
+  });
+  if (window.decision !== "PUBLISHED") return window;
+  if (input.sourceMethodQualified !== true) {
+    return {
+      decision: "REFUSED",
+      reason: "SOURCE_METHOD_UNQUALIFIED",
+      basisDigest: null,
+      allowanceId: null,
+      orderId: null,
+    };
+  }
+  return window;
 }
 
 export function liveCapitalBasisBindingV2(

@@ -394,8 +394,9 @@ extract_branch_nn() {
   local nn=""
   if [[ "$branch" =~ ^dee-([0-9]+)- ]]; then
     nn="${BASH_REMATCH[1]}"
-  elif [[ "$branch" =~ ^cursor/dee-([0-9]+)-[a-z0-9-]+-[0-9]+$ ]]; then
-    # Cloud agent branches keep the dee-<NN>-<slug> identity and append a numeric suffix.
+  elif [[ "$branch" =~ ^cursor/dee-([0-9]+)-[a-z0-9-]+-[a-z0-9]+$ ]]; then
+    # Cloud agent branches keep the dee-<NN>-<slug> identity and append a run suffix
+    # (numeric, or alphanumeric such as a50e).
     nn="${BASH_REMATCH[1]}"
   fi
   if [[ -n "$nn" ]]; then
@@ -540,7 +541,7 @@ fi
 
 dee_branch_ok=false
 if [[ "$PR_BRANCH" =~ ^dee-[0-9]{2,}-[a-z0-9-]+$ ]] ||
-  [[ "$PR_BRANCH" =~ ^cursor/dee-[0-9]{2,}-[a-z0-9-]+-[0-9]+$ ]]; then
+  [[ "$PR_BRANCH" =~ ^cursor/dee-[0-9]{2,}-[a-z0-9-]+-[a-z0-9]+$ ]]; then
   dee_branch_ok=true
 elif [[ -n "$PR_BRANCH" ]]; then
   add_failure "Branch \`${PR_BRANCH}\` does not match \`dee-<NN>-<slug>\`."
