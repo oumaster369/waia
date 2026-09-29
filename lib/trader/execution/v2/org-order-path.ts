@@ -11,7 +11,11 @@ import {
   type AdmitRiskAllowanceV2Input,
   type AdmitRiskAllowanceV2Result,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
-import type { CanonicalDecisionCapitalAuthorityV2Deps } from "@/lib/trader/runtime-v2/decision-capital-authority-v2";
+import type {
+  CanonicalDecisionCapitalAuthorityV2Deps,
+  DecisionAuthorityV2,
+  DecisionStageOutcomeV2,
+} from "@/lib/trader/runtime-v2/decision-capital-authority-v2";
 
 import {
   ExecutionV2AuthorityRefusedError,
@@ -25,6 +29,34 @@ import {
 import { assertExecutionV2LiveGatesPostgres, ExecutionV2LiveGateRefusedError } from "./live-gates";
 
 export type ExecutionV2OrderService = ReturnType<typeof createPostgresExecutionV2Service>;
+
+export type ExecutionV2CycleSubmitPort = {
+  admitAndSubmit(
+    context: OrgContext,
+    request: ExecutionV2AdmitAndSubmitInput,
+  ): Promise<ExecutionV2AdmitAndSubmitResult>;
+};
+
+/**
+ * Paper and live cycles call this when a strategy decision exists.
+ * NO_TRADE does not admit. An actionable decision without an admission
+ * request fails closed and does not place an order.
+ */
+export async function submitExecutionV2ForStrategyDecision(
+  decision: DecisionStageOutcomeV2,
+  executionV2: ExecutionV2CycleSubmitPort | undefined,
+  context: OrgContext,
+  request: ExecutionV2AdmitAndSubmitInput | null,
+): Promise<ExecutionV2AdmitAndSubmitResult | null> {
+  if (decision.status === "NO_TRADE") return null;
+  if (!executionV2) throw new Error("execution_v2_required");
+  if (!request) throw new Error("EXECUTION_V2_ADMISSION_INPUTS_INCOMPLETE");
+  return executionV2.admitAndSubmit(context, request);
+}
+
+export type ExecutionV2ActionableAdmission = (
+  decision: DecisionAuthorityV2,
+) => ExecutionV2AdmitAndSubmitInput | null;
 
 const UNQUALIFIED_DECISION_DIGEST = createHash("sha256")
   .update("waia.trader.execution_v2.decision_not_qualified")

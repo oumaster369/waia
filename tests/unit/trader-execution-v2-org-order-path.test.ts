@@ -65,12 +65,12 @@ describe("Execution V2 org order path (DEE-1151 P0-1)", () => {
     );
     expect(paper).toContain("createOrgScopedExecutionV2OrderPath");
     expect(paper).toContain("buildPreQualificationPaperEnvelope");
-    expect(paper).toContain("executionV2: orderPath.service");
+    expect(paper).toContain("executionV2: orderPath,");
     expect(paper).not.toContain("assertExecutionV2LiveAuthorized");
     expect(paper).not.toContain("createAssertExecutionV2LiveAuthorized");
     expect(live).toContain("createOrgScopedExecutionV2OrderPath");
     expect(live).toContain("createAssertExecutionV2LiveAuthorized");
-    expect(live).toContain("executionV2: orderPath.service");
+    expect(live).toContain("executionV2: orderPath,");
     expect(live).not.toContain("canonicalOrdinaryCapitalEnvelopeV2:");
   });
 

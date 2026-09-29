@@ -16,6 +16,11 @@ import { readRiskAccountStateV2Postgres } from "@/lib/trader/risk/v2/risk-allowa
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 import type { ExecutionAttemptV2 } from "./contracts";
+import {
+  evaluateExecutionV2LiveGates,
+  loadExecutionV2LiveGateFactsPostgres,
+  type ExecutionV2LiveGateFacts,
+} from "./live-gates";
 import { readExecutionPlanV2Postgres } from "./repository-postgres";
 
 export type PrePostRecheckFacts = Readonly<{
@@ -23,7 +28,8 @@ export type PrePostRecheckFacts = Readonly<{
   enforcingSwitch: boolean;
   envelopeReason: string | null;
   executionMode: "mock" | "paper" | "live" | "unknown";
-  liveEnableState: string | null;
+  /** Required for live. Paper and mock ignore it. */
+  liveGates: ExecutionV2LiveGateFacts | null;
 }>;
 
 /** Null means the post may proceed. Any other value is a refusal reason. */
@@ -31,11 +37,10 @@ export function evaluatePrePostRecheck(facts: PrePostRecheckFacts): string | nul
   if (facts.killState !== "CLEAR" || facts.enforcingSwitch) return "KILL_SWITCH_TRIPPED";
   if (facts.envelopeReason) return facts.envelopeReason;
   if (facts.executionMode === "unknown") return "PRE_POST_RECHECK_FAILED";
-  if (facts.executionMode === "live") {
-    if (!facts.liveEnableState) return "LIVE_ENABLE_ABSENT";
-    if (facts.liveEnableState !== "ENABLED") return "LIVE_ENABLE_NOT_ENABLED";
-  }
-  return null;
+  if (facts.executionMode !== "live") return null;
+  if (!facts.liveGates) return "PRE_POST_RECHECK_FAILED";
+  const verdict = evaluateExecutionV2LiveGates(facts.liveGates);
+  return verdict.ok ? null : verdict.reason;
 }
 
 /**
@@ -67,7 +72,10 @@ export async function prePostNetworkRefusalV2(
       else throw error;
     }
     const orders = await tx
-      .select({ executionMode: pgSchema.traderOrders.executionMode })
+      .select({
+        executionMode: pgSchema.traderOrders.executionMode,
+        credentialId: pgSchema.traderOrders.credentialId,
+      })
       .from(pgSchema.traderOrders)
       .where(
         and(
@@ -78,21 +86,26 @@ export async function prePostNetworkRefusalV2(
       .limit(1);
     const mode = orders[0]?.executionMode;
     const executionMode = mode === "mock" || mode === "paper" || mode === "live" ? mode : "unknown";
-    const liveRows =
+    const planForGates =
       executionMode === "live"
-        ? await tx
-            .select({ state: pgSchema.traderOrgLiveEnable.state })
-            .from(pgSchema.traderOrgLiveEnable)
-            .where(eq(pgSchema.traderOrgLiveEnable.organizationId, context.organizationId))
-            .limit(1)
-            .for("update")
-        : [];
+        ? await readExecutionPlanV2Postgres(tx, context, attempt.executionPlanId)
+        : null;
+    const liveGates =
+      executionMode === "live" && planForGates
+        ? await loadExecutionV2LiveGateFactsPostgres(tx, context, {
+            executionMode: "live",
+            credentialId: orders[0]?.credentialId ?? null,
+            strategyId: attempt.exactRequestPayload.strategyId ?? null,
+            strategyVersion: attempt.exactRequestPayload.strategyVersion ?? null,
+            plan: { approvedNotionalCeiling: planForGates.approvedNotionalCeiling },
+          })
+        : null;
     return evaluatePrePostRecheck({
       killState: state.killState,
       enforcingSwitch: await enforcingKillSwitchCoversAccountV2(tx, context.organizationId),
       envelopeReason,
       executionMode,
-      liveEnableState: liveRows[0]?.state ?? null,
+      liveGates,
     });
   });
 }

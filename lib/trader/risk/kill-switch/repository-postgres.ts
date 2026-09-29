@@ -5,8 +5,8 @@ enforceServerOnly();
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
-import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
-import { projectKillSwitchOntoRiskAccountsV2 } from "@/lib/trader/risk/kill-switch/project-onto-risk-accounts-v2";
+import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import { applyKillSwitchProjectionV2 } from "@/lib/trader/risk/kill-switch/project-onto-risk-accounts-v2";
 import type {
   InsertKillSwitchRowInput,
   KillSwitchListFilter,
@@ -24,6 +24,20 @@ import {
 
 type PgReadExecutor = Pick<WaiaPostgresDb, "select">;
 type PgWriteExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
+type PgProjectionExecutor = PgWriteExecutor & Pick<WaiaPostgresDb, "execute">;
+
+function hasTransaction(ex: PgWriteExecutor): ex is WaiaPostgresDb {
+  return "transaction" in ex && typeof (ex as WaiaPostgresDb).transaction === "function";
+}
+
+/** Switch write and account projection commit or roll back together. */
+function inKillSwitchTransaction<T>(
+  ex: PgWriteExecutor,
+  write: (tx: PgProjectionExecutor) => Promise<T>,
+): Promise<T> {
+  if (hasTransaction(ex)) return runWaiaPostgresTransaction(ex, write);
+  return write(ex as PgProjectionExecutor);
+}
 
 function mapRow(row: typeof pgSchema.traderKillSwitches.$inferSelect): KillSwitchRow {
   return {
@@ -138,6 +152,15 @@ export async function insertKillSwitchRowPostgres(
   key: KillSwitchScopeKey,
   input: InsertKillSwitchRowInput,
 ): Promise<KillSwitchRow> {
+  return inKillSwitchTransaction(ex, (tx) => insertKillSwitchInTransaction(tx, target, key, input));
+}
+
+async function insertKillSwitchInTransaction(
+  ex: PgProjectionExecutor,
+  target: KillSwitchTarget,
+  key: KillSwitchScopeKey,
+  input: InsertKillSwitchRowInput,
+): Promise<KillSwitchRow> {
   const id = crypto.randomUUID();
   const now = new Date();
   const organizationId =
@@ -169,13 +192,25 @@ export async function insertKillSwitchRowPostgres(
     throw new Error("[trader] kill switch insert failed");
   }
   if (row.state === "ACTIVE" || row.state === "CLEARING" || row.state === "INACTIVE") {
-    await projectKillSwitchOntoRiskAccountsV2(ex as WaiaPostgresDb, target, row.state);
+    await applyKillSwitchProjectionV2(ex, target, row.state);
   }
   return row;
 }
 
 export async function updateKillSwitchRowWithVersionPostgres(
   ex: PgWriteExecutor,
+  target: KillSwitchTarget,
+  rowId: string,
+  expectedStateVersion: number,
+  patch: KillSwitchTransitionPatch,
+): Promise<KillSwitchRow | null> {
+  return inKillSwitchTransaction(ex, (tx) =>
+    updateKillSwitchInTransaction(tx, target, rowId, expectedStateVersion, patch),
+  );
+}
+
+async function updateKillSwitchInTransaction(
+  ex: PgProjectionExecutor,
   target: KillSwitchTarget,
   rowId: string,
   expectedStateVersion: number,
@@ -220,8 +255,11 @@ export async function updateKillSwitchRowWithVersionPostgres(
     .returning();
 
   const updated = updatedRows[0] ? mapRow(updatedRows[0]) : null;
-  if (updated && (updated.state === "ACTIVE" || updated.state === "CLEARING" || updated.state === "INACTIVE")) {
-    await projectKillSwitchOntoRiskAccountsV2(ex as WaiaPostgresDb, target, updated.state);
+  if (
+    updated &&
+    (updated.state === "ACTIVE" || updated.state === "CLEARING" || updated.state === "INACTIVE")
+  ) {
+    await applyKillSwitchProjectionV2(ex, target, updated.state);
   }
   return updated;
 }

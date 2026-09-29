@@ -33,7 +33,10 @@ import {
   classifyHtxPlacementHttp,
   HtxPlacementRejectedError,
 } from "@/lib/trader/connectors/htx/classify-htx-placement";
-import { buildSignedPostQueryString } from "@/lib/trader/connectors/htx/signing";
+import {
+  buildSignedPostQueryString,
+  buildSignedQueryString,
+} from "@/lib/trader/connectors/htx/signing";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import {
   HTX_TRADE_PERMISSION_WARNING,
@@ -305,6 +308,98 @@ export class HtxExchangeConnector implements ExchangeConnector {
     return order;
   }
 
+  /**
+   * One signed GET by client-order-id. This is not a second POST.
+   * Failure, absence, or an identity mismatch is fail-unknown.
+   */
+  private async confirmPlacementByClientOrderId(input: {
+    clientOrderId: string;
+    acknowledgedOrderId: string;
+    timeoutMs: number;
+    observed: Readonly<Record<string, unknown>>;
+    sensitiveValues: readonly string[];
+  }): Promise<Order> {
+    const path = HTX_ENDPOINTS.clientOrder;
+    const query = buildSignedQueryString({
+      accessKeyId: this.placementApiKey,
+      secret: this.placementApiSecret,
+      host: this.placementHost,
+      path,
+      params: { clientOrderId: input.clientOrderId },
+    });
+    const url = `${this.placementRestHost}${path}?${query}`;
+    const abortController = new AbortController();
+    let timedOut = false;
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    let response: Response | undefined;
+    let responseBody: unknown;
+    try {
+      const fetchAndRead = (async () => {
+        response = await this.placementFetch(url, {
+          method: "GET",
+          signal: abortController.signal,
+        });
+        responseBody = await readRawHtxResponse(response);
+      })();
+      const timeout = new Promise<never>((_resolve, reject) => {
+        timeoutHandle = setTimeout(() => {
+          timedOut = true;
+          abortController.abort();
+          reject(new Error("HTX_PLACEMENT_CONFIRMATION_TIMEOUT"));
+        }, input.timeoutMs);
+      });
+      await Promise.race([fetchAndRead, timeout]);
+    } catch {
+      throw new HtxPlacementFailUnknownError("client-order confirmation requires reconciliation", {
+        ...input.observed,
+        confirmation: timedOut ? "TIMEOUT" : "TRANSPORT_FAILED",
+      });
+    } finally {
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    }
+    if (response === undefined || !response.ok) {
+      throw new HtxPlacementFailUnknownError("client-order confirmation requires reconciliation", {
+        ...input.observed,
+        confirmation: "HTTP_NOT_OK",
+        confirmationHttpStatus: response?.status ?? null,
+      });
+    }
+    const safeBody = redactSensitiveHtxObservation(responseBody, input.sensitiveValues);
+    const body =
+      typeof safeBody === "object" && safeBody !== null && !Array.isArray(safeBody)
+        ? (safeBody as Record<string, unknown>)
+        : null;
+    const data =
+      body && typeof body.data === "object" && body.data !== null && !Array.isArray(body.data)
+        ? (body.data as Record<string, unknown>)
+        : null;
+    if (!body || body.status !== "ok" || !data) {
+      throw new HtxPlacementFailUnknownError("client-order confirmation requires reconciliation", {
+        ...input.observed,
+        confirmation: "ABSENT_OR_UNREADABLE",
+      });
+    }
+    let order: Order;
+    try {
+      order = mapHtxOrder(data as Parameters<typeof mapHtxOrder>[0]);
+    } catch {
+      throw new HtxPlacementFailUnknownError("client-order confirmation requires reconciliation", {
+        ...input.observed,
+        confirmation: "UNMAPPABLE",
+      });
+    }
+    if (
+      order.clientOrderId !== input.clientOrderId ||
+      order.orderId !== input.acknowledgedOrderId
+    ) {
+      throw new HtxPlacementFailUnknownError("client-order confirmation requires reconciliation", {
+        ...input.observed,
+        confirmation: "IDENTITY_MISMATCH",
+      });
+    }
+    return order;
+  }
+
   async placeOrder(input: PlaceOrderInput): Promise<Order> {
     this.assertTradePermission();
     assertHtxSpotSymbolAllowed(input.symbol);
@@ -419,27 +514,20 @@ export class HtxExchangeConnector implements ExchangeConnector {
       responseBodyDigestHex,
     };
     if (classified.kind === "accepted") {
-      const observedAt = new Date().toISOString();
-      const rawVenueObservation =
-        typeof safeResponseBody === "object" &&
-        safeResponseBody !== null &&
-        !Array.isArray(safeResponseBody)
-          ? (safeResponseBody as Record<string, unknown>)
-          : observed;
-      return {
-        orderId: classified.orderId,
+      // The ack id is not the order. Confirm by reading that client-order-id.
+      // A missing or mismatched read stays fail-unknown and is not accepted.
+      return this.confirmPlacementByClientOrderId({
         clientOrderId: input.clientOrderId,
-        symbol: input.symbol,
-        side: input.side,
-        type: input.type,
-        status: "open",
-        ...(input.price === undefined ? {} : { price: input.price }),
-        quantity: input.quantity,
-        filledQuantity: "0",
-        createdAt: observedAt,
-        updatedAt: observedAt,
-        rawVenueObservation,
-      };
+        acknowledgedOrderId: classified.orderId,
+        timeoutMs,
+        observed,
+        sensitiveValues: [
+          this.placementApiKey,
+          this.placementApiSecret,
+          signedParams.get("Signature") ?? "",
+          encodeURIComponent(signedParams.get("Signature") ?? ""),
+        ],
+      });
     }
     if (classified.kind === "rejected") {
       throw new HtxPlacementRejectedError("venue rejected the placement", {

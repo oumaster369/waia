@@ -1,5 +1,8 @@
 import type { CostModelV1 } from "@/lib/trader/execution/cost-model";
-import type { ExecutionV2OrderService } from "@/lib/trader/execution/v2/org-order-path";
+import type {
+  ExecutionV2ActionableAdmission,
+  ExecutionV2CycleSubmitPort,
+} from "@/lib/trader/execution/v2/org-order-path";
 import type { WaiaTraderTelemetrySink } from "@/lib/observability/waia-trader-telemetry";
 import type {
   OrderExecutionService,
@@ -182,8 +185,10 @@ export type PaperCycleDeps = {
   decisionCapitalAuthorityV2?: CanonicalDecisionCapitalAuthorityV2Deps;
   /** DEE-1024: optional epistemic envelope; omission fails closed without inventing receipts. */
   canonicalOrdinaryCapitalEnvelopeV2?: PaperCanonicalOrdinaryCapitalEnvelopeV2;
-  /** DEE-1151: Execution V2 order service. Legacy `execution` stays fail-closed. */
-  executionV2?: ExecutionV2OrderService;
+  /** DEE-1151: Execution V2 admit-and-submit port. Legacy `execution` stays fail-closed. */
+  executionV2?: ExecutionV2CycleSubmitPort;
+  /** Admission payload used only when the strategy decision is actionable. */
+  executionV2AdmissionForActionableDecision?: ExecutionV2ActionableAdmission;
 };
 
 import type { FusedMarketContext } from "@/lib/trader/market-data/observation-types";

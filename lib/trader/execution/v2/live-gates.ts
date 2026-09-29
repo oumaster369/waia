@@ -199,12 +199,12 @@ export function assembleExecutionV2LiveGateFacts(
  * Authoritative live-gate read. Selects no encrypted credential payload.
  * `lock_timeout` is set inside the caller's transaction before the row locks.
  */
-export async function assertExecutionV2LiveGatesPostgres(
+export async function loadExecutionV2LiveGateFactsPostgres(
   executor: LiveGateExecutor,
   context: OrgContext,
   request: ExecutionV2LiveGateRequest,
   env?: Record<string, unknown>,
-): Promise<void> {
+): Promise<ExecutionV2LiveGateFacts> {
   const scoped = requireOrgContext(context.organizationId);
   await executor.execute(sql`select set_config('lock_timeout', '5s', true)`);
 
@@ -259,28 +259,38 @@ export async function assertExecutionV2LiveGatesPostgres(
     : [];
 
   const credentialRow = credentialRows[0] ?? null;
+  return assembleExecutionV2LiveGateFacts({
+    executionMode: request.executionMode,
+    organizationId: scoped.organizationId,
+    org0OrganizationId: resolveOrg0OrganizationId(env),
+    requestedNotional: request.plan.approvedNotionalCeiling,
+    strategyId: request.strategyId ?? null,
+    strategyVersion: request.strategyVersion ?? null,
+    credentialId: request.credentialId,
+    liveEnable: liveRows[0]
+      ? { state: liveRows[0].state, maxNotionalCap: liveRows[0].maxNotionalCap }
+      : null,
+    effectivePromotions: promotionRows,
+    credential: credentialRow
+      ? {
+          status: credentialRow.status,
+          venue: credentialRow.venue,
+          exchangeAccountId: credentialRow.exchangeAccountId,
+          permissionMetadata: parseStoredPermissionMetadata(credentialRow.permissionMetadata),
+        }
+      : null,
+  });
+}
+
+/** Authoritative live-gate read. A missing gate throws. Does not decrypt. */
+export async function assertExecutionV2LiveGatesPostgres(
+  executor: LiveGateExecutor,
+  context: OrgContext,
+  request: ExecutionV2LiveGateRequest,
+  env?: Record<string, unknown>,
+): Promise<void> {
   const verdict = evaluateExecutionV2LiveGates(
-    assembleExecutionV2LiveGateFacts({
-      executionMode: request.executionMode,
-      organizationId: scoped.organizationId,
-      org0OrganizationId: resolveOrg0OrganizationId(env),
-      requestedNotional: request.plan.approvedNotionalCeiling,
-      strategyId: request.strategyId ?? null,
-      strategyVersion: request.strategyVersion ?? null,
-      credentialId: request.credentialId,
-      liveEnable: liveRows[0]
-        ? { state: liveRows[0].state, maxNotionalCap: liveRows[0].maxNotionalCap }
-        : null,
-      effectivePromotions: promotionRows,
-      credential: credentialRow
-        ? {
-            status: credentialRow.status,
-            venue: credentialRow.venue,
-            exchangeAccountId: credentialRow.exchangeAccountId,
-            permissionMetadata: parseStoredPermissionMetadata(credentialRow.permissionMetadata),
-          }
-        : null,
-    }),
+    await loadExecutionV2LiveGateFactsPostgres(executor, context, request, env),
   );
   if (!verdict.ok) throw new ExecutionV2LiveGateRefusedError(verdict.reason);
 }

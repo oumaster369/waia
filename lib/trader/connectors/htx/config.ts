@@ -13,6 +13,7 @@ export const HTX_ENDPOINTS = {
   accountBalance: (accountId: string) => `/v1/account/accounts/${accountId}/balance`,
   openOrders: "/v1/order/openOrders",
   order: (orderId: string) => `/v1/order/orders/${orderId}`,
+  clientOrder: "/v1/order/orders/getClientOrder",
   placeOrder: "/v1/order/orders/place",
   cancelOrder: (orderId: string) => `/v1/order/orders/${orderId}/submitcancel`,
   matchResults: "/v1/order/matchresults",

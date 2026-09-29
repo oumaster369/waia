@@ -169,6 +169,9 @@ export type ExecutionAttemptRequestPayloadV2 = Readonly<{
   price: string | null;
   quantity: string;
   timeInForce: ExecutionTimeInForceV2;
+  /** Live pre-POST recheck identity. Omitted on paper so existing digests stay put. */
+  strategyId?: string;
+  strategyVersion?: string;
 }>;
 
 export type ExecutionAttemptV2 = Readonly<{
@@ -198,6 +201,8 @@ export type CreateExecutionAttemptV2Input = Readonly<{
   plan: ExecutionPlanV2;
   riskAllowanceContentDigestHex: string;
   boundAtUtc: string;
+  strategyId?: string | null;
+  strategyVersion?: string | null;
 }>;
 
 export type ExecutionReportV2 = Readonly<{
@@ -732,6 +737,8 @@ export function createExecutionAttemptV2(input: CreateExecutionAttemptV2Input): 
     throw new Error("attempt mechanics must exactly match the sole pre-sealed child slice");
   }
   const clientOrderId = deterministicExecutionClientOrderId(input.plan.contentDigestHex);
+  const strategyId = input.strategyId?.trim() ?? "";
+  const strategyVersion = input.strategyVersion?.trim() ?? "";
   const exactRequestPayload = Object.freeze({
     clientOrderId,
     symbol: input.plan.symbol,
@@ -740,6 +747,7 @@ export function createExecutionAttemptV2(input: CreateExecutionAttemptV2Input): 
     price: slice.limitPrice,
     quantity: slice.quantity,
     timeInForce: input.plan.timeInForce,
+    ...(strategyId.length > 0 && strategyVersion.length > 0 ? { strategyId, strategyVersion } : {}),
   });
   const boundAtUtc = canonicalTimestamp(input.boundAtUtc, "boundAtUtc");
   const effectIdentityDigestHex = computeStableJsonDigest({

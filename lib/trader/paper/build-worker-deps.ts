@@ -140,7 +140,7 @@ export async function buildPaperLoopDepsFromEnv(
       reconciliation,
       decisionCapitalAuthorityV2: orderPath.decisionCapitalAuthorityV2,
       canonicalOrdinaryCapitalEnvelopeV2: buildPreQualificationPaperEnvelope(),
-      executionV2: orderPath.service,
+      executionV2: orderPath,
     },
     orderRepository,
     poll,

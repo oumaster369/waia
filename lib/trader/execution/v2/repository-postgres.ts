@@ -713,6 +713,8 @@ export async function insertExecutionAttemptV2Postgres(
     plan,
     riskAllowanceContentDigestHex: attempt.riskAllowanceContentDigestHex,
     boundAtUtc: attempt.boundAtUtc,
+    strategyId: attempt.exactRequestPayload.strategyId,
+    strategyVersion: attempt.exactRequestPayload.strategyVersion,
   });
   const allowanceRows = await ex
     .select()

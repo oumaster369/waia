@@ -148,7 +148,7 @@ export async function buildLiveCliPostgresDeps(
       hwmLedger,
       orderRepository,
       decisionCapitalAuthorityV2: orderPath.decisionCapitalAuthorityV2,
-      executionV2: orderPath.service,
+      executionV2: orderPath,
     },
     orgLiveEnableService,
     dispose: () => disposeWaiaRuntimeDb(runtime).then(() => undefined),

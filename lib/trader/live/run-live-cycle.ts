@@ -6,7 +6,11 @@ if (process.env.VITEST !== "true") {
 }
 
 import type { OrderExecutionService } from "@/lib/trader/execution/execution-service.types";
-import type { ExecutionV2OrderService } from "@/lib/trader/execution/v2/org-order-path";
+import {
+  submitExecutionV2ForStrategyDecision,
+  type ExecutionV2ActionableAdmission,
+  type ExecutionV2CycleSubmitPort,
+} from "@/lib/trader/execution/v2/org-order-path";
 import type { ReconciliationService } from "@/lib/trader/execution/reconciliation.types";
 import { runEvaluationCycle } from "@/lib/trader/intelligence/evaluation-cycle";
 import type { MarketSnapshot } from "@/lib/trader/market-data/types";
@@ -62,8 +66,10 @@ export type LiveCycleDeps = {
   /** DEE-634: sole live-equivalent actionability/economics authority. */
   decisionCapitalAuthorityV2?: CanonicalDecisionCapitalAuthorityV2Deps;
   canonicalOrdinaryCapitalEnvelopeV2?: LiveCanonicalOrdinaryCapitalEnvelopeV2;
-  /** DEE-1151: Execution V2 order service. Legacy `execution` stays fail-closed. */
-  executionV2?: ExecutionV2OrderService;
+  /** DEE-1151: Execution V2 admit-and-submit port. Legacy `execution` stays fail-closed. */
+  executionV2?: ExecutionV2CycleSubmitPort;
+  /** Admission payload used only when the strategy decision is actionable. */
+  executionV2AdmissionForActionableDecision?: ExecutionV2ActionableAdmission;
 };
 
 export type RunLiveCycleInput = {
@@ -218,6 +224,39 @@ export async function runLiveCycleOnce(
 
   const symbol = input.snapshot.bars[0]?.symbol ?? input.snapshot.quote.symbol;
   const pitAnchor = input.snapshot.evaluatedAt;
+  const forecastOutcome = evaluation.forecastRuntimeOutcome;
+  if (deps.executionV2 && forecastOutcome?.status === "FORECAST_AUTHORIZED") {
+    const decision = await deps.decisionCapitalAuthorityV2.decide({
+      organizationId: input.context.organizationId,
+      accountId: input.accountKey,
+      cycleId: input.snapshot.cycleId,
+      symbol,
+      referencePrice: evaluation.features.features.close,
+      forecastOutcome,
+      proposal: {
+        action: "ENTER_LONG",
+        quantity: input.defaultQuantity ?? "0.001",
+      },
+    });
+    const submission = await submitExecutionV2ForStrategyDecision(
+      decision,
+      deps.executionV2,
+      input.context,
+      decision.status === "NO_TRADE"
+        ? null
+        : (deps.executionV2AdmissionForActionableDecision?.(decision.decision) ?? null),
+    );
+    if (submission) {
+      return {
+        evaluation,
+        strategyStage,
+        execution: null,
+        reconciliation: null,
+        reporting: null,
+        submitBlocked: false,
+      };
+    }
+  }
   const envelope =
     input.canonicalOrdinaryCapitalEnvelopeV2 ?? deps.canonicalOrdinaryCapitalEnvelopeV2;
   const resolved = resolveLiveCanonicalEpistemicSpineV2({

@@ -451,16 +451,17 @@ export type ExecutionV2ReconciliationLookup =
   | Readonly<{ status: "UNKNOWN" }>;
 
 /**
- * Reduces RECONCILIATION_REQUIRED using a caller-supplied lookup. UNKNOWN stays.
- * ABSENT is a deterministic reject and releases the pending reserve. FOUND uses
- * the same mechanics match as a live acknowledgement. This function does not
- * contact an exchange.
+ * Reduces RECONCILIATION_REQUIRED. UNKNOWN stays and keeps the reserve.
+ * A caller-supplied ABSENT does not release the reserve. Release happens only
+ * after `readVenueOrder` — this function's own exchange read — also returns
+ * ABSENT. FOUND uses the same mechanics match as a confirmed acknowledgement.
  */
 export async function resolveReconciliationRequiredV2Postgres(
   db: WaiaPostgresDb,
   context: OrgContext,
   executionAttemptId: string,
   lookup: () => Promise<ExecutionV2ReconciliationLookup>,
+  readVenueOrder?: (attempt: ExecutionAttemptV2) => Promise<ExecutionV2ReconciliationLookup>,
 ): Promise<DispatchAndRecordExecutionV2Result> {
   const projection = await readExecutionAttemptProjectionV2Postgres(
     db,
@@ -475,13 +476,28 @@ export async function resolveReconciliationRequiredV2Postgres(
   if (lookedUp.status === "UNKNOWN") {
     return { status: "RECONCILIATION_REQUIRED", attempt: projection.attempt };
   }
-  if (lookedUp.status === "ABSENT") {
-    const recorded = await appendReports(db, context, executionAttemptId, [
-      deterministicVenueRejectReport(projection.attempt, { lookup: "ABSENT" }),
-    ]);
-    return { status: "VENUE_REJECTED", attempt: recorded };
+  if (lookedUp.status === "FOUND") {
+    return recordObservedVenueResult(db, context, projection.attempt, lookedUp.observation);
   }
-  return recordObservedVenueResult(db, context, projection.attempt, lookedUp.observation);
+  if (!readVenueOrder) {
+    return { status: "RECONCILIATION_REQUIRED", attempt: projection.attempt };
+  }
+  let ownRead: ExecutionV2ReconciliationLookup;
+  try {
+    ownRead = await readVenueOrder(projection.attempt);
+  } catch {
+    return { status: "RECONCILIATION_REQUIRED", attempt: projection.attempt };
+  }
+  if (ownRead.status === "FOUND") {
+    return recordObservedVenueResult(db, context, projection.attempt, ownRead.observation);
+  }
+  if (ownRead.status !== "ABSENT") {
+    return { status: "RECONCILIATION_REQUIRED", attempt: projection.attempt };
+  }
+  const recorded = await appendReports(db, context, executionAttemptId, [
+    deterministicVenueRejectReport(projection.attempt, { lookup: "ABSENT", venueRead: "ABSENT" }),
+  ]);
+  return { status: "VENUE_REJECTED", attempt: recorded };
 }
 
 export async function requestProtectiveCancelV2Postgres(

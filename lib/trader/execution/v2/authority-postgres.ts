@@ -323,6 +323,8 @@ export async function bindExecutionAuthorityV2Postgres(
         plan: storedPlan,
         riskAllowanceContentDigestHex: input.allowance.contentDigestHex,
         boundAtUtc: boundAt.toISOString(),
+        strategyId: input.strategyId,
+        strategyVersion: input.strategyVersion,
       });
       await tx
         .update(pgSchema.traderOrders)
@@ -487,6 +489,8 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
       plan,
       riskAllowanceContentDigestHex: projection.attempt.riskAllowanceContentDigestHex,
       boundAtUtc: projection.attempt.boundAtUtc,
+      strategyId: projection.attempt.exactRequestPayload.strategyId,
+      strategyVersion: projection.attempt.exactRequestPayload.strategyVersion,
     });
     const priceMatches =
       (order.price === null && projection.attempt.exactRequestPayload.price === null) ||

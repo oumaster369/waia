@@ -2254,7 +2254,7 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     expect(await pendingNotional(input.allowance.accountId)).toMatch(/^0(\.0+)?$/);
   });
 
-  it("DEE-1151 reduces reconciliation to a reject when the lookup is absent", async () => {
+  it("DEE-1151 reduces reconciliation to a reject only after its own venue read is absent", async () => {
     const input = await admittedBindInput();
     const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
     const unknown = await dispatchAndRecordExecutionAttemptV2(
@@ -2275,19 +2275,37 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     );
     expect(stayed.status).toBe("RECONCILIATION_REQUIRED");
     expect(await pendingNotional(input.allowance.accountId)).not.toMatch(/^0(\.0+)?$/);
-    const absent = await resolveReconciliationRequiredV2Postgres(
+    const callerAbsent = await resolveReconciliationRequiredV2Postgres(
       db,
       { organizationId: orgA },
       bound.attempt.executionAttemptId,
       async () => ({ status: "ABSENT" }),
     );
+    expect(callerAbsent.status).toBe("RECONCILIATION_REQUIRED");
+    expect(await pendingNotional(input.allowance.accountId)).not.toMatch(/^0(\.0+)?$/);
+    let ownReads = 0;
+    const absent = await resolveReconciliationRequiredV2Postgres(
+      db,
+      { organizationId: orgA },
+      bound.attempt.executionAttemptId,
+      async () => ({ status: "ABSENT" }),
+      async () => {
+        ownReads += 1;
+        return { status: "ABSENT" };
+      },
+    );
     expect(absent.status).toBe("VENUE_REJECTED");
+    expect(ownReads).toBe(1);
     expect(await pendingNotional(input.allowance.accountId)).toMatch(/^0(\.0+)?$/);
     let lookups = 0;
     const terminal = await resolveReconciliationRequiredV2Postgres(
       db,
       { organizationId: orgA },
       bound.attempt.executionAttemptId,
+      async () => {
+        lookups += 1;
+        return { status: "ABSENT" };
+      },
       async () => {
         lookups += 1;
         return { status: "ABSENT" };
