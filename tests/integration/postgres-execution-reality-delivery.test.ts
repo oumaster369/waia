@@ -11,15 +11,9 @@ import * as executionRepository from "@/lib/trader/execution/v2/repository-postg
 import { catchUpExecutionRealityV2Postgres } from "@/lib/trader/reality/v2/execution-report-delivery-postgres";
 import { routeRealityIngressV2 } from "@/lib/trader/reality/v2/ingress";
 import { ingestRealitySourceReportV2Postgres } from "@/lib/trader/reality/v2/ingest-postgres";
-import {
-  appendRealitySourceObservationV2FromWriter,
-  appendObservedRealityTruthV2FromWriter,
-  listRealitySourceReportsV2,
-  listTruthRecordsV2,
-  listRealityEventsV2,
-  lockRealityScopeV2,
-  readLatestRealityProjectionV2,
-} from "@/lib/trader/reality/v2/repository-postgres";
+import { appendRealitySourceObservationV2FromWriter, appendObservedRealityTruthV2FromWriter,
+  listRealitySourceReportsV2, listTruthRecordsV2, listRealityEventsV2, lockRealityScopeV2,
+  readLatestRealityProjectionV2 } from "@/lib/trader/reality/v2/repository-postgres";
 import { persistDeliveryAttempt } from "../helpers/execution-reality-delivery-fixture";
 import { adaptExecutionReportV2ToReality as baseline828Adapter } from "../fixtures/reality/execution-reality-adapter-82819a95";
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
@@ -28,102 +22,39 @@ const enabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 const USER = "00000000-0000-4000-8000-000000112201";
 const OTHER = "00000000-0000-4000-8000-000000112202";
-const realityTables = [
-  "trader_reality_source_reports_v2",
-  "trader_reality_truth_records_v2",
-  "trader_reality_events_v2",
-  "trader_reality_projections_v2",
-] as const;
-const executionTables = [
-  "trader_execution_reports_v2",
-  "trader_execution_attempts_v2",
-  "trader_execution_plans_v2",
-  "trader_execution_policies_v2",
-] as const;
-const riskTables = [
-  "trader_risk_enforcement_events_v2",
-  "trader_risk_allowances_v2",
-  "trader_risk_verdicts_v2",
-] as const;
+const realityTables = ["trader_reality_source_reports_v2", "trader_reality_truth_records_v2", "trader_reality_events_v2", "trader_reality_projections_v2"] as const;
+const executionTables = ["trader_execution_reports_v2", "trader_execution_attempts_v2", "trader_execution_plans_v2", "trader_execution_policies_v2"] as const;
+const riskTables = ["trader_risk_enforcement_events_v2", "trader_risk_allowances_v2", "trader_risk_verdicts_v2"] as const;
 const appendOnlyTables = [...realityTables, ...executionTables, ...riskTables] as const;
-const cleanupOrder: readonly string[] = [
-  ...[...realityTables].reverse(),
-  "trader_reality_knowledge_frontiers_v2",
-  ...executionTables,
-  "trader_risk_enforcement_events_v2",
-  "trader_risk_allowances_v2",
-  "trader_orders",
-  "trader_risk_verdicts_v2",
-  "trader_risk_account_state_v2",
+const cleanupOrder: readonly string[] = [...[...realityTables].reverse(),
+  "trader_reality_knowledge_frontiers_v2", ...executionTables, "trader_risk_enforcement_events_v2", "trader_risk_allowances_v2",
+  "trader_orders", "trader_risk_verdicts_v2", "trader_risk_account_state_v2",
 ];
 async function clean(client: postgres.Sql, organizationId: string) {
   const { deleteLiveCapitalEnvelopeRows } = await import("../helpers/live-capital-test-envelope");
   await deleteLiveCapitalEnvelopeRows(client, organizationId);
   // Isolated native fixture teardown only; never called by delivery code.
-  for (const table of appendOnlyTables)
-    await client.unsafe(`ALTER TABLE ${table} DISABLE TRIGGER ${table}_block_delete`);
-  try {
-    await client.begin(async (tx) => {
-      for (const table of cleanupOrder)
-        await tx.unsafe(`DELETE FROM ${table} WHERE organization_id=$1::uuid`, [organizationId]);
-    });
-  } finally {
-    for (const table of [...appendOnlyTables].reverse())
-      await client.unsafe(`ALTER TABLE ${table} ENABLE TRIGGER ${table}_block_delete`);
-  }
+  for (const table of appendOnlyTables) await client.unsafe(`ALTER TABLE ${table} DISABLE TRIGGER ${table}_block_delete`);
+  try { await client.begin(async (tx) => { for (const table of cleanupOrder) await tx.unsafe(`DELETE FROM ${table} WHERE organization_id=$1::uuid`, [organizationId]); }); }
+  finally { for (const table of [...appendOnlyTables].reverse()) await client.unsafe(`ALTER TABLE ${table} ENABLE TRIGGER ${table}_block_delete`); }
 }
 function child(args: string[]) {
   return new Promise<{ status: number | null; out: string; err: string }>((resolve, reject) => {
-    const proc = spawn(
-      process.execPath,
-      [
-        "--import",
-        "tsx",
-        "--require",
-        "./scripts/trader/trader-cli-server-only-prelude.cjs",
-        "--conditions=react-server",
-        "scripts/trader/reality-execution-report-catch-up.ts",
-        ...args,
-      ],
-      {
-        cwd: process.cwd(),
-        env: {
-          ...process.env,
-          WAIA_TRADER_CLI: "1",
-          WAIA_DB_BACKEND: "postgres",
-          WAIA_POSTGRES_PER_REQUEST_CLIENT: "false",
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
-    let out = "",
-      err = "";
-    const timer = setTimeout(() => {
-      proc.kill();
-      reject(new Error("bounded child deadline"));
-    }, 15_000);
-    proc.stdout.on("data", (data) => {
-      out += data;
-    });
-    proc.stderr.on("data", (data) => {
-      err += data;
-    });
-    proc.on("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    proc.on("close", (status) => {
-      clearTimeout(timer);
-      resolve({ status, out, err });
-    });
+    const proc = spawn(process.execPath, ["--import", "tsx", "--require", "./scripts/trader/trader-cli-server-only-prelude.cjs", "--conditions=react-server",
+      "scripts/trader/reality-execution-report-catch-up.ts", ...args], { cwd: process.cwd(), env: {
+      ...process.env, WAIA_TRADER_CLI: "1", WAIA_DB_BACKEND: "postgres", WAIA_POSTGRES_PER_REQUEST_CLIENT: "false",
+    }, stdio: ["ignore", "pipe", "pipe"] });
+    let out = "", err = ""; const timer = setTimeout(() => { proc.kill(); reject(new Error("bounded child deadline")); }, 15_000);
+    proc.stdout.on("data", (data) => { out += data; }); proc.stderr.on("data", (data) => { err += data; });
+    proc.on("error", (error) => { clearTimeout(timer); reject(error); });
+    proc.on("close", (status) => { clearTimeout(timer); resolve({ status, out, err }); });
   });
 }
 
 describe.skipIf(!enabled || !url)("DEE1122 native committed Execution report delivery", () => {
   let client: postgres.Sql, db: WaiaPostgresDb, org: string, other: string;
   beforeAll(async () => {
-    client = postgres(url!, { max: 8 });
-    db = drizzle(client, { schema: pgSchema }) as WaiaPostgresDb;
+    client = postgres(url!, { max: 8 }); db = drizzle(client, { schema: pgSchema }) as WaiaPostgresDb;
     // Retain USER's immutable historical LEGACY latch and its identity parents.
     // Existing mutable fixture cleanup and idempotent seeding allow repeat runs.
     for (const user of [USER, OTHER]) await clean(client, personalOrganizationIdFromUserId(user));
@@ -131,875 +62,367 @@ describe.skipIf(!enabled || !url)("DEE1122 native committed Execution report del
     org = await seedWp13User(url!, USER, "DEE1122 local synthetic report delivery");
     other = await seedWp13User(url!, OTHER, "DEE1122 isolated other scope");
   }, 120_000);
-  beforeEach(async () => {
-    await clean(client, org);
-    await clean(client, other);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => {
-        throw new Error("provider forbidden");
-      }),
-    );
-  });
-  afterEach(() => {
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
-  });
+  beforeEach(async () => { await clean(client, org); await clean(client, other); vi.stubGlobal("fetch", vi.fn(() => { throw new Error("provider forbidden"); })); });
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
   afterAll(async () => {
-    if (client) {
-      for (const id of [org, other].filter(Boolean)) await clean(client, id);
-      await client.end({ timeout: 5 });
-    }
+    if (client) { for (const id of [org, other].filter(Boolean)) await clean(client, id); await client.end({ timeout: 5 }); }
     await cleanupWp13Org(url!, OTHER);
   }, 120_000);
   const scope = (accountId = "delivery-fixture") => ({ organizationId: org, accountId });
   async function fixture(accountId = "delivery-fixture", initialize = true) {
     const value = await persistDeliveryAttempt(db, org, accountId, initialize);
-    return {
-      ...value,
-      input: { ...scope(accountId), executionAttemptId: value.attempt.executionAttemptId },
-    };
+    return { ...value, input: { ...scope(accountId), executionAttemptId: value.attempt.executionAttemptId } };
   }
-  async function append(
-    value: Awaited<ReturnType<typeof fixture>>,
-    rawObservation: Readonly<Record<string, unknown>> = { committed: true },
-  ) {
-    return executionRepository.appendExecutionReportV2Postgres(
-      db,
-      { organizationId: org },
-      {
-        accountId: value.accountId,
-        executionAttemptId: value.attempt.executionAttemptId,
-        executionReportId: randomUUID(),
-        reportType: "ATTEMPT_BOUND",
-        source: "EXECUTION",
-        rawObservation,
-        observedAtUtc: "2026-08-21T00:00:00.002Z",
-      },
-    );
+  async function append(value: Awaited<ReturnType<typeof fixture>>, rawObservation: Readonly<Record<string, unknown>> = { committed: true }) {
+    return executionRepository.appendExecutionReportV2Postgres(db, { organizationId: org }, {
+      accountId: value.accountId, executionAttemptId: value.attempt.executionAttemptId, executionReportId: randomUUID(),
+      reportType: "ATTEMPT_BOUND", source: "EXECUTION", rawObservation, observedAtUtc: "2026-08-21T00:00:00.002Z",
+    });
   }
-  async function appendTimedFills(
-    value: Awaited<ReturnType<typeof fixture>>,
-    times: readonly string[],
-  ) {
+  async function appendTimedFills(value: Awaited<ReturnType<typeof fixture>>, times: readonly string[]) {
     const bound = await append(value);
-    const started = await executionRepository.appendExecutionReportV2Postgres(
-      db,
-      { organizationId: org },
-      {
-        accountId: value.accountId,
-        executionAttemptId: value.attempt.executionAttemptId,
-        executionReportId: randomUUID(),
-        reportType: "SUBMIT_STARTED",
-        source: "EXECUTION",
-        rawObservation: {},
-        observedAtUtc: "2026-08-21T00:00:00.003Z",
-      },
-    );
-    const order = {
-      orderId: "local-time-venue-id",
-      clientOrderId: value.attempt.clientOrderId,
-      symbol: "BTCUSDT",
-      side: "buy",
-      type: "limit",
-      price: "25000",
-      quantity: "0.001",
-      filledQuantity: "0.001",
-      status: "filled",
-    };
-    const report = await executionRepository.appendExecutionReportV2Postgres(
-      db,
-      { organizationId: org },
-      {
-        accountId: value.accountId,
-        executionAttemptId: value.attempt.executionAttemptId,
-        executionReportId: randomUUID(),
-        reportType: "FILL_REPORT_OBSERVED",
-        source: "CONNECTOR",
-        venueOrderId: order.orderId,
-        rawObservation: {
-          order,
-          trades: times.map((executedAt, index) => ({
-            tradeId: `local-time-trade-${index}`,
-            orderId: order.orderId,
-            clientOrderId: order.clientOrderId,
-            symbol: "BTCUSDT",
-            side: "buy",
-            price: "25000",
-            quantity: times.length === 2 ? "0.0005" : "0.001",
-            fee: "0.025",
-            feeAsset: "USDT",
-            executedAt,
-          })),
-        },
-        observedAtUtc: "2026-08-21T00:00:01.000Z",
-      },
-    );
+    const started = await executionRepository.appendExecutionReportV2Postgres(db, { organizationId: org }, {
+      accountId: value.accountId, executionAttemptId: value.attempt.executionAttemptId, executionReportId: randomUUID(),
+      reportType: "SUBMIT_STARTED", source: "EXECUTION", rawObservation: {}, observedAtUtc: "2026-08-21T00:00:00.003Z",
+    });
+    const order = { orderId: "local-time-venue-id", clientOrderId: value.attempt.clientOrderId,
+      symbol: "BTCUSDT", side: "buy", type: "limit", price: "25000", quantity: "0.001", filledQuantity: "0.001", status: "filled" };
+    const report = await executionRepository.appendExecutionReportV2Postgres(db, { organizationId: org }, {
+      accountId: value.accountId, executionAttemptId: value.attempt.executionAttemptId, executionReportId: randomUUID(),
+      reportType: "FILL_REPORT_OBSERVED", source: "CONNECTOR", venueOrderId: order.orderId,
+      rawObservation: { order, trades: times.map((executedAt, index) => ({
+        tradeId: `local-time-trade-${index}`, orderId: order.orderId, clientOrderId: order.clientOrderId,
+        symbol: "BTCUSDT", side: "buy", price: "25000", quantity: times.length === 2 ? "0.0005" : "0.001",
+        fee: "0.025", feeAsset: "USDT", executedAt,
+      })) }, observedAtUtc: "2026-08-21T00:00:01.000Z",
+    });
     return { report, reports: [bound, started, report] };
   }
   const route = (report: Awaited<ReturnType<typeof append>>) => {
     const result = routeRealityIngressV2({ kind: "EXECUTION_REPORT_V2", report });
-    if (result.status !== "ADMITTED") throw new Error("fixture route refused");
-    return result.drafts;
+    if (result.status !== "ADMITTED") throw new Error("fixture route refused"); return result.drafts;
   };
   async function snapshot(organizationId = org) {
     const result: Record<string, unknown> = {};
-    for (const table of [
-      ...appendOnlyTables,
-      "trader_reality_knowledge_frontiers_v2",
-      "trader_orders",
-      "trader_risk_account_state_v2",
-    ]) {
-      result[table] = await client.unsafe(
-        `SELECT to_jsonb(t) AS body FROM ${table} t WHERE organization_id=$1::uuid ORDER BY to_jsonb(t)::text`,
-        [organizationId],
-      );
+    for (const table of [...appendOnlyTables, "trader_reality_knowledge_frontiers_v2", "trader_orders", "trader_risk_account_state_v2"]) {
+      result[table] = await client.unsafe(`SELECT to_jsonb(t) AS body FROM ${table} t WHERE organization_id=$1::uuid ORDER BY to_jsonb(t)::text`, [organizationId]);
     }
     return result;
   }
   function financialSnapshot(value: Awaited<ReturnType<typeof snapshot>>) {
-    return Object.fromEntries(
-      Object.entries(value).filter(([key]) => !key.startsWith("trader_reality_")),
-    );
+    return Object.fromEntries(Object.entries(value).filter(([key]) => !key.startsWith("trader_reality_")));
   }
   it("distinguishes a durable reportless attempt from delivery and leaves existing Reality unexamined", async () => {
-    const value = await fixture();
-    const before = await snapshot();
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "NO_REPORTS",
-      capturedHead: { reportSequence: "0", reportDigestHex: null },
-      realityExamined: false,
-      projection: null,
-    });
-    expect(await snapshot()).toEqual(before);
-    expect(fetch).not.toHaveBeenCalled();
+    const value = await fixture(); const before = await snapshot();
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "NO_REPORTS", capturedHead: { reportSequence: "0", reportDigestHex: null }, realityExamined: false, projection: null });
+    expect(await snapshot()).toEqual(before); expect(fetch).not.toHaveBeenCalled();
   });
   it("closes the stored-report delivery gap, preserves every Execution/risk row and repeats exact identities", async () => {
-    const value = await fixture();
-    const report = await append(value);
-    const before = await snapshot();
+    const value = await fixture(); const report = await append(value); const before = await snapshot();
     expect(await listRealitySourceReportsV2(db, scope())).toHaveLength(0);
     const result = await catchUpExecutionRealityV2Postgres(db, value.input);
-    expect(result).toMatchObject({
-      status: "DELIVERED",
-      selectedReports: 1,
-      selectedDrafts: 1,
-      newSources: 1,
-      newEvents: 1,
-      capturedHead: { reportSequence: "1", reportDigestHex: report.contentDigestHex },
-      authority: "OBSERVATION_DELIVERY_ONLY",
-    });
-    const after = await snapshot();
-    expect(financialSnapshot(after)).toEqual(financialSnapshot(before));
+    expect(result).toMatchObject({ status: "DELIVERED", selectedReports: 1, selectedDrafts: 1, newSources: 1, newEvents: 1,
+      capturedHead: { reportSequence: "1", reportDigestHex: report.contentDigestHex }, authority: "OBSERVATION_DELIVERY_ONLY" });
+    const after = await snapshot(); expect(financialSnapshot(after)).toEqual(financialSnapshot(before));
     const repeat = await catchUpExecutionRealityV2Postgres(db, value.input);
-    expect(repeat).toMatchObject({
-      status: "DELIVERED",
-      newSources: 0,
-      existingSources: 1,
-      newEvents: 0,
-      existingEvents: 1,
-    });
-    expect(await snapshot()).toEqual(after);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(repeat).toMatchObject({ status: "DELIVERED", newSources: 0, existingSources: 1, newEvents: 0, existingEvents: 1 });
+    expect(await snapshot()).toEqual(after); expect(fetch).not.toHaveBeenCalled();
   });
   it("reconstructs after connection recreation and through the actual CLI child without a connector", async () => {
-    const value = await fixture();
-    await append(value);
-    await catchUpExecutionRealityV2Postgres(db, value.input);
-    const before = await snapshot();
-    const fresh = postgres(url!, { max: 1 });
-    try {
-      expect(
-        await catchUpExecutionRealityV2Postgres(
-          drizzle(fresh, { schema: pgSchema }) as WaiaPostgresDb,
-          value.input,
-        ),
-      ).toMatchObject({ status: "DELIVERED", newSources: 0 });
-    } finally {
-      await fresh.end({ timeout: 5 });
-    }
-    const run = await child([
-      "--organization-id",
-      org,
-      "--account-id",
-      value.accountId,
-      "--execution-attempt-id",
-      value.attempt.executionAttemptId,
-    ]);
-    expect(run.status, run.err).toBe(0);
-    expect(JSON.parse(run.out)).toMatchObject({
-      result: { status: "DELIVERED", newSources: 0 },
-      cleanup: "CLOSED",
-    });
+    const value = await fixture(); await append(value); await catchUpExecutionRealityV2Postgres(db, value.input);
+    const before = await snapshot(); const fresh = postgres(url!, { max: 1 });
+    try { expect(await catchUpExecutionRealityV2Postgres(drizzle(fresh, { schema: pgSchema }) as WaiaPostgresDb, value.input)).toMatchObject({ status: "DELIVERED", newSources: 0 }); }
+    finally { await fresh.end({ timeout: 5 }); }
+    const run = await child(["--organization-id", org, "--account-id", value.accountId, "--execution-attempt-id", value.attempt.executionAttemptId]);
+    expect(run.status, run.err).toBe(0); expect(JSON.parse(run.out)).toMatchObject({ result: { status: "DELIVERED", newSources: 0 }, cleanup: "CLOSED" });
     expect(await snapshot()).toEqual(before);
   });
   it("refuses a real held Drizzle transaction before reads, including savepoint-capable handles", async () => {
-    const value = await fixture();
-    await append(value);
-    const before = await snapshot();
+    const value = await fixture(); await append(value); const before = await snapshot();
     await db.transaction(async (tx) => {
       expect(typeof tx.transaction).toBe("function");
       const observed = vi.spyOn(tx, "execute");
-      expect(
-        await catchUpExecutionRealityV2Postgres(tx as unknown as WaiaPostgresDb, value.input),
-      ).toMatchObject({ status: "REFUSED", code: "TRANSACTION_OWNER_REQUIRED" });
+      expect(await catchUpExecutionRealityV2Postgres(tx as unknown as WaiaPostgresDb, value.input)).toMatchObject({ status: "REFUSED", code: "TRANSACTION_OWNER_REQUIRED" });
       expect(observed).not.toHaveBeenCalled();
     });
     expect(await snapshot()).toEqual(before);
   });
-  it.each(["foreign-org", "foreign-account", "uppercase", "braced", "hyphenless", "whitespace"])(
-    "refuses scope %s without effect",
-    async (kind) => {
-      const value = await fixture();
-      await append(value);
-      const before = await snapshot();
-      const input = { ...value.input };
-      if (kind === "foreign-org") input.organizationId = other;
-      if (kind === "foreign-account") input.accountId = "other-account";
-      if (kind === "uppercase") input.organizationId = org.toUpperCase();
-      if (kind === "braced") input.organizationId = `{${org}}`;
-      if (kind === "hyphenless") input.organizationId = org.replaceAll("-", "");
-      if (kind === "whitespace") input.accountId += " ";
-      expect(await catchUpExecutionRealityV2Postgres(db, input)).toMatchObject({
-        status: "REFUSED",
-      });
-      expect(await snapshot()).toEqual(before);
-    },
-  );
-  it.each(["paper", "mock", "historical", "venue"])(
-    "refuses stored unsupported %s metadata",
-    async (kind) => {
-      const value = await fixture();
-      await append(value);
-      if (kind === "historical") {
-        await client`UPDATE trader_orders SET historical_account_key='synthetic-history', historical_run_id='fixture-run', execution_mode='mock' WHERE id=${value.attempt.orderId}::uuid`;
-        const retainedMode = await client<{ mode: string }[]>`
+  it.each(["foreign-org", "foreign-account", "uppercase", "braced", "hyphenless", "whitespace"])("refuses scope %s without effect", async (kind) => {
+    const value = await fixture(); await append(value); const before = await snapshot(); const input = { ...value.input };
+    if (kind === "foreign-org") input.organizationId = other;
+    if (kind === "foreign-account") input.accountId = "other-account";
+    if (kind === "uppercase") input.organizationId = org.toUpperCase();
+    if (kind === "braced") input.organizationId = `{${org}}`;
+    if (kind === "hyphenless") input.organizationId = org.replaceAll("-", "");
+    if (kind === "whitespace") input.accountId += " ";
+    expect(await catchUpExecutionRealityV2Postgres(db, input)).toMatchObject({ status: "REFUSED" });
+    expect(await snapshot()).toEqual(before);
+  });
+  it.each(["paper", "mock", "historical", "venue"])("refuses stored unsupported %s metadata", async (kind) => {
+    const value = await fixture(); await append(value);
+    if (kind === "historical") {
+      await client`UPDATE trader_orders SET historical_account_key='synthetic-history', historical_run_id='fixture-run', execution_mode='mock' WHERE id=${value.attempt.orderId}::uuid`;
+      const retainedMode = await client<{ mode: string }[]>`
         SELECT mode FROM trader_historical_reconciliation_scope_mode_v1
         WHERE organization_id=${org}::uuid
           AND account_id='synthetic-history' AND run_id='fixture-run'
       `;
-        expect(retainedMode).toEqual([{ mode: "LEGACY" }]);
-      } else if (kind === "venue")
-        await client`UPDATE trader_orders SET venue='OTHER' WHERE id=${value.attempt.orderId}::uuid`;
-      else
-        await client`UPDATE trader_orders SET execution_mode=${kind} WHERE id=${value.attempt.orderId}::uuid`;
-      const before = await snapshot();
-      expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-        code: "UNSUPPORTED_SOURCE_SCOPE",
-      });
-      expect(await snapshot()).toEqual(before);
-    },
-  );
+      expect(retainedMode).toEqual([{ mode: "LEGACY" }]);
+    }
+    else if (kind === "venue") await client`UPDATE trader_orders SET venue='OTHER' WHERE id=${value.attempt.orderId}::uuid`;
+    else await client`UPDATE trader_orders SET execution_mode=${kind} WHERE id=${value.attempt.orderId}::uuid`;
+    const before = await snapshot(); expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ code: "UNSUPPORTED_SOURCE_SCOPE" });
+    expect(await snapshot()).toEqual(before);
+  });
   it("refuses mismatched sealed order binding instead of dispatching or repairing", async () => {
-    const value = await fixture();
-    await append(value);
-    await client`UPDATE trader_orders SET quantity='0.002' WHERE id=${value.attempt.orderId}::uuid`;
-    const before = await snapshot();
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      code: "SOURCE_BINDING_INVALID",
-    });
+    const value = await fixture(); await append(value); await client`UPDATE trader_orders SET quantity='0.002' WHERE id=${value.attempt.orderId}::uuid`;
+    const before = await snapshot(); expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ code: "SOURCE_BINDING_INVALID" });
     expect(await snapshot()).toEqual(before);
   });
   it("delivers a partly delivered prefix from report1 with original source knowledge preserved", async () => {
-    const value = await fixture();
-    const one = await append(value);
-    await append(value);
+    const value = await fixture(); const one = await append(value); await append(value);
     for (const draft of route(one)) await ingestRealitySourceReportV2Postgres(db, scope(), draft);
     const original = await listRealitySourceReportsV2(db, scope());
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "DELIVERED",
-      selectedReports: 2,
-      newSources: 1,
-      existingSources: 1,
-    });
-    const after = await listRealitySourceReportsV2(db, scope());
-    expect(after).toEqual(expect.arrayContaining([...original]));
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED", selectedReports: 2, newSources: 1, existingSources: 1 });
+    const after = await listRealitySourceReportsV2(db, scope()); expect(after).toEqual(expect.arrayContaining([...original]));
   });
   it("refuses source-only target and missing projection before duplicate ingestion can repair them", async () => {
-    const value = await fixture();
-    const report = await append(value);
-    await db.transaction(async (tx) => {
-      await lockRealityScopeV2(tx, scope());
-      await appendRealitySourceObservationV2FromWriter(tx, scope(), route(report)[0]!);
-    });
-    let before = await snapshot();
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      code: "DELIVERY_INCOMPLETE",
-    });
-    expect(await snapshot()).toEqual(before);
+    const value = await fixture(); const report = await append(value);
+    await db.transaction(async (tx) => { await lockRealityScopeV2(tx, scope()); await appendRealitySourceObservationV2FromWriter(tx, scope(), route(report)[0]!); });
+    let before = await snapshot(); expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ code: "DELIVERY_INCOMPLETE" }); expect(await snapshot()).toEqual(before);
     const [source] = await listRealitySourceReportsV2(db, scope());
-    await db.transaction(async (tx) => {
-      await lockRealityScopeV2(tx, scope());
-      await appendObservedRealityTruthV2FromWriter(tx, scope(), source!);
-    });
-    before = await snapshot();
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      code: "REALITY_BASELINE_INVALID",
-    });
-    expect(await snapshot()).toEqual(before);
+    await db.transaction(async (tx) => { await lockRealityScopeV2(tx, scope()); await appendObservedRealityTruthV2FromWriter(tx, scope(), source!); });
+    before = await snapshot(); expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ code: "REALITY_BASELINE_INVALID" }); expect(await snapshot()).toEqual(before);
   });
   it("refuses a lagged projection before adding any new selected source", async () => {
-    const value = await fixture();
-    const first = await append(value);
-    for (const draft of route(first)) await ingestRealitySourceReportV2Postgres(db, scope(), draft);
+    const value = await fixture(); const first = await append(value); for (const draft of route(first)) await ingestRealitySourceReportV2Postgres(db, scope(), draft);
     const second = await append(value);
-    await db.transaction(async (tx) => {
-      await lockRealityScopeV2(tx, scope());
-      const source = await appendRealitySourceObservationV2FromWriter(
-        tx,
-        scope(),
-        route(second)[0]!,
-      );
-      await appendObservedRealityTruthV2FromWriter(tx, scope(), source.report);
-    });
-    const before = await snapshot();
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      code: "REALITY_BASELINE_INVALID",
-    });
-    expect(await snapshot()).toEqual(before);
+    await db.transaction(async (tx) => { await lockRealityScopeV2(tx, scope()); const source = await appendRealitySourceObservationV2FromWriter(tx, scope(), route(second)[0]!); await appendObservedRealityTruthV2FromWriter(tx, scope(), source.report); });
+    const before = await snapshot(); expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ code: "REALITY_BASELINE_INVALID" }); expect(await snapshot()).toEqual(before);
   });
   it("keeps reportless result distinct even when that account contains an unexplained source", async () => {
-    const old = await fixture();
-    const report = await append(old);
-    await db.transaction(async (tx) => {
-      await lockRealityScopeV2(tx, scope());
-      await appendRealitySourceObservationV2FromWriter(tx, scope(), route(report)[0]!);
-    });
+    const old = await fixture(); const report = await append(old);
+    await db.transaction(async (tx) => { await lockRealityScopeV2(tx, scope()); await appendRealitySourceObservationV2FromWriter(tx, scope(), route(report)[0]!); });
     // A second attempt shares this inconsistent account, but has no report target.
     const empty = await fixture("delivery-fixture", false);
-    expect(await catchUpExecutionRealityV2Postgres(db, empty.input)).toMatchObject({
-      status: "NO_REPORTS",
-      realityExamined: false,
-    });
-    expect(await catchUpExecutionRealityV2Postgres(db, old.input)).toMatchObject({
-      code: "DELIVERY_INCOMPLETE",
-    });
+    expect(await catchUpExecutionRealityV2Postgres(db, empty.input)).toMatchObject({ status: "NO_REPORTS", realityExamined: false });
+    expect(await catchUpExecutionRealityV2Postgres(db, old.input)).toMatchObject({ code: "DELIVERY_INCOMPLETE" });
   });
-  it.each(["source", "truth", "event", "projection", "knowledge"])(
-    "rolls back all new Reality work on injected native %s failure",
-    async (kind) => {
-      const value = await fixture();
-      await append(value);
-      await append(value);
-      const before = await snapshot();
-      const table =
-        kind === "knowledge"
-          ? "trader_reality_knowledge_frontiers_v2"
-          : `trader_reality_${kind === "source" ? "source_reports" : kind === "truth" ? "truth_records" : kind === "event" ? "events" : "projections"}_v2`;
-      await client.unsafe(
-        `CREATE OR REPLACE FUNCTION dee1122_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF (SELECT count(*) FROM trader_reality_source_reports_v2 WHERE organization_id=NEW.organization_id AND account_id=NEW.account_id)>=${kind === "source" ? 1 : 2} THEN RAISE EXCEPTION 'DEE1122 injected late-prefix storage fault'; END IF; RETURN NEW; END $$`,
-      );
-      await client.unsafe(
-        `CREATE TRIGGER zzz_dee1122_fault BEFORE INSERT OR UPDATE ON ${table} FOR EACH ROW EXECUTE FUNCTION dee1122_fault()`,
-      );
-      try {
-        expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-          status: "FAILED",
-          newDeliveryCommitted: false,
-        });
-        expect(await snapshot()).toEqual(before);
-      } finally {
-        await client.unsafe(`DROP TRIGGER zzz_dee1122_fault ON ${table}`);
-        await client.unsafe("DROP FUNCTION dee1122_fault()");
-      }
-      expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-        status: "DELIVERED",
-        newSources: 2,
-      });
-    },
-  );
+  it.each(["source", "truth", "event", "projection", "knowledge"])("rolls back all new Reality work on injected native %s failure", async (kind) => {
+    const value = await fixture(); await append(value); await append(value); const before = await snapshot();
+    const table = kind === "knowledge" ? "trader_reality_knowledge_frontiers_v2" : `trader_reality_${kind === "source" ? "source_reports" : kind === "truth" ? "truth_records" : kind === "event" ? "events" : "projections"}_v2`;
+    await client.unsafe(`CREATE OR REPLACE FUNCTION dee1122_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF (SELECT count(*) FROM trader_reality_source_reports_v2 WHERE organization_id=NEW.organization_id AND account_id=NEW.account_id)>=${kind === 'source' ? 1 : 2} THEN RAISE EXCEPTION 'DEE1122 injected late-prefix storage fault'; END IF; RETURN NEW; END $$`);
+    await client.unsafe(`CREATE TRIGGER zzz_dee1122_fault BEFORE INSERT OR UPDATE ON ${table} FOR EACH ROW EXECUTE FUNCTION dee1122_fault()`);
+    try { expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "FAILED", newDeliveryCommitted: false }); expect(await snapshot()).toEqual(before); }
+    finally { await client.unsafe(`DROP TRIGGER zzz_dee1122_fault ON ${table}`); await client.unsafe("DROP FUNCTION dee1122_fault()"); }
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED", newSources: 2 });
+  });
   it("keeps an earlier committed partial delivery intact when a later prefix projection fails", async () => {
-    const value = await fixture();
-    await append(value);
-    await catchUpExecutionRealityV2Postgres(db, value.input);
-    await append(value);
-    await append(value);
-    const before = await snapshot();
-    await client.unsafe(
-      `CREATE FUNCTION dee1122_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.frontier_sequence>=3 THEN RAISE EXCEPTION 'late projection'; END IF; RETURN NEW; END $$`,
-    );
-    await client.unsafe(
-      "CREATE TRIGGER zzz_dee1122_fault BEFORE INSERT ON trader_reality_projections_v2 FOR EACH ROW EXECUTE FUNCTION dee1122_fault()",
-    );
-    try {
-      expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-        status: "FAILED",
-        newDeliveryCommitted: false,
-      });
-      expect(await snapshot()).toEqual(before);
-    } finally {
-      await client.unsafe("DROP TRIGGER zzz_dee1122_fault ON trader_reality_projections_v2");
-      await client.unsafe("DROP FUNCTION dee1122_fault()");
-    }
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "DELIVERED",
-      existingSources: 1,
-      newSources: 2,
-    });
+    const value = await fixture(); await append(value); await catchUpExecutionRealityV2Postgres(db, value.input);
+    await append(value); await append(value); const before = await snapshot();
+    await client.unsafe(`CREATE FUNCTION dee1122_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.frontier_sequence>=3 THEN RAISE EXCEPTION 'late projection'; END IF; RETURN NEW; END $$`);
+    await client.unsafe("CREATE TRIGGER zzz_dee1122_fault BEFORE INSERT ON trader_reality_projections_v2 FOR EACH ROW EXECUTE FUNCTION dee1122_fault()");
+    try { expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "FAILED", newDeliveryCommitted: false }); expect(await snapshot()).toEqual(before); }
+    finally { await client.unsafe("DROP TRIGGER zzz_dee1122_fault ON trader_reality_projections_v2"); await client.unsafe("DROP FUNCTION dee1122_fault()"); }
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED", existingSources: 1, newSources: 2 });
   });
   it("reports unknown commit acknowledgement and exact retry discovers already committed observations", async () => {
-    const value = await fixture();
-    await append(value);
-    const original = db.transaction.bind(db);
-    const wrapped = vi.spyOn(db, "transaction").mockImplementation(async (callback, options) => {
-      await original(callback, options);
-      throw new Error("synthetic lost commit acknowledgement");
-    });
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "COMMIT_OUTCOME_UNKNOWN",
-      newDeliveryCommitted: "UNKNOWN",
-    });
-    wrapped.mockRestore();
-    const committed = await snapshot();
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "DELIVERED",
-      newSources: 0,
-    });
-    expect(await snapshot()).toEqual(committed);
+    const value = await fixture(); await append(value); const original = db.transaction.bind(db);
+    const wrapped = vi.spyOn(db, "transaction").mockImplementation(async (callback, options) => { await original(callback, options); throw new Error("synthetic lost commit acknowledgement"); });
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "COMMIT_OUTCOME_UNKNOWN", newDeliveryCommitted: "UNKNOWN" });
+    wrapped.mockRestore(); const committed = await snapshot();
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED", newSources: 0 }); expect(await snapshot()).toEqual(committed);
   });
   it("caps oversized stored report bodies before producing any Reality row", async () => {
-    const value = await fixture();
-    await append(value, { payload: "x".repeat(1_048_576) });
-    const before = await snapshot();
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      code: "CAPACITY_EXCEEDED",
-      detail: { bound: "reportRowBytes" },
-    });
-    expect(await snapshot()).toEqual(before);
+    const value = await fixture(); await append(value, { payload: "x".repeat(1_048_576) }); const before = await snapshot();
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ code: "CAPACITY_EXCEEDED", detail: { bound: "reportRowBytes" } }); expect(await snapshot()).toEqual(before);
   });
   it("bounds the selected latest projection bytes before loading its corrupted JSON payload", async () => {
-    const value = await fixture();
-    await append(value);
-    await catchUpExecutionRealityV2Postgres(db, value.input);
+    const value = await fixture(); await append(value); await catchUpExecutionRealityV2Postgres(db, value.input);
     // Controlled storage corruption on isolated test DB, restoring guard before
     // invoking the actual command. No production history repair is performed.
     await client`ALTER TABLE trader_reality_projections_v2 DISABLE TRIGGER trader_reality_projections_v2_block_update`;
-    try {
-      await client`UPDATE trader_reality_projections_v2 SET stable_entries=${JSON.stringify(["x".repeat(16_777_216)])}::jsonb WHERE organization_id=${org}::uuid`;
-    } finally {
-      await client`ALTER TABLE trader_reality_projections_v2 ENABLE TRIGGER trader_reality_projections_v2_block_update`;
-    }
+    try { await client`UPDATE trader_reality_projections_v2 SET stable_entries=${JSON.stringify(["x".repeat(16_777_216)])}::jsonb WHERE organization_id=${org}::uuid`; }
+    finally { await client`ALTER TABLE trader_reality_projections_v2 ENABLE TRIGGER trader_reality_projections_v2_block_update`; }
     const before = await snapshot();
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "REFUSED",
-      code: "CAPACITY_EXCEEDED",
-      detail: { bound: "projectionBytes" },
-    });
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "REFUSED", code: "CAPACITY_EXCEEDED", detail: { bound: "projectionBytes" } });
     expect(await snapshot()).toEqual(before);
   });
   it("accepts a captured prefix while a later report commits above the captured head", async () => {
-    const value = await fixture();
-    const first = await append(value);
+    const value = await fixture(); const first = await append(value);
     const original = executionRepository.readExecutionAttemptProjectionV2Postgres;
     let appended = false;
-    const spy = vi
-      .spyOn(executionRepository, "readExecutionAttemptProjectionV2Postgres")
-      .mockImplementation(async (...args) => {
-        const saved = await original(...args);
-        if (!appended) {
-          appended = true;
-          await append(value);
-        }
-        return saved;
-      });
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "DELIVERED",
-      selectedReports: 1,
-      capturedHead: { reportDigestHex: first.contentDigestHex },
+    const spy = vi.spyOn(executionRepository, "readExecutionAttemptProjectionV2Postgres").mockImplementation(async (...args) => {
+      const saved = await original(...args); if (!appended) { appended = true; await append(value); } return saved;
     });
-    spy.mockRestore();
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "DELIVERED",
-      selectedReports: 2,
-      newSources: 1,
-    });
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED", selectedReports: 1, capturedHead: { reportDigestHex: first.contentDigestHex } });
+    spy.mockRestore(); expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED", selectedReports: 2, newSources: 1 });
   });
   it("preserves an admitted general semantic alias without inventing its own event", async () => {
-    const value = await fixture();
-    const first = await append(value);
-    const second = await append(value);
-    const a = route(first)[0]!,
-      b = route(second)[0]!;
+    const value = await fixture(); const first = await append(value); const second = await append(value);
+    const a = route(first)[0]!, b = route(second)[0]!;
     // General existing-ingester compatibility fixture: the ordinary adapter does
     // not issue this cross-report native identity. No new producer is claimed.
-    const old = await ingestRealitySourceReportV2Postgres(db, scope(), {
-      ...b,
-      lineage: a.lineage,
-      provenance: a.provenance,
-    });
+    const old = await ingestRealitySourceReportV2Postgres(db, scope(), { ...b, lineage: a.lineage, provenance: a.provenance });
     const result = await catchUpExecutionRealityV2Postgres(db, value.input);
     expect(result).toMatchObject({ status: "DELIVERED", selectedReports: 2, newSources: 2 });
     if (result.status !== "DELIVERED") throw new Error("delivery refused");
-    expect(result.sources).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: "SEMANTIC_ALIAS",
-          truthRecordId: old.truthRecord!.truthRecordId,
-        }),
-      ]),
-    );
+    expect(result.sources).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "SEMANTIC_ALIAS", truthRecordId: old.truthRecord!.truthRecordId })]));
     expect(await listRealityEventsV2(db, scope())).toHaveLength(2);
-    const prior = await snapshot();
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "DELIVERED",
-      newSources: 0,
-    });
-    expect(await snapshot()).toEqual(prior);
+    const prior = await snapshot(); expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED", newSources: 0 }); expect(await snapshot()).toEqual(prior);
   });
   it("preserves explicit source-only correction quarantine as uncertainty without forging a truth", async () => {
-    const value = await fixture();
-    const report = await append(value);
-    const draft = route(report)[0]!;
+    const value = await fixture(); const report = await append(value); const draft = route(report)[0]!;
     // General admitted source shape, outside the current adapter's null-revision producer.
-    const prior = await ingestRealitySourceReportV2Postgres(db, scope(), {
-      ...draft,
-      sourceNativeIdentity: {
-        ...draft.sourceNativeIdentity!,
-        nativeRevision: "v2",
-        supersedesNativeRevision: "v1",
-      },
-    });
-    expect(prior.classification).toBe("QUARANTINED");
-    expect(prior.truthRecord).toBe(null);
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "DELIVERED_WITH_UNCERTAINTY",
-      projection: { uncertaintyCount: 1 },
-    });
-    expect(
-      (await listTruthRecordsV2(db, scope())).filter(
-        (truth) => truth.sourceReportId === prior.sourceReport.sourceReportId,
-      ),
-    ).toHaveLength(0);
+    const prior = await ingestRealitySourceReportV2Postgres(db, scope(), { ...draft,
+      sourceNativeIdentity: { ...draft.sourceNativeIdentity!, nativeRevision: "v2", supersedesNativeRevision: "v1" } });
+    expect(prior.classification).toBe("QUARANTINED"); expect(prior.truthRecord).toBe(null);
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED_WITH_UNCERTAINTY", projection: { uncertaintyCount: 1 } });
+    expect((await listTruthRecordsV2(db, scope())).filter((truth) => truth.sourceReportId === prior.sourceReport.sourceReportId)).toHaveLength(0);
   });
   it("keeps repeated order assertions contradictory instead of silently choosing newest", async () => {
     const value = await fixture();
-    const order = {
-      orderId: "same-local-order",
-      symbol: "BTCUSDT",
-      side: "buy",
-      type: "limit",
-      price: "25000",
-      quantity: "0.001",
-      status: "open",
-    };
-    await append(value, { order });
-    await append(value, { order: { ...order, status: "filled" } });
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "DELIVERED_WITH_UNCERTAINTY",
-      selectedReports: 2,
-      projection: { uncertaintyCount: 1 },
-    });
+    const order = { orderId: "same-local-order", symbol: "BTCUSDT", side: "buy", type: "limit", price: "25000", quantity: "0.001", status: "open" };
+    await append(value, { order }); await append(value, { order: { ...order, status: "filled" } });
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED_WITH_UNCERTAINTY", selectedReports: 2, projection: { uncertaintyCount: 1 } });
     const projection = await readLatestRealityProjectionV2(db, scope());
-    expect(projection!.stableEntries[0]!.primitiveAssertion).toMatchObject({
-      kind: "ORDER",
-      status: "open",
-    });
-    expect((await listRealityEventsV2(db, scope())).map((event) => event.eventType)).toEqual([
-      "OBSERVED",
-      "SOURCE_CONTRADICTION",
-    ]);
+    expect(projection!.stableEntries[0]!.primitiveAssertion).toMatchObject({ kind: "ORDER", status: "open" });
+    expect((await listRealityEventsV2(db, scope())).map((event) => event.eventType)).toEqual(["OBSERVED", "SOURCE_CONTRADICTION"]);
   });
   it("retains append-only guards on delivered source, truth, event and projection", async () => {
-    const value = await fixture();
-    await append(value);
-    await catchUpExecutionRealityV2Postgres(db, value.input);
+    const value = await fixture(); await append(value); await catchUpExecutionRealityV2Postgres(db, value.input);
     for (const table of realityTables) {
-      await expect(
-        client.unsafe(`DELETE FROM ${table} WHERE organization_id=$1::uuid`, [org]),
-      ).rejects.toThrow(/append.only/i);
-      await expect(
-        client.unsafe(`UPDATE ${table} SET account_id=account_id WHERE organization_id=$1::uuid`, [
-          org,
-        ]),
-      ).rejects.toThrow(/append.only/i);
+      await expect(client.unsafe(`DELETE FROM ${table} WHERE organization_id=$1::uuid`, [org])).rejects.toThrow(/append.only/i);
+      await expect(client.unsafe(`UPDATE ${table} SET account_id=account_id WHERE organization_id=$1::uuid`, [org])).rejects.toThrow(/append.only/i);
     }
   });
   it("serializes two owners through675 under RR session defaults and copies input before the wait", async () => {
-    const value = await fixture();
-    await append(value);
-    const workerClient = postgres(url!, {
-      max: 1,
-      connection: {
-        application_name: "dee1122-waiter",
-        default_transaction_isolation: "repeatable read",
-      },
-    });
+    const value = await fixture(); await append(value);
+    const workerClient = postgres(url!, { max: 1, connection: { application_name: "dee1122-waiter", default_transaction_isolation: "repeatable read" } });
     const worker = drizzle(workerClient, { schema: pgSchema }) as WaiaPostgresDb;
     let release!: () => void, locked!: () => void;
-    const holding = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const ready = new Promise<void>((resolve) => {
-      locked = resolve;
-    });
-    const blocker = db.transaction(async (tx) => {
-      await lockRealityScopeV2(tx, scope());
-      locked();
-      await holding;
-    });
-    await ready;
-    const mutable = { ...value.input };
-    const pending = catchUpExecutionRealityV2Postgres(worker, mutable);
+    const holding = new Promise<void>((resolve) => { release = resolve; });
+    const ready = new Promise<void>((resolve) => { locked = resolve; });
+    const blocker = db.transaction(async (tx) => { await lockRealityScopeV2(tx, scope()); locked(); await holding; });
+    await ready; const mutable = { ...value.input }; const pending = catchUpExecutionRealityV2Postgres(worker, mutable);
     mutable.accountId = "changed-during-await";
     try {
       let waiting = false;
       for (let i = 0; i < 100; i++) {
-        const rows =
-          await client`SELECT 1 FROM pg_stat_activity WHERE application_name='dee1122-waiter' AND wait_event='advisory'`;
-        if (rows.length) {
-          waiting = true;
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        const rows = await client`SELECT 1 FROM pg_stat_activity WHERE application_name='dee1122-waiter' AND wait_event='advisory'`;
+        if (rows.length) { waiting = true; break; } await new Promise((resolve) => setTimeout(resolve, 10));
       }
       expect(waiting).toBe(true);
       // Other scope progresses while this account remains locked.
-      const different = await fixture("other-progress");
-      await append(different);
-      expect(await catchUpExecutionRealityV2Postgres(db, different.input)).toMatchObject({
-        status: "DELIVERED",
-      });
-      release();
-      await blocker;
+      const different = await fixture("other-progress"); await append(different);
+      expect(await catchUpExecutionRealityV2Postgres(db, different.input)).toMatchObject({ status: "DELIVERED" });
+      release(); await blocker;
       expect(await pending).toMatchObject({ status: "DELIVERED", accountId: value.accountId });
-      const pair = await Promise.all([
-        catchUpExecutionRealityV2Postgres(db, value.input),
-        catchUpExecutionRealityV2Postgres(worker, value.input),
-      ]);
-      expect(pair).toEqual([
-        expect.objectContaining({ status: "DELIVERED", newSources: 0 }),
-        expect.objectContaining({ status: "DELIVERED", newSources: 0 }),
-      ]);
+      const pair = await Promise.all([catchUpExecutionRealityV2Postgres(db, value.input), catchUpExecutionRealityV2Postgres(worker, value.input)]);
+      expect(pair).toEqual([expect.objectContaining({ status: "DELIVERED", newSources: 0 }), expect.objectContaining({ status: "DELIVERED", newSources: 0 })]);
       expect(await listRealityEventsV2(db, scope())).toHaveLength(1);
-    } finally {
-      release();
-      await blocker;
-      await pending;
-      await workerClient.end({ timeout: 5 });
-    }
+    } finally { release(); await blocker; await pending; await workerClient.end({ timeout: 5 }); }
   });
   it("retains only OBSERVED fill evidence, never SETTLED or realized cashflows", async () => {
-    const value = await fixture();
-    await append(value);
-    await executionRepository.appendExecutionReportV2Postgres(
-      db,
-      { organizationId: org },
-      {
-        accountId: value.accountId,
-        executionAttemptId: value.attempt.executionAttemptId,
-        executionReportId: randomUUID(),
-        reportType: "SUBMIT_STARTED",
-        source: "EXECUTION",
-        rawObservation: {},
-        observedAtUtc: "2026-08-21T00:00:00.003Z",
-      },
-    );
-    const order = {
-      orderId: "local-fixture-venue-id",
-      clientOrderId: value.attempt.clientOrderId,
-      symbol: "BTCUSDT",
-      side: "buy",
-      type: "limit",
-      price: "25000",
-      quantity: "0.001",
-      filledQuantity: "0.001",
-      status: "filled",
-    };
-    await executionRepository.appendExecutionReportV2Postgres(
-      db,
-      { organizationId: org },
-      {
-        accountId: value.accountId,
-        executionAttemptId: value.attempt.executionAttemptId,
-        executionReportId: randomUUID(),
-        reportType: "FILL_REPORT_OBSERVED",
-        source: "CONNECTOR",
-        venueOrderId: order.orderId,
-        rawObservation: {
-          order,
-          trades: [
-            {
-              tradeId: "local-trade",
-              orderId: order.orderId,
-              clientOrderId: order.clientOrderId,
-              symbol: "BTCUSDT",
-              side: "buy",
-              price: "25000",
-              quantity: "0.001",
-              fee: "0",
-              feeAsset: "USDT",
-              executedAt: "2026-08-21T00:00:00.004Z",
-            },
-          ],
-        },
-        observedAtUtc: "2026-08-21T00:00:00.004Z",
-      },
-    );
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "DELIVERED",
-      selectedReports: 3,
-      selectedDrafts: 4,
+    const value = await fixture(); await append(value);
+    await executionRepository.appendExecutionReportV2Postgres(db, { organizationId: org }, {
+      accountId: value.accountId, executionAttemptId: value.attempt.executionAttemptId, executionReportId: randomUUID(),
+      reportType: "SUBMIT_STARTED", source: "EXECUTION", rawObservation: {}, observedAtUtc: "2026-08-21T00:00:00.003Z",
     });
-    const truths = await listTruthRecordsV2(db, scope());
-    expect(truths.filter((t) => t.primitiveAssertion.kind === "FILL")).toHaveLength(1);
-    expect(
-      truths.find((t) => t.primitiveAssertion.kind === "FILL")!.primitiveAssertion,
-    ).toMatchObject({ settlementStatus: "OBSERVED", feeAmount: "0" });
-    expect(truths.find((t) => t.primitiveAssertion.kind === "FILL")!.validAtUtc).toBe(
-      "2026-08-21T00:00:00.004Z",
-    );
+    const order = { orderId: "local-fixture-venue-id", clientOrderId: value.attempt.clientOrderId, symbol: "BTCUSDT", side: "buy", type: "limit", price: "25000", quantity: "0.001", filledQuantity: "0.001", status: "filled" };
+    await executionRepository.appendExecutionReportV2Postgres(db, { organizationId: org }, {
+      accountId: value.accountId, executionAttemptId: value.attempt.executionAttemptId, executionReportId: randomUUID(),
+      reportType: "FILL_REPORT_OBSERVED", source: "CONNECTOR", venueOrderId: order.orderId,
+      rawObservation: { order, trades: [{ tradeId: "local-trade", orderId: order.orderId, clientOrderId: order.clientOrderId, symbol: "BTCUSDT", side: "buy", price: "25000", quantity: "0.001", fee: "0", feeAsset: "USDT", executedAt: "2026-08-21T00:00:00.004Z" }] },
+      observedAtUtc: "2026-08-21T00:00:00.004Z",
+    });
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({ status: "DELIVERED", selectedReports: 3, selectedDrafts: 4 });
+    const truths = await listTruthRecordsV2(db, scope()); expect(truths.filter((t) => t.primitiveAssertion.kind === "FILL")).toHaveLength(1);
+    expect(truths.find((t) => t.primitiveAssertion.kind === "FILL")!.primitiveAssertion).toMatchObject({ settlementStatus: "OBSERVED", feeAmount: "0" });
+    expect(truths.find((t) => t.primitiveAssertion.kind === "FILL")!.validAtUtc).toBe("2026-08-21T00:00:00.004Z");
     expect(truths.some((t) => t.primitiveAssertion.kind === "REALIZED_CASHFLOW")).toBe(false);
     expect((await readLatestRealityProjectionV2(db, scope()))!.uncertainties).toHaveLength(0);
   });
   it("preserves two distinct venue times through durable sources, truths, projection and fresh replay", async () => {
     const value = await fixture();
     const times = ["2026-08-21T00:00:00.123Z", "2026-08-21T00:00:00.456Z"];
-    const { report } = await appendTimedFills(value, times);
-    const before = await snapshot();
+    const { report } = await appendTimedFills(value, times); const before = await snapshot();
     expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "DELIVERED",
-      selectedReports: 3,
-      selectedDrafts: 5,
-      newSources: 5,
-      newEvents: 5,
+      status: "DELIVERED", selectedReports: 3, selectedDrafts: 5, newSources: 5, newEvents: 5,
     });
     const sources = await listRealitySourceReportsV2(db, scope());
     const truths = await listTruthRecordsV2(db, scope());
     const projection = await readLatestRealityProjectionV2(db, scope());
     for (const [index, time] of times.entries()) {
-      const source = sources.find(
-        (s) =>
-          s.primitiveAssertion?.kind === "FILL" &&
-          s.primitiveAssertion.venueTradeId === `local-time-trade-${index}`,
-      )!;
+      const source = sources.find(s => s.primitiveAssertion?.kind === "FILL" && s.primitiveAssertion.venueTradeId === `local-time-trade-${index}`)!;
       expect(source.validAtUtc).toBe(time);
       expect(source.knowledgeAtUtc > report.observedAtUtc).toBe(true);
-      expect(source.lineage).toMatchObject({
-        executionReportId: report.executionReportId,
-        executionReportDigestHex: report.contentDigestHex,
-      });
-      expect(source.primitiveAssertion).toMatchObject({
-        quantity: "0.0005",
-        feeAmount: "0.025",
-        feeAsset: "USDT",
-        settlementStatus: "OBSERVED",
-      });
-      const truth = truths.find((t) => t.sourceReportId === source.sourceReportId)!;
-      expect(truth).toMatchObject({
-        validAtUtc: time,
-        knowledgeAtUtc: source.knowledgeAtUtc,
-        primitiveAssertion: source.primitiveAssertion,
-      });
-      expect(
-        projection!.stableEntries.find((e) => e.sourceReportId === source.sourceReportId),
-      ).toMatchObject({
-        truthRecordId: truth.truthRecordId,
-        validAtUtc: time,
-        knowledgeAtUtc: source.knowledgeAtUtc,
-        primitiveAssertion: source.primitiveAssertion,
+      expect(source.lineage).toMatchObject({ executionReportId: report.executionReportId, executionReportDigestHex: report.contentDigestHex });
+      expect(source.primitiveAssertion).toMatchObject({ quantity: "0.0005", feeAmount: "0.025", feeAsset: "USDT", settlementStatus: "OBSERVED" });
+      const truth = truths.find(t => t.sourceReportId === source.sourceReportId)!;
+      expect(truth).toMatchObject({ validAtUtc: time, knowledgeAtUtc: source.knowledgeAtUtc, primitiveAssertion: source.primitiveAssertion });
+      expect(projection!.stableEntries.find(e => e.sourceReportId === source.sourceReportId)).toMatchObject({
+        truthRecordId: truth.truthRecordId, validAtUtc: time, knowledgeAtUtc: source.knowledgeAtUtc, primitiveAssertion: source.primitiveAssertion,
       });
     }
-    expect(sources.find((s) => s.primitiveAssertion?.kind === "ORDER")!.validAtUtc).toBe(
-      report.observedAtUtc,
-    );
-    const after = await snapshot();
-    expect(financialSnapshot(after)).toEqual(financialSnapshot(before));
+    expect(sources.find(s => s.primitiveAssertion?.kind === "ORDER")!.validAtUtc).toBe(report.observedAtUtc);
+    const after = await snapshot(); expect(financialSnapshot(after)).toEqual(financialSnapshot(before));
     const fresh = postgres(url!, { max: 1 });
     try {
-      expect(
-        await catchUpExecutionRealityV2Postgres(
-          drizzle(fresh, { schema: pgSchema }) as WaiaPostgresDb,
-          value.input,
-        ),
-      ).toMatchObject({ status: "DELIVERED", newSources: 0, existingSources: 5, newEvents: 0 });
-    } finally {
-      await fresh.end({ timeout: 5 });
-    }
-    const replay = await child([
-      "--organization-id",
-      org,
-      "--account-id",
-      value.accountId,
-      "--execution-attempt-id",
-      value.attempt.executionAttemptId,
-    ]);
+      expect(await catchUpExecutionRealityV2Postgres(drizzle(fresh, { schema: pgSchema }) as WaiaPostgresDb, value.input))
+        .toMatchObject({ status: "DELIVERED", newSources: 0, existingSources: 5, newEvents: 0 });
+    } finally { await fresh.end({ timeout: 5 }); }
+    const replay = await child(["--organization-id", org, "--account-id", value.accountId, "--execution-attempt-id", value.attempt.executionAttemptId]);
     expect(replay.status, replay.err).toBe(0);
-    expect(JSON.parse(replay.out)).toMatchObject({
-      result: { status: "DELIVERED", newSources: 0 },
-      cleanup: "CLOSED",
-    });
-    expect(await snapshot()).toEqual(after);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(JSON.parse(replay.out)).toMatchObject({ result: { status: "DELIVERED", newSources: 0 }, cleanup: "CLOSED" });
+    expect(await snapshot()).toEqual(after); expect(fetch).not.toHaveBeenCalled();
   });
   it("refuses reinterpretation of genuine baseline828 fill rows and preserves all immutable history", async () => {
     // Byte-for-byte original adapter, not the corrected mapper with a substituted timestamp.
-    const baselineBytes = readFileSync(
-      resolve(process.cwd(), "tests/fixtures/reality/execution-reality-adapter-82819a95.ts"),
-    );
-    expect(createHash("sha256").update(baselineBytes).digest("hex")).toBe(
-      "4560258f04cbe8ba89e256b4138acfcb0022fe01086252f070ded419f079c0f3",
-    );
-    const value = await fixture();
-    const time = "2026-08-21T00:00:00.123Z";
+    const baselineBytes = readFileSync(resolve(process.cwd(), "tests/fixtures/reality/execution-reality-adapter-82819a95.ts"));
+    expect(createHash("sha256").update(baselineBytes).digest("hex"))
+      .toBe("4560258f04cbe8ba89e256b4138acfcb0022fe01086252f070ded419f079c0f3");
+    const value = await fixture(); const time = "2026-08-21T00:00:00.123Z";
     const { report, reports } = await appendTimedFills(value, [time]);
-    for (const stored of reports)
-      for (const draft of baseline828Adapter(stored)) {
-        await ingestRealitySourceReportV2Postgres(db, scope(), draft);
-      }
-    const old = (await listRealitySourceReportsV2(db, scope())).find(
-      (s) => s.primitiveAssertion?.kind === "FILL",
-    )!;
-    expect(old.validAtUtc).toBe(report.observedAtUtc);
-    expect(old.validAtUtc).not.toBe(time);
+    for (const stored of reports) for (const draft of baseline828Adapter(stored)) {
+      await ingestRealitySourceReportV2Postgres(db, scope(), draft);
+    }
+    const old = (await listRealitySourceReportsV2(db, scope())).find(s => s.primitiveAssertion?.kind === "FILL")!;
+    expect(old.validAtUtc).toBe(report.observedAtUtc); expect(old.validAtUtc).not.toBe(time);
     const before = await snapshot();
     expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "REFUSED",
-      code: "SOURCE_BINDING_INVALID",
-      newDeliveryCommitted: false,
+      status: "REFUSED", code: "SOURCE_BINDING_INVALID", newDeliveryCommitted: false,
     });
     expect(await snapshot()).toEqual(before);
-    const corrected = route(report).find((d) => d.primitiveAssertion?.kind === "FILL")!;
-    await expect(ingestRealitySourceReportV2Postgres(db, scope(), corrected)).rejects.toThrow(
-      "immutable Reality lineage was reinterpreted with different semantics",
-    );
-    expect(await snapshot()).toEqual(before);
-    expect(fetch).not.toHaveBeenCalled();
+    const corrected = route(report).find(d => d.primitiveAssertion?.kind === "FILL")!;
+    await expect(ingestRealitySourceReportV2Postgres(db, scope(), corrected))
+      .rejects.toThrow("immutable Reality lineage was reinterpreted with different semantics");
+    expect(await snapshot()).toEqual(before); expect(fetch).not.toHaveBeenCalled();
   });
   it.each([
     ["offset", "2026-08-21T02:00:00.123+02:00"],
     ["missing milliseconds", "2026-08-21T00:00:00Z"],
     ["submillisecond", "2026-08-21T00:00:00.123456Z"],
   ])("refuses stored noncanonical %s fill time without any Reality write", async (_name, time) => {
-    const value = await fixture();
-    const { report } = await appendTimedFills(value, [time]);
+    const value = await fixture(); const { report } = await appendTimedFills(value, [time]);
     expect(report.rawObservation.trades).toEqual([expect.objectContaining({ executedAt: time })]);
     expect(() => route(report)).toThrow("ExecutionReportV2 fill evidence is fail-uncertain");
     const before = await snapshot();
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "FAILED",
-      code: "DELIVERY_FAILED",
-      newDeliveryCommitted: false,
-    });
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input))
+      .toMatchObject({ status: "FAILED", code: "DELIVERY_FAILED", newDeliveryCommitted: false });
     expect(await listRealitySourceReportsV2(db, scope())).toHaveLength(0);
-    expect(await snapshot()).toEqual(before);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(await snapshot()).toEqual(before); expect(fetch).not.toHaveBeenCalled();
   });
   it("rolls back delivery when a source fill time is later than actual allocated knowledge", async () => {
-    const value = await fixture();
-    const { report } = await appendTimedFills(value, ["2099-08-21T00:00:00.123Z"]);
+    const value = await fixture(); const { report } = await appendTimedFills(value, ["2099-08-21T00:00:00.123Z"]);
     const before = await snapshot();
-    expect(await catchUpExecutionRealityV2Postgres(db, value.input)).toMatchObject({
-      status: "FAILED",
-      code: "DELIVERY_FAILED",
-      newDeliveryCommitted: false,
-    });
+    expect(await catchUpExecutionRealityV2Postgres(db, value.input))
+      .toMatchObject({ status: "FAILED", code: "DELIVERY_FAILED", newDeliveryCommitted: false });
     expect(await listRealitySourceReportsV2(db, scope())).toHaveLength(0);
     expect(await snapshot()).toEqual(before);
-    const future = route(report).find((d) => d.primitiveAssertion?.kind === "FILL")!;
-    await expect(ingestRealitySourceReportV2Postgres(db, scope(), future)).rejects.toThrow(
-      "knowledge time cannot precede source-asserted valid time",
-    );
-    expect(await snapshot()).toEqual(before);
-    expect(fetch).not.toHaveBeenCalled();
+    const future = route(report).find(d => d.primitiveAssertion?.kind === "FILL")!;
+    await expect(ingestRealitySourceReportV2Postgres(db, scope(), future))
+      .rejects.toThrow("knowledge time cannot precede source-asserted valid time");
+    expect(await snapshot()).toEqual(before); expect(fetch).not.toHaveBeenCalled();
   });
 });

@@ -20,10 +20,7 @@ import {
 } from "@/lib/trader/execution/v2/contracts";
 import { bindExecutionAuthorityV2Postgres } from "@/lib/trader/execution/v2/authority-postgres";
 import { dispatchAndRecordExecutionAttemptV2 } from "@/lib/trader/execution/v2/recovery-postgres";
-import type {
-  SubmitOrderInput,
-  SubmitOrderResult,
-} from "@/lib/trader/execution/execution-service.types";
+import type { SubmitOrderInput, SubmitOrderResult } from "@/lib/trader/execution/execution-service.types";
 import type { OrderRepository, OrderRow } from "@/lib/trader/execution/order-repository.types";
 import { assertFhvDatasetSealed } from "@/lib/trader/market-data/fhv-dataset-seal";
 import {
@@ -62,8 +59,8 @@ import {
   initializeRiskAccountStateV2Postgres,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import {
-  deleteLiveCapitalEnvelopeRows,
   publishMirroredLiveCapitalEnvelopeV2,
+  deleteLiveCapitalEnvelopeRows,
 } from "@/tests/helpers/live-capital-test-envelope";
 import {
   buildFhvOfficialV2ScaleDataset,
@@ -174,36 +171,27 @@ async function seedFhvTestOnlyV2Tenant(
     organizationId,
   });
   await sqlClient`insert into auth.users (id) values (${ownerUserId}::uuid) on conflict (id) do nothing`;
-  await db
-    .insert(pgSchema.users)
-    .values({
-      id: ownerUserId,
-      identityLabel: "DEE-651 FHV TEST_ONLY Execution V2",
-      email: `${ownerUserId}@fhv-execution-v2.invalid`,
-      passwordHash: null,
-    })
-    .onConflictDoNothing();
-  await db
-    .insert(pgSchema.organizations)
-    .values({
-      id: organizationId,
-      ownerUserId,
-      kind: "personal",
-      name: "DEE-651 FHV TEST_ONLY Execution V2",
-    })
-    .onConflictDoNothing();
-  await db
-    .insert(pgSchema.organizationMembers)
-    .values({
-      id: deterministicExecutionUuidV2("order", {
-        purpose: "fhv-official-scale-test-only-membership",
-        organizationId,
-      }),
+  await db.insert(pgSchema.users).values({
+    id: ownerUserId,
+    identityLabel: "DEE-651 FHV TEST_ONLY Execution V2",
+    email: `${ownerUserId}@fhv-execution-v2.invalid`,
+    passwordHash: null,
+  }).onConflictDoNothing();
+  await db.insert(pgSchema.organizations).values({
+    id: organizationId,
+    ownerUserId,
+    kind: "personal",
+    name: "DEE-651 FHV TEST_ONLY Execution V2",
+  }).onConflictDoNothing();
+  await db.insert(pgSchema.organizationMembers).values({
+    id: deterministicExecutionUuidV2("order", {
+      purpose: "fhv-official-scale-test-only-membership",
       organizationId,
-      userId: ownerUserId,
-      memberRole: "owner",
-    })
-    .onConflictDoNothing();
+    }),
+    organizationId,
+    userId: ownerUserId,
+    memberRole: "owner",
+  }).onConflictDoNothing();
 }
 
 /**
@@ -233,8 +221,9 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
       if (property === "createOrder") {
         return async (...args: Parameters<OrderRepository["createOrder"]>) => {
           const [context, input] = args;
-          const historicalSymbol =
-            input.id === undefined ? undefined : historicalSymbolsByOrderId.get(input.id);
+          const historicalSymbol = input.id === undefined
+            ? undefined
+            : historicalSymbolsByOrderId.get(input.id);
           if (historicalSymbol === undefined) {
             return projectHistoricalSymbol(await target.createOrder(...args))!;
           }
@@ -242,11 +231,8 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
             return target.createOrder(context, { ...input, symbol: historicalSymbol });
           }
           const authorityLineage = parseOpeningCausalLineageV1(input.openingCausalLineageJson);
-          const {
-            schemaVersion: _schemaVersion,
-            contentDigest: _contentDigest,
-            ...draft
-          } = authorityLineage;
+          const { schemaVersion: _schemaVersion, contentDigest: _contentDigest, ...draft } =
+            authorityLineage;
           const historicalLineage = buildOpeningCausalLineageV1({
             ...draft,
             symbol: historicalSymbol,
@@ -288,16 +274,15 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
     if (input.executionMode !== "mock" || input.type !== "market") {
       throw new Error("FHV TEST_ONLY Execution V2 permits modeled mock market orders only");
     }
-    const { historicalSymbol, venueSymbol, baseAsset } = resolveFhvHistoricalExecutionInstrument(
-      input.symbol,
-    );
+    const { historicalSymbol, venueSymbol, baseAsset } =
+      resolveFhvHistoricalExecutionInstrument(input.symbol);
     const symbol = venueSymbol;
     const referencePrice = input.referencePrice;
     const identity = `${invocationId}:${input.idempotencyKey}`;
     const accountId = `fhv-v2-${digestHex(identity).slice(0, 24)}`;
     const instrumentDigest = digestHex(`${venueSymbol}:SPOT`);
     const isEntry = input.side === "buy";
-    const action = isEntry ? ("ENTER_LONG" as const) : ("CLOSE" as const);
+    const action = isEntry ? "ENTER_LONG" as const : "CLOSE" as const;
     const reservationNotional = isEntry
       ? multiplyExecutionNotionalConservativelyV2(input.quantity, referencePrice)
       : "0";
@@ -312,17 +297,16 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
       realitySnapshotId,
       realityContentDigestHex: digestHex(`${identity}:reality`),
       reconciliationAuthorityDigestHex: digestHex(`${identity}:reconciliation`),
-      reconciledInstrumentExposures: [
-        {
-          instrumentIdentityDigestHex: instrumentDigest,
-          symbol,
-          baseQuantity: isEntry ? "0" : input.quantity,
-        },
-      ],
+      reconciledInstrumentExposures: [{
+        instrumentIdentityDigestHex: instrumentDigest,
+        symbol,
+        baseQuantity: isEntry ? "0" : input.quantity,
+      }],
       accounting: {
-        reconciledExposureNotional: isEntry
-          ? "0"
-          : multiplyExecutionNotionalConservativelyV2(input.quantity, referencePrice),
+        reconciledExposureNotional: isEntry ? "0" : multiplyExecutionNotionalConservativelyV2(
+          input.quantity,
+          referencePrice,
+        ),
         worstCasePendingExposureNotional: "0",
         outstandingReservationNotional: "0",
         exposureLimitNotional: "1000000000000",
@@ -340,10 +324,7 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
       accountId,
       riskVerdictId: deterministicExecutionUuidV2("order", { identity, purpose: "risk-verdict" }),
       riskAllowanceId: deterministicExecutionUuidV2("order", { identity, purpose: "allowance" }),
-      issuanceEventId: deterministicExecutionUuidV2("risk-event", {
-        identity,
-        purpose: "issuance",
-      }),
+      issuanceEventId: deterministicExecutionUuidV2("risk-event", { identity, purpose: "issuance" }),
       nonce: deterministicExecutionUuidV2("order", { identity, purpose: "nonce" }),
       validForMs: 300_000,
       verdict: {
@@ -370,13 +351,11 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
         },
         riskPolicyVersion: "dee-651-fhv-test-only-risk-v2",
         riskPolicyDigestHex: digestHex("dee-651-fhv-test-only-risk-v2"),
-        limitVersions: [
-          {
-            layer: "L2",
-            version: "fhv-test-only-position-v1",
-            digestHex: digestHex("fhv-test-only-position-v1"),
-          },
-        ],
+        limitVersions: [{
+          layer: "L2",
+          version: "fhv-test-only-position-v1",
+          digestHex: digestHex("fhv-test-only-position-v1"),
+        }],
         reality: {
           snapshotId: realitySnapshotId,
           contentDigestHex: digestHex(`${identity}:reality`),
@@ -467,12 +446,10 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
         openingCausalLineageDigest: pgSchema.traderOrders.openingCausalLineageDigest,
       })
       .from(pgSchema.traderOrders)
-      .where(
-        and(
-          eq(pgSchema.traderOrders.id, authority.order.id),
-          eq(pgSchema.traderOrders.organizationId, seeded.context.organizationId),
-        ),
-      )
+      .where(and(
+        eq(pgSchema.traderOrders.id, authority.order.id),
+        eq(pgSchema.traderOrders.organizationId, seeded.context.organizationId),
+      ))
       .limit(1);
     updateTestOnlyV2Metrics({ boundAttempts: testOnlyV2Metrics.boundAttempts + 1 });
 
@@ -569,10 +546,7 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
 
   const execution = {
     ...originalExecution,
-    submitOrder: (
-      context: Parameters<typeof originalExecution.submitOrder>[0],
-      input: SubmitOrderInput,
-    ) => {
+    submitOrder: (context: Parameters<typeof originalExecution.submitOrder>[0], input: SubmitOrderInput) => {
       if (context.organizationId !== seeded.context.organizationId) {
         throw new Error("FHV TEST_ONLY Execution V2 tenant mismatch");
       }
