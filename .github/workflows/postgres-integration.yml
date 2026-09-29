@@ -123,6 +123,7 @@ on:
       - "scripts/trader/reality-execution-report-catch-up.ts"
       - "package.json"
       - "tests/integration/postgres-risk-v2.test.ts"
+      - "tests/integration/postgres-risk-validation-org-fk-v1.test.ts"
       - "tests/integration/postgres-reality-v2.test.ts"
       - "tests/integration/postgres-canonical-decision-verification-v2.test.ts"
       - "lib/trader/observability/control-replay-scientific-v2-driver-v1.ts"
@@ -238,6 +239,7 @@ jobs:
             tests/integration/postgres-execution-v2.test.ts \
             tests/integration/postgres-execution-reality-delivery.test.ts \
             tests/integration/postgres-risk-v2.test.ts \
+            tests/integration/postgres-risk-validation-org-fk-v1.test.ts \
             tests/integration/postgres-risk-limits-bootstrap.test.ts \
             tests/integration/postgres-trader-service-actor-authorization.test.ts \
             tests/integration/postgres-reality-v2.test.ts \

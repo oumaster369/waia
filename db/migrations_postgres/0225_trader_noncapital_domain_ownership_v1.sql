@@ -7,6 +7,7 @@
 -- Do not copy either holder onto the other. Later inserts must match the
 -- ownership-ref tuple exactly.
 -- Quiesce relevant writers before transactional apply; no original receipt/body rewrite.
+-- The ACCESS EXCLUSIVE locks below are applied only in a window with those writers stopped.
 SET LOCAL lock_timeout = '5s';
 --> statement-breakpoint
 LOCK TABLE trader_recorded_analysis_companions_v1,
@@ -142,16 +143,16 @@ CREATE INDEX noncapital_ref_acquisition_idx ON trader_runtime_ownership_refs_v1 
 --> statement-breakpoint
 CREATE INDEX noncapital_ref_research_idx ON trader_runtime_ownership_refs_v1 (organization_id,runtime_instance_id,lease_epoch,research_parent_digest) WHERE research_parent_digest IS NOT NULL;
 --> statement-breakpoint
-CREATE FUNCTION trader_noncapital_ownership_reference_v1() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION public.trader_noncapital_ownership_reference_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
 BEGIN
   IF TG_TABLE_NAME='trader_runtime_control_lease_epoch_history_v2' THEN
-    INSERT INTO trader_runtime_ownership_refs_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest,capital_parent_digest)
+    INSERT INTO public.trader_runtime_ownership_refs_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest,capital_parent_digest)
     VALUES ('CAPITAL_LEGACY_V2',NEW.organization_id,NEW.runtime_instance_id,NEW.lease_epoch,NEW.content_digest,NEW.content_digest);
   ELSIF TG_TABLE_NAME='trader_recorded_acquisition_lease_history_v1' THEN
-    INSERT INTO trader_runtime_ownership_refs_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest,acquisition_parent_digest)
+    INSERT INTO public.trader_runtime_ownership_refs_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest,acquisition_parent_digest)
     VALUES ('RECORDED_ACQUISITION_V1',NEW.organization_id,NEW.runtime_instance_id,NEW.lease_epoch,NEW.content_digest,NEW.content_digest);
   ELSIF TG_TABLE_NAME='trader_saved_research_lease_history_v1' THEN
-    INSERT INTO trader_runtime_ownership_refs_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest,research_parent_digest)
+    INSERT INTO public.trader_runtime_ownership_refs_v1(ownership_domain,organization_id,runtime_instance_id,lease_epoch,lease_content_digest,research_parent_digest)
     VALUES ('SAVED_RESEARCH_V1',NEW.organization_id,NEW.runtime_instance_id,NEW.lease_epoch,NEW.content_digest,NEW.content_digest);
   ELSE RAISE EXCEPTION 'NONCAPITAL_REFERENCE_TABLE_REFUSED'; END IF;
   RETURN NEW;
@@ -161,17 +162,17 @@ INSERT INTO trader_runtime_ownership_refs_v1(ownership_domain,organization_id,ru
 SELECT 'CAPITAL_LEGACY_V2',organization_id,runtime_instance_id,lease_epoch,content_digest,content_digest
 FROM trader_runtime_control_lease_epoch_history_v2;
 --> statement-breakpoint
-CREATE TRIGGER noncapital_fixed_reference AFTER INSERT ON trader_runtime_control_lease_epoch_history_v2 FOR EACH ROW EXECUTE FUNCTION trader_noncapital_ownership_reference_v1();
+CREATE TRIGGER noncapital_fixed_reference AFTER INSERT ON trader_runtime_control_lease_epoch_history_v2 FOR EACH ROW EXECUTE FUNCTION public.trader_noncapital_ownership_reference_v1();
 --> statement-breakpoint
-CREATE TRIGGER noncapital_fixed_reference AFTER INSERT ON trader_recorded_acquisition_lease_history_v1 FOR EACH ROW EXECUTE FUNCTION trader_noncapital_ownership_reference_v1();
+CREATE TRIGGER noncapital_fixed_reference AFTER INSERT ON trader_recorded_acquisition_lease_history_v1 FOR EACH ROW EXECUTE FUNCTION public.trader_noncapital_ownership_reference_v1();
 --> statement-breakpoint
-CREATE TRIGGER noncapital_fixed_reference AFTER INSERT ON trader_saved_research_lease_history_v1 FOR EACH ROW EXECUTE FUNCTION trader_noncapital_ownership_reference_v1();
+CREATE TRIGGER noncapital_fixed_reference AFTER INSERT ON trader_saved_research_lease_history_v1 FOR EACH ROW EXECUTE FUNCTION public.trader_noncapital_ownership_reference_v1();
 --> statement-breakpoint
-CREATE FUNCTION noncapital_acq_history_guard_v1() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE prior trader_recorded_acquisition_lease_heads_v1%ROWTYPE; has_prior boolean; observed timestamptz;
+CREATE FUNCTION public.noncapital_acq_history_guard_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
+DECLARE prior public.trader_recorded_acquisition_lease_heads_v1%ROWTYPE; has_prior boolean; observed timestamptz;
 BEGIN
   PERFORM pg_advisory_xact_lock(1121001,hashtext(NEW.organization_id::text));
-  SELECT * INTO prior FROM trader_recorded_acquisition_lease_heads_v1 WHERE organization_id=NEW.organization_id FOR UPDATE;
+  SELECT * INTO prior FROM public.trader_recorded_acquisition_lease_heads_v1 WHERE organization_id=NEW.organization_id FOR UPDATE;
   has_prior := FOUND; observed := clock_timestamp();
   IF NEW.adjudicated_at_utc > observed OR observed > NEW.valid_until_utc
     OR (has_prior AND (observed <= prior.valid_until_utc OR NEW.adjudicated_at_utc <= prior.valid_until_utc
@@ -181,12 +182,12 @@ BEGIN
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-CREATE FUNCTION noncapital_acq_head_guard_v1() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE lease trader_recorded_acquisition_lease_history_v1%ROWTYPE; observed timestamptz;
+CREATE FUNCTION public.noncapital_acq_head_guard_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
+DECLARE lease public.trader_recorded_acquisition_lease_history_v1%ROWTYPE; observed timestamptz;
 BEGIN
   IF TG_OP='DELETE' THEN RAISE EXCEPTION 'NONCAPITAL_LEASE_HEAD_DELETE_REFUSED'; END IF;
   PERFORM pg_advisory_xact_lock(1121001,hashtext(NEW.organization_id::text));
-  SELECT * INTO lease FROM trader_recorded_acquisition_lease_history_v1 WHERE organization_id=NEW.organization_id AND content_digest=NEW.content_digest;
+  SELECT * INTO lease FROM public.trader_recorded_acquisition_lease_history_v1 WHERE organization_id=NEW.organization_id AND content_digest=NEW.content_digest;
   IF NOT FOUND THEN RAISE EXCEPTION 'NONCAPITAL_LEASE_HISTORY_REQUIRED'; END IF;
   observed := clock_timestamp();
   IF lease.runtime_instance_id IS DISTINCT FROM NEW.runtime_instance_id OR lease.lease_epoch IS DISTINCT FROM NEW.lease_epoch
@@ -203,11 +204,11 @@ BEGIN
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-CREATE FUNCTION noncapital_acq_commit_fence_v1() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE current_head trader_recorded_acquisition_lease_heads_v1%ROWTYPE;
+CREATE FUNCTION public.noncapital_acq_commit_fence_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
+DECLARE current_head public.trader_recorded_acquisition_lease_heads_v1%ROWTYPE;
 BEGIN
   PERFORM pg_advisory_xact_lock(1121001,hashtext(NEW.organization_id::text));
-  SELECT * INTO current_head FROM trader_recorded_acquisition_lease_heads_v1 WHERE organization_id=NEW.organization_id FOR UPDATE;
+  SELECT * INTO current_head FROM public.trader_recorded_acquisition_lease_heads_v1 WHERE organization_id=NEW.organization_id FOR UPDATE;
   IF NOT FOUND OR current_head.runtime_instance_id IS DISTINCT FROM NEW.runtime_instance_id
     OR current_head.lease_epoch IS DISTINCT FROM NEW.lease_epoch OR current_head.content_digest IS DISTINCT FROM NEW.content_digest
     OR current_head.valid_until_utc IS DISTINCT FROM NEW.valid_until_utc OR clock_timestamp()>current_head.valid_until_utc
@@ -215,19 +216,19 @@ BEGIN
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-CREATE TRIGGER noncapital_history_claim BEFORE INSERT ON trader_recorded_acquisition_lease_history_v1 FOR EACH ROW EXECUTE FUNCTION noncapital_acq_history_guard_v1();
+CREATE TRIGGER noncapital_history_claim BEFORE INSERT ON trader_recorded_acquisition_lease_history_v1 FOR EACH ROW EXECUTE FUNCTION public.noncapital_acq_history_guard_v1();
 --> statement-breakpoint
-CREATE TRIGGER noncapital_head_change BEFORE INSERT OR UPDATE OR DELETE ON trader_recorded_acquisition_lease_heads_v1 FOR EACH ROW EXECUTE FUNCTION noncapital_acq_head_guard_v1();
+CREATE TRIGGER noncapital_head_change BEFORE INSERT OR UPDATE OR DELETE ON trader_recorded_acquisition_lease_heads_v1 FOR EACH ROW EXECUTE FUNCTION public.noncapital_acq_head_guard_v1();
 --> statement-breakpoint
-CREATE CONSTRAINT TRIGGER noncapital_lease_commit_fence AFTER INSERT OR UPDATE ON trader_recorded_acquisition_lease_history_v1 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION noncapital_acq_commit_fence_v1();
+CREATE CONSTRAINT TRIGGER noncapital_lease_commit_fence AFTER INSERT OR UPDATE ON trader_recorded_acquisition_lease_history_v1 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.noncapital_acq_commit_fence_v1();
 --> statement-breakpoint
-CREATE CONSTRAINT TRIGGER noncapital_lease_commit_fence AFTER INSERT OR UPDATE ON trader_recorded_acquisition_lease_heads_v1 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION noncapital_acq_commit_fence_v1();
+CREATE CONSTRAINT TRIGGER noncapital_lease_commit_fence AFTER INSERT OR UPDATE ON trader_recorded_acquisition_lease_heads_v1 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.noncapital_acq_commit_fence_v1();
 --> statement-breakpoint
-CREATE FUNCTION noncapital_saved_history_guard_v1() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE prior trader_saved_research_lease_heads_v1%ROWTYPE; has_prior boolean; observed timestamptz;
+CREATE FUNCTION public.noncapital_saved_history_guard_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
+DECLARE prior public.trader_saved_research_lease_heads_v1%ROWTYPE; has_prior boolean; observed timestamptz;
 BEGIN
   PERFORM pg_advisory_xact_lock(1126001,hashtext(NEW.organization_id::text));
-  SELECT * INTO prior FROM trader_saved_research_lease_heads_v1 WHERE organization_id=NEW.organization_id FOR UPDATE;
+  SELECT * INTO prior FROM public.trader_saved_research_lease_heads_v1 WHERE organization_id=NEW.organization_id FOR UPDATE;
   has_prior := FOUND; observed := clock_timestamp();
   IF NEW.adjudicated_at_utc > observed OR observed > NEW.valid_until_utc
     OR (has_prior AND (observed <= prior.valid_until_utc OR NEW.adjudicated_at_utc <= prior.valid_until_utc
@@ -237,12 +238,12 @@ BEGIN
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-CREATE FUNCTION noncapital_saved_head_guard_v1() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE lease trader_saved_research_lease_history_v1%ROWTYPE; observed timestamptz;
+CREATE FUNCTION public.noncapital_saved_head_guard_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
+DECLARE lease public.trader_saved_research_lease_history_v1%ROWTYPE; observed timestamptz;
 BEGIN
   IF TG_OP='DELETE' THEN RAISE EXCEPTION 'NONCAPITAL_LEASE_HEAD_DELETE_REFUSED'; END IF;
   PERFORM pg_advisory_xact_lock(1126001,hashtext(NEW.organization_id::text));
-  SELECT * INTO lease FROM trader_saved_research_lease_history_v1 WHERE organization_id=NEW.organization_id AND content_digest=NEW.content_digest;
+  SELECT * INTO lease FROM public.trader_saved_research_lease_history_v1 WHERE organization_id=NEW.organization_id AND content_digest=NEW.content_digest;
   IF NOT FOUND THEN RAISE EXCEPTION 'NONCAPITAL_LEASE_HISTORY_REQUIRED'; END IF;
   observed := clock_timestamp();
   IF lease.runtime_instance_id IS DISTINCT FROM NEW.runtime_instance_id OR lease.lease_epoch IS DISTINCT FROM NEW.lease_epoch
@@ -259,11 +260,11 @@ BEGIN
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-CREATE FUNCTION noncapital_saved_commit_fence_v1() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE current_head trader_saved_research_lease_heads_v1%ROWTYPE;
+CREATE FUNCTION public.noncapital_saved_commit_fence_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
+DECLARE current_head public.trader_saved_research_lease_heads_v1%ROWTYPE;
 BEGIN
   PERFORM pg_advisory_xact_lock(1126001,hashtext(NEW.organization_id::text));
-  SELECT * INTO current_head FROM trader_saved_research_lease_heads_v1 WHERE organization_id=NEW.organization_id FOR UPDATE;
+  SELECT * INTO current_head FROM public.trader_saved_research_lease_heads_v1 WHERE organization_id=NEW.organization_id FOR UPDATE;
   IF NOT FOUND OR current_head.runtime_instance_id IS DISTINCT FROM NEW.runtime_instance_id
     OR current_head.lease_epoch IS DISTINCT FROM NEW.lease_epoch OR current_head.content_digest IS DISTINCT FROM NEW.content_digest
     OR current_head.valid_until_utc IS DISTINCT FROM NEW.valid_until_utc OR clock_timestamp()>current_head.valid_until_utc
@@ -271,13 +272,13 @@ BEGIN
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-CREATE TRIGGER noncapital_history_claim BEFORE INSERT ON trader_saved_research_lease_history_v1 FOR EACH ROW EXECUTE FUNCTION noncapital_saved_history_guard_v1();
+CREATE TRIGGER noncapital_history_claim BEFORE INSERT ON trader_saved_research_lease_history_v1 FOR EACH ROW EXECUTE FUNCTION public.noncapital_saved_history_guard_v1();
 --> statement-breakpoint
-CREATE TRIGGER noncapital_head_change BEFORE INSERT OR UPDATE OR DELETE ON trader_saved_research_lease_heads_v1 FOR EACH ROW EXECUTE FUNCTION noncapital_saved_head_guard_v1();
+CREATE TRIGGER noncapital_head_change BEFORE INSERT OR UPDATE OR DELETE ON trader_saved_research_lease_heads_v1 FOR EACH ROW EXECUTE FUNCTION public.noncapital_saved_head_guard_v1();
 --> statement-breakpoint
-CREATE CONSTRAINT TRIGGER noncapital_lease_commit_fence AFTER INSERT OR UPDATE ON trader_saved_research_lease_history_v1 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION noncapital_saved_commit_fence_v1();
+CREATE CONSTRAINT TRIGGER noncapital_lease_commit_fence AFTER INSERT OR UPDATE ON trader_saved_research_lease_history_v1 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.noncapital_saved_commit_fence_v1();
 --> statement-breakpoint
-CREATE CONSTRAINT TRIGGER noncapital_lease_commit_fence AFTER INSERT OR UPDATE ON trader_saved_research_lease_heads_v1 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION noncapital_saved_commit_fence_v1();
+CREATE CONSTRAINT TRIGGER noncapital_lease_commit_fence AFTER INSERT OR UPDATE ON trader_saved_research_lease_heads_v1 DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.noncapital_saved_commit_fence_v1();
 --> statement-breakpoint
 CREATE TRIGGER noncapital_append_only BEFORE UPDATE OR DELETE ON trader_recorded_acquisition_lease_history_v1 FOR EACH ROW EXECUTE FUNCTION trader_runtime_authority_v2_append_only_guard();
 --> statement-breakpoint
@@ -289,21 +290,31 @@ ALTER TABLE trader_recorded_acquisition_lease_history_v1 ENABLE ROW LEVEL SECURI
 --> statement-breakpoint
 CREATE POLICY noncapital_browser_deny ON trader_recorded_acquisition_lease_history_v1 FOR ALL TO authenticated,anon USING(false) WITH CHECK(false);
 --> statement-breakpoint
+REVOKE ALL ON public.trader_recorded_acquisition_lease_history_v1 FROM PUBLIC, anon, authenticated;
+--> statement-breakpoint
 ALTER TABLE trader_recorded_acquisition_lease_heads_v1 ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
 CREATE POLICY noncapital_browser_deny ON trader_recorded_acquisition_lease_heads_v1 FOR ALL TO authenticated,anon USING(false) WITH CHECK(false);
+--> statement-breakpoint
+REVOKE ALL ON public.trader_recorded_acquisition_lease_heads_v1 FROM PUBLIC, anon, authenticated;
 --> statement-breakpoint
 ALTER TABLE trader_saved_research_lease_history_v1 ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
 CREATE POLICY noncapital_browser_deny ON trader_saved_research_lease_history_v1 FOR ALL TO authenticated,anon USING(false) WITH CHECK(false);
 --> statement-breakpoint
+REVOKE ALL ON public.trader_saved_research_lease_history_v1 FROM PUBLIC, anon, authenticated;
+--> statement-breakpoint
 ALTER TABLE trader_saved_research_lease_heads_v1 ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
 CREATE POLICY noncapital_browser_deny ON trader_saved_research_lease_heads_v1 FOR ALL TO authenticated,anon USING(false) WITH CHECK(false);
 --> statement-breakpoint
+REVOKE ALL ON public.trader_saved_research_lease_heads_v1 FROM PUBLIC, anon, authenticated;
+--> statement-breakpoint
 ALTER TABLE trader_runtime_ownership_refs_v1 ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
 CREATE POLICY noncapital_browser_deny ON trader_runtime_ownership_refs_v1 FOR ALL TO authenticated,anon USING(false) WITH CHECK(false);
+--> statement-breakpoint
+REVOKE ALL ON public.trader_runtime_ownership_refs_v1 FROM PUBLIC, anon, authenticated;
 --> statement-breakpoint
 CREATE TABLE trader_runtime_legacy_holder_divergence_v1 (
   divergence_id text PRIMARY KEY CHECK (divergence_id ~ '^[0-9a-f]{64}$'),
@@ -359,16 +370,18 @@ BEGIN
   IF remaining <> 0 THEN RAISE EXCEPTION 'NONCAPITAL_HOLDER_SUBSTITUTION_REFUSED'; END IF;
 END $dee1147$;
 --> statement-breakpoint
-CREATE FUNCTION trader_legacy_holder_divergence_closed_v1() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION public.trader_legacy_holder_divergence_closed_v1() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
 BEGIN RAISE EXCEPTION 'LEGACY_HOLDER_DIVERGENCE_CLOSED'; END $$;
 --> statement-breakpoint
-CREATE TRIGGER legacy_holder_divergence_closed BEFORE INSERT ON trader_runtime_legacy_holder_divergence_v1 FOR EACH ROW EXECUTE FUNCTION trader_legacy_holder_divergence_closed_v1();
+CREATE TRIGGER legacy_holder_divergence_closed BEFORE INSERT ON trader_runtime_legacy_holder_divergence_v1 FOR EACH ROW EXECUTE FUNCTION public.trader_legacy_holder_divergence_closed_v1();
 --> statement-breakpoint
 CREATE TRIGGER legacy_holder_divergence_append_only BEFORE UPDATE OR DELETE ON trader_runtime_legacy_holder_divergence_v1 FOR EACH ROW EXECUTE FUNCTION trader_runtime_authority_v2_append_only_guard();
 --> statement-breakpoint
 ALTER TABLE trader_runtime_legacy_holder_divergence_v1 ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
 CREATE POLICY legacy_holder_divergence_browser_deny ON trader_runtime_legacy_holder_divergence_v1 FOR ALL TO authenticated,anon USING(false) WITH CHECK(false);
+--> statement-breakpoint
+REVOKE ALL ON public.trader_runtime_legacy_holder_divergence_v1 FROM PUBLIC, anon, authenticated;
 --> statement-breakpoint
 ALTER TABLE trader_runtime_noncapital_cycles_v2 ADD COLUMN ownership_domain text NOT NULL DEFAULT 'CAPITAL_LEGACY_V2', ADD CONSTRAINT noncapital_receipt_domain_0 CHECK (ownership_domain IN ('CAPITAL_LEGACY_V2','RECORDED_ACQUISITION_V1'));
 --> statement-breakpoint
@@ -518,43 +531,43 @@ BEGIN
   END LOOP;
 END $$;
 --> statement-breakpoint
-CREATE OR REPLACE FUNCTION trader_runtime_noncapital_cycles_v2_fence() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION public.trader_runtime_noncapital_cycles_v2_fence() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
 DECLARE owner record;
 BEGIN
   IF NEW.ownership_domain='CAPITAL_LEGACY_V2' THEN
     PERFORM pg_advisory_xact_lock(hashtextextended(NEW.organization_id::text,637));
-    SELECT * INTO owner FROM trader_runtime_control_lease_heads_v2 WHERE organization_id=NEW.organization_id FOR UPDATE;
+    SELECT * INTO owner FROM public.trader_runtime_control_lease_heads_v2 WHERE organization_id=NEW.organization_id FOR UPDATE;
   ELSIF NEW.ownership_domain='RECORDED_ACQUISITION_V1' AND TG_TABLE_NAME IN ('trader_runtime_noncapital_cycles_v2') THEN
     PERFORM pg_advisory_xact_lock(1121001,hashtext(NEW.organization_id::text));
-    SELECT * INTO owner FROM trader_recorded_acquisition_lease_heads_v1 WHERE organization_id=NEW.organization_id FOR UPDATE;
+    SELECT * INTO owner FROM public.trader_recorded_acquisition_lease_heads_v1 WHERE organization_id=NEW.organization_id FOR UPDATE;
   ELSE RAISE EXCEPTION 'NONCAPITAL_RECEIPT_DOMAIN_REFUSED'; END IF;
   IF NOT FOUND OR owner.runtime_instance_id <> NEW.runtime_instance_id OR owner.lease_epoch <> NEW.lease_epoch
     OR owner.content_digest <> NEW.lease_content_digest OR clock_timestamp()>owner.valid_until_utc
   THEN RAISE EXCEPTION 'RUNTIME_CONTROL_LEASE_STALE_HOLDER'; END IF;
-  IF NOT EXISTS (SELECT 1 FROM trader_runtime_ownership_refs_v1 r WHERE r.ownership_domain=NEW.ownership_domain
+  IF NOT EXISTS (SELECT 1 FROM public.trader_runtime_ownership_refs_v1 r WHERE r.ownership_domain=NEW.ownership_domain
     AND r.organization_id=NEW.organization_id AND r.runtime_instance_id=NEW.runtime_instance_id
     AND r.lease_epoch=NEW.lease_epoch AND r.lease_content_digest=NEW.lease_content_digest)
   THEN RAISE EXCEPTION 'NONCAPITAL_RECEIPT_HOLDER_REFUSED'; END IF;
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-CREATE OR REPLACE FUNCTION trader_recorded_analysis_v1_fence() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION public.trader_recorded_analysis_v1_fence() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public AS $$
 DECLARE owner record;
 BEGIN
   IF NEW.ownership_domain='CAPITAL_LEGACY_V2' THEN
     PERFORM pg_advisory_xact_lock(hashtextextended(NEW.organization_id::text,637));
-    SELECT * INTO owner FROM trader_runtime_control_lease_heads_v2 WHERE organization_id=NEW.organization_id FOR UPDATE;
+    SELECT * INTO owner FROM public.trader_runtime_control_lease_heads_v2 WHERE organization_id=NEW.organization_id FOR UPDATE;
   ELSIF NEW.ownership_domain='RECORDED_ACQUISITION_V1' AND TG_TABLE_NAME IN ('trader_recorded_analysis_sessions_v1','trader_recorded_analysis_packets_v1','trader_recorded_analysis_companions_v1') THEN
     PERFORM pg_advisory_xact_lock(1121001,hashtext(NEW.organization_id::text));
-    SELECT * INTO owner FROM trader_recorded_acquisition_lease_heads_v1 WHERE organization_id=NEW.organization_id FOR UPDATE;
+    SELECT * INTO owner FROM public.trader_recorded_acquisition_lease_heads_v1 WHERE organization_id=NEW.organization_id FOR UPDATE;
   ELSIF NEW.ownership_domain='SAVED_RESEARCH_V1' AND TG_TABLE_NAME IN ('trader_research_understanding_assignments_v1','trader_research_understanding_completions_v1','trader_research_application_assignments_v1','trader_research_applications_v1','trader_research_application_availability_v1','trader_research_application_consumptions_v1') THEN
     PERFORM pg_advisory_xact_lock(1126001,hashtext(NEW.organization_id::text));
-    SELECT * INTO owner FROM trader_saved_research_lease_heads_v1 WHERE organization_id=NEW.organization_id FOR UPDATE;
+    SELECT * INTO owner FROM public.trader_saved_research_lease_heads_v1 WHERE organization_id=NEW.organization_id FOR UPDATE;
   ELSE RAISE EXCEPTION 'NONCAPITAL_RECEIPT_DOMAIN_REFUSED'; END IF;
   IF NOT FOUND OR owner.runtime_instance_id <> NEW.runtime_instance_id OR owner.lease_epoch <> NEW.lease_epoch
     OR owner.content_digest <> NEW.lease_content_digest OR clock_timestamp()>owner.valid_until_utc
   THEN RAISE EXCEPTION 'RUNTIME_CONTROL_LEASE_STALE_HOLDER'; END IF;
-  IF NOT EXISTS (SELECT 1 FROM trader_runtime_ownership_refs_v1 r WHERE r.ownership_domain=NEW.ownership_domain
+  IF NOT EXISTS (SELECT 1 FROM public.trader_runtime_ownership_refs_v1 r WHERE r.ownership_domain=NEW.ownership_domain
     AND r.organization_id=NEW.organization_id AND r.runtime_instance_id=NEW.runtime_instance_id
     AND r.lease_epoch=NEW.lease_epoch AND r.lease_content_digest=NEW.lease_content_digest)
   THEN RAISE EXCEPTION 'NONCAPITAL_RECEIPT_HOLDER_REFUSED'; END IF;
