@@ -205,12 +205,19 @@ export function constructRiskAccountBasisV1(input: {
     inclusionDispositions: [...input.inclusions] });
 }
 
-/** Exact identity exception only: its own already counted obligation is not charged twice. */
+/** Exact identity exception only: its own already counted obligation is not charged twice.
+ *  A positive answer requires the evaluation instant to be strictly before the basis validUntilUtc.
+ *  Quote-asset buying power is refused: BUY-order reserves are not subtracted here. */
 export function availableRiskAccountQuantityV1(input: {
   basis: RiskAccountBasisV1; asset: string; obligations: readonly RiskAccountObligationV1[];
+  evaluatedAtUtc: string; quoteAsset: string;
   own?: { allowanceId: string; allowanceContentDigest: string; orderId: string | null; quantity: string };
 }): string {
   assertRiskAccountRecordSealV1(input.basis);
+  const evaluatedAt = Date.parse(riskAccountTimeSchemaV1.parse(input.evaluatedAtUtc));
+  const validUntil = Date.parse(riskAccountTimeSchemaV1.parse(input.basis.validUntilUtc));
+  if (!(evaluatedAt < validUntil)) refuse("BASIS_NOT_CURRENT");
+  if (input.quoteAsset.length === 0 || input.asset === input.quoteAsset) refuse("QUOTE_BUYING_POWER_REFUSED");
   const asset = input.basis.assets.find(row => row.asset === input.asset);
   if (!asset) return refuse("INVENTORY_ASSET_MISSING");
   let lower = nonnegative(asset.guaranteedLowerQuantity), ownMatched = false;

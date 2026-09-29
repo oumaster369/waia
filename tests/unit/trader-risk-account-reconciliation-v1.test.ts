@@ -65,6 +65,11 @@ function projection(btc: string, quote: string, at = start, extras: RealityProje
       entry("BALANCE", "USDT", { kind: "BALANCE", asset: "USDT", available: quote, locked: "0", total: quote }), ...extras,
     ] });
 }
+function available(input: Omit<Parameters<typeof availableRiskAccountQuantityV1>[0], "evaluatedAtUtc" | "quoteAsset"> & {
+  evaluatedAtUtc?: string; quoteAsset?: string;
+}) {
+  return availableRiskAccountQuantityV1({ evaluatedAtUtc: time(2), quoteAsset: "USDT", ...input });
+}
 function obligation(id: string, quantity: string, side: "BUY" | "SELL" = "SELL"): RiskAccountObligationV1 {
   return { allowanceId: id, allowanceContentDigest: digest(id), verdictId: `verdict-${id}`, verdictContentDigest: digest(`verdict-${id}`),
     instrumentIdentityDigest: digest("BTC/USDT"), symbol: "BTC/USDT", baseAsset: "BTC", side, quantity,
@@ -103,18 +108,18 @@ describe("current-account pure arithmetic and refusal values, without durable ad
   it("charges other SELL obligations, ignores pending BUY as guaranteed inventory and exempts only the exact own SELL once", () => {
     const basis = constructRiskAccountBasisV1(fixture()), own = obligation("own", "0.4"), other = obligation("other", "0.3");
     const obligations = [own, other, obligation("buy", "100", "BUY")];
-    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations })).toBe("0.6");
-    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations,
+    expect(available({ basis, asset: "BTC", obligations })).toBe("0.6");
+    expect(available({ basis, asset: "BTC", obligations,
       own: { allowanceId: own.allowanceId, allowanceContentDigest: own.allowanceContentDigest,
         orderId: null, quantity: "0.4" } })).toBe("1");
-    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations,
+    expect(() => available({ basis, asset: "BTC", obligations,
       own: { allowanceId: "own", allowanceContentDigest: digest("forged"), orderId: null, quantity: "0.4" } })).toThrow("OWN_OBLIGATION_MISMATCH");
-    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations: [own, own] })).toThrow("DUPLICATE_OBLIGATION");
+    expect(() => available({ basis, asset: "BTC", obligations: [own, own] })).toThrow("DUPLICATE_OBLIGATION");
   });
   it("floors depleted inventory at zero and never exempts a sibling or nonexistent own identity", () => {
     const basis = constructRiskAccountBasisV1(fixture());
-    expect(availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations: [obligation("other", "2")] })).toBe("0");
-    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations: [obligation("other", "1")],
+    expect(available({ basis, asset: "BTC", obligations: [obligation("other", "2")] })).toBe("0");
+    expect(() => available({ basis, asset: "BTC", obligations: [obligation("other", "1")],
       own: { allowanceId: "missing", allowanceContentDigest: digest("missing"), orderId: null, quantity: "1" } })).toThrow("OWN_OBLIGATION_MISSING");
   });
   it("only releases the exact consumed charge after a matching independently settled fill and actual balance comparison", () => {
@@ -155,5 +160,22 @@ describe("current-account pure arithmetic and refusal values, without durable ad
       .toThrow("REFERENCE_DRIFT_WITH_OBLIGATIONS");
     expect(() => constructRiskAccountBasisV1({ ...input, predecessor: prior,
       expected: { ...expected, reconciledExposureNotional: "0" } })).toThrow("PREDECESSOR_SCOPE_OR_TIME");
+  });
+  it("refuses an evaluation that is not strictly before basis validity", () => {
+    const basis = constructRiskAccountBasisV1(fixture());
+    const obligations = [obligation("other", "0.3")];
+    expect(available({ basis, asset: "BTC", obligations, evaluatedAtUtc: time(30) })).toBe("1");
+    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations,
+      evaluatedAtUtc: basis.validUntilUtc, quoteAsset: "USDT" })).toThrow("BASIS_NOT_CURRENT");
+    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations,
+      evaluatedAtUtc: time(32), quoteAsset: "USDT" })).toThrow("BASIS_NOT_CURRENT");
+  });
+  it("refuses quote-asset buying power because BUY reserves are not subtracted", () => {
+    const basis = constructRiskAccountBasisV1(fixture());
+    expect(basis.assets.some(row => row.asset === "USDT")).toBe(true);
+    expect(() => availableRiskAccountQuantityV1({ basis, asset: "USDT", obligations: [],
+      evaluatedAtUtc: time(2), quoteAsset: "USDT" })).toThrow("QUOTE_BUYING_POWER_REFUSED");
+    expect(() => availableRiskAccountQuantityV1({ basis, asset: "BTC", obligations: [],
+      evaluatedAtUtc: time(2), quoteAsset: "BTC" })).toThrow("QUOTE_BUYING_POWER_REFUSED");
   });
 });
