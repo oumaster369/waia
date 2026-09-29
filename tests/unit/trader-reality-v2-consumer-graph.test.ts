@@ -24,7 +24,8 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
       expect.objectContaining({
         status: "PASS",
         // DEE-1126 extracts passive interval durations and the replay minimum.
-        sources: 157,
+        // DEE-1151 adds Execution V2 order-path modules under execution/v2.
+        sources: 161,
         // DEE-1015 adds exactly one observation-only consumer: the assignment-bound
         // credential read boundary that replaces the generic repository on that path.
         // DEE-1050 adds three public-read consumers: RSS news, Alternative.me, and
@@ -33,7 +34,8 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         // DEE-1130 adds one excluded historical reconciliation projector.
         // DEE-1135 pins the HTX account acquisition spec and its PostgreSQL journal
         // on the existing Reality boundary.
-        consumers: 143,
+        // DEE-1151 adds paper and live callers that import Execution V2.
+        consumers: 148,
         // DEE-1099 adds one read of freshly validated account permissions,
         // not a financial observation or a venue effect.
         connectorReferences: 26,
