@@ -8,7 +8,21 @@ import { createExecutionAttemptV2, createExecutionPlanV2, createExecutionPolicyB
 import { insertExecutionAttemptV2Postgres, insertExecutionPlanV2Postgres, insertExecutionPolicyV2Postgres } from "@/lib/trader/execution/v2/repository-postgres";
 import { divideDecimal } from "@/lib/trader/risk/numeric";
 import { admitRiskAllowanceV2Postgres, consumeRiskAllowanceForOrderV2Postgres,
-  initializeRiskAccountStateV2Postgres, type AdmitRiskAllowanceV2Input } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
+  initializeRiskAccountStateV2Postgres as initializeRiskAccountStateRaw, type AdmitRiskAllowanceV2Input } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
+import { publishMirroredLiveCapitalEnvelopeV2 } from "./live-capital-test-envelope";
+
+async function initializeRiskAccountStateV2Postgres(
+  database: Parameters<typeof initializeRiskAccountStateRaw>[0],
+  context: Parameters<typeof initializeRiskAccountStateRaw>[1],
+  state: Parameters<typeof initializeRiskAccountStateRaw>[2],
+) {
+  await initializeRiskAccountStateRaw(database, context, state);
+  await publishMirroredLiveCapitalEnvelopeV2({
+    organizationId: context.organizationId,
+    accountId: state.accountId,
+    exposureLimitNotional: state.accounting.exposureLimitNotional,
+  });
+}
 const hex64 = (seed: string) => createHash("sha256").update(seed).digest("hex");
 function account(accountId: string) {
   return {

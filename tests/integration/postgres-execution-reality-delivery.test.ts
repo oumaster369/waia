@@ -31,6 +31,8 @@ const cleanupOrder: readonly string[] = [...[...realityTables].reverse(),
   "trader_orders", "trader_risk_verdicts_v2", "trader_risk_account_state_v2",
 ];
 async function clean(client: postgres.Sql, organizationId: string) {
+  const { deleteLiveCapitalEnvelopeRows } = await import("../helpers/live-capital-test-envelope");
+  await deleteLiveCapitalEnvelopeRows(client, organizationId);
   // Isolated native fixture teardown only; never called by delivery code.
   for (const table of appendOnlyTables) await client.unsafe(`ALTER TABLE ${table} DISABLE TRIGGER ${table}_block_delete`);
   try { await client.begin(async (tx) => { for (const table of cleanupOrder) await tx.unsafe(`DELETE FROM ${table} WHERE organization_id=$1::uuid`, [organizationId]); }); }

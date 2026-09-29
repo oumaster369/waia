@@ -21,6 +21,10 @@ import {
 } from "@/lib/trader/execution";
 import { createExecutionLiveAuthorizationHook } from "@/lib/trader/live/assert-live-path-authorized";
 import {
+  createAssertExecutionV2LiveAuthorized,
+  createOrgScopedExecutionV2OrderPath,
+} from "@/lib/trader/execution/v2/org-order-path";
+import {
   createLiveConnectorForMode,
   createLiveHtxConnector,
 } from "@/lib/trader/live/live-connector";
@@ -119,6 +123,11 @@ export async function buildLiveCliPostgresDeps(
     nowMs,
     assertLiveAuthorized,
   });
+  const orderPath = createOrgScopedExecutionV2OrderPath({
+    db,
+    connectorFor: (mode) => connectorForMode(mode),
+    assertLiveAuthorized: createAssertExecutionV2LiveAuthorized(db, input.env),
+  });
 
   const reconciliation = createPostgresReconciliationService(db, {
     connectorForMode,
@@ -138,6 +147,8 @@ export async function buildLiveCliPostgresDeps(
       feeComputation,
       hwmLedger,
       orderRepository,
+      decisionCapitalAuthorityV2: orderPath.decisionCapitalAuthorityV2,
+      executionV2: orderPath,
     },
     orgLiveEnableService,
     dispose: () => disposeWaiaRuntimeDb(runtime).then(() => undefined),

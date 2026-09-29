@@ -59,6 +59,10 @@ import {
   initializeRiskAccountStateV2Postgres,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import {
+  publishMirroredLiveCapitalEnvelopeV2,
+  deleteLiveCapitalEnvelopeRows,
+} from "@/tests/helpers/live-capital-test-envelope";
+import {
   buildFhvOfficialV2ScaleDataset,
   FHV_OFFICIAL_V2_SCALE_RELEASE_SHA,
   FHV_TEST_ORG_ID,
@@ -308,6 +312,12 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
         exposureLimitNotional: "1000000000000",
       },
     });
+    await publishMirroredLiveCapitalEnvelopeV2({
+      sql: sqlClient,
+      organizationId: seeded.context.organizationId,
+      accountId,
+      exposureLimitNotional: "1000000000000",
+    });
 
     const decisionId = `fhv-test-only-decision-${digestHex(identity).slice(0, 24)}`;
     const admitted = await admitRiskAllowanceV2Postgres(pgDb, seeded.context, {
@@ -555,8 +565,13 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
       deps: { ...seeded.session.deps, execution },
     },
     cleanup: () => {
+      // Close the shared FHV SQLite before returning. The next it.each case
+      // starts as soon as this returns; deferring session.cleanup() until the
+      // envelope delete settles closes that next session mid-submit.
       seeded.cleanup();
-      void sqlClient.end({ timeout: 5 });
+      return deleteLiveCapitalEnvelopeRows(sqlClient, seeded.context.organizationId).finally(() =>
+        sqlClient.end({ timeout: 5 }),
+      );
     },
   };
 }

@@ -391,8 +391,14 @@ validate_linear_completion_contract() {
 
 extract_branch_nn() {
   local branch="$1"
+  local nn=""
   if [[ "$branch" =~ ^dee-([0-9]+)- ]]; then
-    local nn="${BASH_REMATCH[1]}"
+    nn="${BASH_REMATCH[1]}"
+  elif [[ "$branch" =~ ^cursor/dee-([0-9]+)-[a-z0-9-]+-[0-9]+$ ]]; then
+    # Cloud agent branches keep the dee-<NN>-<slug> identity and append a numeric suffix.
+    nn="${BASH_REMATCH[1]}"
+  fi
+  if [[ -n "$nn" ]]; then
     if [[ "$nn" -lt 100 ]]; then
       printf 'DEE-%02d' "$((10#$nn))"
     else
@@ -533,7 +539,8 @@ if [[ -n "$branch_id" && -n "$explicit_id" ]] && ! dee_ids_equal "$branch_id" "$
 fi
 
 dee_branch_ok=false
-if [[ "$PR_BRANCH" =~ ^dee-[0-9]{2,}-[a-z0-9-]+$ ]]; then
+if [[ "$PR_BRANCH" =~ ^dee-[0-9]{2,}-[a-z0-9-]+$ ]] ||
+  [[ "$PR_BRANCH" =~ ^cursor/dee-[0-9]{2,}-[a-z0-9-]+-[0-9]+$ ]]; then
   dee_branch_ok=true
 elif [[ -n "$PR_BRANCH" ]]; then
   add_failure "Branch \`${PR_BRANCH}\` does not match \`dee-<NN>-<slug>\`."

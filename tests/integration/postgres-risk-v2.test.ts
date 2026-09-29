@@ -9,7 +9,7 @@ import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
   admitRiskAllowanceV2Postgres,
   consumeRiskAllowanceForOrderV2Postgres,
-  initializeRiskAccountStateV2Postgres,
+  initializeRiskAccountStateV2Postgres as initializeRiskAccountStateRaw,
   readRiskAccountStateV2Postgres,
   expireRiskAllowanceV2Postgres,
   revokeRiskAllowanceV2Postgres,
@@ -19,7 +19,13 @@ import {
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { divideDecimal } from "@/lib/trader/risk/numeric";
+import { createPostgresKillSwitchService } from "@/lib/trader/risk/kill-switch";
+import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
+import {
+  deleteLiveCapitalEnvelopeRows,
+  publishMirroredLiveCapitalEnvelopeV2,
+} from "../helpers/live-capital-test-envelope";
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -35,7 +41,30 @@ const riskTables = [
   "trader_risk_enforcement_events_v2",
 ] as const;
 
+async function initializeRiskAccountStateV2Postgres(
+  database: Parameters<typeof initializeRiskAccountStateRaw>[0],
+  context: Parameters<typeof initializeRiskAccountStateRaw>[1],
+  state: Parameters<typeof initializeRiskAccountStateRaw>[2],
+) {
+  await initializeRiskAccountStateRaw(database, context, state);
+  await publishMirroredLiveCapitalEnvelopeV2({
+    organizationId: context.organizationId,
+    accountId: state.accountId,
+    exposureLimitNotional: state.accounting.exposureLimitNotional,
+  });
+}
+
+async function deleteOrgAuditLogs(sqlClient: postgres.Sql, organizationId: string) {
+  await sqlClient.unsafe("ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_block_delete");
+  try {
+    await sqlClient`DELETE FROM audit_logs WHERE organization_id = ${organizationId}::uuid`;
+  } finally {
+    await sqlClient.unsafe("ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_block_delete");
+  }
+}
+
 async function clearRisk(sqlClient: postgres.Sql, organizationId: string) {
+  await deleteLiveCapitalEnvelopeRows(sqlClient, organizationId);
   await sqlClient.unsafe(
     "ALTER TABLE trader_risk_enforcement_events_v2 DISABLE TRIGGER trader_risk_enforcement_events_v2_block_delete",
   );
@@ -262,6 +291,8 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
     if (sqlClient) {
       await clearRisk(sqlClient, orgA);
       await clearRisk(sqlClient, orgB);
+      await deleteOrgAuditLogs(sqlClient, orgA);
+      await deleteOrgAuditLogs(sqlClient, orgB);
       await sqlClient.end({ timeout: 10 });
     }
     await cleanupWp13Org(url!, USER_A);
@@ -1101,4 +1132,83 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
       await admitClient.end({ timeout: 5 });
     }
   }, 30_000);
+
+  it("DEE-1151 refuses admission when the live capital envelope is missing", async () => {
+    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("capital-absent"));
+    await sqlClient`
+      delete from trader_live_capital_envelope_current_v2
+      where organization_id = ${orgA}::uuid and account_id = 'capital-absent'`;
+    await expect(
+      admitRiskAllowanceV2Postgres(
+        db,
+        { organizationId: orgA },
+        admission({ accountId: "capital-absent", identity: 910, reservation: "1" }),
+      ),
+    ).rejects.toMatchObject({ reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
+
+  it("DEE-1151 refuses admission when loss limit is below the reservation", async () => {
+    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("capital-loss"));
+    await publishMirroredLiveCapitalEnvelopeV2({
+      sql: sqlClient,
+      organizationId: orgA,
+      accountId: "capital-loss",
+      exposureLimitNotional: "100",
+      lossLimitNotional: "1",
+    });
+    await expect(
+      admitRiskAllowanceV2Postgres(
+        db,
+        { organizationId: orgA },
+        admission({ accountId: "capital-loss", identity: 911, reservation: "25" }),
+      ),
+    ).rejects.toMatchObject({ reason: "RESERVATION_EXCEEDS_REMAINING_ENVELOPE" });
+  });
+
+  it("DEE-1151 refuses admission when capital does not equal the exposure limit", async () => {
+    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("capital-mismatch"));
+    await publishMirroredLiveCapitalEnvelopeV2({
+      sql: sqlClient,
+      organizationId: orgA,
+      accountId: "capital-mismatch",
+      exposureLimitNotional: "10",
+      lossLimitNotional: "10",
+    });
+    await expect(
+      admitRiskAllowanceV2Postgres(
+        db,
+        { organizationId: orgA },
+        admission({ accountId: "capital-mismatch", identity: 912, reservation: "1" }),
+      ),
+    ).rejects.toMatchObject({ reason: "LIVE_CAPITAL_LIMIT_MISMATCH" });
+  });
+
+  it("DEE-1151 projects an org kill-switch trip onto the account V2 reads", async () => {
+    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("kill-project"));
+    const service = createPostgresKillSwitchService(db);
+    try {
+      await service.trip(
+        { actorType: "service", actorId: null },
+        requireOrgContext(orgA),
+        { scopeType: "organization", organizationId: orgA },
+        { scopeType: "organization", scopeRef: null, switchType: "EMERGENCY_STOP" },
+        { enforcementMode: "REJECT", origin: "manual", reason: "dee-1151 projection" },
+      );
+      const [row] = await sqlClient<{ kill_state: string; posture: string }[]>`
+        select kill_state, posture from trader_risk_account_state_v2
+        where organization_id = ${orgA}::uuid and account_id = 'kill-project'`;
+      expect(row).toEqual({ kill_state: "TRIPPED", posture: "KILLED" });
+      await expect(
+        admitRiskAllowanceV2Postgres(
+          db,
+          { organizationId: orgA },
+          admission({ accountId: "kill-project", identity: 913, reservation: "1" }),
+        ),
+      ).rejects.toMatchObject({ reason: "KILL_SWITCH_TRIPPED" });
+    } finally {
+      await sqlClient`
+        delete from trader_kill_switches
+        where organization_id = ${orgA}::uuid`;
+    }
+  });
 });

@@ -224,15 +224,6 @@ class HtxUnknownOrderEvidenceError extends Error {
   }
 }
 
-function requireHtxOrderEvidence(
-  value: unknown,
-  field: string,
-  row: Readonly<Record<string, unknown>>,
-): string {
-  if (typeof value === "string" && value.trim() !== "") return value;
-  throw new HtxUnknownOrderEvidenceError(field, row);
-}
-
 function requireHtxVenueIdentity(
   value: unknown,
   field: string,
@@ -271,12 +262,137 @@ function msToIso(ms?: number): string {
   return new Date(ms).toISOString();
 }
 
+/** Spot matching scale. Trailing zeros beyond this may be trimmed; a non-zero digit may not. */
+const HTX_VENUE_DECIMAL_SCALE = 8;
+
+/**
+ * Blank is absent. A non-decimal value is present and fail-unknown.
+ * Amounts and prices stay non-negative. Fee fields may be a maker rebate.
+ */
+function readHtxDecimalAlias(
+  value: unknown,
+  field: string,
+  row: Readonly<Record<string, unknown>>,
+  allowNegative = false,
+): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") throw new HtxUnknownOrderEvidenceError(field, row);
+  const trimmed = value.trim();
+  if (trimmed === "") return undefined;
+  const pattern = allowNegative ? /^-?\d+(?:\.\d+)?$/ : /^\d+(?:\.\d+)?$/;
+  if (!pattern.test(trimmed)) throw new HtxUnknownOrderEvidenceError(field, row);
+  return trimmed;
+}
+
+function htxDecimalStringsAgree(left: string, right: string): boolean {
+  const canonical = (value: string): string => {
+    const negative = value.startsWith("-");
+    const unsigned = negative ? value.slice(1) : value;
+    const [wholeRaw, fractionRaw = ""] = unsigned.split(".");
+    const whole = wholeRaw.replace(/^0+(?=\d)/, "");
+    const fraction = fractionRaw.replace(/0+$/, "");
+    const body = fraction.length > 0 ? `${whole}.${fraction}` : whole;
+    if (body === "0") return "0";
+    return negative ? `-${body}` : body;
+  };
+  return canonical(left) === canonical(right);
+}
+
+/**
+ * Trim trailing zeros down to the 8-digit spot scale. A non-zero digit past
+ * that scale is fail-unknown so compareDecimal is never asked to accept it.
+ */
+function normalizeHtxVenueDecimal(
+  value: string,
+  field: string,
+  row: Readonly<Record<string, unknown>>,
+): string {
+  const negative = value.startsWith("-");
+  const unsigned = negative ? value.slice(1) : value;
+  const [wholeRaw, fractionRaw = ""] = unsigned.split(".");
+  if (
+    fractionRaw.length > HTX_VENUE_DECIMAL_SCALE &&
+    /[1-9]/.test(fractionRaw.slice(HTX_VENUE_DECIMAL_SCALE))
+  ) {
+    throw new HtxUnknownOrderEvidenceError(field, row);
+  }
+  const whole = wholeRaw.replace(/^0+(?=\d)/, "") || "0";
+  const fraction = fractionRaw.slice(0, HTX_VENUE_DECIMAL_SCALE).replace(/0+$/, "");
+  const body = fraction.length > 0 ? `${whole}.${fraction}` : whole;
+  if (body === "0") return "0";
+  return negative ? `-${body}` : body;
+}
+
+/**
+ * Prefer the documented `filled-*` name. Accept the published detail-read
+ * `field-*` name when `filled-*` is absent. Both present and unequal is
+ * fail-unknown. Cash and fee pairs are checked the same way when a row
+ * carries them; absence is allowed because open-order rows omit them.
+ */
+function resolveHtxAliasedDecimal(
+  primary: unknown,
+  alias: unknown,
+  field: string,
+  row: Readonly<Record<string, unknown>>,
+  required: boolean,
+  allowNegative = false,
+): string | undefined {
+  const primaryValue = readHtxDecimalAlias(primary, field, row, allowNegative);
+  const aliasValue = readHtxDecimalAlias(alias, field, row, allowNegative);
+  if (
+    primaryValue !== undefined &&
+    aliasValue !== undefined &&
+    !htxDecimalStringsAgree(primaryValue, aliasValue)
+  ) {
+    throw new HtxUnknownOrderEvidenceError(field, row);
+  }
+  const chosen = primaryValue ?? aliasValue;
+  if (chosen === undefined && required) throw new HtxUnknownOrderEvidenceError(field, row);
+  return chosen === undefined ? undefined : normalizeHtxVenueDecimal(chosen, field, row);
+}
+
+function requireNormalizedHtxDecimal(
+  value: unknown,
+  field: string,
+  row: Readonly<Record<string, unknown>>,
+): string {
+  const read = readHtxDecimalAlias(value, field, row);
+  if (read === undefined) throw new HtxUnknownOrderEvidenceError(field, row);
+  return normalizeHtxVenueDecimal(read, field, row);
+}
+
 export function mapHtxOrder(row: HtxOrderRow): Order {
   const { side, type } = parseHtxOrderSideAndType(row.type, row);
   const orderId = requireHtxVenueIdentity(row.id, "order", row);
   const createdAt = msToIso(row["created-at"]);
-  const quantity = requireHtxOrderEvidence(row.amount, "amount", row);
-  const filledQuantity = requireHtxOrderEvidence(row["filled-amount"], "filled amount", row);
+  const quantity = requireNormalizedHtxDecimal(row.amount, "amount", row);
+  const price =
+    row.price === undefined ? undefined : requireNormalizedHtxDecimal(row.price, "price", row);
+  const filledQuantity = resolveHtxAliasedDecimal(
+    row["filled-amount"],
+    row["field-amount"],
+    "filled amount",
+    row,
+    true,
+  );
+  void resolveHtxAliasedDecimal(
+    row["filled-cash-amount"],
+    row["field-cash-amount"],
+    "filled cash amount",
+    row,
+    false,
+  );
+  void resolveHtxAliasedDecimal(
+    row["filled-fees"],
+    row["field-fees"],
+    "filled fees",
+    row,
+    false,
+    true,
+  );
+  if (filledQuantity === undefined) {
+    throw new HtxUnknownOrderEvidenceError("filled amount", row);
+  }
 
   return {
     orderId,
@@ -285,7 +401,7 @@ export function mapHtxOrder(row: HtxOrderRow): Order {
     side,
     type,
     status: mapHtxOrderStatus(row),
-    price: row.price,
+    price,
     quantity,
     filledQuantity,
     createdAt,
