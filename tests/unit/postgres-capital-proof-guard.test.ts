@@ -8,6 +8,7 @@ const directory = mkdtempSync(join(tmpdir(), "waia-capital-proof-"));
 const reportPath = join(directory, "report.json");
 const required = [
   "postgres-execution-v2.test.ts", "postgres-risk-v2.test.ts",
+  "postgres-risk-validation-org-fk-v1.test.ts",
   "postgres-execution-reality-delivery.test.ts",
   "postgres-risk-limits-bootstrap.test.ts", "postgres-trader-service-actor-authorization.test.ts",
   "postgres-reality-v2.test.ts", "postgres-canonical-decision-verification-v2.test.ts",
@@ -41,10 +42,10 @@ function run(testResults: ReturnType<typeof passed>) {
 afterAll(() => { rmSync(directory, { recursive: true, force: true }); });
 
 describe("mandatory executed Postgres capital proof", () => {
-  it("accepts all twenty-six actually executed critical suites", () => {
+  it("accepts all twenty-seven actually executed critical suites", () => {
     const result = run(passed());
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("26 critical suites, no skipped tests");
+    expect(result.stdout).toContain("27 critical suites, no skipped tests");
   });
   it.each(required)("rejects missing, skipped or failed proof for %s", (file) => {
     for (const mode of ["missing", "skipped", "failed", "empty", "duplicate"] as const) {
