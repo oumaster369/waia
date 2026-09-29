@@ -102,6 +102,8 @@ export async function cleanupWp13Org(url: string, userId: string): Promise<void>
   const sql = postgres(url, { max: 1 });
   try {
     const orgId = personalOrganizationIdFromUserId(userId);
+    const { deleteLiveCapitalEnvelopeRows } = await import("../helpers/live-capital-test-envelope");
+    await deleteLiveCapitalEnvelopeRows(sql, orgId);
     await sql.unsafe(
       `ALTER TABLE trader_intelligence_conviction_record DISABLE TRIGGER trader_intelligence_conviction_record_block_delete`,
     );

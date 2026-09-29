@@ -40,7 +40,7 @@ import { divideDecimal } from "@/lib/trader/risk/numeric";
 import {
   admitRiskAllowanceV2Postgres,
   consumeRiskAllowanceForOrderV2Postgres,
-  initializeRiskAccountStateV2Postgres,
+  initializeRiskAccountStateV2Postgres as initializeRiskAccountStateRaw,
   revokeRiskAllowanceV2Postgres,
   RiskV2AdmissionRefusedError,
   type AdmitRiskAllowanceV2Input,
@@ -48,6 +48,10 @@ import {
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
 import { createOrgScopedExecutionV2OrderPath } from "@/lib/trader/execution/v2/org-order-path";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
+import {
+  deleteLiveCapitalEnvelopeRows,
+  publishMirroredLiveCapitalEnvelopeV2,
+} from "../helpers/live-capital-test-envelope";
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
@@ -138,7 +142,21 @@ function admission(accountId: string): AdmitRiskAllowanceV2Input {
   };
 }
 
+async function initializeRiskAccountStateV2Postgres(
+  database: Parameters<typeof initializeRiskAccountStateRaw>[0],
+  context: Parameters<typeof initializeRiskAccountStateRaw>[1],
+  state: Parameters<typeof initializeRiskAccountStateRaw>[2],
+) {
+  await initializeRiskAccountStateRaw(database, context, state);
+  await publishMirroredLiveCapitalEnvelopeV2({
+    organizationId: context.organizationId,
+    accountId: state.accountId,
+    exposureLimitNotional: state.accounting.exposureLimitNotional,
+  });
+}
+
 async function clearOrganization(sql: postgres.Sql, organizationId: string): Promise<void> {
+  await deleteLiveCapitalEnvelopeRows(sql, organizationId);
   const guarded = [
     ["trader_execution_reports_v2", "trader_execution_reports_v2_block_delete"],
     ["trader_execution_attempts_v2", "trader_execution_attempts_v2_block_delete"],
@@ -183,9 +201,19 @@ function nativeErrorCauses(error: unknown): Record<string, unknown>[] {
   const seen = new Set<unknown>();
   while (error && typeof error === "object" && !seen.has(error)) {
     seen.add(error);
-    const cause = error as Error & { code?: string; detail?: string; reason?: string; cause?: unknown };
-    causes.push({ name: cause.name, message: cause.message, code: cause.code,
-      detail: cause.detail, reason: cause.reason });
+    const cause = error as Error & {
+      code?: string;
+      detail?: string;
+      reason?: string;
+      cause?: unknown;
+    };
+    causes.push({
+      name: cause.name,
+      message: cause.message,
+      code: cause.code,
+      detail: cause.detail,
+      reason: cause.reason,
+    });
     error = cause.cause;
   }
   if (error && typeof error !== "object") causes.push({ value: String(error) });
@@ -200,9 +228,15 @@ function nativeSettled<T>(operation: Promise<T>) {
 }
 
 function printLockProof(test: string, receipt: Record<string, unknown>): void {
-  console.info(`[DEE1134_NATIVE] ${JSON.stringify({ test, ...receipt },
-    (_key, value) => typeof value === "bigint" ? value.toString()
-      : value instanceof Error ? { causes: nativeErrorCauses(value) } : value)}`);
+  console.info(
+    `[DEE1134_NATIVE] ${JSON.stringify({ test, ...receipt }, (_key, value) =>
+      typeof value === "bigint"
+        ? value.toString()
+        : value instanceof Error
+          ? { causes: nativeErrorCauses(value) }
+          : value,
+    )}`,
+  );
 }
 
 // A test-local observer: all SQL and transaction ownership remain with the real
@@ -213,21 +247,36 @@ function lockClient(
   trace: LockTrace,
   pause?: { resource: "account" | "allowance" | "attempt"; identity: string },
 ) {
-  const client = postgres(url!, { max: 1, connect_timeout: 5,
-    connection: { application_name: `dee1134-${label}` } });
+  const client = postgres(url!, {
+    max: 1,
+    connect_timeout: 5,
+    connection: { application_name: `dee1134-${label}` },
+  });
   const plainDb = drizzle(client, { schema: pgSchema }) as WaiaPostgresDb;
   let release!: () => void;
-  const released = new Promise<void>((resolve) => { release = resolve; });
-  const actor = { client, plainDb, db: plainDb, label, pid: 0,
-    tx: null as LockTx | null, paused: false, release };
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const actor = {
+    client,
+    plainDb,
+    db: plainDb,
+    label,
+    pid: 0,
+    tx: null as LockTx | null,
+    paused: false,
+    release,
+  };
   actor.db = new Proxy(plainDb, {
     get(target, property) {
       if (property !== "transaction") {
         const value = Reflect.get(target, property);
         return typeof value === "function" ? value.bind(target) : value;
       }
-      return async (run: (tx: LockTx) => Promise<unknown>,
-        config?: Parameters<WaiaPostgresDb["transaction"]>[1]) => {
+      return async (
+        run: (tx: LockTx) => Promise<unknown>,
+        config?: Parameters<WaiaPostgresDb["transaction"]>[1],
+      ) => {
         try {
           const result = await target.transaction(async (tx) => {
             actor.tx = tx;
@@ -241,51 +290,67 @@ function lockClient(
                 current_setting('idle_in_transaction_session_timeout') AS idle_timeout,
                 current_setting('deadlock_timeout') AS deadlock_timeout,
                 current_setting('deadlock_timeout')::interval < interval '10 seconds'
-                  AS deadlock_before_timeout`);
+                  AS deadlock_before_timeout`,
+            );
             actor.pid = identity!.pid;
             trace.push({ actor: label, kind: "transaction-start", ...identity });
             expect(identity!.deadlock_before_timeout).toBe(true);
             const observed = new Proxy(tx, {
               get(realTx, key) {
-                if (key === "select") return (...args: unknown[]) => {
-                  const builder = Reflect.apply(realTx.select, realTx, args) as ReturnType<LockTx["select"]>;
-                  const from = builder.from.bind(builder);
-                  builder.from = ((...fromArgs: unknown[]) => {
-                    const query = Reflect.apply(from, builder, fromArgs) as CompletedSelect;
-                    const execute = query.execute.bind(query);
-                    query.execute = async (...executeArgs: unknown[]) => {
-                      const statement = query.toSQL();
-                      const rows = await execute(...executeArgs);
-                      const resource = ([
-                        ["account", "trader_risk_account_state_v2"],
-                        ["allowance", "trader_risk_allowances_v2"],
-                        ["attempt", "trader_execution_attempts_v2"],
-                      ] as const).find(([, table]) => statement.sql.includes(`"${table}"`))?.[0];
-                      if (resource && /\bfor update\b/i.test(statement.sql)) {
-                        trace.push({ actor: label, kind: "lock-acquired", resource,
-                          sql: statement.sql, params: statement.params,
-                          rowCount: Array.isArray(rows) ? rows.length : null });
-                        if (!actor.paused && resource === pause?.resource) {
-                          expect(statement.params).toContain(organizationId);
-                          expect(statement.params).toContain(pause.identity);
-                          expect(rows).toHaveLength(1);
-                          actor.paused = true;
-                          await released;
+                if (key === "select")
+                  return (...args: unknown[]) => {
+                    const builder = Reflect.apply(realTx.select, realTx, args) as ReturnType<
+                      LockTx["select"]
+                    >;
+                    const from = builder.from.bind(builder);
+                    builder.from = ((...fromArgs: unknown[]) => {
+                      const query = Reflect.apply(from, builder, fromArgs) as CompletedSelect;
+                      const execute = query.execute.bind(query);
+                      query.execute = async (...executeArgs: unknown[]) => {
+                        const statement = query.toSQL();
+                        const rows = await execute(...executeArgs);
+                        const resource = (
+                          [
+                            ["account", "trader_risk_account_state_v2"],
+                            ["allowance", "trader_risk_allowances_v2"],
+                            ["attempt", "trader_execution_attempts_v2"],
+                          ] as const
+                        ).find(([, table]) => statement.sql.includes(`"${table}"`))?.[0];
+                        if (resource && /\bfor update\b/i.test(statement.sql)) {
+                          trace.push({
+                            actor: label,
+                            kind: "lock-acquired",
+                            resource,
+                            sql: statement.sql,
+                            params: statement.params,
+                            rowCount: Array.isArray(rows) ? rows.length : null,
+                          });
+                          if (!actor.paused && resource === pause?.resource) {
+                            expect(statement.params).toContain(organizationId);
+                            expect(statement.params).toContain(pause.identity);
+                            expect(rows).toHaveLength(1);
+                            actor.paused = true;
+                            await released;
+                          }
                         }
-                      }
-                      return rows;
-                    };
-                    return query;
-                  }) as typeof builder.from;
-                  return builder;
-                };
-                if (key === "execute") return async (...args: Parameters<LockTx["execute"]>) => {
-                  const rows = await realTx.execute(...args);
-                  const first = (rows as unknown as { durable_at?: Date | string }[])[0];
-                  if (first?.durable_at) trace.push({ actor: label, kind: "clock",
-                    at: new Date(first.durable_at).toISOString() });
-                  return rows;
-                };
+                        return rows;
+                      };
+                      return query;
+                    }) as typeof builder.from;
+                    return builder;
+                  };
+                if (key === "execute")
+                  return async (...args: Parameters<LockTx["execute"]>) => {
+                    const rows = await realTx.execute(...args);
+                    const first = (rows as unknown as { durable_at?: Date | string }[])[0];
+                    if (first?.durable_at)
+                      trace.push({
+                        actor: label,
+                        kind: "clock",
+                        at: new Date(first.durable_at).toISOString(),
+                      });
+                    return rows;
+                  };
                 const value = Reflect.get(realTx, key);
                 return typeof value === "function" ? value.bind(realTx) : value;
               },
@@ -312,27 +377,42 @@ async function observeLockWait(
   resource: LockResource,
   trace: LockTrace,
 ) {
-  const table = { account: "trader_risk_account_state_v2", allowance: "trader_risk_allowances_v2",
-    attempt: "trader_execution_attempts_v2" }[resource];
+  const table = {
+    account: "trader_risk_account_state_v2",
+    allowance: "trader_risk_allowances_v2",
+    attempt: "trader_execution_attempts_v2",
+  }[resource];
   await expect.poll(() => binder.pid, { timeout: 5_000 }).not.toBe(0);
   expect(binder.pid).not.toBe(holder.pid);
-  await expect.poll(async () => {
-    await holder.tx!.execute(sqlQuery`SELECT pg_stat_clear_snapshot()`);
-    const rows = await holder.tx!.execute<{ pid: number; query: string; blockers: number[] }>(
-      sqlQuery`SELECT pid, query, pg_blocking_pids(pid) AS blockers FROM pg_stat_activity
+  await expect
+    .poll(
+      async () => {
+        await holder.tx!.execute(sqlQuery`SELECT pg_stat_clear_snapshot()`);
+        const rows = await holder.tx!.execute<{ pid: number; query: string; blockers: number[] }>(
+          sqlQuery`SELECT pid, query, pg_blocking_pids(pid) AS blockers FROM pg_stat_activity
         WHERE pid = ${binder.pid} AND wait_event_type = 'Lock'
-          AND ${holder.pid} = ANY(pg_blocking_pids(pid))`);
-    const waiting = rows[0];
-    if (!waiting?.query.includes(table) || !/\bfor update\b/i.test(waiting.query)) return false;
-    const locks = await holder.tx!.execute(sqlQuery`SELECT pid, locktype, mode, granted,
+          AND ${holder.pid} = ANY(pg_blocking_pids(pid))`,
+        );
+        const waiting = rows[0];
+        if (!waiting?.query.includes(table) || !/\bfor update\b/i.test(waiting.query)) return false;
+        const locks = await holder.tx!.execute(sqlQuery`SELECT pid, locktype, mode, granted,
       relation::regclass::text AS relation, transactionid::text AS transaction_id
       FROM pg_locks WHERE pid IN (${holder.pid}, ${binder.pid})
         AND locktype IN ('transactionid', 'tuple', 'relation')
       ORDER BY pid, locktype, mode, granted LIMIT 64`);
-    trace.push({ kind: "observed-server-wait", resource, holderPid: holder.pid,
-      binderPid: binder.pid, waiting, locks });
-    return true;
-  }, { timeout: 5_000 }).toBe(true);
+        trace.push({
+          kind: "observed-server-wait",
+          resource,
+          holderPid: holder.pid,
+          binderPid: binder.pid,
+          waiting,
+          locks,
+        });
+        return true;
+      },
+      { timeout: 5_000 },
+    )
+    .toBe(true);
 }
 
 describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E651-A)", () => {
@@ -578,9 +658,14 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
   }
 
   async function lockProofState(input: BindExecutionAuthorityV2Input, organizationId = orgA) {
-    const [state] = await sql<{
-      r: string; p: string; next: string; head: string | null;
-    }[]>`SELECT outstanding_reservation_notional::text AS r,
+    const [state] = await sql<
+      {
+        r: string;
+        p: string;
+        next: string;
+        head: string | null;
+      }[]
+    >`SELECT outstanding_reservation_notional::text AS r,
       worst_case_pending_exposure_notional::text AS p,
       next_enforcement_event_sequence::text AS next, last_enforcement_event_digest AS head
       FROM trader_risk_account_state_v2
@@ -589,16 +674,26 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       last_enforcement_event_sequence::text, last_enforcement_event_digest, content_digest
       FROM trader_risk_allowances_v2
       WHERE organization_id = ${organizationId}::uuid AND id = ${input.allowance.riskAllowanceId}::uuid`;
-    const events = await sql<{
-      type: string; sequence: string; previous: string | null; digest: string;
-    }[]>`SELECT event_type AS type, event_sequence::text AS sequence,
+    const events = await sql<
+      {
+        type: string;
+        sequence: string;
+        previous: string | null;
+        digest: string;
+      }[]
+    >`SELECT event_type AS type, event_sequence::text AS sequence,
       previous_event_digest AS previous, content_digest AS digest
       FROM trader_risk_enforcement_events_v2
       WHERE organization_id = ${organizationId}::uuid AND account_id = ${input.allowance.accountId}
       ORDER BY event_sequence LIMIT 4`;
-    const reports = await sql<{
-      type: string; sequence: string; previous: string | null; digest: string;
-    }[]>`SELECT report_type AS type, report_sequence::text AS sequence,
+    const reports = await sql<
+      {
+        type: string;
+        sequence: string;
+        previous: string | null;
+        digest: string;
+      }[]
+    >`SELECT report_type AS type, report_sequence::text AS sequence,
       previous_report_digest AS previous, content_digest AS digest
       FROM trader_execution_reports_v2
       WHERE organization_id = ${organizationId}::uuid AND account_id = ${input.allowance.accountId}
@@ -613,7 +708,12 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     return { account: state ?? null, allowance, events, reports, counts };
   }
 
-  function expectRiskChain(state: Awaited<ReturnType<typeof lockProofState>>, types: string[], r: string, p: string) {
+  function expectRiskChain(
+    state: Awaited<ReturnType<typeof lockProofState>>,
+    types: string[],
+    r: string,
+    p: string,
+  ) {
     expect(state.events.map((event) => event.type)).toEqual(types);
     state.events.forEach((event, index) => {
       expect(event.sequence).toBe(String(index + 1));
@@ -621,11 +721,21 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       expect(event.digest).toMatch(/^[0-9a-f]{64}$/);
     });
     expect(state.counts!.events).toBe(types.length);
-    expect(state.account).toEqual({ r, p, next: String(types.length + 1), head: state.events.at(-1)!.digest });
+    expect(state.account).toEqual({
+      r,
+      p,
+      next: String(types.length + 1),
+      head: state.events.at(-1)!.digest,
+    });
   }
 
-  async function finishLockProof(test: string, input: BindExecutionAuthorityV2Input, trace: LockTrace,
-    clients: ReturnType<typeof lockClient>[], operations: Promise<unknown>[]) {
+  async function finishLockProof(
+    test: string,
+    input: BindExecutionAuthorityV2Input,
+    trace: LockTrace,
+    clients: ReturnType<typeof lockClient>[],
+    operations: Promise<unknown>[],
+  ) {
     clients.forEach((client) => client.release());
     const outcomes = await Promise.all(operations);
     // Always emit both terminal results and nested driver causes before any
@@ -636,22 +746,41 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       printLockProof(test, { phase: "durable-state", state });
       return { outcomes, state };
     } finally {
-      const closed = await Promise.allSettled(clients.map((client) => client.client.end({ timeout: 5 })));
-      printLockProof(test, { phase: "closed", clients: clients.map((client) => ({ label: client.label, pid: client.pid })), closed });
+      const closed = await Promise.allSettled(
+        clients.map((client) => client.client.end({ timeout: 5 })),
+      );
+      printLockProof(test, {
+        phase: "closed",
+        clients: clients.map((client) => ({ label: client.label, pid: client.pid })),
+        closed,
+      });
       expect(closed.every((result) => result.status === "fulfilled")).toBe(true);
     }
   }
 
-  async function waitPastDeadline(holder: ReturnType<typeof lockClient>, deadline: string, trace: LockTrace) {
-    const [before] = await holder.tx!.execute<{ at: Date }>(sqlQuery`SELECT clock_timestamp() AS at`);
+  async function waitPastDeadline(
+    holder: ReturnType<typeof lockClient>,
+    deadline: string,
+    trace: LockTrace,
+  ) {
+    const [before] = await holder.tx!.execute<{ at: Date }>(
+      sqlQuery`SELECT clock_timestamp() AS at`,
+    );
     trace.push({ kind: "before-deadline", at: before!.at, deadline });
     expect(new Date(before!.at).getTime()).toBeLessThan(new Date(deadline).getTime());
-    await expect.poll(async () => {
-      const [row] = await holder.tx!.execute<{ at: Date }>(sqlQuery`SELECT clock_timestamp() AS at`);
-      if (new Date(row!.at).getTime() < new Date(deadline).getTime()) return false;
-      trace.push({ kind: "deadline-reached", at: row!.at, deadline });
-      return true;
-    }, { timeout: 5_000 }).toBe(true);
+    await expect
+      .poll(
+        async () => {
+          const [row] = await holder.tx!.execute<{ at: Date }>(
+            sqlQuery`SELECT clock_timestamp() AS at`,
+          );
+          if (new Date(row!.at).getTime() < new Date(deadline).getTime()) return false;
+          trace.push({ kind: "deadline-reached", at: row!.at, deadline });
+          return true;
+        },
+        { timeout: 5_000 },
+      )
+      .toBe(true);
   }
 
   it("DEE-1134 serializes issued bind behind actual issued revoke", async () => {
@@ -660,32 +789,67 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     expectRiskChain(before, ["ALLOWANCE_ISSUED"], "25.00000000", "0.00000000");
     const trace: LockTrace = [{ kind: "before", state: before }];
     const binder = lockClient("issued-bind", orgA, trace);
-    const revoker = lockClient("issued-revoke", orgA, trace,
-      { resource: "account", identity: input.allowance.accountId });
+    const revoker = lockClient("issued-revoke", orgA, trace, {
+      resource: "account",
+      identity: input.allowance.accountId,
+    });
     const operations: Promise<unknown>[] = [];
     let proof!: Awaited<ReturnType<typeof finishLockProof>>;
     try {
-      operations.push(nativeSettled(revokeRiskAllowanceV2Postgres(revoker.db, { organizationId: orgA }, {
-        accountId: input.allowance.accountId, riskAllowanceId: input.allowance.riskAllowanceId,
-        eventId: uuid(667_901), reasonCode: "DEE1134_NATIVE_REVOKE",
-      })));
+      operations.push(
+        nativeSettled(
+          revokeRiskAllowanceV2Postgres(
+            revoker.db,
+            { organizationId: orgA },
+            {
+              accountId: input.allowance.accountId,
+              riskAllowanceId: input.allowance.riskAllowanceId,
+              eventId: uuid(667_901),
+              reasonCode: "DEE1134_NATIVE_REVOKE",
+            },
+          ),
+        ),
+      );
       await expect.poll(() => revoker.paused, { timeout: 5_000 }).toBe(true);
-      operations.push(nativeSettled(bindExecutionAuthorityV2Postgres(binder.db, { organizationId: orgA }, input)));
+      operations.push(
+        nativeSettled(bindExecutionAuthorityV2Postgres(binder.db, { organizationId: orgA }, input)),
+      );
       await observeLockWait(revoker, binder, "account", trace);
     } catch (error) {
       trace.push({ kind: "harness-failure", causes: nativeErrorCauses(error) });
       throw error;
     } finally {
-      proof = await finishLockProof("issued-bind/revoke", input, trace, [binder, revoker], operations);
+      proof = await finishLockProof(
+        "issued-bind/revoke",
+        input,
+        trace,
+        [binder, revoker],
+        operations,
+      );
     }
     expect(proof.outcomes).toMatchObject([
       { ok: true, value: true },
       { ok: false, error: expect.any(ExecutionV2AuthorityRefusedError) },
     ]);
-    expect(trace.find((event) => event.actor === binder.label && event.kind === "lock-acquired")?.resource).toBe("account");
+    expect(
+      trace.find((event) => event.actor === binder.label && event.kind === "lock-acquired")
+        ?.resource,
+    ).toBe("account");
     expect(proof.state.allowance[0]!.lifecycle_state).toBe("REVOKED");
-    expectRiskChain(proof.state, ["ALLOWANCE_ISSUED", "ALLOWANCE_REVOKED"], "0.00000000", "0.00000000");
-    expect(proof.state.counts).toEqual({ policies: 0, plans: 0, orders: 0, attempts: 0, reports: 0, events: 2 });
+    expectRiskChain(
+      proof.state,
+      ["ALLOWANCE_ISSUED", "ALLOWANCE_REVOKED"],
+      "0.00000000",
+      "0.00000000",
+    );
+    expect(proof.state.counts).toEqual({
+      policies: 0,
+      plans: 0,
+      orders: 0,
+      attempts: 0,
+      reports: 0,
+      events: 2,
+    });
     expect(proof.state.reports).toEqual([]);
   }, 30_000);
 
@@ -695,162 +859,319 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     const before = await lockProofState(input);
     const trace: LockTrace = [{ kind: "before", state: before }];
     const binder = lockClient("replay-bind", orgA, trace);
-    const dispatcher = lockClient("dispatch", orgA, trace,
-      { resource: "account", identity: input.allowance.accountId });
+    const dispatcher = lockClient("dispatch", orgA, trace, {
+      resource: "account",
+      identity: input.allowance.accountId,
+    });
     const operations: Promise<unknown>[] = [];
     let callbacks = 0;
     let proof!: Awaited<ReturnType<typeof finishLockProof>>;
     try {
-      operations.push(nativeSettled(dispatchCommittedExecutionAttemptV2(dispatcher.db, { organizationId: orgA },
-        original.attempt.executionAttemptId, async () => {
-          callbacks += 1;
-          trace.push({ kind: "inert-callback", callbacks });
-          const reports = await listExecutionReportsV2Postgres(dispatcher.plainDb, { organizationId: orgA },
-            original.attempt.executionAttemptId);
-          expect(reports.filter((report) => report.reportType === "SUBMIT_STARTED")).toHaveLength(1);
-          await dispatcher.plainDb.transaction(async (tx) => {
-            await tx.execute(sqlQuery`SET LOCAL lock_timeout = '2s'`);
-            await tx.execute(sqlQuery`SET LOCAL statement_timeout = '5s'`);
-            await tx.select().from(pgSchema.traderRiskAccountStateV2).where(and(
-              eq(pgSchema.traderRiskAccountStateV2.organizationId, orgA),
-              eq(pgSchema.traderRiskAccountStateV2.accountId, input.allowance.accountId),
-            )).for("update");
-          });
-          trace.push({ kind: "callback-commit-and-lock-release-observed" });
-          return { synthetic: true };
-        })));
+      operations.push(
+        nativeSettled(
+          dispatchCommittedExecutionAttemptV2(
+            dispatcher.db,
+            { organizationId: orgA },
+            original.attempt.executionAttemptId,
+            async () => {
+              callbacks += 1;
+              trace.push({ kind: "inert-callback", callbacks });
+              const reports = await listExecutionReportsV2Postgres(
+                dispatcher.plainDb,
+                { organizationId: orgA },
+                original.attempt.executionAttemptId,
+              );
+              expect(
+                reports.filter((report) => report.reportType === "SUBMIT_STARTED"),
+              ).toHaveLength(1);
+              await dispatcher.plainDb.transaction(async (tx) => {
+                await tx.execute(sqlQuery`SET LOCAL lock_timeout = '2s'`);
+                await tx.execute(sqlQuery`SET LOCAL statement_timeout = '5s'`);
+                await tx
+                  .select()
+                  .from(pgSchema.traderRiskAccountStateV2)
+                  .where(
+                    and(
+                      eq(pgSchema.traderRiskAccountStateV2.organizationId, orgA),
+                      eq(pgSchema.traderRiskAccountStateV2.accountId, input.allowance.accountId),
+                    ),
+                  )
+                  .for("update");
+              });
+              trace.push({ kind: "callback-commit-and-lock-release-observed" });
+              return { synthetic: true };
+            },
+          ),
+        ),
+      );
       await expect.poll(() => dispatcher.paused, { timeout: 5_000 }).toBe(true);
-      operations.push(nativeSettled(bindExecutionAuthorityV2Postgres(binder.db, { organizationId: orgA }, input)));
+      operations.push(
+        nativeSettled(bindExecutionAuthorityV2Postgres(binder.db, { organizationId: orgA }, input)),
+      );
       await observeLockWait(dispatcher, binder, "account", trace);
     } catch (error) {
       trace.push({ kind: "harness-failure", causes: nativeErrorCauses(error) });
       throw error;
     } finally {
-      proof = await finishLockProof("replay-bind/dispatch", input, trace, [binder, dispatcher], operations);
+      proof = await finishLockProof(
+        "replay-bind/dispatch",
+        input,
+        trace,
+        [binder, dispatcher],
+        operations,
+      );
     }
     expect(proof.outcomes).toMatchObject([
       { ok: true, value: { status: "SUBMITTED" } },
-      { ok: true, value: { consumedNow: false, plan: original.plan, attempt: original.attempt, order: original.order } },
+      {
+        ok: true,
+        value: {
+          consumedNow: false,
+          plan: original.plan,
+          attempt: original.attempt,
+          order: original.order,
+        },
+      },
     ]);
     expect(callbacks).toBe(1);
-    expect(trace.find((event) => event.actor === binder.label && event.kind === "lock-acquired")?.resource).toBe("account");
-    expectRiskChain(proof.state, ["ALLOWANCE_ISSUED", "ALLOWANCE_CONSUMED"], "0.00000000", "25.00000000");
+    expect(
+      trace.find((event) => event.actor === binder.label && event.kind === "lock-acquired")
+        ?.resource,
+    ).toBe("account");
+    expectRiskChain(
+      proof.state,
+      ["ALLOWANCE_ISSUED", "ALLOWANCE_CONSUMED"],
+      "0.00000000",
+      "25.00000000",
+    );
     expect(proof.state.events).toEqual(before.events);
     expect(proof.state.allowance).toEqual(before.allowance);
-    expect(proof.state.counts).toEqual({ policies: 1, plans: 1, orders: 1, attempts: 1, reports: 4, events: 2 });
+    expect(proof.state.counts).toEqual({
+      policies: 1,
+      plans: 1,
+      orders: 1,
+      attempts: 1,
+      reports: 4,
+      events: 2,
+    });
     expect(proof.state.reports.map((report) => report.type)).toEqual([
-      "PLAN_SEALED", "ALLOWANCE_CLAIMED", "ATTEMPT_BOUND", "SUBMIT_STARTED",
+      "PLAN_SEALED",
+      "ALLOWANCE_CLAIMED",
+      "ATTEMPT_BOUND",
+      "SUBMIT_STARTED",
     ]);
     expect(proof.state.reports.slice(0, 3)).toEqual(before.reports);
-    expect(proof.state.reports[3]).toMatchObject({ sequence: "4", previous: before.reports[2]!.digest });
+    expect(proof.state.reports[3]).toMatchObject({
+      sequence: "4",
+      previous: before.reports[2]!.digest,
+    });
   }, 30_000);
 
   it("DEE-1134 refuses a fresh bind when its plan closes during an account wait", async () => {
     const original = await admittedBindInput({ validForMs: 60_000 });
-    const [clock] = await sql<{ deadline: Date | string }[]>`SELECT clock_timestamp() + interval '3 seconds' AS deadline`;
+    const [clock] = await sql<
+      { deadline: Date | string }[]
+    >`SELECT clock_timestamp() + interval '3 seconds' AS deadline`;
     const deadlineDate = new Date(clock!.deadline);
     expect(Number.isFinite(deadlineDate.getTime())).toBe(true);
     const deadline = deadlineDate.toISOString();
-    const input = { ...original, plan: { ...original.plan,
-      timingWindow: { ...original.plan.timingWindow, closesAtUtc: deadline } } };
+    const input = {
+      ...original,
+      plan: {
+        ...original.plan,
+        timingWindow: { ...original.plan.timingWindow, closesAtUtc: deadline },
+      },
+    };
     const before = await lockProofState(input);
     const trace: LockTrace = [{ kind: "before", state: before, deadline }];
     const binder = lockClient("fresh-window", orgA, trace);
-    const holder = lockClient("account-holder", orgA, trace,
-      { resource: "account", identity: input.allowance.accountId });
+    const holder = lockClient("account-holder", orgA, trace, {
+      resource: "account",
+      identity: input.allowance.accountId,
+    });
     const operations: Promise<unknown>[] = [];
     let proof!: Awaited<ReturnType<typeof finishLockProof>>;
     try {
-      operations.push(nativeSettled(holder.db.transaction(async (tx) => {
-        await tx.select().from(pgSchema.traderRiskAccountStateV2).where(and(
-          eq(pgSchema.traderRiskAccountStateV2.organizationId, orgA),
-          eq(pgSchema.traderRiskAccountStateV2.accountId, input.allowance.accountId),
-        )).for("update");
-      })));
+      operations.push(
+        nativeSettled(
+          holder.db.transaction(async (tx) => {
+            await tx
+              .select()
+              .from(pgSchema.traderRiskAccountStateV2)
+              .where(
+                and(
+                  eq(pgSchema.traderRiskAccountStateV2.organizationId, orgA),
+                  eq(pgSchema.traderRiskAccountStateV2.accountId, input.allowance.accountId),
+                ),
+              )
+              .for("update");
+          }),
+        ),
+      );
       await expect.poll(() => holder.paused, { timeout: 5_000 }).toBe(true);
-      operations.push(nativeSettled(bindExecutionAuthorityV2Postgres(binder.db, { organizationId: orgA }, input)));
+      operations.push(
+        nativeSettled(bindExecutionAuthorityV2Postgres(binder.db, { organizationId: orgA }, input)),
+      );
       await observeLockWait(holder, binder, "account", trace);
       await waitPastDeadline(holder, deadline, trace);
     } catch (error) {
       trace.push({ kind: "harness-failure", causes: nativeErrorCauses(error) });
       throw error;
     } finally {
-      proof = await finishLockProof("fresh-window/account-wait", input, trace, [binder, holder], operations);
+      proof = await finishLockProof(
+        "fresh-window/account-wait",
+        input,
+        trace,
+        [binder, holder],
+        operations,
+      );
     }
-    expect(proof.outcomes).toMatchObject([{ ok: true }, { ok: false,
-      error: expect.any(ExecutionV2AuthorityRefusedError), causes: [{ reason: "EXECUTION_WINDOW_CLOSED" }] }]);
+    expect(proof.outcomes).toMatchObject([
+      { ok: true },
+      {
+        ok: false,
+        error: expect.any(ExecutionV2AuthorityRefusedError),
+        causes: [{ reason: "EXECUTION_WINDOW_CLOSED" }],
+      },
+    ]);
     expect(proof.state).toEqual(before);
     expectRiskChain(proof.state, ["ALLOWANCE_ISSUED"], "25.00000000", "0.00000000");
   }, 30_000);
 
   it("DEE-1134 refuses a replay when its policy closes during a later attempt wait", async () => {
     const original = await admittedBindInput({ validForMs: 60_000 });
-    const [clock] = await sql<{ deadline: Date | string }[]>`SELECT clock_timestamp() + interval '3 seconds' AS deadline`;
+    const [clock] = await sql<
+      { deadline: Date | string }[]
+    >`SELECT clock_timestamp() + interval '3 seconds' AS deadline`;
     const deadlineDate = new Date(clock!.deadline);
     expect(Number.isFinite(deadlineDate.getTime())).toBe(true);
     const deadline = deadlineDate.toISOString();
     // The actual contract requires plan.close <= policy.until. Their shared
     // deadline proves late policy expiry without constructing an invalid seal.
-    const { schemaVersion: _schemaVersion, semanticDigestHex: _semanticDigestHex,
-      contentDigestHex: _contentDigestHex, ...policyDraft } = original.policy;
+    const {
+      schemaVersion: _schemaVersion,
+      semanticDigestHex: _semanticDigestHex,
+      contentDigestHex: _contentDigestHex,
+      ...policyDraft
+    } = original.policy;
     void _schemaVersion;
     void _semanticDigestHex;
     void _contentDigestHex;
     const policy = createExecutionPolicyBindingV2({ ...policyDraft, effectiveUntilUtc: deadline });
     expect(validateExecutionPolicyBindingV2(policy)).toBe(true);
-    const input = { ...original, policy,
-      plan: { ...original.plan, timingWindow: { ...original.plan.timingWindow, closesAtUtc: deadline } } };
+    const input = {
+      ...original,
+      policy,
+      plan: {
+        ...original.plan,
+        timingWindow: { ...original.plan.timingWindow, closesAtUtc: deadline },
+      },
+    };
     const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
     const before = await lockProofState(input);
     const trace: LockTrace = [{ kind: "before", state: before, deadline }];
     const binder = lockClient("replay-window", orgA, trace);
-    const holder = lockClient("attempt-holder", orgA, trace,
-      { resource: "attempt", identity: bound.attempt.executionAttemptId });
+    const holder = lockClient("attempt-holder", orgA, trace, {
+      resource: "attempt",
+      identity: bound.attempt.executionAttemptId,
+    });
     const operations: Promise<unknown>[] = [];
     let proof!: Awaited<ReturnType<typeof finishLockProof>>;
     try {
-      operations.push(nativeSettled(holder.db.transaction(async (tx) => {
-        await tx.select().from(pgSchema.traderExecutionAttemptsV2).where(and(
-          eq(pgSchema.traderExecutionAttemptsV2.organizationId, orgA),
-          eq(pgSchema.traderExecutionAttemptsV2.id, bound.attempt.executionAttemptId),
-        )).for("update");
-      })));
+      operations.push(
+        nativeSettled(
+          holder.db.transaction(async (tx) => {
+            await tx
+              .select()
+              .from(pgSchema.traderExecutionAttemptsV2)
+              .where(
+                and(
+                  eq(pgSchema.traderExecutionAttemptsV2.organizationId, orgA),
+                  eq(pgSchema.traderExecutionAttemptsV2.id, bound.attempt.executionAttemptId),
+                ),
+              )
+              .for("update");
+          }),
+        ),
+      );
       await expect.poll(() => holder.paused, { timeout: 5_000 }).toBe(true);
-      operations.push(nativeSettled(bindExecutionAuthorityV2Postgres(binder.db, { organizationId: orgA }, input)));
+      operations.push(
+        nativeSettled(bindExecutionAuthorityV2Postgres(binder.db, { organizationId: orgA }, input)),
+      );
       await observeLockWait(holder, binder, "attempt", trace);
-      const clockSamples = trace.filter((event) => event.actor === binder.label && event.kind === "clock");
+      const clockSamples = trace.filter(
+        (event) => event.actor === binder.label && event.kind === "clock",
+      );
       expect(clockSamples.length).toBeGreaterThan(0);
-      expect(clockSamples.every((event) => new Date(String(event.at)).getTime() < new Date(deadline).getTime())).toBe(true);
+      expect(
+        clockSamples.every(
+          (event) => new Date(String(event.at)).getTime() < new Date(deadline).getTime(),
+        ),
+      ).toBe(true);
       await waitPastDeadline(holder, deadline, trace);
     } catch (error) {
       trace.push({ kind: "harness-failure", causes: nativeErrorCauses(error) });
       throw error;
     } finally {
-      proof = await finishLockProof("replay-policy/attempt-wait", input, trace, [binder, holder], operations);
+      proof = await finishLockProof(
+        "replay-policy/attempt-wait",
+        input,
+        trace,
+        [binder, holder],
+        operations,
+      );
     }
-    expect(proof.outcomes).toMatchObject([{ ok: true }, { ok: false,
-      error: expect.any(ExecutionV2AuthorityRefusedError), causes: [{ reason: "EXECUTION_WINDOW_CLOSED" }] }]);
+    expect(proof.outcomes).toMatchObject([
+      { ok: true },
+      {
+        ok: false,
+        error: expect.any(ExecutionV2AuthorityRefusedError),
+        causes: [{ reason: "EXECUTION_WINDOW_CLOSED" }],
+      },
+    ]);
     expect(proof.state).toEqual(before);
-    expect(await readExecutionAttemptV2Postgres(db, { organizationId: orgA }, bound.attempt.executionAttemptId)).toEqual(bound.attempt);
+    expect(
+      await readExecutionAttemptV2Postgres(
+        db,
+        { organizationId: orgA },
+        bound.attempt.executionAttemptId,
+      ),
+    ).toEqual(bound.attempt);
   }, 30_000);
 
   it("DEE-1134 preserves typed missing-account refusal without durable bind effects", async () => {
     const input = await admittedBindInput({ validForMs: 60_000 });
-    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgB }, account(input.allowance.accountId));
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgB },
+      account(input.allowance.accountId),
+    );
     const foreignBefore = await lockProofState(input, orgB);
     // Only this synthetic fixture row is removed; existing guards stay enabled.
     await sql`DELETE FROM trader_risk_account_state_v2
       WHERE organization_id = ${orgA}::uuid AND account_id = ${input.allowance.accountId}`;
     const before = await lockProofState(input);
-    const outcome = await nativeSettled(bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input));
+    const outcome = await nativeSettled(
+      bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input),
+    );
     const after = await lockProofState(input);
     const foreignAfter = await lockProofState(input, orgB);
     printLockProof("missing-account", { before, outcome, after, foreignBefore, foreignAfter });
-    expect(outcome).toMatchObject({ ok: false, error: expect.any(RiskV2AdmissionRefusedError),
-      causes: [{ name: "RiskV2AdmissionRefusedError", reason: "RISK_ACCOUNT_STATE_MISSING" }] });
+    expect(outcome).toMatchObject({
+      ok: false,
+      error: expect.any(RiskV2AdmissionRefusedError),
+      causes: [{ name: "RiskV2AdmissionRefusedError", reason: "RISK_ACCOUNT_STATE_MISSING" }],
+    });
     expect(before.account).toBeNull();
     expect(after).toEqual(before);
-    expect(after.counts).toEqual({ policies: 0, plans: 0, orders: 0, attempts: 0, reports: 0, events: 1 });
+    expect(after.counts).toEqual({
+      policies: 0,
+      plans: 0,
+      orders: 0,
+      attempts: 0,
+      reports: 0,
+      events: 1,
+    });
     expect(foreignAfter).toEqual(foreignBefore);
   }, 30_000);
 
@@ -1766,7 +2087,9 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
         ON s.organization_id = a.organization_id AND s.account_id = a.account_id
       WHERE a.organization_id = ${orgA}::uuid AND a.id = ${input.allowance.riskAllowanceId}::uuid`;
     expect(allowance).toEqual({ lifecycle_state: "ISSUED", reservation: "25.00000000" });
-    const counts = await sql<{ policies: string; plans: string; orders: string; attempts: string }[]>`
+    const counts = await sql<
+      { policies: string; plans: string; orders: string; attempts: string }[]
+    >`
       SELECT
         (SELECT count(*)::text FROM trader_execution_policies_v2
           WHERE organization_id = ${orgA}::uuid) AS policies,

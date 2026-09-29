@@ -20,9 +20,13 @@ import { assertControlReplayTestOnlyAuthorityV1 } from "@/lib/trader/observabili
 import { multiplyDecimal } from "@/lib/trader/risk/numeric";
 import {
   admitRiskAllowanceV2Postgres,
-  initializeRiskAccountStateV2Postgres,
+  initializeRiskAccountStateV2Postgres as initializeRiskAccountStateRaw,
   readRiskAccountStateV2Postgres,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
+import {
+  deleteLiveCapitalEnvelopeRows,
+  publishMirroredLiveCapitalEnvelopeV2,
+} from "./live-capital-test-envelope";
 
 const hex64 = (seed: string): string => createHash("sha256").update(seed).digest("hex");
 
@@ -79,6 +83,19 @@ async function seedTestTenant(
       memberRole: "owner",
     })
     .onConflictDoNothing();
+}
+
+async function initializeRiskAccountStateV2Postgres(
+  database: Parameters<typeof initializeRiskAccountStateRaw>[0],
+  context: Parameters<typeof initializeRiskAccountStateRaw>[1],
+  state: Parameters<typeof initializeRiskAccountStateRaw>[2],
+) {
+  await initializeRiskAccountStateRaw(database, context, state);
+  await publishMirroredLiveCapitalEnvelopeV2({
+    organizationId: context.organizationId,
+    accountId: state.accountId,
+    exposureLimitNotional: state.accounting.exposureLimitNotional,
+  });
 }
 
 function requireProof(condition: boolean, message: string): void {
@@ -145,8 +162,7 @@ export const postgresTestOnlyExecutionV2Authority: TestOnlyExecutionV2AuthorityP
           contentDigestHex: request.decision.contentDigestHex,
           forecastId: request.decision.forecastId,
           forecastContentDigestHex: request.decision.forecastContentDigestHex,
-          canonicalCausalLineageDigestHex:
-            request.decision.canonicalCausalLineageDigestHex,
+          canonicalCausalLineageDigestHex: request.decision.canonicalCausalLineageDigestHex,
           action: "ENTER_LONG",
           economicSizeSetId: request.decision.economicSizeSetId,
           economicSizeSetDigestHex: request.decision.economicSizeSetDigestHex,
@@ -326,6 +342,7 @@ export const postgresTestOnlyExecutionV2Authority: TestOnlyExecutionV2AuthorityP
       reportTypes: Object.freeze(reportTypes),
     });
   } finally {
+    await deleteLiveCapitalEnvelopeRows(sql, request.organizationId).catch(() => undefined);
     await sql.end({ timeout: 5 });
   }
 };

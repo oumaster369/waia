@@ -9,7 +9,7 @@ import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
   admitRiskAllowanceV2Postgres,
   consumeRiskAllowanceForOrderV2Postgres,
-  initializeRiskAccountStateV2Postgres,
+  initializeRiskAccountStateV2Postgres as initializeRiskAccountStateRaw,
   readRiskAccountStateV2Postgres,
   expireRiskAllowanceV2Postgres,
   revokeRiskAllowanceV2Postgres,
@@ -20,6 +20,10 @@ import {
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { divideDecimal } from "@/lib/trader/risk/numeric";
 import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
+import {
+  deleteLiveCapitalEnvelopeRows,
+  publishMirroredLiveCapitalEnvelopeV2,
+} from "../helpers/live-capital-test-envelope";
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -35,7 +39,21 @@ const riskTables = [
   "trader_risk_enforcement_events_v2",
 ] as const;
 
+async function initializeRiskAccountStateV2Postgres(
+  database: Parameters<typeof initializeRiskAccountStateRaw>[0],
+  context: Parameters<typeof initializeRiskAccountStateRaw>[1],
+  state: Parameters<typeof initializeRiskAccountStateRaw>[2],
+) {
+  await initializeRiskAccountStateRaw(database, context, state);
+  await publishMirroredLiveCapitalEnvelopeV2({
+    organizationId: context.organizationId,
+    accountId: state.accountId,
+    exposureLimitNotional: state.accounting.exposureLimitNotional,
+  });
+}
+
 async function clearRisk(sqlClient: postgres.Sql, organizationId: string) {
+  await deleteLiveCapitalEnvelopeRows(sqlClient, organizationId);
   await sqlClient.unsafe(
     "ALTER TABLE trader_risk_enforcement_events_v2 DISABLE TRIGGER trader_risk_enforcement_events_v2_block_delete",
   );
@@ -86,17 +104,19 @@ function account(
 ) {
   return {
     accountId,
-    posture: options.posture ?? "NORMAL" as const,
+    posture: options.posture ?? ("NORMAL" as const),
     killState: "CLEAR" as const,
     reconciliationStatus: "RECONCILED" as const,
     realitySnapshotId: `reality-${accountId}`,
     realityContentDigestHex: hex64(`reality-${accountId}`),
     reconciliationAuthorityDigestHex: hex64(`reconciliation-${accountId}`),
-    reconciledInstrumentExposures: [{
-      instrumentIdentityDigestHex: hex64("BTCUSDT-SPOT"),
-      symbol: "BTCUSDT",
-      baseQuantity: options.btcBaseQuantity ?? "0",
-    }],
+    reconciledInstrumentExposures: [
+      {
+        instrumentIdentityDigestHex: hex64("BTCUSDT-SPOT"),
+        symbol: "BTCUSDT",
+        baseQuantity: options.btcBaseQuantity ?? "0",
+      },
+    ],
     accounting: {
       reconciledExposureNotional: "0",
       worstCasePendingExposureNotional: "0",
@@ -171,7 +191,7 @@ function claim(input: AdmitRiskAllowanceV2Input, orderIdentity: number) {
       id: uuid(658_001 + orderIdentity * 10),
       executionMode: "paper" as const,
       symbol: input.verdict.symbol,
-      side: input.verdict.decision.action === "ENTER_LONG" ? "buy" as const : "sell" as const,
+      side: input.verdict.decision.action === "ENTER_LONG" ? ("buy" as const) : ("sell" as const),
       type: "market" as const,
       price: null,
       quantity: input.verdict.approvedQualifiedQuantity!,
@@ -238,7 +258,8 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
     await operation?.catch(() => undefined);
     await operationClient.end({ timeout: 5 });
   }
-}describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () => {
+}
+describe.skipIf(!enabled || !url)("Postgres Risk V2 (DEE-650 / R650-C+D)", () => {
   let sqlClient: postgres.Sql;
   let db: WaiaPostgresDb;
   let orgA: string;
@@ -276,7 +297,10 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
     expect(first.insertedNew).toBe(true);
     expect(replay).toEqual({ ...first, insertedNew: false });
     expect(first.verdict.admissionSequence).toBe("1");
-    expect(first.allowance).toMatchObject({ lifecycleState: "ISSUED", reservedExposureNotional: "25" });
+    expect(first.allowance).toMatchObject({
+      lifecycleState: "ISSUED",
+      reservedExposureNotional: "25",
+    });
 
     const state = await readRiskAccountStateV2Postgres(db, { organizationId: orgA }, "atomic");
     expect(state).toMatchObject({
@@ -284,11 +308,9 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
       nextEnforcementEventSequence: "2",
       accounting: { outstandingReservationNotional: "25" },
     });
-    await expect(readRiskAccountStateV2Postgres(
-      db,
-      { organizationId: orgB },
-      "atomic",
-    )).resolves.toBeNull();
+    await expect(
+      readRiskAccountStateV2Postgres(db, { organizationId: orgB }, "atomic"),
+    ).resolves.toBeNull();
   });
 
   it("serializes concurrent admission so the envelope cannot be over-reserved", async () => {
@@ -432,29 +454,43 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
       { organizationId: orgA },
       admission({ accountId: "revoke", identity: 4, reservation: "40" }),
     );
-    await expect(revokeRiskAllowanceV2Postgres(db, { organizationId: orgA }, {
-      accountId: "revoke",
-      riskAllowanceId: admitted.allowance.riskAllowanceId,
-      eventId: uuid(657_149),
-      reasonCode: "CURRENT_POSTURE_RESTRICTED",
-    })).resolves.toBe(true);
-    await expect(revokeRiskAllowanceV2Postgres(db, { organizationId: orgA }, {
-      accountId: "revoke",
-      riskAllowanceId: admitted.allowance.riskAllowanceId,
-      eventId: uuid(657_150),
-      reasonCode: "CURRENT_POSTURE_RESTRICTED",
-    })).resolves.toBe(false);
+    await expect(
+      revokeRiskAllowanceV2Postgres(
+        db,
+        { organizationId: orgA },
+        {
+          accountId: "revoke",
+          riskAllowanceId: admitted.allowance.riskAllowanceId,
+          eventId: uuid(657_149),
+          reasonCode: "CURRENT_POSTURE_RESTRICTED",
+        },
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      revokeRiskAllowanceV2Postgres(
+        db,
+        { organizationId: orgA },
+        {
+          accountId: "revoke",
+          riskAllowanceId: admitted.allowance.riskAllowanceId,
+          eventId: uuid(657_150),
+          reasonCode: "CURRENT_POSTURE_RESTRICTED",
+        },
+      ),
+    ).resolves.toBe(false);
 
     const state = await readRiskAccountStateV2Postgres(db, { organizationId: orgA }, "revoke");
     expect(state).toMatchObject({
       nextEnforcementEventSequence: "3",
       accounting: { outstandingReservationNotional: "0" },
     });
-    const events = await sqlClient<{
-      event_sequence: string;
-      previous_event_digest: string | null;
-      content_digest: string;
-    }[]>`
+    const events = await sqlClient<
+      {
+        event_sequence: string;
+        previous_event_digest: string | null;
+        content_digest: string;
+      }[]
+    >`
       SELECT event_sequence, previous_event_digest, content_digest
       FROM trader_risk_enforcement_events_v2
       WHERE organization_id = ${orgA}::uuid AND account_id = 'revoke'
@@ -515,17 +551,13 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
       UPDATE trader_risk_account_state_v2 SET posture = 'HALT'
       WHERE organization_id = ${orgA}::uuid AND account_id = 'claim'
     `;
-    await expect(consumeRiskAllowanceForOrderV2Postgres(
-      db,
-      { organizationId: orgA },
-      exactClaim,
-    )).rejects.toMatchObject({ reason: "EXECUTION_FAIL_CLOSED" });
+    await expect(
+      consumeRiskAllowanceForOrderV2Postgres(db, { organizationId: orgA }, exactClaim),
+    ).rejects.toMatchObject({ reason: "EXECUTION_FAIL_CLOSED" });
     const differentOrder = claim(authority, 2);
-    await expect(consumeRiskAllowanceForOrderV2Postgres(
-      db,
-      { organizationId: orgA },
-      differentOrder,
-    )).rejects.toMatchObject({ reason: "ALLOWANCE_ALREADY_CONSUMED_BY_DIFFERENT_ORDER" });
+    await expect(
+      consumeRiskAllowanceForOrderV2Postgres(db, { organizationId: orgA }, differentOrder),
+    ).rejects.toMatchObject({ reason: "ALLOWANCE_ALREADY_CONSUMED_BY_DIFFERENT_ORDER" });
     const state = await readRiskAccountStateV2Postgres(db, { organizationId: orgA }, "claim");
     expect(state).toMatchObject({
       accounting: {
@@ -534,11 +566,13 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
       },
       nextEnforcementEventSequence: "3",
     });
-    const allowanceRows = await sqlClient<{
-      lifecycle_state: string;
-      bound_order_id: string;
-      bound_order_digest: string;
-    }[]>`
+    const allowanceRows = await sqlClient<
+      {
+        lifecycle_state: string;
+        bound_order_id: string;
+        bound_order_digest: string;
+      }[]
+    >`
       SELECT lifecycle_state, bound_order_id, bound_order_digest
       FROM trader_risk_allowances_v2
       WHERE id = ${authority.riskAllowanceId}::uuid
@@ -552,43 +586,77 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
 
   it("rechecks posture, kill, reconciliation, Reality, nonce, and exact order at claim time", async () => {
     const cases = [
-      { accountId: "halted", identity: 8, set: "posture = 'HALT'", reason: "EXECUTION_FAIL_CLOSED" },
-      { accountId: "killed", identity: 9, set: "kill_state = 'TRIPPED'", reason: "CURRENT_AUTHORITY_BINDING_MISMATCH" },
-      { accountId: "stale", identity: 10, set: "reconciliation_status = 'STALE'", reason: "CURRENT_AUTHORITY_BINDING_MISMATCH" },
-      { accountId: "reality-drift", identity: 11, set: `reality_content_digest = '${hex64("changed-reality")}'`, reason: "CURRENT_AUTHORITY_BINDING_MISMATCH" },
+      {
+        accountId: "halted",
+        identity: 8,
+        set: "posture = 'HALT'",
+        reason: "EXECUTION_FAIL_CLOSED",
+      },
+      {
+        accountId: "killed",
+        identity: 9,
+        set: "kill_state = 'TRIPPED'",
+        reason: "CURRENT_AUTHORITY_BINDING_MISMATCH",
+      },
+      {
+        accountId: "stale",
+        identity: 10,
+        set: "reconciliation_status = 'STALE'",
+        reason: "CURRENT_AUTHORITY_BINDING_MISMATCH",
+      },
+      {
+        accountId: "reality-drift",
+        identity: 11,
+        set: `reality_content_digest = '${hex64("changed-reality")}'`,
+        reason: "CURRENT_AUTHORITY_BINDING_MISMATCH",
+      },
     ] as const;
     for (const entry of cases) {
-      await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account(entry.accountId));
-      const authority = admission({ accountId: entry.accountId, identity: entry.identity, reservation: "10" });
+      await initializeRiskAccountStateV2Postgres(
+        db,
+        { organizationId: orgA },
+        account(entry.accountId),
+      );
+      const authority = admission({
+        accountId: entry.accountId,
+        identity: entry.identity,
+        reservation: "10",
+      });
       await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority);
       await sqlClient.unsafe(
         `UPDATE trader_risk_account_state_v2 SET ${entry.set} WHERE organization_id = $1::uuid AND account_id = $2`,
         [orgA, entry.accountId],
       );
-      await expect(consumeRiskAllowanceForOrderV2Postgres(
-        db,
-        { organizationId: orgA },
-        claim(authority, entry.identity),
-      )).resolves.toMatchObject({ status: "REFUSED", reason: entry.reason });
+      await expect(
+        consumeRiskAllowanceForOrderV2Postgres(
+          db,
+          { organizationId: orgA },
+          claim(authority, entry.identity),
+        ),
+      ).resolves.toMatchObject({ status: "REFUSED", reason: entry.reason });
     }
 
     await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("exact"));
     const exact = admission({ accountId: "exact", identity: 12, reservation: "10" });
     await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, exact);
     const wrongQuantity = claim(exact, 12);
-    await expect(consumeRiskAllowanceForOrderV2Postgres(
-      db,
-      { organizationId: orgA },
-      { ...wrongQuantity, order: { ...wrongQuantity.order, quantity: "0.002" } },
-    )).resolves.toMatchObject({ status: "REFUSED", reason: "ORDER_DOES_NOT_MATCH_ALLOWANCE" });
+    await expect(
+      consumeRiskAllowanceForOrderV2Postgres(
+        db,
+        { organizationId: orgA },
+        { ...wrongQuantity, order: { ...wrongQuantity.order, quantity: "0.002" } },
+      ),
+    ).resolves.toMatchObject({ status: "REFUSED", reason: "ORDER_DOES_NOT_MATCH_ALLOWANCE" });
     await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("nonce"));
     const nonce = admission({ accountId: "nonce", identity: 13, reservation: "10" });
     await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, nonce);
-    await expect(consumeRiskAllowanceForOrderV2Postgres(
-      db,
-      { organizationId: orgA },
-      { ...claim(nonce, 13), nonce: uuid(999_999) },
-    )).resolves.toMatchObject({ status: "REFUSED", reason: "ALLOWANCE_NONCE_MISMATCH" });
+    await expect(
+      consumeRiskAllowanceForOrderV2Postgres(
+        db,
+        { organizationId: orgA },
+        { ...claim(nonce, 13), nonce: uuid(999_999) },
+      ),
+    ).resolves.toMatchObject({ status: "REFUSED", reason: "ALLOWANCE_NONCE_MISMATCH" });
     const orderCount = await sqlClient<{ count: string }[]>`
       SELECT count(*)::text AS count FROM trader_orders
       WHERE organization_id = ${orgA}::uuid AND risk_allowance_id = ${exact.riskAllowanceId}::uuid
@@ -621,11 +689,13 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
       strictExposureReduction: true,
       reservedExposureNotional: "0",
     });
-    await expect(consumeRiskAllowanceForOrderV2Postgres(
-      db,
-      { organizationId: orgA },
-      claim(reductionAuthority, 16),
-    )).resolves.toMatchObject({ status: "CONSUMED", consumedNow: true });
+    await expect(
+      consumeRiskAllowanceForOrderV2Postgres(
+        db,
+        { organizationId: orgA },
+        claim(reductionAuthority, 16),
+      ),
+    ).resolves.toMatchObject({ status: "CONSUMED", consumedNow: true });
 
     for (const [accountId, identity, baseQuantity, quantity, action] of [
       ["close-entry", 17, "1", "0.001", "ENTER_LONG"],
@@ -647,11 +717,9 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
           verdict: "CLOSE_ONLY",
         },
       };
-      await expect(admitRiskAllowanceV2Postgres(
-        db,
-        { organizationId: orgA },
-        invalidAuthority,
-      )).rejects.toBeInstanceOf(RiskV2AdmissionRefusedError);
+      await expect(
+        admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, invalidAuthority),
+      ).rejects.toBeInstanceOf(RiskV2AdmissionRefusedError);
     }
   });
 
@@ -678,40 +746,34 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
       },
     };
 
-    const admitted = await admitRiskAllowanceV2Postgres(
-      db,
-      { organizationId: orgA },
-      authority,
-    );
+    const admitted = await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority);
     expect(admitted.allowance.reservedExposureNotional).toBe("30.86415242");
-    await expect(readRiskAccountStateV2Postgres(
-      db,
-      { organizationId: orgA },
-      "conservative-reservation",
-    )).resolves.toMatchObject({
+    await expect(
+      readRiskAccountStateV2Postgres(db, { organizationId: orgA }, "conservative-reservation"),
+    ).resolves.toMatchObject({
       accounting: { outstandingReservationNotional: "30.86415242" },
     });
   });
 
   it("refuses an expired consumed order that never reached first dispatch", async () => {
-    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("replay-expiry"));
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      account("replay-expiry"),
+    );
     const authority = {
       ...admission({ accountId: "replay-expiry", identity: 31, reservation: "25" }),
       validForMs: 2_000,
     };
     await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority);
     const exactClaim = claim(authority, 31);
-    await expect(consumeRiskAllowanceForOrderV2Postgres(
-      db,
-      { organizationId: orgA },
-      exactClaim,
-    )).resolves.toMatchObject({ status: "CONSUMED", consumedNow: true });
+    await expect(
+      consumeRiskAllowanceForOrderV2Postgres(db, { organizationId: orgA }, exactClaim),
+    ).resolves.toMatchObject({ status: "CONSUMED", consumedNow: true });
     await sqlClient`SELECT pg_sleep(2.1)`;
-    await expect(consumeRiskAllowanceForOrderV2Postgres(
-      db,
-      { organizationId: orgA },
-      exactClaim,
-    )).rejects.toMatchObject({ reason: "ALLOWANCE_EXPIRED" });
+    await expect(
+      consumeRiskAllowanceForOrderV2Postgres(db, { organizationId: orgA }, exactClaim),
+    ).rejects.toMatchObject({ reason: "ALLOWANCE_EXPIRED" });
   });
 
   it("serializes competing claims so exactly one bound order consumes the allowance", async () => {
@@ -719,16 +781,8 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
     const authority = admission({ accountId: "claim-race", identity: 14, reservation: "20" });
     await admitRiskAllowanceV2Postgres(db, { organizationId: orgA }, authority);
     const outcomes = await Promise.allSettled([
-      consumeRiskAllowanceForOrderV2Postgres(
-        db,
-        { organizationId: orgA },
-        claim(authority, 14),
-      ),
-      consumeRiskAllowanceForOrderV2Postgres(
-        db,
-        { organizationId: orgA },
-        claim(authority, 15),
-      ),
+      consumeRiskAllowanceForOrderV2Postgres(db, { organizationId: orgA }, claim(authority, 14)),
+      consumeRiskAllowanceForOrderV2Postgres(db, { organizationId: orgA }, claim(authority, 15)),
     ]);
     expect(outcomes.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(outcomes.filter((result) => result.status === "rejected")).toHaveLength(1);
@@ -760,18 +814,28 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
     `;
     expect(metadata).toHaveLength(4);
     expect(metadata.every((row) => row.relrowsecurity)).toBe(true);
-    const policies = await sqlClient<{ tablename: string; roles: string[]; cmd: string; qual: string; with_check: string }[]>`
+    const policies = await sqlClient<
+      { tablename: string; roles: string[]; cmd: string; qual: string; with_check: string }[]
+    >`
       SELECT tablename, roles, cmd, qual, with_check FROM pg_policies
       WHERE schemaname = 'public' AND tablename = ANY(${riskTables as unknown as string[]})
       ORDER BY tablename
     `;
     expect(policies).toHaveLength(4);
-    expect(policies.every((policy) =>
-      policy.cmd === "ALL" && policy.qual === "false" && policy.with_check === "false" &&
-      policy.roles.includes("authenticated") && policy.roles.includes("anon")
-    )).toBe(true);
+    expect(
+      policies.every(
+        (policy) =>
+          policy.cmd === "ALL" &&
+          policy.qual === "false" &&
+          policy.with_check === "false" &&
+          policy.roles.includes("authenticated") &&
+          policy.roles.includes("anon"),
+      ),
+    ).toBe(true);
 
-    await sqlClient.unsafe(`GRANT SELECT, INSERT, UPDATE, DELETE ON ${riskTables.join(", ")} TO authenticated, anon`);
+    await sqlClient.unsafe(
+      `GRANT SELECT, INSERT, UPDATE, DELETE ON ${riskTables.join(", ")} TO authenticated, anon`,
+    );
     try {
       for (const role of ["authenticated", "anon"] as const) {
         const roleSql = postgres(url!, { max: 1 });
@@ -779,12 +843,17 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
           await roleSql.unsafe(`SET ROLE ${role}`);
           for (const table of riskTables) {
             await expect(roleSql.unsafe(`SELECT * FROM ${table}`)).resolves.toEqual([]);
-            await expect(roleSql.unsafe(`UPDATE ${table} SET organization_id = organization_id RETURNING organization_id`))
-              .resolves.toEqual([]);
-            await expect(roleSql.unsafe(`DELETE FROM ${table} RETURNING organization_id`))
-              .resolves.toEqual([]);
+            await expect(
+              roleSql.unsafe(
+                `UPDATE ${table} SET organization_id = organization_id RETURNING organization_id`,
+              ),
+            ).resolves.toEqual([]);
+            await expect(
+              roleSql.unsafe(`DELETE FROM ${table} RETURNING organization_id`),
+            ).resolves.toEqual([]);
           }
-          await expect(roleSql.unsafe(`
+          await expect(
+            roleSql.unsafe(`
             INSERT INTO trader_risk_account_state_v2 (
               organization_id, account_id, market, quote_asset, posture, kill_state,
               reconciliation_status, reality_snapshot_id, reality_content_digest,
@@ -799,14 +868,19 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
               '${hex64(`${role}-reconciliation`)}', '[]'::jsonb,
               0, 0, 0, 1, 1, 1, 1
             )
-          `)).rejects.toThrow(/row-level security/);
+          `),
+          ).rejects.toThrow(/row-level security/);
         } finally {
-          try { await roleSql.unsafe("RESET ROLE"); } catch {}
+          try {
+            await roleSql.unsafe("RESET ROLE");
+          } catch {}
           await roleSql.end({ timeout: 5 });
         }
       }
     } finally {
-      await sqlClient.unsafe(`REVOKE SELECT, INSERT, UPDATE, DELETE ON ${riskTables.join(", ")} FROM authenticated, anon`);
+      await sqlClient.unsafe(
+        `REVOKE SELECT, INSERT, UPDATE, DELETE ON ${riskTables.join(", ")} FROM authenticated, anon`,
+      );
     }
     const grants = await sqlClient<{ grantee: string }[]>`
       SELECT grantee FROM information_schema.role_table_grants
@@ -1101,4 +1175,66 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
       await admitClient.end({ timeout: 5 });
     }
   }, 30_000);
+
+  it("DEE-1151 refuses admission when the live capital envelope is missing", async () => {
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      account("capital-absent"),
+    );
+    await sqlClient`
+      delete from trader_live_capital_envelope_current_v2
+      where organization_id = ${orgA}::uuid and account_id = 'capital-absent'`;
+    await expect(
+      admitRiskAllowanceV2Postgres(
+        db,
+        { organizationId: orgA },
+        admission({ accountId: "capital-absent", identity: 910, reservation: "1" }),
+      ),
+    ).rejects.toMatchObject({ reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
+  });
+
+  it("DEE-1151 refuses admission when loss limit is below the reservation", async () => {
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      account("capital-loss"),
+    );
+    await publishMirroredLiveCapitalEnvelopeV2({
+      sql: sqlClient,
+      organizationId: orgA,
+      accountId: "capital-loss",
+      exposureLimitNotional: "100",
+      lossLimitNotional: "1",
+    });
+    await expect(
+      admitRiskAllowanceV2Postgres(
+        db,
+        { organizationId: orgA },
+        admission({ accountId: "capital-loss", identity: 911, reservation: "25" }),
+      ),
+    ).rejects.toMatchObject({ reason: "RESERVATION_EXCEEDS_REMAINING_ENVELOPE" });
+  });
+
+  it("DEE-1151 refuses admission when capital does not equal the exposure limit", async () => {
+    await initializeRiskAccountStateV2Postgres(
+      db,
+      { organizationId: orgA },
+      account("capital-mismatch"),
+    );
+    await publishMirroredLiveCapitalEnvelopeV2({
+      sql: sqlClient,
+      organizationId: orgA,
+      accountId: "capital-mismatch",
+      exposureLimitNotional: "10",
+      lossLimitNotional: "10",
+    });
+    await expect(
+      admitRiskAllowanceV2Postgres(
+        db,
+        { organizationId: orgA },
+        admission({ accountId: "capital-mismatch", identity: 912, reservation: "1" }),
+      ),
+    ).rejects.toMatchObject({ reason: "LIVE_CAPITAL_LIMIT_MISMATCH" });
+  });
 });
