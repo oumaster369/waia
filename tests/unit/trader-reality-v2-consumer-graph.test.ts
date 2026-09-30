@@ -38,6 +38,8 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         // live credential admission module and the pre-post recheck that imports it.
         // skipBlindTail in scripts/trader/ri-evidence-campaign.ts changes an
         // existing consumer's body. Counts and digests are recomputed on the merge.
+        // DEE-1151 stores a trade credential only when live is enabled, which
+        // changes the existing connect-handler consumer body.
         consumers: 150,
         consumerDigestHex: "7162a7765ff1c42a9b6a4446d7e7bfe48b8a18cba7d3fad4312c5f6fa4ce3578",
         // DEE-1099 adds one read of freshly validated account permissions,
@@ -46,7 +48,7 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         connectorReferences: 26,
         sourceContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
         consumerContentDigestHex:
-          "216f214d0dad5a9f37e7d9dcec9e106d45f73cbd73de8d8fb272377bd4698e06",
+          "c10592b0531414c613555a173df4dd54e1d3967b4281a9ffcb141a7195dcbafb",
       }),
     );
   });
