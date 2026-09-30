@@ -132,7 +132,7 @@ describe.skipIf(!enabled)("Postgres actual durable noncapital paper analysis", (
     expect(await counts()).toEqual([0, 0, 0, 0]);
   });
   it("actual CLI resumes a published input without transport or choosing another PIT", async () => {
-    const s = session({ leaseDurationMs: 2_000 }); const data = await collect(s); const holder = await claim(300);
+    const s = session({ leaseDurationMs: 2_000 }); const data = await collect(s); const holder = await claim(5_000);
     const packet = await publishRecordedAnalysis(client, s, holder, 0, data.pit, data.normalized); await expiry();
     const child = worker({ operation: "cli", input: { ...s, startSequence: 0 }, forbidFetch: true }); const event = await child.result;
     expect(event.result.status).toBe("COMPLETE"); expect(event.fetches).toBe(0); expect(event.result.completed[0].packetDigest).toBe(packet.contentDigest);
