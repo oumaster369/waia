@@ -247,7 +247,7 @@ async function direct(f: Fixture, fetchImpl: typeof fetch) {
     if (statement.includes("SELECT c.observation_revision")) f.markers.push("actual-binding-query");
   });
   const credential = await connect(runtimeUrl("credential"), "direct-credential", true, statement => {
-    if (statement.includes("SELECT id, organization_id, exchange_account_id, status, encrypted_payload")) f.markers.push("actual-credential-query");
+    if (statement.includes("SELECT id, organization_id, exchange_account_id, status, observation_read_only, encrypted_payload")) f.markers.push("actual-credential-query");
   });
   const session = createProtectedHtxAccountAcquisitionSessionV1({ readerSql: reader.sql, credentialSql: credential.sql,
     masterKeyProvider: f.provider, assignment: f.assignment, spec: f.job.spec,
@@ -442,7 +442,7 @@ describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational
       expect(opened.reader.statements).toContain("SET LOCAL ROLE waia_account_observation_reader");
       expect(opened.credential.statements).toContain("SET LOCAL ROLE waia_account_observation_credential");
       expect(opened.reader.statements.some(statement => statement.includes("SELECT state.symbols"))).toBe(true);
-      expect(opened.credential.statements.some(statement => statement.includes("SELECT id, organization_id, exchange_account_id, status, encrypted_payload"))).toBe(true);
+      expect(opened.credential.statements.some(statement => statement.includes("SELECT id, organization_id, exchange_account_id, status, observation_read_only, encrypted_payload"))).toBe(true);
       receipt("protected-session", { binding: transport.binding, readerPid: opened.reader.pid, credentialPid: opened.credential.pid,
         paths: io.paths, markers: f.markers, statements: { reader: opened.reader.statements, credential: opened.credential.statements }, keyCalls: f.keyCalls });
       expect((await snapshot(f)).journal).toHaveLength(0);
