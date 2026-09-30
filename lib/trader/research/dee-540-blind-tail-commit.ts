@@ -162,16 +162,16 @@ async function persistTerminal(
 }
 
 /**
- * Burns the DEE-540 bar-content token and the blind-validation row in one
- * transaction. Checks that run before the strategy sees the bars throw with
- * nothing written. After the strategy sees the bars, a backtest or result-insert
- * failure still commits the token together with a terminal error row.
- * The backtest receives the transaction client and must use it for every query.
- * There is no path that clears the token.
- *
- * If the terminal error-row insert itself throws, this transaction rolls back
- * after the strategy has already seen the bars. Nothing outside this
- * transaction records the burn. That remaining edge is left for Linear.
+ * Burns the DEE-540 bar-content token before the strategy sees the bars.
+ * The primary key on `trader_dee540_bar_consumption` is the concurrency gate:
+ * the burn commits in its own transaction, so a second opener blocks on that
+ * key and then fails. A later outcome rollback cannot put the permission back.
+ * Checks that run before the burn throw with nothing written.
+ * After the bars are shown, a backtest or result-insert failure still records
+ * a terminal error row when that insert commits. If the terminal insert itself
+ * throws, the burn stays committed and no second opener can run the backtest.
+ * The backtest receives the outcome transaction client and must use it for
+ * every query. There is no path that clears the token.
  */
 export async function commitDee540BlindHoldout(
   ex: Pick<WaiaPostgresDb, "transaction">,
@@ -185,11 +185,14 @@ export async function commitDee540BlindHoldout(
     repository: input.readRepository,
   });
 
+  await ex.transaction(async (tx) => {
+    await consumeDee540BlindTailAuthorization(tx, { blindDigest: input.blindDigest });
+  });
+
   let failure: unknown = null;
   const recorded = await ex.transaction(async (tx) => {
     const disarmParentGuard = armDee540ParentHandleGuard(ex);
     try {
-      await consumeDee540BlindTailAuthorization(tx, { blindDigest: input.blindDigest });
       const repository = input.bindRepository(tx);
       let metrics: ResearchValidationMetrics;
       try {
