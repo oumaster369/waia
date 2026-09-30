@@ -153,18 +153,26 @@ describe("DEE-540 blind tail gate", () => {
     expect(cli.indexOf("resolveResearchPipelineCliBlindTail(flags)")).toBeLessThan(
       cli.indexOf("listMarketBarsPostgres("),
     );
-    expect(orchestrator.indexOf("assertDee540BlindTailAuthorized")).toBeLessThan(
-      orchestrator.indexOf("runBlindHoldoutValidation"),
+    expect(orchestrator.indexOf("assertDee540BlindTailAuthorized(")).toBeLessThan(
+      orchestrator.indexOf("commitDee540BlindHoldout("),
     );
-    expect(orchestrator.indexOf("assertDee540BlindTailAuthorized")).toBeLessThan(
-      orchestrator.indexOf("resolveM9ResearchDatasetPostgres"),
+    expect(orchestrator.indexOf("assertDee540BlindTailAuthorized(")).toBeLessThan(
+      orchestrator.indexOf("resolveM9ResearchDatasetPostgres("),
+    );
+    expect(orchestrator).not.toContain("runBlindHoldoutValidation");
+    const blindCommit = readFileSync(
+      resolve(process.cwd(), "lib/trader/research/dee-540-blind-tail-commit.ts"),
+      "utf8",
     );
     expect(orchestrator.indexOf("assertResearchPipelineRegimeCoverage(")).toBeLessThan(
-      orchestrator.indexOf("consumeDee540BlindTailAuthorization("),
+      orchestrator.indexOf("commitDee540BlindHoldout("),
     );
-    expect(orchestrator.indexOf("consumeDee540BlindTailAuthorization(")).toBeLessThan(
-      orchestrator.indexOf("return runBlindHoldoutValidation({"),
+    expect(orchestrator).not.toContain("consumeDee540BlindTailAuthorization(");
+    expect(blindCommit.indexOf("consumeDee540BlindTailAuthorization(")).toBeLessThan(
+      blindCommit.indexOf("runBacktest("),
     );
+    expect(blindCommit).not.toContain("WAIA_DEE540_CONSUMPTION_PATH");
+    expect(blindCommit).not.toContain("replay");
     const campaign = readFileSync(
       resolve(process.cwd(), "scripts/trader/ri-evidence-campaign.ts"),
       "utf8",

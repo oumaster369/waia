@@ -27,7 +27,7 @@ import type { Bar, BarInterval, InstrumentId } from "@/lib/trader/intelligence/t
 import type { PaperCycleDeps, PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 import type { PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
 import { assertDee540BlindTailAuthorized } from "@/lib/trader/research/dee-540-blind-tail-gate";
-import { consumeDee540BlindTailAuthorization } from "@/lib/trader/research/dee-540-authorization-store";
+import { commitDee540BlindHoldout } from "@/lib/trader/research/dee-540-blind-tail-commit";
 import { M9_BLIND_AUTHORIZATION_SIDECAR_DIGEST_NONE } from "@/lib/trader/research/m9-operator-authorization";
 import {
   buildResearchEvaluationPlan,
@@ -55,7 +55,6 @@ import {
   readLegacyTradeCount,
   readPeriodRealizedPnl,
 } from "@/lib/trader/research/research-validation-metrics-taxonomy";
-import { runBlindHoldoutValidation } from "@/lib/trader/research/blind-holdout-engine";
 import { buildResearchEvidenceDocument } from "@/lib/trader/research/build-research-evidence-export";
 import {
   MultiRegimeCoverageError,
@@ -100,7 +99,7 @@ import type { OrgContext } from "@/lib/waia-core/scope/org-context";
  */
 export const RESEARCH_PIPELINE_BLIND_TAIL_NOT_RUN = "not-produced" as const;
 
-type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "delete">;
+type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "delete" | "transaction">;
 
 export type RunResearchPipelineInput = {
   context: OrgContext;
@@ -504,47 +503,47 @@ export async function runResearchPipelinePostgres(
         result: { id: RESEARCH_PIPELINE_BLIND_TAIL_NOT_RUN },
         metrics: emptyBlindMetrics,
       }
-    : await (async () => {
-        await consumeDee540BlindTailAuthorization(ex, {
-          blindDigest: sealed.blindDigest,
-        });
-        return runBlindHoldoutValidation({
-          context: input.context,
-          candidate: { ...candidate, status: "walk_forward_validated", blindUsed: false },
-          datasetId: dataset.id,
-          blindBars: splits.blind,
-          expectedBlindDigest: dataset.blindDigest,
-          runBacktest: async ({ bars, strategyId, strategyVersion }) => {
-            const repo = await resolveOrderRepository(input.createOrderRepository);
-            return runIsolatedResearchBacktest(
-              ex,
-              buildIsolatedBacktestInput(input, {
-                bars,
-                datasetId: dataset.id,
-                runId: backtestRunId,
-                split: "blind",
-                costModel,
-                orderRepository: repo,
-                accountKey,
-                defaultQuantity,
-                newId,
-                cycleIdPrefix: buildResearchBlindCycleIdPrefix(backtestRunId),
-              }),
-            );
-          },
-          repository: {
-            getBlindValidationResultForCandidate: (context, candidateId) =>
-              getBlindValidationResultForCandidatePostgres(ex, context, candidateId),
-            insertBlindValidationResult: (context, row) =>
-              insertBlindValidationResultPostgres(ex, context, row),
-            markStrategyCandidateBlindUsed: (context, candidateId) =>
-              markStrategyCandidateBlindUsedPostgres(ex, context, candidateId),
-            updateStrategyCandidateStatus: (context, candidateId, status) =>
-              updateStrategyCandidateStatusPostgres(ex, context, candidateId, status),
-          },
-          newId,
-        });
-      })();
+    : await commitDee540BlindHoldout(ex, {
+        blindDigest: sealed.blindDigest,
+        context: input.context,
+        candidate: { ...candidate, status: "walk_forward_validated", blindUsed: false },
+        datasetId: dataset.id,
+        blindBars: splits.blind,
+        expectedBlindDigest: dataset.blindDigest,
+        runBacktest: async ({ bars }) => {
+          const repo = await resolveOrderRepository(input.createOrderRepository);
+          return runIsolatedResearchBacktest(
+            ex,
+            buildIsolatedBacktestInput(input, {
+              bars,
+              datasetId: dataset.id,
+              runId: backtestRunId,
+              split: "blind",
+              costModel,
+              orderRepository: repo,
+              accountKey,
+              defaultQuantity,
+              newId,
+              cycleIdPrefix: buildResearchBlindCycleIdPrefix(backtestRunId),
+            }),
+          );
+        },
+        readRepository: {
+          getBlindValidationResultForCandidate: (context, candidateId) =>
+            getBlindValidationResultForCandidatePostgres(ex, context, candidateId),
+        },
+        bindRepository: (tx) => ({
+          getBlindValidationResultForCandidate: (context, candidateId) =>
+            getBlindValidationResultForCandidatePostgres(tx, context, candidateId),
+          insertBlindValidationResult: (context, row) =>
+            insertBlindValidationResultPostgres(tx, context, row),
+          markStrategyCandidateBlindUsed: (context, candidateId) =>
+            markStrategyCandidateBlindUsedPostgres(tx, context, candidateId),
+          updateStrategyCandidateStatus: (context, candidateId, status) =>
+            updateStrategyCandidateStatusPostgres(tx, context, candidateId, status),
+        }),
+        newId,
+      });
 
   const evidenceDocument = buildResearchEvidenceDocument({
     organizationId: input.context.organizationId,
