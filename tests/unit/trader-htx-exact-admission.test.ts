@@ -3,6 +3,7 @@ import { HtxExchangeConnector } from "@/lib/trader/connectors/htx/htx-exchange-c
 import { HtxRestClient } from "@/lib/trader/connectors/htx/client";
 import { createExchangeConnector } from "@/lib/trader/connectors/registry";
 import { createLiveHtxConnector } from "@/lib/trader/live/live-connector";
+import { LiveHtxExecutionAdmissionError } from "@/lib/trader/live/live-htx-execution-admission";
 import type { CredentialService } from "@/lib/trader/credentials/types";
 import {
   resolveHtxSecureCredential,
@@ -82,12 +83,12 @@ describe("DEE-956 exact HTX admission", () => {
     };
     await expect(createLiveHtxConnector({
       context: { organizationId: "mock-org-956" }, credentialId: "mock-credential", credentialService: service, fetchImpl,
-    })).rejects.toThrow("PERMISSION_METADATA_UNVERIFIED");
+    })).rejects.toThrow("LIVE_HTX_CREDENTIAL_ABSENT");
     expect(getDecryptedCredentials).not.toHaveBeenCalled();
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("fresh read-only downgrade cannot inherit stored trade permission", async () => {
+  function tradeStoredReadOnlyVenue() {
     const { fetchImpl } = harness();
     const service: CredentialService = {
       listCredentialMetadata: vi.fn(async () => [{
@@ -99,9 +100,47 @@ describe("DEE-956 exact HTX admission", () => {
       }]),
       getDecryptedCredentials: vi.fn(async () => credentials), storeCredentials: vi.fn(), revokeCredentials: vi.fn(),
     };
+    return { fetchImpl, service };
+  }
+
+  it("fresh read-only downgrade trips the kill switch and drops the in-memory key", async () => {
+    const drop = vi.spyOn(HtxExchangeConnector.prototype, "dropInMemoryCredentials");
+    const writeKillSwitch = vi.fn(async () => "WRITTEN" as const);
+    const lines: string[] = [];
+    const { fetchImpl, service } = tradeStoredReadOnlyVenue();
     await expect(createLiveHtxConnector({
-      context: { organizationId: "mock-org-956" }, credentialId: "mock-credential", credentialService: service, fetchImpl,
-    })).rejects.toThrow("fresh trade permission admission failed");
+      context: { organizationId: "mock-org-956" },
+      credentialId: "mock-credential",
+      credentialService: service,
+      fetchImpl,
+      writeKillSwitch,
+      telemetrySink: (line) => lines.push(line),
+    })).rejects.toBeInstanceOf(LiveHtxExecutionAdmissionError);
+    expect(writeKillSwitch).toHaveBeenCalledWith("LIVE_HTX_CREDENTIAL_READ_ONLY");
+    expect(drop).toHaveBeenCalled();
+    expect(JSON.parse(lines.at(-1) ?? "{}")).toMatchObject({
+      outcome: "LIVE_HTX_CREDENTIAL_READ_ONLY",
+      kill_state_telemetry: "TRIPPED",
+      kill_switch_write: "WRITTEN",
+    });
+    drop.mockRestore();
+  });
+
+  it("drops the in-memory key when the venue read-only kill-switch write throws", async () => {
+    const drop = vi.spyOn(HtxExchangeConnector.prototype, "dropInMemoryCredentials");
+    const writeKillSwitch = vi.fn(async () => {
+      throw new Error("kill switch unavailable");
+    });
+    const { fetchImpl, service } = tradeStoredReadOnlyVenue();
+    await expect(createLiveHtxConnector({
+      context: { organizationId: "mock-org-956" },
+      credentialId: "mock-credential",
+      credentialService: service,
+      fetchImpl,
+      writeKillSwitch,
+    })).rejects.toBeInstanceOf(LiveHtxExecutionAdmissionError);
+    expect(drop).toHaveBeenCalled();
+    drop.mockRestore();
   });
 
   it("read-only session admits observation but no order placement or cancellation network call", async () => {

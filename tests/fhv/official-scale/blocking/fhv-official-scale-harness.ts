@@ -60,6 +60,7 @@ import {
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
 import {
   publishMirroredLiveCapitalEnvelopeV2,
+  TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
   deleteLiveCapitalEnvelopeRows,
 } from "@/tests/helpers/live-capital-test-envelope";
 import {
@@ -313,6 +314,7 @@ export async function bindFhvTestOnlyExecutionV2HistoricalSession(
       },
     });
     await publishMirroredLiveCapitalEnvelopeV2({
+      sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
       sql: sqlClient,
       organizationId: seeded.context.organizationId,
       accountId,

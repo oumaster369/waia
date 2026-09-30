@@ -31,7 +31,7 @@ import {
 } from "@/lib/trader/execution/v2/contracts";
 import { listExecutionReportsV2Postgres } from "@/lib/trader/execution/v2/repository-postgres";
 import { divideDecimal } from "@/lib/trader/risk/numeric";
-import { publishMirroredLiveCapitalEnvelopeV2 } from "../helpers/live-capital-test-envelope";
+import { publishMirroredLiveCapitalEnvelopeV2, TEST_HUMAN_SOURCE_METHOD_QUALIFIED } from "../helpers/live-capital-test-envelope";
 import {
   admitRiskAllowanceV2Postgres,
   initializeRiskAccountStateV2Postgres as initializeRiskAccountStateRaw,
@@ -49,6 +49,7 @@ async function initializeRiskAccountStateV2Postgres(
 ) {
   await initializeRiskAccountStateRaw(database, context, state);
   await publishMirroredLiveCapitalEnvelopeV2({
+    sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
     organizationId: context.organizationId,
     accountId: state.accountId,
     exposureLimitNotional: state.accounting.exposureLimitNotional,

@@ -1,8 +1,11 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
   decideLiveCapitalEnvelopePublicationV2,
+  decideLiveCapitalEnvelopeWindowV2,
+  readStoredSourceMethodQualifiedV2,
   sealLiveCapitalEnvelopeV2,
   type LiveCapitalEnvelopeCommandV2,
 } from "@/lib/trader/risk/v2/live-capital-envelope-v2";
@@ -33,7 +36,7 @@ function bound(patch: Partial<typeof command> = {}) {
 }
 
 describe("LiveCapitalEnvelopeV2 publication", () => {
-  it("keeps a missing envelope refused and ignores a qualification boolean", () => {
+  it("keeps a missing envelope refused even when the human flag is true", () => {
     expect(
       decideCurrentAccountBasisPublicationV1({
         liveCapitalEnvelope: null,
@@ -48,7 +51,7 @@ describe("LiveCapitalEnvelopeV2 publication", () => {
     ).toEqual({ decision: "REFUSED", reason: "LIVE_CAPITAL_ENVELOPE_ABSENT" });
   });
 
-  it("publishes a sealed operator command with zero venue effects", () => {
+  it("publishes only when the source method flag is explicitly true", () => {
     const receipt = sealLiveCapitalEnvelopeV2(command);
     const qualified = decideCurrentAccountBasisPublicationV1({
       liveCapitalEnvelope: receipt,
@@ -60,7 +63,13 @@ describe("LiveCapitalEnvelopeV2 publication", () => {
       sourceMethodQualified: false,
       bound: bound(),
     });
-    expect(qualified).toEqual(unqualified);
+    expect(unqualified).toMatchObject({
+      decision: "REFUSED",
+      reason: "SOURCE_METHOD_UNQUALIFIED",
+      basisDigest: null,
+      allowanceId: null,
+      orderId: null,
+    });
     expect(qualified).toMatchObject({
       decision: "PUBLISHED",
       envelopeDigest: receipt.contentDigest,
@@ -135,5 +144,54 @@ describe("LiveCapitalEnvelopeV2 publication", () => {
         expect(line).not.toMatch(/DEFAULT/i);
       }
     }
+  });
+
+  it("refuses order sizing when a stored basis has no explicit source-method qualification", () => {
+    const receipt = sealLiveCapitalEnvelopeV2(command);
+    const unqualified = decideLiveCapitalEnvelopeWindowV2({
+      liveCapitalEnvelope: receipt,
+      bound: bound(),
+      sourceMethodQualified: false,
+    });
+    expect(unqualified).toMatchObject({
+      decision: "REFUSED",
+      reason: "SOURCE_METHOD_UNQUALIFIED",
+    });
+    const qualified = decideLiveCapitalEnvelopeWindowV2({
+      liveCapitalEnvelope: receipt,
+      bound: bound(),
+      sourceMethodQualified: true,
+    });
+    expect(qualified.decision).toBe("PUBLISHED");
+    expect(readStoredSourceMethodQualifiedV2(null)).toBe(false);
+    expect(
+      readStoredSourceMethodQualifiedV2('{"schemaVersion":"live-capital-envelope-journal/v2"}'),
+    ).toBe(false);
+    expect(readStoredSourceMethodQualifiedV2('{"sourceMethodQualified":"true"}')).toBe(false);
+    expect(readStoredSourceMethodQualifiedV2('{"sourceMethodQualified":true}')).toBe(true);
+  });
+
+  it("does not set sourceMethodQualified true anywhere outside tests", () => {
+    const roots = ["lib", "app", "scripts", "services", "db"];
+    const hits: string[] = [];
+    const visit = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        const path = join(dir, entry);
+        const stat = statSync(path);
+        if (stat.isDirectory()) {
+          if (entry === "node_modules" || entry === "tests") continue;
+          visit(path);
+          continue;
+        }
+        if (!/\.(ts|tsx|js|mjs|sql)$/.test(entry)) continue;
+        const body = readFileSync(path, "utf8");
+        if (/sourceMethodQualified\s*:\s*true/.test(body)) hits.push(path);
+      }
+    };
+    for (const root of roots) visit(root);
+    expect(hits).toEqual([]);
+    const producer = readFileSync("lib/trader/risk/v2/live-capital-envelope-postgres.ts", "utf8");
+    expect(producer).toContain("sourceMethodQualified: input.sourceMethodQualified === true");
+    expect(producer).not.toMatch(/sourceMethodQualified\s*:\s*true/);
   });
 });

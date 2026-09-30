@@ -123,8 +123,9 @@ export class HtxExchangeConnector implements ExchangeConnector {
   readonly marketType = "spot" as const;
 
   private readonly client: HtxRestClient;
-  private readonly placementApiKey: string;
-  private readonly placementApiSecret: string;
+  private placementApiKey: string;
+  private placementApiSecret: string;
+  private inMemoryCredentialsDropped = false;
   private readonly placementRestHost: string;
   private readonly placementHost: string;
   private readonly placementFetch: typeof fetch;
@@ -400,7 +401,26 @@ export class HtxExchangeConnector implements ExchangeConnector {
     return order;
   }
 
+  /**
+   * Drops the decrypted placement key held by this process.
+   * This is not a kill-switch row. The next placeOrder cannot sign.
+   */
+  dropInMemoryCredentials(): void {
+    this.inMemoryCredentialsDropped = true;
+    this.placementApiKey = "";
+    this.placementApiSecret = "";
+    this.client.dropInMemoryCredentials();
+    this.resetSession();
+  }
+
   async placeOrder(input: PlaceOrderInput): Promise<Order> {
+    if (
+      this.inMemoryCredentialsDropped ||
+      this.placementApiKey.length === 0 ||
+      this.placementApiSecret.length === 0
+    ) {
+      throw new Error("[trader] HTX in-memory credentials were dropped");
+    }
     this.assertTradePermission();
     assertHtxSpotSymbolAllowed(input.symbol);
     if (input.type === "limit" && !input.price) {

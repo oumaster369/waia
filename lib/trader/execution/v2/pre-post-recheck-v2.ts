@@ -6,6 +6,12 @@ import { and, eq, sql } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
 import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import {
+  CredentialGateKillWriteFailedError,
+  emitCredentialGateKillTelemetry,
+  isCredentialGateKillReason,
+  writeOrganizationCredentialKillSwitchPostgres,
+} from "@/lib/trader/execution/v2/credential-gate-kill";
 import { enforcingKillSwitchCoversAccountV2 } from "@/lib/trader/risk/kill-switch/project-onto-risk-accounts-v2";
 import {
   assertNotionalWithinLiveCapitalLimitV2,
@@ -100,12 +106,31 @@ export async function prePostNetworkRefusalV2(
             plan: { approvedNotionalCeiling: planForGates.approvedNotionalCeiling },
           })
         : null;
-    return evaluatePrePostRecheck({
+    const reason = evaluatePrePostRecheck({
       killState: state.killState,
       enforcingSwitch: await enforcingKillSwitchCoversAccountV2(tx, context.organizationId),
       envelopeReason,
       executionMode,
       liveGates,
     });
+    if (reason && isCredentialGateKillReason(reason)) {
+      try {
+        const killSwitchWrite = await writeOrganizationCredentialKillSwitchPostgres(
+          tx,
+          context.organizationId,
+          reason,
+          { joinCurrentTransaction: true },
+        );
+        await emitCredentialGateKillTelemetry({
+          organizationId: context.organizationId,
+          outcome: reason,
+          errorClass: "ExecutionV2LiveGateRefusedError",
+          killSwitchWrite,
+        });
+      } catch (error) {
+        throw new CredentialGateKillWriteFailedError(reason, { cause: error });
+      }
+    }
+    return reason;
   });
 }

@@ -42,6 +42,7 @@ import {
   readExecutionPlanV2Postgres,
   readExecutionPolicyV2Postgres,
 } from "./repository-postgres";
+import { refusalForPrePostThrow } from "./credential-gate-kill";
 import { assertExecutionV2LiveGatesPostgres, ExecutionV2LiveGateRefusedError } from "./live-gates";
 import { prePostNetworkRefusalV2 } from "./pre-post-recheck-v2";
 
@@ -415,6 +416,7 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
   executionAttemptId: string,
   submit: ExecutionV2NetworkSubmitter<T>,
   afterSubmitStarted?: () => Promise<void>,
+  onRefusedBeforePost?: (reason: string) => void,
 ): Promise<DispatchCommittedExecutionV2Result<T>> {
   const scoped = requireOrgContext(context.organizationId);
   const ready = await runWaiaPostgresTransaction(db, async (tx) => {
@@ -560,12 +562,14 @@ export async function dispatchCommittedExecutionAttemptV2<T>(
   let refusal: string | null;
   try {
     refusal = await prePostNetworkRefusalV2(db, scoped, ready.attempt);
-  } catch {
+  } catch (error) {
     // A thrown read is not a venue reject. The caller records a non-terminal
-    // refusal and must not POST. A returned refusal string stays terminal.
-    refusal = "PRE_POST_RECHECK_UNAVAILABLE";
+    // refusal and must not POST. A credential kill-switch write failure keeps
+    // that credential reason so the caller still drops the in-memory key.
+    refusal = refusalForPrePostThrow(error);
   }
   if (refusal) {
+    onRefusedBeforePost?.(refusal);
     return Object.freeze({
       status: "REFUSED_BEFORE_POST" as const,
       attempt: ready.attempt,

@@ -476,8 +476,8 @@ export function availableRiskAccountQuantityV1(input: {
   return formatDecimal(lower > 0n ? lower : 0n);
 }
 
-/** A null envelope stays refused. A sealed LiveCapitalEnvelopeV2 receipt can publish the basis.
- *  A qualified method flag is not authority.
+/** A null envelope stays refused. Publication still requires the explicit human flag.
+ *  This function does not set that flag.
  */
 export function decideCurrentAccountBasisPublicationV1(input: {
   liveCapitalEnvelope: null;

@@ -25,6 +25,7 @@ import { cleanupWp13Org, seedWp13User } from "./wp13-intelligence-test-helpers";
 import {
   deleteLiveCapitalEnvelopeRows,
   publishMirroredLiveCapitalEnvelopeV2,
+  TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
 } from "../helpers/live-capital-test-envelope";
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
@@ -48,6 +49,7 @@ async function initializeRiskAccountStateV2Postgres(
 ) {
   await initializeRiskAccountStateRaw(database, context, state);
   await publishMirroredLiveCapitalEnvelopeV2({
+    sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
     organizationId: context.organizationId,
     accountId: state.accountId,
     exposureLimitNotional: state.accounting.exposureLimitNotional,
@@ -1150,6 +1152,7 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
   it("DEE-1151 refuses admission when loss limit is below the reservation", async () => {
     await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("capital-loss"));
     await publishMirroredLiveCapitalEnvelopeV2({
+      sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
       sql: sqlClient,
       organizationId: orgA,
       accountId: "capital-loss",
@@ -1168,6 +1171,7 @@ async function runAcrossAccountLockPastExpiry<T>(input: {
   it("DEE-1151 refuses admission when capital does not equal the exposure limit", async () => {
     await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, account("capital-mismatch"));
     await publishMirroredLiveCapitalEnvelopeV2({
+      sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
       sql: sqlClient,
       organizationId: orgA,
       accountId: "capital-mismatch",

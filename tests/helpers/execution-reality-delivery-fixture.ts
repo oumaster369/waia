@@ -9,7 +9,7 @@ import { insertExecutionAttemptV2Postgres, insertExecutionPlanV2Postgres, insert
 import { divideDecimal } from "@/lib/trader/risk/numeric";
 import { admitRiskAllowanceV2Postgres, consumeRiskAllowanceForOrderV2Postgres,
   initializeRiskAccountStateV2Postgres as initializeRiskAccountStateRaw, type AdmitRiskAllowanceV2Input } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
-import { publishMirroredLiveCapitalEnvelopeV2 } from "./live-capital-test-envelope";
+import { publishMirroredLiveCapitalEnvelopeV2, TEST_HUMAN_SOURCE_METHOD_QUALIFIED } from "./live-capital-test-envelope";
 
 async function initializeRiskAccountStateV2Postgres(
   database: Parameters<typeof initializeRiskAccountStateRaw>[0],
@@ -18,6 +18,7 @@ async function initializeRiskAccountStateV2Postgres(
 ) {
   await initializeRiskAccountStateRaw(database, context, state);
   await publishMirroredLiveCapitalEnvelopeV2({
+    sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
     organizationId: context.organizationId,
     accountId: state.accountId,
     exposureLimitNotional: state.accounting.exposureLimitNotional,
