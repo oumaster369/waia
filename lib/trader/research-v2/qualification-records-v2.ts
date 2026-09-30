@@ -3,6 +3,7 @@ import type { ResearchHypothesisFamilyV2 } from "@/lib/trader/research-v2/multip
 import {
   AppendOnlyStrategyAdmissionJournal,
   assessStrategyAdmission,
+  assessStrategyAdmissionReadOnly,
   strategyAdmissionHypothesisId,
   StrategyAdmissionError,
   type StrategyAdmissionAssessment,
@@ -190,7 +191,7 @@ function assertDateNetsMatchCounts(evaluation: QualificationEvaluationV2): void 
  * Records a partition qualification. The verdict is computed inside strategy
  * admission from the date-level evidence. A caller-supplied `verdict` is refused.
  */
-export function recordQualificationV2(
+function buildQualificationRecord(
   input: {
     candidate: StrategyEvolutionCandidateV2;
     partition: QualificationPartitionV2 | "BLIND_HOLDOUT";
@@ -212,11 +213,10 @@ export function recordQualificationV2(
     entryTimeUtc?: string;
     barIntervalMinutes?: number;
     journal?: AppendOnlyStrategyAdmissionJournal;
-    /** Recompute a sealed record without consuming the split again. */
-    replay?: boolean;
     /** IS did not qualify. Validation is recorded as unscored and is not assessed. */
     unscored?: boolean;
-  } & { verdict?: never },
+  } & { verdict?: never; replay?: never },
+  readOnly: boolean,
 ): QualificationRecordV2 {
   if (input.partition === "BLIND_HOLDOUT") {
     queryBlindHoldoutAsIterativeFitnessV2();
@@ -225,6 +225,12 @@ export function recordQualificationV2(
     throw new StrategyEvolutionResearchError(
       "QUALIFICATION_VERDICT_NOT_ACCEPTED_FROM_CALLER",
       "research-v2 verdict is computed from partition evidence",
+    );
+  }
+  if (!readOnly && Object.prototype.hasOwnProperty.call(input, "replay")) {
+    throw new StrategyEvolutionResearchError(
+      "admission_replay_read_only",
+      "replay cannot skip a split consume",
     );
   }
   assertResearchDiscoveryFitnessV2(input.evaluation, "qualification evaluation");
@@ -251,7 +257,9 @@ export function recordQualificationV2(
   const intraday = input.intraday ?? false;
   const sideDeclared = input.sideDeclared ?? "long";
   const horizonBars = input.horizonBars ?? 1;
-  const ownObservations = input.evaluation.dateNets ?? [];
+  const ownObservations =
+    input.evaluation.dateNets ??
+    (readOnly ? (input.familyObservations?.[input.trialIndex ?? 0] ?? []) : []);
   const familyObservationNets = input.familyObservations ?? [ownObservations];
   const trialIndex = input.trialIndex ?? 0;
   if (
@@ -268,7 +276,7 @@ export function recordQualificationV2(
       "partition evidence must be the declared family trial",
     );
   }
-  const split = partition === "DEVELOPMENT" ? "is" : "validation";
+  const split: "is" | "validation" = partition === "DEVELOPMENT" ? "is" : "validation";
   const hypothesisId =
     input.hypothesisId ?? strategyAdmissionHypothesisId(input.specSha256, input.candidate.params);
   const barIntervalMinutes = input.barIntervalMinutes ?? 1;
@@ -285,13 +293,13 @@ export function recordQualificationV2(
     );
   }
   const unscored = input.unscored === true;
-  if (!input.replay && !unscored && !input.journal?.durable) {
+  if (!readOnly && !unscored && !input.journal?.durable) {
     throw new StrategyEvolutionResearchError(
       "admission_journal_unavailable",
       "qualification requires a durable admission journal",
     );
   }
-  if (split === "validation" && !input.replay && !unscored) {
+  if (split === "validation" && !readOnly && !unscored) {
     input.journal!.assertSplitAvailable({
       specSha256: input.specSha256,
       hypothesisId,
@@ -304,7 +312,7 @@ export function recordQualificationV2(
     assessment = unscoredAdmissionAssessment(input.declaredFamilySize);
   } else {
     try {
-      assessment = assessStrategyAdmission({
+      const admissionInput = {
         specSha256: input.specSha256,
         declaredFamilySize: input.declaredFamilySize,
         kind,
@@ -323,9 +331,13 @@ export function recordQualificationV2(
         signalBarCloseUtc,
         entryTimeUtc,
         barIntervalMinutes,
-        journal: input.journal ?? new AppendOnlyStrategyAdmissionJournal(),
-        replay: input.replay === true,
-      });
+      };
+      assessment = readOnly
+        ? assessStrategyAdmissionReadOnly(admissionInput)
+        : assessStrategyAdmission({
+            ...admissionInput,
+            journal: input.journal ?? new AppendOnlyStrategyAdmissionJournal(),
+          });
     } catch (error) {
       if (error instanceof StrategyAdmissionError) {
         throw new StrategyEvolutionResearchError(error.code, error.message);
@@ -334,7 +346,7 @@ export function recordQualificationV2(
     }
   }
 
-  if (split === "validation" && !input.replay && !unscored) {
+  if (split === "validation" && !readOnly && !unscored) {
     input.journal!.append({
       correctsRowIndex: null,
       hypothesisId,
@@ -413,6 +425,7 @@ export function recordQualificationV2(
     assessment,
   });
 
+  const { dateNets: rawDateNets, ...evaluationWithoutDateNets } = input.evaluation;
   const body = {
     schemaVersion: QUALIFICATION_RECORD_V2_SCHEMA,
     capitalAuthority: "RESEARCH_ONLY" as const,
@@ -420,10 +433,8 @@ export function recordQualificationV2(
     partition,
     fittingAllowed: partition === "DEVELOPMENT",
     evaluation: Object.freeze({
-      ...input.evaluation,
-      ...(input.evaluation.dateNets
-        ? { dateNets: Object.freeze([...input.evaluation.dateNets]) }
-        : {}),
+      ...evaluationWithoutDateNets,
+      ...(unscored || !rawDateNets ? {} : { dateNets: Object.freeze([...rawDateNets]) }),
     }),
     multipleTesting,
     admission,
@@ -434,6 +445,12 @@ export function recordQualificationV2(
     ...body,
     contentDigestHex: computeSemanticSha256Hex(body),
   });
+}
+
+export function recordQualificationV2(
+  input: Parameters<typeof buildQualificationRecord>[0],
+): QualificationRecordV2 {
+  return buildQualificationRecord(input, false);
 }
 
 function assertQualificationCandidateV2(candidate: StrategyEvolutionCandidateV2): void {
@@ -471,31 +488,33 @@ export function assertQualificationPairForCandidateV2(input: {
     if (record.partition !== partition) {
       throw new StrategyEvolutionResearchError("QUALIFICATION_PARTITION_MISMATCH");
     }
-    const replay = recordQualificationV2({
-      candidate: input.candidate,
-      partition,
-      evaluation: record.evaluation,
-      failureReasons: record.failureReasons.filter(
-        (reason) => !RECOMPUTED_FAILURE_REASONS.has(reason),
-      ),
-      specSha256: record.admission.specSha256,
-      declaredFamilySize: record.admission.declaredFamilySize,
-      kind: record.admission.kind,
-      intraday: record.admission.intraday,
-      sideDeclared: record.admission.sideDeclared,
-      horizonBars: record.admission.horizonBars,
-      barIntervalMinutes: record.admission.barIntervalMinutes,
-      familyObservations: record.admission.familyObservationNets,
-      trialIndex: record.admission.trialIndex,
-      hypothesisId: record.admission.hypothesisId,
-      usedForDiscovery: record.admission.usedForDiscovery,
-      signalBarCloseUtc: record.admission.signalBarCloseUtc,
-      entryTimeUtc: record.admission.entryTimeUtc,
-      symbol: record.admission.symbol,
-      fundingMean: record.admission.fundingMean,
-      replay: true,
-      unscored: record.admission.scored === false,
-    });
+    const replay = buildQualificationRecord(
+      {
+        candidate: input.candidate,
+        partition,
+        evaluation: record.evaluation,
+        failureReasons: record.failureReasons.filter(
+          (reason) => !RECOMPUTED_FAILURE_REASONS.has(reason),
+        ),
+        specSha256: record.admission.specSha256,
+        declaredFamilySize: record.admission.declaredFamilySize,
+        kind: record.admission.kind,
+        intraday: record.admission.intraday,
+        sideDeclared: record.admission.sideDeclared,
+        horizonBars: record.admission.horizonBars,
+        barIntervalMinutes: record.admission.barIntervalMinutes,
+        familyObservations: record.admission.familyObservationNets,
+        trialIndex: record.admission.trialIndex,
+        hypothesisId: record.admission.hypothesisId,
+        usedForDiscovery: record.admission.usedForDiscovery,
+        signalBarCloseUtc: record.admission.signalBarCloseUtc,
+        entryTimeUtc: record.admission.entryTimeUtc,
+        symbol: record.admission.symbol,
+        fundingMean: record.admission.fundingMean,
+        unscored: record.admission.scored === false,
+      },
+      true,
+    );
     if (replay.contentDigestHex !== record.contentDigestHex) {
       throw new StrategyEvolutionResearchError("QUALIFICATION_RECORD_INVALID");
     }

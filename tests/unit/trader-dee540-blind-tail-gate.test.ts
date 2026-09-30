@@ -1,6 +1,5 @@
-import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -107,7 +106,7 @@ describe("DEE-540 blind tail gate", () => {
     );
   });
 
-  it("accepts a content-bound grant and still reports the official holdout as sealed", () => {
+  it("accepts a content-bound grant and still reports the official holdout as sealed", async () => {
     const { scope, digest } = authorizedScope();
     const grant = resolveResearchPipelineCliBlindTail(
       new Map([
@@ -117,19 +116,28 @@ describe("DEE-540 blind tail gate", () => {
     );
     expect(grant.officialHoldoutStatus).toBe("SEALED_NOT_ACCESSED");
     expect(grant.blindAuthorizationScope.blindDigest).toBe(scope.blindDigest);
-    const storePath = join(mkdtempSync(join(tmpdir(), "waia-dee540-")), "consumed.jsonl");
-    consumeDee540BlindTailAuthorization({
-      authorizationDigest: grant.operatorBlindAuthorization,
-      storePath,
+    const seen = new Set<string>();
+    const ex = {
+      insert() {
+        return {
+          values(row: { barContentToken: string }) {
+            if (seen.has(row.barContentToken)) {
+              throw Object.assign(new Error("duplicate"), { code: "23505" });
+            }
+            seen.add(row.barContentToken);
+            return Promise.resolve();
+          },
+        };
+      },
+    };
+    await consumeDee540BlindTailAuthorization(ex as never, {
+      blindDigest: grant.blindAuthorizationScope.blindDigest,
     });
-    expectGateCode(
-      () =>
-        consumeDee540BlindTailAuthorization({
-          authorizationDigest: grant.operatorBlindAuthorization,
-          storePath,
-        }),
-      "DEE540_AUTHORIZATION_ALREADY_CONSUMED",
-    );
+    await expect(
+      consumeDee540BlindTailAuthorization(ex as never, {
+        blindDigest: grant.blindAuthorizationScope.blindDigest,
+      }),
+    ).rejects.toMatchObject({ code: "DEE540_AUTHORIZATION_ALREADY_CONSUMED" });
   });
 
   it("checks the gate before listing bars or running the blind backtest", () => {
@@ -152,9 +160,9 @@ describe("DEE-540 blind tail gate", () => {
       orchestrator.indexOf("resolveM9ResearchDatasetPostgres"),
     );
     expect(orchestrator.indexOf("assertResearchPipelineRegimeCoverage(")).toBeLessThan(
-      orchestrator.indexOf("consumeDee540BlindTailAuthorization({"),
+      orchestrator.indexOf("consumeDee540BlindTailAuthorization("),
     );
-    expect(orchestrator.indexOf("consumeDee540BlindTailAuthorization({")).toBeLessThan(
+    expect(orchestrator.indexOf("consumeDee540BlindTailAuthorization(")).toBeLessThan(
       orchestrator.indexOf("return runBlindHoldoutValidation({"),
     );
     const campaign = readFileSync(

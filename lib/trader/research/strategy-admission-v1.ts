@@ -1,6 +1,4 @@
 import { createHash } from "node:crypto";
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
 
 import { parseDecimal } from "@/lib/trader/risk/numeric";
 import { applyHolmAdjustment } from "@/lib/trader/research-v2/multiple-testing-holm-v2";
@@ -42,13 +40,17 @@ export const STRATEGY_ADMISSION_MIN_POSITIVE_YEAR_SPAN = 3 as const;
  * not a real spread of trial Sharpes. Identical trials must use the SR-estimation variance.
  */
 export const STRATEGY_ADMISSION_TRIAL_SHARPE_VARIANCE_DUST = 1e-12 as const;
-
-export function defaultStrategyAdmissionJournalPath(): string {
-  const configured = process.env.WAIA_STRATEGY_ADMISSION_JOURNAL_PATH?.trim();
-  return configured && configured.length > 0
-    ? configured
-    : "var/waia/strategy-admission-journal.jsonl";
-}
+/**
+ * A cross-section within this multiple of the absolute dust floor is still a
+ * near-duplicate family. 1.1e-12 sits just above the absolute floor and must
+ * not collapse the Deflated Sharpe haircut.
+ */
+export const STRATEGY_ADMISSION_TRIAL_SHARPE_VARIANCE_DUST_SPAN = 1e6 as const;
+/**
+ * Relative tolerance against the single-trial Sharpe estimation variance.
+ * A smaller cross-section is not an independent-trial dispersion.
+ */
+export const STRATEGY_ADMISSION_TRIAL_SHARPE_VARIANCE_RELATIVE = 1 as const;
 
 /** Stable hypothesis identity. Campaign id is not part of the key. */
 export function strategyAdmissionHypothesisId(
@@ -111,11 +113,6 @@ export type StrategyAdmissionInput = Readonly<{
   entryTimeUtc: string;
   /** Minutes per bar. Horizon is converted to a date lag. Default 1. */
   barIntervalMinutes?: number;
-  /**
-   * Recompute a sealed record. Does not require a prior family registration
-   * and does not consume a split.
-   */
-  replay?: boolean;
 }>;
 
 export type StrategyAdmissionFamilyTrial = Readonly<{
@@ -196,44 +193,43 @@ type StrategyAdmissionJournalLine =
 
 /**
  * Append-only per-configuration journal. Corrections are new rows.
- * A durable journal is a JSONL file. In-memory journals are not accepted
- * for a validation consume.
+ * Durability is the Postgres store. This object is the in-process cache.
+ * A non-durable journal is refused for a validation consume.
  */
 export class AppendOnlyStrategyAdmissionJournal {
   protected readonly rows: StrategyAdmissionJournalRow[] = [];
   protected readonly families = new Map<string, number>();
   durable = false;
-  private filePath: string | null = null;
 
-  /**
-   * Opens a JSONL journal, creating it when missing.
-   * Fails closed when the path cannot be created or read.
-   */
-  static openDurable(filePath: string): AppendOnlyStrategyAdmissionJournal {
-    if (!filePath.trim()) {
-      throw new StrategyAdmissionError("admission_journal_unavailable", "journal path is empty");
-    }
-    try {
-      mkdirSync(dirname(filePath), { recursive: true });
-      try {
-        writeFileSync(filePath, "", { flag: "wx" });
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code !== "EEXIST") throw error;
+  /** In-process durable cache. Postgres load/commit is what survives a new process. */
+  static openDurableMemory(): AppendOnlyStrategyAdmissionJournal {
+    const journal = new AppendOnlyStrategyAdmissionJournal();
+    journal.durable = true;
+    return journal;
+  }
+
+  static fromSnapshot(snapshot: {
+    families: readonly { specSha256: string; familySize: number }[];
+    rows: readonly StrategyAdmissionJournalRow[];
+  }): AppendOnlyStrategyAdmissionJournal {
+    const journal = AppendOnlyStrategyAdmissionJournal.openDurableMemory();
+    for (const family of snapshot.families) {
+      const existing = journal.families.get(family.specSha256);
+      if (existing !== undefined && existing !== family.familySize) {
+        throw new StrategyAdmissionError("family_size_mismatch");
       }
-      const raw = readFileSync(filePath, "utf8");
-      const journal = new AppendOnlyStrategyAdmissionJournal();
-      journal.load(raw);
-      journal.filePath = filePath;
-      journal.durable = true;
-      return journal;
-    } catch (error) {
-      if (error instanceof StrategyAdmissionError) throw error;
-      throw new StrategyAdmissionError(
-        "admission_journal_unavailable",
-        error instanceof Error ? error.message : "journal unavailable",
+      journal.families.set(family.specSha256, family.familySize);
+    }
+    const ordered = [...snapshot.rows].sort((left, right) => left.rowIndex - right.rowIndex);
+    for (const row of ordered) {
+      journal.rows.push(
+        Object.freeze({
+          ...row,
+          flags: Object.freeze([...row.flags]),
+        }),
       );
     }
+    return journal;
   }
 
   list(): readonly StrategyAdmissionJournalRow[] {
@@ -242,6 +238,13 @@ export class AppendOnlyStrategyAdmissionJournal {
 
   registeredFamilySize(specSha256: string): number | null {
     return this.families.get(specSha256) ?? null;
+  }
+
+  registeredFamilies(): readonly { specSha256: string; familySize: number }[] {
+    return [...this.families.entries()].map(([specSha256, familySize]) => ({
+      specSha256,
+      familySize,
+    }));
   }
 
   /** Idempotent for the same size. A different size is a conflict. */
@@ -319,59 +322,9 @@ export class AppendOnlyStrategyAdmissionJournal {
     }
   }
 
-  protected persist(line: StrategyAdmissionJournalLine): void {
-    if (!this.filePath) return;
-    try {
-      appendFileSync(this.filePath, `${JSON.stringify(line)}\n`, "utf8");
-    } catch (error) {
-      throw new StrategyAdmissionError(
-        "admission_journal_unavailable",
-        error instanceof Error ? error.message : "journal append failed",
-      );
-    }
-  }
-
-  protected load(raw: string): void {
-    const lines = raw.split("\n");
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      let parsed: StrategyAdmissionJournalLine;
-      try {
-        parsed = JSON.parse(trimmed) as StrategyAdmissionJournalLine;
-      } catch {
-        throw new StrategyAdmissionError(
-          "admission_journal_unavailable",
-          "journal line is not JSON",
-        );
-      }
-      if (parsed.recordType === "family_registration") {
-        const existing = this.families.get(parsed.specSha256);
-        if (existing !== undefined && existing !== parsed.familySize) {
-          throw new StrategyAdmissionError("family_size_mismatch");
-        }
-        this.families.set(parsed.specSha256, parsed.familySize);
-        continue;
-      }
-      if (parsed.recordType !== "run" || !parsed.row) {
-        throw new StrategyAdmissionError(
-          "admission_journal_unavailable",
-          "journal line has an unknown record type",
-        );
-      }
-      const direction = parsed.row.direction ?? "strategy";
-      const directionTrialOrdinal =
-        this.rows.filter((existing) => existing.direction === direction).length + 1;
-      this.rows.push(
-        Object.freeze({
-          ...parsed.row,
-          direction,
-          rowIndex: this.rows.length,
-          directionTrialOrdinal,
-          flags: Object.freeze([...(parsed.row.flags ?? [])]),
-        }),
-      );
-    }
+  /** Postgres commit is the durable append. The cache itself does not touch the filesystem. */
+  protected persist(_line: StrategyAdmissionJournalLine): void {
+    void _line;
   }
 }
 
@@ -739,6 +692,34 @@ function srEstimationVariance(
   return Math.max(numerator, 0) / (count - 1);
 }
 
+/**
+ * Chooses V[SR] for the Deflated Sharpe haircut.
+ *
+ * Near-duplicate families (cross-sectional variance inside the absolute dust
+ * span, or not larger than the single-trial estimation variance) do not
+ * identify an independent-trial dispersion. Their effective N stays the
+ * declared family size — shrinking N toward 1 would cancel the haircut — and
+ * the variance is the SR estimation variance. A wider cross-section uses the
+ * larger of the two variances, still at the declared N.
+ */
+export function selectStrategyAdmissionSharpeVariance(input: {
+  crossSectional: number;
+  estimation: number;
+  sharpe: number;
+}): { variance: number; nearDuplicate: boolean } {
+  const absoluteDust =
+    STRATEGY_ADMISSION_TRIAL_SHARPE_VARIANCE_DUST * Math.max(1, input.sharpe * input.sharpe);
+  const floor = Math.max(
+    absoluteDust * STRATEGY_ADMISSION_TRIAL_SHARPE_VARIANCE_DUST_SPAN,
+    input.estimation * STRATEGY_ADMISSION_TRIAL_SHARPE_VARIANCE_RELATIVE,
+  );
+  const nearDuplicate = !Number.isFinite(input.crossSectional) || !(input.crossSectional > floor);
+  return {
+    nearDuplicate,
+    variance: nearDuplicate ? input.estimation : Math.max(input.crossSectional, input.estimation),
+  };
+}
+
 function deflatedSharpe(input: {
   confirmatory: readonly number[];
   trialSeries: readonly (readonly number[])[];
@@ -759,14 +740,14 @@ function deflatedSharpe(input: {
       trialSharpes.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (trialSharpes.length - 1)
     );
   })();
-  // Identical trials, float dust, or an undefined cross-section use Bailey–López de Prado SR variance.
-  // Bitwise-identical Sharpes still produce a sample variance around 1e-32.
-  const varianceDust =
-    STRATEGY_ADMISSION_TRIAL_SHARPE_VARIANCE_DUST * Math.max(1, moments.sr * moments.sr);
-  const variance =
-    Number.isFinite(crossSectional) && crossSectional > varianceDust
-      ? crossSectional
-      : srEstimationVariance(moments, count);
+  const selected = selectStrategyAdmissionSharpeVariance({
+    crossSectional,
+    estimation: srEstimationVariance(moments, count),
+    sharpe: moments.sr,
+  });
+  // Effective N is the declared family size on both branches. A near-duplicate
+  // cross-section must not be treated as N_eff ≈ 1.
+  const variance = selected.variance;
   const n = input.familySize;
   const sr0 =
     Math.sqrt(Math.max(variance, 0)) *
@@ -796,6 +777,35 @@ function signedObservations(
 export function assessStrategyAdmission(
   input: StrategyAdmissionInput,
 ): StrategyAdmissionAssessment {
+  if (Object.prototype.hasOwnProperty.call(input, "replay")) {
+    throw new StrategyAdmissionError(
+      "admission_replay_read_only",
+      "replay cannot skip family registration or a split consume",
+    );
+  }
+  return assessStrategyAdmissionBody(input, false);
+}
+
+/**
+ * Recompute a sealed assessment. Does not register a family and does not
+ * consume a split. Recording a qualification must use {@link assessStrategyAdmission}.
+ */
+export function assessStrategyAdmissionReadOnly(
+  input: Omit<StrategyAdmissionInput, "journal">,
+): StrategyAdmissionAssessment {
+  return assessStrategyAdmissionBody(
+    {
+      ...input,
+      journal: AppendOnlyStrategyAdmissionJournal.openDurableMemory(),
+    },
+    true,
+  );
+}
+
+function assessStrategyAdmissionBody(
+  input: StrategyAdmissionInput,
+  readOnly: boolean,
+): StrategyAdmissionAssessment {
   if (!SPEC_SHA256.test(input.specSha256)) {
     throw new StrategyAdmissionError(
       "spec_sha256_required",
@@ -805,7 +815,7 @@ export function assessStrategyAdmission(
   if (!Number.isSafeInteger(input.declaredFamilySize) || input.declaredFamilySize < 1) {
     throw new StrategyAdmissionError("declared_family_size_required");
   }
-  if (!input.replay) {
+  if (!readOnly) {
     const registered = input.journal.registeredFamilySize(input.specSha256);
     if (registered === null) {
       throw new StrategyAdmissionError(

@@ -27,10 +27,7 @@ import type { Bar, BarInterval, InstrumentId } from "@/lib/trader/intelligence/t
 import type { PaperCycleDeps, PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 import type { PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
 import { assertDee540BlindTailAuthorized } from "@/lib/trader/research/dee-540-blind-tail-gate";
-import {
-  consumeDee540BlindTailAuthorization,
-  defaultDee540ConsumptionPath,
-} from "@/lib/trader/research/dee-540-authorization-store";
+import { consumeDee540BlindTailAuthorization } from "@/lib/trader/research/dee-540-authorization-store";
 import { M9_BLIND_AUTHORIZATION_SIDECAR_DIGEST_NONE } from "@/lib/trader/research/m9-operator-authorization";
 import {
   buildResearchEvaluationPlan,
@@ -508,10 +505,8 @@ export async function runResearchPipelinePostgres(
         metrics: emptyBlindMetrics,
       }
     : await (async () => {
-        consumeDee540BlindTailAuthorization({
-          authorizationDigest: blindGrant!.operatorBlindAuthorization,
-          storePath:
-            pipelineBacktest?.blindAuthorizationConsumptionPath ?? defaultDee540ConsumptionPath(),
+        await consumeDee540BlindTailAuthorization(ex, {
+          blindDigest: sealed.blindDigest,
         });
         return runBlindHoldoutValidation({
           context: input.context,

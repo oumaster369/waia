@@ -1,65 +1,80 @@
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { createHash } from "node:crypto";
+import { eq } from "drizzle-orm";
 
+import * as pgSchema from "@/db/schema.postgres";
+import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
 import { ResearchOrchestratorError } from "@/lib/trader/research/errors";
+import { isPostgresUniqueViolation } from "@/lib/trader/research/postgres-unique-violation";
 
-export function defaultDee540ConsumptionPath(): string {
-  const configured = process.env.WAIA_DEE540_CONSUMPTION_PATH?.trim();
-  return configured && configured.length > 0 ? configured : "var/waia/dee540-consumed.jsonl";
-}
+const BLIND_DIGEST = /^[0-9a-f]{64}$/;
 
 /**
- * One-shot consume of a content-bound DEE-540 authorization digest.
- * A second consume of the same digest is refused. The store is a new
- * append-only file, not a lock on a hot table. Fails closed if the file
- * cannot be read or written.
+ * DEE-540 consumption token. Hashes the sealed blind-split bar digest only.
+ * datasetName, vaultDir, and the rest of the caller scope are not inputs, so
+ * renaming those labels cannot mint a second consume for the same bars.
  */
-export function consumeDee540BlindTailAuthorization(input: {
-  authorizationDigest: string;
-  storePath: string;
-}): void {
-  const digest = input.authorizationDigest.trim();
-  if (!digest) {
+export function computeDee540BarContentToken(blindDigest: string): string {
+  const digest = blindDigest.trim();
+  if (!BLIND_DIGEST.test(digest)) {
     throw new ResearchOrchestratorError(
       "DEE540_BLIND_TAIL_AUTHORIZATION_REQUIRED",
-      "authorization digest is empty",
+      "DEE-540 consumption requires the sealed bar-content digest",
     );
   }
-  let existing = "";
+  return createHash("sha256")
+    .update(
+      canonicalJsonString({
+        kind: "dee540_bar_content_v1",
+        blindDigest: digest,
+      }),
+      "utf8",
+    )
+    .digest("hex");
+}
+
+type Dee540Insert = Pick<WaiaPostgresDb, "insert">;
+
+/**
+ * Consumes a bar-content token exactly once. The primary key is the concurrency
+ * gate. There is no path override and no replay that clears the row.
+ */
+export async function consumeDee540BlindTailAuthorization(
+  ex: Dee540Insert,
+  input: { blindDigest: string },
+): Promise<string> {
+  const token = computeDee540BarContentToken(input.blindDigest);
   try {
-    mkdirSync(dirname(input.storePath), { recursive: true });
-    try {
-      writeFileSync(input.storePath, "", { flag: "wx" });
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "EEXIST") throw error;
-    }
-    existing = readFileSync(input.storePath, "utf8");
+    await ex.insert(pgSchema.traderDee540BarConsumption).values({
+      barContentToken: token,
+      blindDigest: input.blindDigest.trim(),
+    });
   } catch (error) {
+    if (isPostgresUniqueViolation(error)) {
+      throw new ResearchOrchestratorError(
+        "DEE540_AUTHORIZATION_ALREADY_CONSUMED",
+        "this blind-tail bar content was already consumed",
+      );
+    }
     if (error instanceof ResearchOrchestratorError) throw error;
     throw new ResearchOrchestratorError(
       "DEE540_AUTHORIZATION_STORE_UNAVAILABLE",
       error instanceof Error ? error.message : "authorization store unavailable",
     );
   }
-  const used = new Set(
-    existing
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0),
-  );
-  if (used.has(digest)) {
-    throw new ResearchOrchestratorError(
-      "DEE540_AUTHORIZATION_ALREADY_CONSUMED",
-      "this blind-tail authorization was already consumed",
-    );
-  }
-  try {
-    appendFileSync(input.storePath, `${digest}\n`, "utf8");
-  } catch (error) {
-    throw new ResearchOrchestratorError(
-      "DEE540_AUTHORIZATION_STORE_UNAVAILABLE",
-      error instanceof Error ? error.message : "authorization store unavailable",
-    );
-  }
+  return token;
+}
+
+/** Read-only: whether this bar-content token was already consumed. Does not insert. */
+export async function dee540BarContentConsumed(
+  ex: Pick<WaiaPostgresDb, "select">,
+  blindDigest: string,
+): Promise<boolean> {
+  const token = computeDee540BarContentToken(blindDigest);
+  const rows = await ex
+    .select({ token: pgSchema.traderDee540BarConsumption.barContentToken })
+    .from(pgSchema.traderDee540BarConsumption)
+    .where(eq(pgSchema.traderDee540BarConsumption.barContentToken, token))
+    .limit(1);
+  return rows.length > 0;
 }

@@ -31,8 +31,6 @@ export type ResearchPipelineBacktestOptions = {
    * validation and walk-forward only. Evidence records an empty blind result.
    */
   skipBlindTail?: boolean;
-  /** One-shot authorization consume file. Defaults to var/waia/dee540-consumed.jsonl. */
-  blindAuthorizationConsumptionPath?: string;
   validationArtifactSink?: ResearchValidationBacktestArtifactSink;
   /** Optional replay provider sidecar for tier-2 cross-venue/crowd/global in M9 artifacts. */
   providerSidecar?: ReplayProviderSidecar;

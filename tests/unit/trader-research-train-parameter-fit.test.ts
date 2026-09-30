@@ -217,7 +217,7 @@ describe("research train parameter fit", () => {
     expect(orchestrator).toContain("evidenceBacktestUsesTrainFit: false");
     expect(orchestrator).toContain('trainFitAppliedTo: "walk_forward_window_slices"');
     expect(orchestrator.indexOf("assertResearchPipelineRegimeCoverage(")).toBeLessThan(
-      orchestrator.indexOf("consumeDee540BlindTailAuthorization({"),
+      orchestrator.indexOf("consumeDee540BlindTailAuthorization("),
     );
     const validationCalls = orchestrator.match(/runIsolatedResearchBacktest\(/g) ?? [];
     expect(validationCalls).toHaveLength(2);
