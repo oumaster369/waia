@@ -74,6 +74,11 @@ export type StoreCredentialsInput = {
   actorId?: string | null;
   /** Optimistic replacement guard. null means the caller observed no active credential. */
   expectedActiveCredentialId?: string | null;
+  /**
+   * Stored org live-enable state. Omitted is not enabled. Required to store a
+   * trade scope. This flag does not turn live trading on.
+   */
+  orgLiveEnabled?: boolean;
 };
 
 export type RevokeCredentialsInput = {
