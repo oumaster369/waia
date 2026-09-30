@@ -4,6 +4,10 @@ enforceServerOnly();
 
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
+  persistDiscoveryLoopRun,
+  type DiscoveryLoopPersistInput,
+} from "@/lib/trader/discovery/discovery-loop-repository-postgres";
+import {
   DEFAULT_DISCOVERY_RUN_CONFIG,
   type DiscoveryRunConfig,
   type DiscoveryRunContext,
@@ -16,8 +20,13 @@ import type { FutureCycleEpistemicEffectReceiptV2 } from "@/lib/trader/knowledge
 import type { PaperClosedTrade } from "@/lib/trader/paper/paper-strategy-eval.types";
 import type { ResearchRejectionRecord } from "@/lib/trader/research/research-rejection-record.types";
 import {
+  commitStrategyAdmissionJournal,
+  loadStrategyAdmissionJournal,
+  type AdmissionJournalBaseline,
+} from "@/lib/trader/research/strategy-admission-journal-postgres";
+import {
   AppendOnlyStrategyAdmissionJournal,
-  defaultStrategyAdmissionJournalPath,
+  StrategyAdmissionError,
 } from "@/lib/trader/research/strategy-admission-v1";
 import {
   assertPartitionEvaluationMatchesWindowsV2,
@@ -26,6 +35,7 @@ import {
   enqueueResearchJobV2,
   runStrategyEvolutionResearchPassV2,
   StrategyEvolutionResearchError,
+  type StrategyEvolutionResearchPassV2,
   type ClosedTradeOutcomeInputV2,
   type ClosedTradeOutcomePolarityV2,
   type PartitionWindowMetricV2,
@@ -70,9 +80,11 @@ export type DiscoveryEvolutionPassInput = {
   failureReasons?: readonly string[];
   specSha256?: string;
   declaredFamilySize?: number;
-  /** Durable admission journal. Opened at the default path when omitted. */
+  /**
+   * In-process journal used only when this call has no Postgres executor.
+   * A Postgres executor always loads and commits the durable journal.
+   */
   journal?: AppendOnlyStrategyAdmissionJournal;
-  journalPath?: string;
   usedForDiscovery?: boolean;
   evidenceCutoffUtc?: string;
   symbol?: string;
@@ -96,7 +108,15 @@ export type DiscoveryEvolutionPassResult = {
   outcomePolarities?: readonly ClosedTradeOutcomePolarityV2[];
 };
 
-type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "delete">;
+type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "delete" | "transaction">;
+
+function isPostgresWriter(ex: PgExecutor): ex is PgExecutor & WaiaPostgresDb {
+  return (
+    typeof (ex as { insert?: unknown }).insert === "function" &&
+    typeof (ex as { select?: unknown }).select === "function" &&
+    typeof (ex as { transaction?: unknown }).transaction === "function"
+  );
+}
 
 type EnabledResearchV2Admission = {
   navigatorSelect: SelectKnowledgeForQuestionV2Input | null;
@@ -114,6 +134,48 @@ function failClosed(reason: string): DiscoveryEvolutionPassResult {
     reason,
     status: "FAIL_CLOSED",
     capitalAuthority: "NONE",
+  };
+}
+
+function discoveryLoopBody(
+  runId: string,
+  input: DiscoveryEvolutionPassInput,
+  result: DiscoveryEvolutionPassResult,
+  pass?: StrategyEvolutionResearchPassV2,
+): DiscoveryLoopPersistInput {
+  return {
+    runId,
+    organizationId: input.runContext.context.organizationId,
+    campaignId: input.runContext.campaignRef.campaignId,
+    skipped: result.skipped,
+    status: result.status ?? null,
+    reason: result.reason ?? null,
+    capitalAuthority: result.capitalAuthority ?? null,
+    trials:
+      pass?.development.admission.assessment.familyTrials.map((trial) => ({
+        trialIndex: trial.trialIndex,
+        hypothesisId: trial.hypothesisId,
+        rawPValue: trial.rawPValue,
+        adjustedPValue: trial.adjustedPValue,
+      })) ?? [],
+    verdicts: pass
+      ? [
+          {
+            partition: "DEVELOPMENT",
+            verdict: pass.development.verdict,
+            admissionVerdict: pass.development.admission.assessment.verdict,
+            scored: pass.development.admission.scored,
+            reasons: [...pass.development.failureReasons],
+          },
+          {
+            partition: "WALK_FORWARD",
+            verdict: pass.walkForward.verdict,
+            admissionVerdict: pass.walkForward.admission.assessment.verdict,
+            scored: pass.walkForward.admission.scored,
+            reasons: [...pass.walkForward.failureReasons],
+          },
+        ]
+      : [],
   };
 }
 
@@ -179,6 +241,27 @@ export async function runDiscoveryEvolutionPass(
   const config = input.config ?? input.runContext.config ?? DEFAULT_DISCOVERY_RUN_CONFIG;
   assertNoBannedFields(config, "discoveryRunConfig");
 
+  async function finish(
+    result: DiscoveryEvolutionPassResult,
+    extra?: {
+      pass?: StrategyEvolutionResearchPassV2;
+      journal?: AppendOnlyStrategyAdmissionJournal;
+      baseline?: AdmissionJournalBaseline;
+    },
+  ): Promise<DiscoveryEvolutionPassResult> {
+    if (!config.enabled || !isPostgresWriter(_ex)) return result;
+    const body = discoveryLoopBody(crypto.randomUUID(), input, result, extra?.pass);
+    if (extra?.journal && extra.baseline) {
+      await _ex.transaction(async (tx) => {
+        await commitStrategyAdmissionJournal(tx, extra.journal!, extra.baseline!);
+        await persistDiscoveryLoopRun(tx, body);
+      });
+    } else {
+      await persistDiscoveryLoopRun(_ex, body);
+    }
+    return result;
+  }
+
   if (!config.enabled) {
     return {
       skipped: true,
@@ -187,10 +270,10 @@ export async function runDiscoveryEvolutionPass(
   }
 
   if (input.runContext.campaignRef.state !== "ACTIVE") {
-    return {
+    return finish({
       skipped: true,
       reason: "campaign_not_active",
-    };
+    });
   }
 
   if (input.capitalRuntimeActive === true) {
@@ -201,16 +284,16 @@ export async function runDiscoveryEvolutionPass(
       budgetMs: 1,
       capitalRuntimeActive: true,
     });
-    return {
+    return finish({
       skipped: true,
       reason: "research_yielded_to_capital_runtime",
       capitalAuthority: "NONE",
-    };
+    });
   }
 
   const admission = resolveEnabledResearchV2Admission(input);
   if (!admission) {
-    return failClosed("research_v2_admission_incomplete");
+    return finish(failClosed("research_v2_admission_incomplete"));
   }
 
   const generation =
@@ -223,7 +306,7 @@ export async function runDiscoveryEvolutionPass(
         })
       : null);
   if (!generation) {
-    return failClosed("research_v2_generation_incomplete");
+    return finish(failClosed("research_v2_generation_incomplete"));
   }
 
   const outcomes = mapClosedTradesToOutcomeInputsV2(input.closedTrades);
@@ -234,20 +317,32 @@ export async function runDiscoveryEvolutionPass(
     input.bars.at(-1)?.barCloseTime ??
     "";
   if (outcomes.length === 0 || symbol.trim() === "" || evidenceCutoffUtc.trim() === "") {
-    return failClosed("research_v2_outcomes_required");
+    return finish(failClosed("research_v2_outcomes_required"));
   }
   if (typeof input.usedForDiscovery !== "boolean") {
-    return failClosed("used_for_discovery_required");
+    return finish(failClosed("used_for_discovery_required"));
   }
   let journal = input.journal;
-  if (!journal?.durable) {
+  let baseline: AdmissionJournalBaseline | undefined;
+  if (isPostgresWriter(_ex)) {
     try {
-      journal = AppendOnlyStrategyAdmissionJournal.openDurable(
-        input.journalPath ?? defaultStrategyAdmissionJournalPath(),
-      );
-    } catch {
-      return failClosed("admission_journal_unavailable");
+      const loaded = await loadStrategyAdmissionJournal(_ex);
+      journal = loaded.journal;
+      baseline = loaded.baseline;
+    } catch (error) {
+      if (
+        error instanceof StrategyAdmissionError &&
+        error.code !== "admission_journal_unavailable"
+      ) {
+        throw error;
+      }
+      return finish(failClosed("admission_journal_unavailable"));
     }
+  } else if (!journal?.durable) {
+    return finish(failClosed("admission_journal_unavailable"));
+  }
+  if (!journal) {
+    return finish(failClosed("admission_journal_unavailable"));
   }
 
   const pass = runStrategyEvolutionResearchPassV2({
@@ -275,17 +370,20 @@ export async function runDiscoveryEvolutionPass(
     usedForDiscovery: input.usedForDiscovery,
   });
 
-  return {
-    skipped: false,
-    observationId: pass.evidencePackage.contentDigestHex,
-    researchQuestionId: pass.question.questionId,
-    hypothesisProposalId: pass.hypothesis.hypothesisId,
-    synthesisId: pass.candidate.contentDigestHex,
-    candidateProposalId: pass.candidate.candidateId,
-    comparisonDigest: pass.contentDigestHex,
-    promotionProposalId: pass.proposal?.proposalId,
-    status: pass.status,
-    capitalAuthority: pass.capitalAuthority,
-    outcomePolarities: pass.evidencePackage.polaritiesPresent,
-  };
+  return finish(
+    {
+      skipped: false,
+      observationId: pass.evidencePackage.contentDigestHex,
+      researchQuestionId: pass.question.questionId,
+      hypothesisProposalId: pass.hypothesis.hypothesisId,
+      synthesisId: pass.candidate.contentDigestHex,
+      candidateProposalId: pass.candidate.candidateId,
+      comparisonDigest: pass.contentDigestHex,
+      promotionProposalId: pass.proposal?.proposalId,
+      status: pass.status,
+      capitalAuthority: pass.capitalAuthority,
+      outcomePolarities: pass.evidencePackage.polaritiesPresent,
+    },
+    { pass, journal, baseline },
+  );
 }

@@ -1,7 +1,3 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 import { describe, expect, it } from "vitest";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { buildClosedTradeOutcomeEvidencePackageV2 } from "@/lib/trader/research-v2/closed-trade-outcome-evidence-v2";
@@ -86,8 +82,7 @@ function fixture() {
     ...countsForDateNets(passingIsDateNets(2022)),
     incumbentComparisonDigestHex: "c".repeat(64),
   };
-  const journalDir = mkdtempSync(join(tmpdir(), "waia-admission-"));
-  const journal = AppendOnlyStrategyAdmissionJournal.openDurable(join(journalDir, "journal.jsonl"));
+  const journal = AppendOnlyStrategyAdmissionJournal.openDurableMemory();
   journal.registerFamily(STRATEGY_ADMISSION_SPEC_SHA256, 1);
   const qualificationInput = {
     candidate,

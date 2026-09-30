@@ -49,8 +49,10 @@ describe("account observation PostgreSQL CI contract", () => {
   it("retains both pre-existing historical jobs byte-for-byte", () => {
     // Baseline 74a5a6b0: never replace a historical guard with the new account gate.
     // An intentional future change needs an independently reviewed contract update.
+    // DEE-1152: the integration job changed only by adding
+    // tests/integration/postgres-dee540-blind-tail-max-pool.test.ts to its test list.
     expect(createHash("sha256").update(job(historicalWorkflow, "integration")).digest("hex"))
-      .toBe("d5e03e6c302c10582730bf408d12208b17a5afe335976cb8aaa2a071d90c68e1");
+      .toBe("1c81412ccc89b82effbbe7b8ba3918fca8d4022fc3d3fc77edd43cfa62475509");
     expect(createHash("sha256").update(job(historicalWorkflow, "historical-postgres17")).digest("hex"))
       .toBe("e85758d52b4ee3b7ca1f6993ad31be8a336695bdfb49aa47d63fe55612daa250");
   });

@@ -14,6 +14,9 @@ import {
   createHtrHistoricalCostModelAuthorityV1,
   type CostModelV1,
 } from "@/lib/trader/execution/cost-model";
+import { createPostgresOrderExecutionServiceFromExecutor } from "@/lib/trader/execution/execution-service";
+import { createPostgresReconciliationServiceFromExecutor } from "@/lib/trader/execution/reconciliation-service";
+import { createPostgresOrderRepositoryFromExecutor } from "@/lib/trader/execution/repository-adapters";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import { listMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
 import type { ResearchDatasetRecord } from "@/lib/trader/market-data/research-dataset-repository-postgres";
@@ -28,9 +31,9 @@ import type { PaperCycleDeps, PaperCycleResult } from "@/lib/trader/paper/paper-
 import type { PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
 import { assertDee540BlindTailAuthorized } from "@/lib/trader/research/dee-540-blind-tail-gate";
 import {
-  consumeDee540BlindTailAuthorization,
-  defaultDee540ConsumptionPath,
-} from "@/lib/trader/research/dee-540-authorization-store";
+  commitDee540BlindHoldout,
+  type Dee540BlindTailExecutor,
+} from "@/lib/trader/research/dee-540-blind-tail-commit";
 import { M9_BLIND_AUTHORIZATION_SIDECAR_DIGEST_NONE } from "@/lib/trader/research/m9-operator-authorization";
 import {
   buildResearchEvaluationPlan,
@@ -58,12 +61,12 @@ import {
   readLegacyTradeCount,
   readPeriodRealizedPnl,
 } from "@/lib/trader/research/research-validation-metrics-taxonomy";
-import { runBlindHoldoutValidation } from "@/lib/trader/research/blind-holdout-engine";
 import { buildResearchEvidenceDocument } from "@/lib/trader/research/build-research-evidence-export";
 import {
   MultiRegimeCoverageError,
   ResearchOrchestratorError,
   ResearchPipelineRegimeFailureError,
+  StrategyCandidateNotFoundError,
 } from "@/lib/trader/research/errors";
 import { recordResearchPipelineKnowledgePostgres } from "@/lib/trader/research/record-research-knowledge";
 import { runIsolatedResearchBacktest } from "@/lib/trader/research/research-backtest-isolation";
@@ -74,6 +77,7 @@ import {
 import type { ResearchEvidenceDocument } from "@/lib/trader/research/research-evidence-export.types";
 import {
   getBlindValidationResultForCandidatePostgres,
+  getStrategyCandidateByIdPostgres,
   insertBlindValidationResultPostgres,
   insertWalkForwardWindowPostgres,
   markStrategyCandidateBlindUsedPostgres,
@@ -88,8 +92,11 @@ import {
 } from "@/lib/trader/research/walk-forward-engine";
 import type { HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
 import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
+import { createIntelligenceCycleBundleRepositoryPostgres } from "@/lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres";
 import type { IntelligenceCycleBundleRepository } from "@/lib/trader/intelligence/records/repository-adapters";
+import { createForecastDecisionBundleRepositoryPostgres } from "@/lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres";
 import type { ForecastDecisionBundleRepository } from "@/lib/trader/intelligence/forecast-decision/forecast-decision-repository-adapters";
+import { createWp21RuntimeDepsPostgres } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
 import type { CalibrationSink } from "@/lib/trader/intelligence/calibration/calibration.types";
 import type { OutcomeResolutionSink } from "@/lib/trader/intelligence/outcome-resolution/outcome-resolution.types";
 import type { Wp21RuntimeDeps } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
@@ -103,7 +110,7 @@ import type { OrgContext } from "@/lib/waia-core/scope/org-context";
  */
 export const RESEARCH_PIPELINE_BLIND_TAIL_NOT_RUN = "not-produced" as const;
 
-type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "delete">;
+type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "delete" | "transaction">;
 
 export type RunResearchPipelineInput = {
   context: OrgContext;
@@ -153,6 +160,17 @@ export type RunResearchPipelineInput = {
   wp21PostgresExecutor?: Pick<WaiaPostgresDb, "select" | "insert" | "execute">;
   /** HTR-WP21: provenance for epistemic records. */
   wp21Provenance?: { codeSha: string; datasetContentDigest: string };
+  /**
+   * When set, research windows may submit mock orders. Production callers leave
+   * this unset. This is not a holdout authority object.
+   */
+  submitResearchMockOrders?: boolean;
+  /**
+   * Runs inside the blind-window transaction after the strategy backtest
+   * returns. A throw is a backtest failure: the consume and one terminal row
+   * commit together. It does not clear the token.
+   */
+  afterBlindBacktest?: () => Promise<void>;
 };
 
 export type RunResearchPipelineResult = {
@@ -194,6 +212,51 @@ async function resolveOrderRepository(
   return await factory();
 }
 
+type BlindWindowBinding = {
+  deps: PaperCycleDeps;
+  intelligenceRecordsSink?: RunResearchPipelineInput["intelligenceRecordsSink"];
+  forecastDecisionSink?: RunResearchPipelineInput["forecastDecisionSink"];
+  outcomeResolutionSink?: RunResearchPipelineInput["outcomeResolutionSink"];
+  calibrationSink?: RunResearchPipelineInput["calibrationSink"];
+  confidenceUpdateSink?: RunResearchPipelineInput["confidenceUpdateSink"];
+  wp21RuntimeDeps?: RunResearchPipelineInput["wp21RuntimeDeps"];
+  outcomeResolutionReadPort?: RunResearchPipelineInput["outcomeResolutionReadPort"];
+  wp21PostgresExecutor?: RunResearchPipelineInput["wp21PostgresExecutor"];
+};
+
+/**
+ * Every Postgres dependency the blind window can touch, bound to the consume
+ * transaction. Nested `transaction()` on that client is a savepoint. The
+ * parent pool is guarded and must not be queried from here.
+ */
+function bindBlindWindowToExecutor(
+  input: RunResearchPipelineInput,
+  executor: Dee540BlindTailExecutor,
+): BlindWindowBinding {
+  const wp21 = input.wp21RuntimeDeps ? createWp21RuntimeDepsPostgres(executor) : undefined;
+  return {
+    deps: {
+      ...input.deps,
+      execution: createPostgresOrderExecutionServiceFromExecutor(executor),
+      reconciliation: createPostgresReconciliationServiceFromExecutor(executor),
+    },
+    intelligenceRecordsSink: input.intelligenceRecordsSink
+      ? createIntelligenceCycleBundleRepositoryPostgres(executor)
+      : undefined,
+    forecastDecisionSink: input.forecastDecisionSink
+      ? createForecastDecisionBundleRepositoryPostgres(executor)
+      : undefined,
+    outcomeResolutionSink: wp21 ? wp21.outcomeResolutionSink : input.outcomeResolutionSink,
+    calibrationSink: wp21 ? wp21.calibrationSink : input.calibrationSink,
+    confidenceUpdateSink: wp21 ? wp21.confidenceUpdateSink : input.confidenceUpdateSink,
+    wp21RuntimeDeps: wp21 ?? input.wp21RuntimeDeps,
+    outcomeResolutionReadPort: wp21
+      ? wp21.outcomeResolutionReadPort
+      : input.outcomeResolutionReadPort,
+    wp21PostgresExecutor: input.wp21PostgresExecutor ? executor : undefined,
+  };
+}
+
 function buildIsolatedBacktestInput(
   input: RunResearchPipelineInput,
   params: {
@@ -208,6 +271,8 @@ function buildIsolatedBacktestInput(
     newId: () => string;
     cycleIdPrefix: string;
     artifactSink?: ResearchValidationBacktestArtifactSink;
+    wp21PostgresExecutor?: RunResearchPipelineInput["wp21PostgresExecutor"];
+    bound?: BlindWindowBinding;
   },
 ) {
   const pipelineBacktest = input.pipelineBacktest;
@@ -223,7 +288,7 @@ function buildIsolatedBacktestInput(
     runId: params.runId,
     split: params.split,
     costModel: params.costModel,
-    deps: input.deps,
+    deps: params.bound?.deps ?? input.deps,
     orderRepository: params.orderRepository,
     accountKey: params.accountKey,
     defaultQuantity: params.defaultQuantity,
@@ -234,6 +299,7 @@ function buildIsolatedBacktestInput(
     guardian: buildResearchGuardianContext(pipelineBacktest?.guardian),
     artifactSink: params.artifactSink,
     providerSidecar: pipelineBacktest?.providerSidecar,
+    enableReplayFusedContext: pipelineBacktest?.enableReplayFusedContext,
     retentionMode: pipelineBacktest?.retentionMode,
     evidenceSink:
       pipelineBacktest?.evidenceSink ??
@@ -248,14 +314,27 @@ function buildIsolatedBacktestInput(
         : undefined),
     historicalExecutionProfile: input.historicalExecutionProfile,
     historicalProfile: input.historicalProfile,
-    intelligenceRecordsSink: input.intelligenceRecordsSink,
-    forecastDecisionSink: input.forecastDecisionSink,
-    outcomeResolutionSink: input.outcomeResolutionSink,
-    calibrationSink: input.calibrationSink,
-    confidenceUpdateSink: input.confidenceUpdateSink,
-    wp21RuntimeDeps: input.wp21RuntimeDeps,
-    outcomeResolutionReadPort: input.outcomeResolutionReadPort,
-    wp21PostgresExecutor: input.wp21PostgresExecutor,
+    submitResearchMockOrders: input.submitResearchMockOrders,
+    intelligenceRecordsSink: params.bound
+      ? params.bound.intelligenceRecordsSink
+      : input.intelligenceRecordsSink,
+    forecastDecisionSink: params.bound
+      ? params.bound.forecastDecisionSink
+      : input.forecastDecisionSink,
+    outcomeResolutionSink: params.bound
+      ? params.bound.outcomeResolutionSink
+      : input.outcomeResolutionSink,
+    calibrationSink: params.bound ? params.bound.calibrationSink : input.calibrationSink,
+    confidenceUpdateSink: params.bound
+      ? params.bound.confidenceUpdateSink
+      : input.confidenceUpdateSink,
+    wp21RuntimeDeps: params.bound ? params.bound.wp21RuntimeDeps : input.wp21RuntimeDeps,
+    outcomeResolutionReadPort: params.bound
+      ? params.bound.outcomeResolutionReadPort
+      : input.outcomeResolutionReadPort,
+    wp21PostgresExecutor: params.bound
+      ? params.bound.wp21PostgresExecutor
+      : (params.wp21PostgresExecutor ?? input.wp21PostgresExecutor),
     wp21Provenance: input.wp21Provenance,
   };
 }
@@ -502,54 +581,66 @@ export async function runResearchPipelinePostgres(
     }
   }
 
-  const blind = skipBlindTail
-    ? {
+  const blind = await (async () => {
+    if (skipBlindTail) {
+      return {
         result: { id: RESEARCH_PIPELINE_BLIND_TAIL_NOT_RUN },
         metrics: emptyBlindMetrics,
-      }
-    : await (async () => {
-        consumeDee540BlindTailAuthorization({
-          authorizationDigest: blindGrant!.operatorBlindAuthorization,
-          storePath:
-            pipelineBacktest?.blindAuthorizationConsumptionPath ?? defaultDee540ConsumptionPath(),
-        });
-        return runBlindHoldoutValidation({
-          context: input.context,
-          candidate: { ...candidate, status: "walk_forward_validated", blindUsed: false },
-          datasetId: dataset.id,
-          blindBars: splits.blind,
-          expectedBlindDigest: dataset.blindDigest,
-          runBacktest: async ({ bars, strategyId, strategyVersion }) => {
-            const repo = await resolveOrderRepository(input.createOrderRepository);
-            return runIsolatedResearchBacktest(
-              ex,
-              buildIsolatedBacktestInput(input, {
-                bars,
-                datasetId: dataset.id,
-                runId: backtestRunId,
-                split: "blind",
-                costModel,
-                orderRepository: repo,
-                accountKey,
-                defaultQuantity,
-                newId,
-                cycleIdPrefix: buildResearchBlindCycleIdPrefix(backtestRunId),
-              }),
-            );
-          },
-          repository: {
-            getBlindValidationResultForCandidate: (context, candidateId) =>
-              getBlindValidationResultForCandidatePostgres(ex, context, candidateId),
-            insertBlindValidationResult: (context, row) =>
-              insertBlindValidationResultPostgres(ex, context, row),
-            markStrategyCandidateBlindUsed: (context, candidateId) =>
-              markStrategyCandidateBlindUsedPostgres(ex, context, candidateId),
-            updateStrategyCandidateStatus: (context, candidateId, status) =>
-              updateStrategyCandidateStatusPostgres(ex, context, candidateId, status),
-          },
-          newId,
-        });
-      })();
+      };
+    }
+    const persistedCandidate = await getStrategyCandidateByIdPostgres(
+      ex,
+      input.context,
+      candidate.id,
+    );
+    if (!persistedCandidate) {
+      throw new StrategyCandidateNotFoundError(candidate.id);
+    }
+    return commitDee540BlindHoldout(ex, {
+      blindDigest: sealed.blindDigest,
+      context: input.context,
+      candidate: persistedCandidate,
+      datasetId: dataset.id,
+      blindBars: splits.blind,
+      expectedBlindDigest: dataset.blindDigest,
+      runBacktest: async ({ bars, executor }) => {
+        const metrics = await runIsolatedResearchBacktest(
+          executor,
+          buildIsolatedBacktestInput(input, {
+            bars,
+            datasetId: dataset.id,
+            runId: backtestRunId,
+            split: "blind",
+            costModel,
+            orderRepository: createPostgresOrderRepositoryFromExecutor(executor),
+            accountKey,
+            defaultQuantity,
+            newId,
+            cycleIdPrefix: buildResearchBlindCycleIdPrefix(backtestRunId),
+            artifactSink: input.pipelineBacktest?.blindArtifactSink,
+            bound: bindBlindWindowToExecutor(input, executor),
+          }),
+        );
+        if (input.afterBlindBacktest) await input.afterBlindBacktest();
+        return metrics;
+      },
+      readRepository: {
+        getBlindValidationResultForCandidate: (context, candidateId) =>
+          getBlindValidationResultForCandidatePostgres(ex, context, candidateId),
+      },
+      bindRepository: (tx) => ({
+        getBlindValidationResultForCandidate: (context, candidateId) =>
+          getBlindValidationResultForCandidatePostgres(tx, context, candidateId),
+        insertBlindValidationResult: (context, row) =>
+          insertBlindValidationResultPostgres(tx, context, row),
+        markStrategyCandidateBlindUsed: (context, candidateId) =>
+          markStrategyCandidateBlindUsedPostgres(tx, context, candidateId),
+        updateStrategyCandidateStatus: (context, candidateId, status) =>
+          updateStrategyCandidateStatusPostgres(tx, context, candidateId, status),
+      }),
+      newId,
+    });
+  })();
 
   const evidenceDocument = buildResearchEvidenceDocument({
     organizationId: input.context.organizationId,

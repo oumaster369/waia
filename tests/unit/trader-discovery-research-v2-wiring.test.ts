@@ -1,6 +1,5 @@
-import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -53,8 +52,7 @@ const CUTOFF = "2026-02-01T11:00:00.000Z";
 const IS_NETS = passingIsDateNets(2022);
 
 function freshJournal() {
-  const dir = mkdtempSync(join(tmpdir(), "waia-admission-"));
-  return AppendOnlyStrategyAdmissionJournal.openDurable(join(dir, "journal.jsonl"));
+  return AppendOnlyStrategyAdmissionJournal.openDurableMemory();
 }
 const VALIDATION_NETS = admissionDateNets(2024, "0.02", 5);
 

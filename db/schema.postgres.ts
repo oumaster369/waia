@@ -9757,3 +9757,101 @@ export const traderLiveCapitalEnvelopeCurrentV2 = pgTable("trader_live_capital_e
     traderLiveCapitalEnvelopesV2.organizationId, traderLiveCapitalEnvelopesV2.accountId, traderLiveCapitalEnvelopesV2.contentDigest] }),
   foreignKey({ columns: [t.organizationId, t.accountId, t.basisDigest], foreignColumns: [
     traderLiveCapitalBasisBindingsV2.organizationId, traderLiveCapitalBasisBindingsV2.accountId, traderLiveCapitalBasisBindingsV2.contentDigest] })]);
+
+export const traderStrategyAdmissionFamily = pgTable("trader_strategy_admission_family", {
+  specSha256: text("spec_sha256").primaryKey(),
+  familySize: integer("family_size").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+});
+
+export const traderStrategyAdmissionJournal = pgTable(
+  "trader_strategy_admission_journal",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    specSha256: text("spec_sha256").notNull(),
+    hypothesisId: text("hypothesis_id").notNull(),
+    split: text("split").notNull(),
+    countsAsSplitUse: boolean("counts_as_split_use").notNull(),
+    payloadJson: jsonb("payload_json").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trader_strategy_admission_journal_spec_idx").on(t.specSha256, t.hypothesisId, t.split),
+  ],
+);
+
+export const traderStrategyAdmissionSplitConsume = pgTable(
+  "trader_strategy_admission_split_consume",
+  {
+    specSha256: text("spec_sha256").notNull(),
+    hypothesisId: text("hypothesis_id").notNull(),
+    split: text("split").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.specSha256, t.hypothesisId, t.split] })],
+);
+
+/** DEE-540 one-shot consume keyed by bar-content token, not dataset labels. */
+export const traderDee540BarConsumption = pgTable("trader_dee540_bar_consumption", {
+  barContentToken: text("bar_content_token").primaryKey(),
+  blindDigest: text("blind_digest").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+});
+
+/** Discovery loop persistence. Read-only for operators. No order or capital columns. */
+export const traderDiscoveryLoopRun = pgTable(
+  "trader_discovery_loop_run",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignId: text("campaign_id").notNull(),
+    skipped: boolean("skipped").notNull(),
+    status: text("status"),
+    reason: text("reason"),
+    capitalAuthority: text("capital_authority"),
+    contentDigest: text("content_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("trader_discovery_loop_run_org_created_idx").on(t.organizationId, t.createdAt)],
+);
+
+export const traderDiscoveryLoopTrial = pgTable(
+  "trader_discovery_loop_trial",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => traderDiscoveryLoopRun.id, { onDelete: "cascade" }),
+    trialIndex: integer("trial_index").notNull(),
+    hypothesisId: text("hypothesis_id").notNull(),
+    rawPValue: text("raw_p_value").notNull(),
+    adjustedPValue: text("adjusted_p_value").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [unique("trader_discovery_loop_trial_run_index_unique").on(t.runId, t.trialIndex)],
+);
+
+export const traderDiscoveryLoopVerdict = pgTable(
+  "trader_discovery_loop_verdict",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => traderDiscoveryLoopRun.id, { onDelete: "cascade" }),
+    partition: text("partition").notNull(),
+    verdict: text("verdict").notNull(),
+    admissionVerdict: text("admission_verdict").notNull(),
+    scored: boolean("scored").notNull(),
+    reasonsJson: jsonb("reasons_json").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [unique("trader_discovery_loop_verdict_run_partition_unique").on(t.runId, t.partition)],
+);
