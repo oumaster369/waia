@@ -30,6 +30,7 @@ import { serializeProductionKnowledgeAsset } from "@/lib/trader/knowledge/serial
 import type { BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
 import { listMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
+import { resolveResearchPipelineCliBlindTail } from "@/lib/trader/research/dee-540-blind-tail-gate";
 import { runResearchPipelinePostgres } from "@/lib/trader/research/research-orchestrator";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
 import { createIntelligenceCycleBundleRepositoryPostgres } from "@/lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres";
@@ -64,7 +65,13 @@ Usage:
     [--out=evidence.json] \\
     [--build-pka] \\
     [--pka-out=production-knowledge-asset.json] \\
-    [--htr-epistemic-closure]
+    [--htr-epistemic-closure] \\
+    --operator-blind-authorization=<digest> \\
+    --blind-authorization-scope=<json>
+
+The blind tail stays closed without the DEE-540 authorization gate.
+Official 2025 holdout remains SEALED_NOT_ACCESSED (--official-holdout and
+--partition=blind-holdout are refused).
 
 Environment:
   WAIA_DB_BACKEND=postgres
@@ -157,6 +164,8 @@ async function main(): Promise<void> {
     writeAudit,
   });
 
+  const blindTail = resolveResearchPipelineCliBlindTail(flags);
+
   const barRecords = await listMarketBarsPostgres(db, context, { symbol, interval });
   const barSetDigest = computeBarSetDigest(barRecords);
 
@@ -172,6 +181,11 @@ async function main(): Promise<void> {
     oosBarCount,
     deps: { execution, reconciliation },
     createOrderRepository: () => createPostgresOrderRepository(db),
+    pipelineBacktest: {
+      operatorBlindAuthorization: blindTail.operatorBlindAuthorization,
+      blindAuthorizationScope: blindTail.blindAuthorizationScope,
+      officialHoldoutAccessRequested: false,
+    },
     ...(htrEpistemicClosure
       ? {
           historicalProfile: HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1,

@@ -6,6 +6,7 @@ import {
   requireResearchV2NonEmpty,
   StrategyEvolutionResearchError,
 } from "@/lib/trader/research-v2/research-v2-guards";
+import type { StrategyAdmissionObservation } from "@/lib/trader/research/strategy-admission-v1";
 import {
   queryBlindHoldoutAsIterativeFitnessV2,
   type QualificationEvaluationV2,
@@ -21,6 +22,10 @@ export type PartitionWindowMetricV2 = Readonly<{
   maxDrawdown: string;
   tailEventCount: number;
   closedTradeCount: number;
+  distinctDayCount: number;
+  positiveTradeCount: number;
+  nonZeroTradeCount: number;
+  dateNets?: readonly StrategyAdmissionObservation[];
   incumbentComparisonDigestHex: string;
 }>;
 
@@ -33,6 +38,10 @@ function sameEvaluation(
     parseDecimal(left.maxDrawdown) === parseDecimal(right.maxDrawdown) &&
     left.tailEventCount === right.tailEventCount &&
     left.sampleSize === right.sampleSize &&
+    left.distinctDayCount === right.distinctDayCount &&
+    left.positiveTradeCount === right.positiveTradeCount &&
+    left.nonZeroTradeCount === right.nonZeroTradeCount &&
+    JSON.stringify(left.dateNets ?? []) === JSON.stringify(right.dateNets ?? []) &&
     left.incumbentComparisonDigestHex === right.incumbentComparisonDigestHex
   );
 }
@@ -56,6 +65,10 @@ export function deriveQualificationEvaluationFromPartitionWindowsV2(
   let drawdown = windows[0]?.maxDrawdown ?? "0";
   let tails = 0;
   let sample = 0;
+  let distinctDays = 0;
+  let positiveTrades = 0;
+  let nonZeroTrades = 0;
+  const dateNets: StrategyAdmissionObservation[] = [];
   const incumbent = windows[0]?.incumbentComparisonDigestHex ?? "";
   for (const window of windows) {
     assertResearchDiscoveryFitnessV2(window, "partition window metric");
@@ -77,7 +90,15 @@ export function deriveQualificationEvaluationFromPartitionWindowsV2(
       !Number.isSafeInteger(window.tailEventCount) ||
       window.tailEventCount < 0 ||
       !Number.isSafeInteger(window.closedTradeCount) ||
-      window.closedTradeCount < 0
+      window.closedTradeCount < 0 ||
+      !Number.isSafeInteger(window.distinctDayCount) ||
+      window.distinctDayCount < 0 ||
+      !Number.isSafeInteger(window.positiveTradeCount) ||
+      window.positiveTradeCount < 0 ||
+      !Number.isSafeInteger(window.nonZeroTradeCount) ||
+      window.nonZeroTradeCount < 0 ||
+      window.positiveTradeCount > window.nonZeroTradeCount ||
+      window.nonZeroTradeCount > window.closedTradeCount
     ) {
       throw new StrategyEvolutionResearchError("QUALIFICATION_PARTITION_WINDOWS_INVALID");
     }
@@ -85,15 +106,20 @@ export function deriveQualificationEvaluationFromPartitionWindowsV2(
     drawdown = minDecimal(drawdown, window.maxDrawdown);
     tails += window.tailEventCount;
     sample += window.closedTradeCount;
-  }
-  if (sample < 1) {
-    throw new StrategyEvolutionResearchError("QUALIFICATION_PARTITION_WINDOWS_INVALID");
+    distinctDays += window.distinctDayCount;
+    positiveTrades += window.positiveTradeCount;
+    nonZeroTrades += window.nonZeroTradeCount;
+    if (window.dateNets) dateNets.push(...window.dateNets);
   }
   return Object.freeze({
     netEconomicResult: formatDecimal(parseDecimal(net)),
     maxDrawdown: formatDecimal(parseDecimal(drawdown)),
     tailEventCount: tails,
     sampleSize: sample,
+    distinctDayCount: distinctDays,
+    positiveTradeCount: positiveTrades,
+    nonZeroTradeCount: nonZeroTrades,
+    ...(dateNets.length > 0 ? { dateNets: Object.freeze(dateNets) } : {}),
     incumbentComparisonDigestHex: incumbent,
   });
 }

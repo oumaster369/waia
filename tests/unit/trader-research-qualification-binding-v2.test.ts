@@ -1,3 +1,7 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
 import { buildClosedTradeOutcomeEvidencePackageV2 } from "@/lib/trader/research-v2/closed-trade-outcome-evidence-v2";
@@ -13,6 +17,12 @@ import {
   type QualificationRecordV2,
 } from "@/lib/trader/research-v2/qualification-records-v2";
 import { buildHumanPromotionProposalV2 } from "@/lib/trader/research-v2/human-promotion-proposal-v2";
+import { AppendOnlyStrategyAdmissionJournal } from "@/lib/trader/research/strategy-admission-v1";
+import {
+  STRATEGY_ADMISSION_SPEC_SHA256,
+  countsForDateNets,
+  passingIsDateNets,
+} from "./strategy-admission-date-nets";
 
 function reseal<T extends { contentDigestHex: string }>(value: T): T {
   const { contentDigestHex, ...body } = value;
@@ -73,14 +83,22 @@ function fixture() {
     netEconomicResult: "1",
     maxDrawdown: "-1",
     tailEventCount: 1,
-    sampleSize: 8,
+    ...countsForDateNets(passingIsDateNets(2022)),
     incumbentComparisonDigestHex: "c".repeat(64),
   };
+  const journalDir = mkdtempSync(join(tmpdir(), "waia-admission-"));
+  const journal = AppendOnlyStrategyAdmissionJournal.openDurable(join(journalDir, "journal.jsonl"));
+  journal.registerFamily(STRATEGY_ADMISSION_SPEC_SHA256, 1);
   const qualificationInput = {
     candidate,
     partition: "DEVELOPMENT" as const,
     evaluation,
-    verdict: "QUALIFIED" as const,
+    specSha256: STRATEGY_ADMISSION_SPEC_SHA256,
+    declaredFamilySize: 1,
+    journal,
+    usedForDiscovery: false as const,
+    signalBarCloseUtc: cutoff,
+    entryTimeUtc: "2026-02-01T11:01:00.000Z",
   };
   const development = recordQualificationV2(qualificationInput);
   const walkForward = recordQualificationV2({
@@ -90,7 +108,6 @@ function fixture() {
   });
   const rejected = recordQualificationV2({
     ...qualificationInput,
-    verdict: "REJECTED",
     failureReasons: ["FAILED"],
   });
   const input = { proposalId: "proposal", candidate, hypothesis, memory, development, walkForward };
@@ -233,13 +250,13 @@ describe("DEE-1107 exact research qualification bindings", () => {
     );
   });
 
-  it.each(["UNKNOWN", "", null, undefined])(
-    "rejects unknown verdict %s before qualification",
+  it.each(["QUALIFIED", "REJECTED", "UNKNOWN", "", null, undefined])(
+    "refuses caller verdict %s before qualification",
     (verdict) => {
       const { qualificationInput } = fixture();
-      expect(() =>
-        recordQualificationV2({ ...qualificationInput, verdict: verdict as never }),
-      ).toThrow("QUALIFICATION_VERDICT_INVALID");
+      expect(() => recordQualificationV2({ ...qualificationInput, verdict } as never)).toThrow(
+        "QUALIFICATION_VERDICT_NOT_ACCEPTED_FROM_CALLER",
+      );
     },
   );
   it.each(["UNKNOWN", "", null, undefined])(

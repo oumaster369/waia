@@ -66,6 +66,9 @@ replay-runs/**/_operator-forensics-stash/
 .data/
 .ops/
 
+# Durable research journals and one-shot authorization consumes (local only)
+var/
+
 # DEE-511 cutover operator-local snapshots must live under $HOME/.waia/…
 # Guard against accidental in-repo copies:
 scripts/github/fixtures/single-trunk-cutover/pre-cutover-state.json

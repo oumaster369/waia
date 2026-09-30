@@ -26,10 +26,16 @@ import { computeSidecarContentDigest } from "@/lib/trader/market-data/replay/sid
 import type { Bar, BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
 import type { PaperCycleDeps, PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 import type { PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
+import { assertDee540BlindTailAuthorized } from "@/lib/trader/research/dee-540-blind-tail-gate";
 import {
-  assertM9BlindAuthorizationV2,
-  M9_BLIND_AUTHORIZATION_SIDECAR_DIGEST_NONE,
-} from "@/lib/trader/research/m9-operator-authorization";
+  consumeDee540BlindTailAuthorization,
+  defaultDee540ConsumptionPath,
+} from "@/lib/trader/research/dee-540-authorization-store";
+import { M9_BLIND_AUTHORIZATION_SIDECAR_DIGEST_NONE } from "@/lib/trader/research/m9-operator-authorization";
+import {
+  buildResearchEvaluationPlan,
+  type ResearchEvaluationPlanV1,
+} from "@/lib/trader/research/research-train-parameter-fit";
 import { barsFromMarketBarRecords } from "@/lib/trader/research/m9-dataset-seal-preview";
 import { resolveM9ResearchDatasetPostgres } from "@/lib/trader/research/m9-dataset-preflight";
 import { buildResearchGuardianContext } from "@/lib/trader/research/research-guardian-config";
@@ -64,7 +70,6 @@ import { runIsolatedResearchBacktest } from "@/lib/trader/research/research-back
 import {
   buildResearchBlindCycleIdPrefix,
   buildResearchValidationCycleIdPrefix,
-  buildResearchWalkForwardCycleIdPrefix,
 } from "@/lib/trader/research/research-backtest-cycle-id";
 import type { ResearchEvidenceDocument } from "@/lib/trader/research/research-evidence-export.types";
 import {
@@ -77,7 +82,10 @@ import {
 } from "@/lib/trader/research/strategy-candidate-repository-postgres";
 import { validateResearchEvidenceProvenancePostgres } from "@/lib/trader/research/validate-research-evidence-provenance";
 import { assertResearchPipelineRegimeCoverage } from "@/lib/trader/research/regime-coverage";
-import { runWalkForwardValidation } from "@/lib/trader/research/walk-forward-engine";
+import {
+  accountWalkForwardFromFittedLookback,
+  metricsFromFittedLookback,
+} from "@/lib/trader/research/walk-forward-engine";
 import type { HistoricalExecutionProfileV1 } from "@/lib/trader/backtest/historical-execution-profile";
 import type { HistoricalIntelligenceProfile } from "@/lib/trader/intelligence/historical-profile/historical-profile.types";
 import type { IntelligenceCycleBundleRepository } from "@/lib/trader/intelligence/records/repository-adapters";
@@ -88,6 +96,12 @@ import type { Wp21RuntimeDeps } from "@/lib/trader/intelligence/outcome-resoluti
 import type { ConfidenceUpdateSink } from "@/lib/trader/knowledge/knowledge-confidence-update-repository-postgres";
 import type { OutcomeResolutionReadPort } from "@/lib/trader/knowledge/mkb-read-model.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+
+/**
+ * The blind tail was not executed. This is not a blind-validation result id
+ * and must not be read as evidence that a holdout row exists.
+ */
+export const RESEARCH_PIPELINE_BLIND_TAIL_NOT_RUN = "not-produced" as const;
 
 type PgExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "delete">;
 
@@ -151,11 +165,28 @@ export type RunResearchPipelineResult = {
   walkForwardWindowCount: number;
   validationMetrics: ResearchValidationMetrics;
   blindMetrics: ResearchValidationMetrics;
+  parameterFit: ResearchEvaluationPlanV1;
+  validationEvaluations: 1;
   validationCycleResults?: readonly PaperCycleResult[];
   validationPortfolioContext?: PortfolioCycleContext;
   validationStreamingManifestRef?: StreamingEvidenceManifestRef;
   replayTerminalState?: ReplayRunTerminalState | null;
 };
+
+function parseResearchParams(paramsJson: string | undefined): Record<string, unknown> {
+  if (!paramsJson || paramsJson.trim() === "") {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(paramsJson) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return {};
+  }
+  return {};
+}
 
 async function resolveOrderRepository(
   factory: RunResearchPipelineInput["createOrderRepository"],
@@ -267,46 +298,44 @@ export async function runResearchPipelinePostgres(
   const bars = barsFromMarketBarRecords(barRecords);
   const splits = splitBarsThreeWay(bars);
   const sealed = sealResearchDataset(bars, splits);
+  const parameterFit = buildResearchEvaluationPlan({
+    trainBars: splits.train,
+    validationBars: splits.validation,
+  });
 
-  // 2. Content-bound operator blind authorization verification (DEE-398 / ADR-0022).
-  // Runs immediately after sealing and before dataset persistence/backtest work: fails
-  // closed on any mismatch between the operator-authorized scope and what was just sealed,
-  // so no replay content can silently change after authorization and no compute is wasted
-  // on an unauthorized run.
+  // 2. DEE-540 verifies the grant before dataset persistence. Consumption is
+  // one-shot and happens immediately before the blind backtest, after the
+  // regime check, so a coverage failure cannot be used to retune on the tail.
+  // skipBlindTail does not self-authorize and does not read the holdout.
   const pipelineBacktest = input.pipelineBacktest;
-  if (pipelineBacktest?.operatorBlindAuthorization) {
-    const blindScope = pipelineBacktest.blindAuthorizationScope;
-    if (!blindScope) {
-      throw new ResearchOrchestratorError(
-        "M9_BLIND_AUTHORIZATION_SCOPE_MISSING",
-        "blind authorization scope must be provided with operator blind digest",
-      );
-    }
-    assertM9BlindAuthorizationV2(pipelineBacktest.operatorBlindAuthorization, blindScope);
-
-    if (blindScope.blindDigest !== sealed.blindDigest) {
-      throw new ResearchOrchestratorError(
-        "M9_BLIND_AUTHORIZATION_CONTENT_MISMATCH",
-        `authorized blindDigest (${blindScope.blindDigest.slice(0, 12)}…) does not match the ` +
-          `freshly sealed dataset blindDigest (${sealed.blindDigest.slice(0, 12)}…) — replay ` +
-          "content changed after operator authorization",
-      );
-    }
-
-    const runtimeSidecarDigest = pipelineBacktest.providerSidecar
-      ? computeSidecarContentDigest(pipelineBacktest.providerSidecar)
-      : M9_BLIND_AUTHORIZATION_SIDECAR_DIGEST_NONE;
-    if (runtimeSidecarDigest !== blindScope.sidecarContentDigest) {
-      throw new ResearchOrchestratorError(
-        "M9_BLIND_AUTHORIZATION_CONTENT_MISMATCH",
-        "authorized sidecarContentDigest does not match the runtime provider sidecar content " +
-          "— replay content changed after operator authorization",
-      );
-    }
-  } else if (pipelineBacktest?.blindAuthorizationScope) {
+  const skipBlindTail = pipelineBacktest?.skipBlindTail === true;
+  const blindGrant = skipBlindTail
+    ? null
+    : assertDee540BlindTailAuthorized({
+        operatorBlindAuthorization: pipelineBacktest?.operatorBlindAuthorization,
+        blindAuthorizationScope: pipelineBacktest?.blindAuthorizationScope,
+        officialHoldoutAccessRequested: pipelineBacktest?.officialHoldoutAccessRequested,
+      });
+  if (blindGrant && blindGrant.blindAuthorizationScope.blindDigest !== sealed.blindDigest) {
     throw new ResearchOrchestratorError(
-      "M9_BLIND_AUTHORIZATION_REQUIRED",
-      "operator blind authorization digest required before blind holdout stage",
+      "M9_BLIND_AUTHORIZATION_CONTENT_MISMATCH",
+      `authorized blindDigest (${blindGrant.blindAuthorizationScope.blindDigest.slice(0, 12)}…) does not match the ` +
+        `freshly sealed dataset blindDigest (${sealed.blindDigest.slice(0, 12)}…) — replay ` +
+        "content changed after operator authorization",
+    );
+  }
+
+  const runtimeSidecarDigest = pipelineBacktest?.providerSidecar
+    ? computeSidecarContentDigest(pipelineBacktest.providerSidecar)
+    : M9_BLIND_AUTHORIZATION_SIDECAR_DIGEST_NONE;
+  if (
+    blindGrant &&
+    runtimeSidecarDigest !== blindGrant.blindAuthorizationScope.sidecarContentDigest
+  ) {
+    throw new ResearchOrchestratorError(
+      "M9_BLIND_AUTHORIZATION_CONTENT_MISMATCH",
+      "authorized sidecarContentDigest does not match the runtime provider sidecar content " +
+        "— replay content changed after operator authorization",
     );
   }
 
@@ -331,7 +360,15 @@ export async function runResearchPipelinePostgres(
     id: newId(),
     strategyId: input.strategyId,
     strategyVersion: input.strategyVersion,
-    paramsJson: input.paramsJson ?? "{}",
+    paramsJson: JSON.stringify({
+      ...parseResearchParams(input.paramsJson),
+      lookbackBars: String(parameterFit.fit.selectedLookback),
+      researchParameterFit: "train_only",
+      evidenceBacktestUsesTrainFit: false,
+      trainFitAppliedTo: "walk_forward_window_slices",
+      feeBps: parameterFit.fit.feeBps,
+      slippageBps: parameterFit.fit.slippageBps,
+    }),
     status: "registered",
   });
 
@@ -417,30 +454,13 @@ export async function runResearchPipelinePostgres(
 
   await updateStrategyCandidateStatusPostgres(ex, input.context, candidate.id, "backtested");
 
-  const walkForward = await runWalkForwardValidation({
+  const walkForward = await accountWalkForwardFromFittedLookback({
     context: input.context,
     candidate: { ...candidate, status: "backtested" },
     trainBars: splits.train,
     validationBars: splits.validation,
     oosBarCount,
-    runBacktest: async ({ bars, strategyId, strategyVersion, windowIndex }) => {
-      const repo = await resolveOrderRepository(input.createOrderRepository);
-      return runIsolatedResearchBacktest(
-        ex,
-        buildIsolatedBacktestInput(input, {
-          bars,
-          datasetId: dataset.id,
-          runId: backtestRunId,
-          split: "validation",
-          costModel,
-          orderRepository: repo,
-          accountKey,
-          defaultQuantity,
-          newId,
-          cycleIdPrefix: buildResearchWalkForwardCycleIdPrefix(backtestRunId, windowIndex),
-        }),
-      );
-    },
+    lookback: parameterFit.fit.selectedLookback,
     repository: {
       insertWalkForwardWindow: (context, row) => insertWalkForwardWindowPostgres(ex, context, row),
       updateStrategyCandidateStatus: (context, candidateId, status) =>
@@ -449,54 +469,15 @@ export async function runResearchPipelinePostgres(
     newId,
   });
 
-  // Blind gate: single-use blind-holdout lockout (`markStrategyCandidateBlindUsedPostgres` /
-  // `StrategyCandidateBlindLockoutError`), independent of and downstream from the
-  // content-bound operator authorization verification already enforced in step 2 above.
-  const blind = await runBlindHoldoutValidation({
-    context: input.context,
-    candidate: { ...candidate, status: "walk_forward_validated", blindUsed: false },
-    datasetId: dataset.id,
-    blindBars: splits.blind,
-    expectedBlindDigest: dataset.blindDigest,
-    runBacktest: async ({ bars, strategyId, strategyVersion }) => {
-      const repo = await resolveOrderRepository(input.createOrderRepository);
-      return runIsolatedResearchBacktest(
-        ex,
-        buildIsolatedBacktestInput(input, {
-          bars,
-          datasetId: dataset.id,
-          runId: backtestRunId,
-          split: "blind",
-          costModel,
-          orderRepository: repo,
-          accountKey,
-          defaultQuantity,
-          newId,
-          cycleIdPrefix: buildResearchBlindCycleIdPrefix(backtestRunId),
-        }),
-      );
-    },
-    repository: {
-      getBlindValidationResultForCandidate: (context, candidateId) =>
-        getBlindValidationResultForCandidatePostgres(ex, context, candidateId),
-      insertBlindValidationResult: (context, row) =>
-        insertBlindValidationResultPostgres(ex, context, row),
-      markStrategyCandidateBlindUsed: (context, candidateId) =>
-        markStrategyCandidateBlindUsedPostgres(ex, context, candidateId),
-      updateStrategyCandidateStatus: (context, candidateId, status) =>
-        updateStrategyCandidateStatusPostgres(ex, context, candidateId, status),
-    },
-    newId,
-  });
+  const emptyBlindMetrics = metricsFromFittedLookback([], parameterFit.fit.selectedLookback);
 
   if (requireMultiRegimeCoverage) {
-    const pipelineMetrics = [
+    const preBlindMetrics = [
       validationMetrics,
       ...walkForward.windows.map((window) => window.metrics),
-      blind.metrics,
     ];
     try {
-      assertResearchPipelineRegimeCoverage(pipelineMetrics);
+      assertResearchPipelineRegimeCoverage(preBlindMetrics);
     } catch (error) {
       if (error instanceof MultiRegimeCoverageError) {
         throw new ResearchPipelineRegimeFailureError(
@@ -507,12 +488,12 @@ export async function runResearchPipelinePostgres(
             candidateId: candidate.id,
             datasetId: dataset.id,
             backtestRunId,
-            blindValidationResultId: blind.result.id,
-            blindConsumed: true,
+            blindValidationResultId: "",
+            blindConsumed: false,
             walkForwardWindowCount: walkForward.windows.length,
             validationMetrics,
             walkForwardMetrics: walkForward.windows.map((window) => window.metrics),
-            blindMetrics: blind.metrics,
+            blindMetrics: emptyBlindMetrics,
           },
           error,
         );
@@ -520,6 +501,55 @@ export async function runResearchPipelinePostgres(
       throw error;
     }
   }
+
+  const blind = skipBlindTail
+    ? {
+        result: { id: RESEARCH_PIPELINE_BLIND_TAIL_NOT_RUN },
+        metrics: emptyBlindMetrics,
+      }
+    : await (async () => {
+        consumeDee540BlindTailAuthorization({
+          authorizationDigest: blindGrant!.operatorBlindAuthorization,
+          storePath:
+            pipelineBacktest?.blindAuthorizationConsumptionPath ?? defaultDee540ConsumptionPath(),
+        });
+        return runBlindHoldoutValidation({
+          context: input.context,
+          candidate: { ...candidate, status: "walk_forward_validated", blindUsed: false },
+          datasetId: dataset.id,
+          blindBars: splits.blind,
+          expectedBlindDigest: dataset.blindDigest,
+          runBacktest: async ({ bars, strategyId, strategyVersion }) => {
+            const repo = await resolveOrderRepository(input.createOrderRepository);
+            return runIsolatedResearchBacktest(
+              ex,
+              buildIsolatedBacktestInput(input, {
+                bars,
+                datasetId: dataset.id,
+                runId: backtestRunId,
+                split: "blind",
+                costModel,
+                orderRepository: repo,
+                accountKey,
+                defaultQuantity,
+                newId,
+                cycleIdPrefix: buildResearchBlindCycleIdPrefix(backtestRunId),
+              }),
+            );
+          },
+          repository: {
+            getBlindValidationResultForCandidate: (context, candidateId) =>
+              getBlindValidationResultForCandidatePostgres(ex, context, candidateId),
+            insertBlindValidationResult: (context, row) =>
+              insertBlindValidationResultPostgres(ex, context, row),
+            markStrategyCandidateBlindUsed: (context, candidateId) =>
+              markStrategyCandidateBlindUsedPostgres(ex, context, candidateId),
+            updateStrategyCandidateStatus: (context, candidateId, status) =>
+              updateStrategyCandidateStatusPostgres(ex, context, candidateId, status),
+          },
+          newId,
+        });
+      })();
 
   const evidenceDocument = buildResearchEvidenceDocument({
     organizationId: input.context.organizationId,
@@ -554,6 +584,8 @@ export async function runResearchPipelinePostgres(
     walkForwardWindowCount: walkForward.windows.length,
     validationMetrics,
     blindMetrics: blind.metrics,
+    parameterFit,
+    validationEvaluations: 1,
     validationCycleResults: validationArtifactSink?.cycleResults,
     validationPortfolioContext: validationArtifactSink?.portfolioContext,
     validationStreamingManifestRef: validationArtifactSink?.streamingManifestRef,

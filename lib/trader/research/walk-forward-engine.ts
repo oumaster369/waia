@@ -6,13 +6,16 @@ import type { Bar } from "@/lib/trader/intelligence/types";
 import { WalkForwardValidationError } from "@/lib/trader/research/errors";
 import { collectRegimeLabelsFromMetrics } from "@/lib/trader/research/regime-coverage";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
-import type {
-  InsertWalkForwardWindowRow,
-  ResearchValidationMetrics,
-  StrategyCandidate,
-  StrategyCandidateStatus,
-  WalkForwardWindowPlan,
-  WalkForwardWindowResult,
+import { scoreLookbackOnBars } from "@/lib/trader/research/research-train-parameter-fit";
+import {
+  RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
+  type InsertWalkForwardWindowRow,
+  type ResearchValidationMetrics,
+  type ResearchValidationMetricsV1,
+  type StrategyCandidate,
+  type StrategyCandidateStatus,
+  type WalkForwardWindowPlan,
+  type WalkForwardWindowResult,
 } from "@/lib/trader/research/strategy-candidate.types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
@@ -215,6 +218,81 @@ export async function runWalkForwardValidation(
     "walk_forward_validated",
   );
 
+  return { windows, regimeLabels };
+}
+
+/** Slice metrics from the train-fitted lookback. Short windows score as zero trades. */
+export function metricsFromFittedLookback(
+  bars: readonly Bar[],
+  lookback: number,
+): ResearchValidationMetricsV1 {
+  const short = bars.length < lookback + 2;
+  const score = short ? { net: 0, tradeCount: 0 } : scoreLookbackOnBars(bars, lookback);
+  const net = Number.isFinite(score.net) ? score.net : 0;
+  return {
+    schemaVersion: RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
+    tradeCount: score.tradeCount,
+    periodRealizedPnl: net.toFixed(8),
+    periodTotalFees: "0",
+    byRegime: [],
+  };
+}
+
+/**
+ * Each window stores the fitted-lookback score of its own out-of-sample bars.
+ * The digest is that slice. The full validation backtest is not copied onto window 0.
+ */
+export async function accountWalkForwardFromFittedLookback(input: {
+  context: OrgContext;
+  candidate: StrategyCandidate;
+  trainBars: readonly Bar[];
+  validationBars: readonly Bar[];
+  oosBarCount: number;
+  lookback: number;
+  repository: WalkForwardRepository;
+  newId?: () => string;
+}): Promise<WalkForwardValidationResult> {
+  if (!ALLOWED_WALK_FORWARD_STATUSES.has(input.candidate.status)) {
+    throw new WalkForwardValidationError(
+      `candidate status ${input.candidate.status} is not eligible for walk-forward validation`,
+    );
+  }
+  const windowCount = assertWalkForwardSplits(
+    input.trainBars,
+    input.validationBars,
+    input.oosBarCount,
+  );
+  const newId = input.newId ?? crypto.randomUUID.bind(crypto);
+  const windows: WalkForwardWindowResult[] = [];
+  for (let windowIndex = 0; windowIndex < windowCount; windowIndex += 1) {
+    const plan = buildWalkForwardWindowPlanAtIndex(
+      input.trainBars,
+      input.validationBars,
+      windowIndex,
+      input.oosBarCount,
+    );
+    const metrics = metricsFromFittedLookback(plan.outOfSampleBars, input.lookback);
+    await input.repository.insertWalkForwardWindow(input.context, {
+      id: newId(),
+      candidateId: input.candidate.id,
+      windowIndex: plan.windowIndex,
+      inSampleDigest: plan.inSampleDigest,
+      outOfSampleDigest: plan.outOfSampleDigest,
+      metricsJson: serializeMetrics(metrics),
+    });
+    windows.push({
+      windowIndex: plan.windowIndex,
+      inSampleDigest: plan.inSampleDigest,
+      outOfSampleDigest: plan.outOfSampleDigest,
+      metrics,
+    });
+  }
+  const regimeLabels = collectRegimeLabelsFromMetrics(windows.map((window) => window.metrics));
+  await input.repository.updateStrategyCandidateStatus(
+    input.context,
+    input.candidate.id,
+    "walk_forward_validated",
+  );
   return { windows, regimeLabels };
 }
 
