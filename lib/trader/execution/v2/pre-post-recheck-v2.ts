@@ -7,6 +7,7 @@ import { and, eq, sql } from "drizzle-orm";
 import * as pgSchema from "@/db/schema.postgres";
 import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
+  CredentialGateKillWriteFailedError,
   emitCredentialGateKillTelemetry,
   isCredentialGateKillReason,
   writeOrganizationCredentialKillSwitchPostgres,
@@ -113,18 +114,22 @@ export async function prePostNetworkRefusalV2(
       liveGates,
     });
     if (reason && isCredentialGateKillReason(reason)) {
-      const killSwitchWrite = await writeOrganizationCredentialKillSwitchPostgres(
-        tx,
-        context.organizationId,
-        reason,
-        { joinCurrentTransaction: true },
-      );
-      await emitCredentialGateKillTelemetry({
-        organizationId: context.organizationId,
-        outcome: reason,
-        errorClass: "ExecutionV2LiveGateRefusedError",
-        killSwitchWrite,
-      });
+      try {
+        const killSwitchWrite = await writeOrganizationCredentialKillSwitchPostgres(
+          tx,
+          context.organizationId,
+          reason,
+          { joinCurrentTransaction: true },
+        );
+        await emitCredentialGateKillTelemetry({
+          organizationId: context.organizationId,
+          outcome: reason,
+          errorClass: "ExecutionV2LiveGateRefusedError",
+          killSwitchWrite,
+        });
+      } catch (error) {
+        throw new CredentialGateKillWriteFailedError(reason, { cause: error });
+      }
     }
     return reason;
   });

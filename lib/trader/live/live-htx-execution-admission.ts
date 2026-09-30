@@ -23,8 +23,11 @@ export class LiveHtxExecutionAdmissionError extends Error {
   /** Event marker only. The kill-switch row is `killSwitchWrite`, not this field. */
   readonly telemetryKillState = "TRIPPED" as const;
 
-  constructor(readonly code: LiveHtxExecutionAdmissionReason) {
-    super(code);
+  constructor(
+    readonly code: LiveHtxExecutionAdmissionReason,
+    options?: { cause?: unknown },
+  ) {
+    super(code, options);
     this.name = "LiveHtxExecutionAdmissionError";
   }
 }
@@ -97,14 +100,12 @@ export function classifyLiveHtxExecutionAdmission(input: {
  * `kill_state_telemetry` is the event field. `kill_switch_write` is the row
  * write when `writeKillSwitch` is supplied; otherwise the event says
  * `NOT_ATTEMPTED` and no switch row is inserted here.
- * `placeOrder`, when supplied, is not called.
  */
 export async function assertLiveHtxExecutionAdmission(input: {
   organizationId: string;
   credentialId: string | null | undefined;
   credential: LiveHtxExecutionCredentialView | null;
   sink?: WaiaTraderTelemetrySink;
-  placeOrder?: () => Promise<unknown>;
   writeKillSwitch?: (
     reason: LiveHtxExecutionAdmissionReason,
   ) => Promise<"WRITTEN" | "ALREADY_ACTIVE">;
@@ -127,6 +128,5 @@ export async function assertLiveHtxExecutionAdmission(input: {
     },
     input.sink,
   );
-  void input.placeOrder;
   throw new LiveHtxExecutionAdmissionError(verdict.reason);
 }

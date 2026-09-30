@@ -39,9 +39,8 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         consumers: 150,
         // DEE-1099 adds one read of freshly validated account permissions,
         // not a financial observation or a venue effect.
-        // DEE-1151 adds the live-connector placeOrder recheck wrapper (2) and the
-        // voided admission placeOrder argument (1). Neither submits a new venue effect.
-        connectorReferences: 29,
+        // DEE-1151 keeps that read on the live connector and does not add placeOrder.
+        connectorReferences: 26,
         sourceContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
         consumerContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
       }),
@@ -63,25 +62,13 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         occurrences: 1,
         disposition: expect.stringContaining("CREDENTIAL_PERMISSION_CHECK_ONLY"),
       },
-      {
-        file,
-        method: "placeOrder",
-        occurrences: 2,
-        disposition: expect.stringContaining("CREDENTIAL_SCOPE_RECHECK_ONLY"),
-      },
     ]);
     const references = detectConnectorMethodReferencesInSource(
       readFileSync(join(ROOT, file), "utf8"),
       file,
       ["getAccountInfo", "getBalances", "getOrder", "getTradeHistory", "placeOrder", "cancelOrder"],
     );
-    // Two placeOrder property accesses wrap the existing connector call.
-    // They recheck stored scope and do not add a Reality venue effect.
-    expect(references.map(({ method }) => method)).toEqual([
-      "getAccountInfo",
-      "placeOrder",
-      "placeOrder",
-    ]);
+    expect(references.map(({ method }) => method)).toEqual(["getAccountInfo"]);
   });
 
   it("pins the protected store as exactly one observation-only consumer, not an admitted boundary", () => {

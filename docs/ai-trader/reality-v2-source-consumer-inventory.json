@@ -31,7 +31,7 @@
     ],
     "expectedFileCount": 163,
     "sortedPathDigestHex": "82fde5b9398211bffb94cc4355cfe5e2d78b69e2ff4180d72d86b29dd9fd89df",
-    "sortedContentDigestHex": "44c0d92221d58e541e967e98bca11e31b606c88cf5d9d283865ac7bf61b56cc2"
+    "sortedContentDigestHex": "3f8e378fc19cf8c27ba92c48b86fc0fb12c77d8b705e5c66e70223ab6d6432e9"
   },
   "sourceRules": [
     {
@@ -116,7 +116,7 @@
     ],
     "expectedFileCount": 150,
     "sortedPathDigestHex": "7162a7765ff1c42a9b6a4446d7e7bfe48b8a18cba7d3fad4312c5f6fa4ce3578",
-    "sortedContentDigestHex": "e208dfe1967f9c19a134b991843b215aa789d91e4cf456521ac349f212a1bac2"
+    "sortedContentDigestHex": "fdf03c299813b7b67cf6b7a580bca57fcc1a09b257d9cbc7ea6b0e481dc6159f"
   },
   "consumerRules": [
     {
@@ -316,18 +316,6 @@
       "method": "getAccountInfo",
       "occurrences": 1,
       "disposition": "CREDENTIAL_PERMISSION_CHECK_ONLY — read freshly validated HTX session identity/permissions; no balance/order/fill ingress or Reality promotion."
-    },
-    {
-      "file": "lib/trader/live/live-connector.ts",
-      "method": "placeOrder",
-      "occurrences": 2,
-      "disposition": "CREDENTIAL_SCOPE_RECHECK_ONLY — wraps the existing connector placeOrder to re-read stored scope before each POST and drop in-memory keys on refusal; not a second venue effect or Reality admission."
-    },
-    {
-      "file": "lib/trader/live/live-htx-execution-admission.ts",
-      "method": "placeOrder",
-      "occurrences": 1,
-      "disposition": "CREDENTIAL_ADMISSION_ONLY — the optional placeOrder argument is voided and never invoked; a credential refusal does not submit an order."
     },
     {
       "file": "lib/trader/positions/sync-handler.ts",

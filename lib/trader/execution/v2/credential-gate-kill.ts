@@ -2,13 +2,18 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
 
+import type { WaiaDb } from "@/db/types";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
   emitTraderTelemetry,
   type WaiaTraderTelemetrySink,
 } from "@/lib/observability/waia-trader-telemetry";
 import { isAlreadyActiveError } from "@/lib/trader/risk/kill-switch/errors";
-import { createPostgresKillSwitchService } from "@/lib/trader/risk/kill-switch/kill-switch-service";
+import {
+  createPostgresKillSwitchService,
+  createSqliteKillSwitchService,
+} from "@/lib/trader/risk/kill-switch/kill-switch-service";
+import type { KillSwitchService } from "@/lib/trader/risk/kill-switch/types";
 import { TRUSTED_AUTOMATIC_TRIGGER_ACTOR } from "@/lib/trader/risk/kill-switch/automatic-trigger";
 
 /**
@@ -32,6 +37,45 @@ type KillSwitchExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update" | 
 
 export function isCredentialGateKillReason(reason: string): reason is CredentialGateKillReason {
   return (CREDENTIAL_GATE_KILL_REASONS as readonly string[]).includes(reason);
+}
+
+/**
+ * The kill-switch insert failed. Callers must keep the original credential
+ * refusal, drop any in-memory placement key, and must not POST. This is not
+ * `PRE_POST_RECHECK_UNAVAILABLE`.
+ */
+export class CredentialGateKillWriteFailedError extends Error {
+  constructor(
+    readonly reason: CredentialGateKillReason,
+    options?: { cause?: unknown },
+  ) {
+    super(`credential kill switch write failed: ${reason}`, options);
+    this.name = "CredentialGateKillWriteFailedError";
+  }
+}
+
+/** Walks `cause` so a transaction wrapper does not hide the credential refusal. */
+export function credentialGateKillReasonFromError(
+  error: unknown,
+  depth = 0,
+): CredentialGateKillReason | null {
+  if (depth > 8) return null;
+  if (error instanceof CredentialGateKillWriteFailedError) return error.reason;
+  if (typeof error !== "object" || error === null) return null;
+  const candidate = error as { name?: unknown; reason?: unknown; cause?: unknown };
+  if (
+    candidate.name === "CredentialGateKillWriteFailedError" &&
+    typeof candidate.reason === "string" &&
+    isCredentialGateKillReason(candidate.reason)
+  ) {
+    return candidate.reason;
+  }
+  return credentialGateKillReasonFromError(candidate.cause, depth + 1);
+}
+
+/** Maps a thrown pre-POST failure to the refusal the dispatcher must record. */
+export function refusalForPrePostThrow(error: unknown): string {
+  return credentialGateKillReasonFromError(error) ?? "PRE_POST_RECHECK_UNAVAILABLE";
 }
 
 export async function emitCredentialGateKillTelemetry(input: {
@@ -61,14 +105,11 @@ export async function emitCredentialGateKillTelemetry(input: {
  * `joinCurrentTransaction` keeps the write on the caller's open transaction
  * so it does not wait on locks that transaction already holds.
  */
-export async function writeOrganizationCredentialKillSwitchPostgres(
-  db: KillSwitchExecutor,
+async function tripOrganizationCredentialKillSwitch(
+  service: KillSwitchService,
   organizationId: string,
   reason: CredentialGateKillReason,
-  options?: { joinCurrentTransaction?: boolean },
 ): Promise<Exclude<CredentialKillSwitchWrite, "NOT_ATTEMPTED">> {
-  const executor = options?.joinCurrentTransaction ? hideNestedTransaction(db) : db;
-  const service = createPostgresKillSwitchService(executor);
   try {
     await service.trip(
       TRUSTED_AUTOMATIC_TRIGGER_ACTOR,
@@ -86,6 +127,33 @@ export async function writeOrganizationCredentialKillSwitchPostgres(
     if (isAlreadyActiveError(error)) return "ALREADY_ACTIVE";
     throw error;
   }
+}
+
+export async function writeOrganizationCredentialKillSwitchPostgres(
+  db: KillSwitchExecutor,
+  organizationId: string,
+  reason: CredentialGateKillReason,
+  options?: { joinCurrentTransaction?: boolean },
+): Promise<Exclude<CredentialKillSwitchWrite, "NOT_ATTEMPTED">> {
+  const executor = options?.joinCurrentTransaction ? hideNestedTransaction(db) : db;
+  return tripOrganizationCredentialKillSwitch(
+    createPostgresKillSwitchService(executor),
+    organizationId,
+    reason,
+  );
+}
+
+/** Same organization EMERGENCY_STOP as the Postgres writer, on the SQLite live CLI db. */
+export async function writeOrganizationCredentialKillSwitchSqlite(
+  db: WaiaDb,
+  organizationId: string,
+  reason: CredentialGateKillReason,
+): Promise<Exclude<CredentialKillSwitchWrite, "NOT_ATTEMPTED">> {
+  return tripOrganizationCredentialKillSwitch(
+    createSqliteKillSwitchService(db),
+    organizationId,
+    reason,
+  );
 }
 
 function hideNestedTransaction(db: KillSwitchExecutor): KillSwitchExecutor {

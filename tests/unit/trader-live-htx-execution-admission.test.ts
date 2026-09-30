@@ -34,7 +34,6 @@ function credential(scopes: readonly string[]) {
 
 describe("live HTX execution admission (DEE-1151)", () => {
   it("writes the kill switch separately from the telemetry field and still does not post", async () => {
-    const placeOrder = vi.fn(async () => ({ orderId: "must-not-post" }));
     const writeKillSwitch = vi.fn(async () => "WRITTEN" as const);
     const lines: string[] = [];
     await expect(
@@ -43,12 +42,10 @@ describe("live HTX execution admission (DEE-1151)", () => {
         credentialId: "cred-1",
         credential: credential(["read"]),
         sink: (line) => lines.push(line),
-        placeOrder,
         writeKillSwitch,
       }),
     ).rejects.toThrow(LiveHtxExecutionAdmissionError);
     expect(writeKillSwitch).toHaveBeenCalledWith("LIVE_HTX_CREDENTIAL_READ_ONLY");
-    expect(placeOrder).not.toHaveBeenCalled();
     expect(JSON.parse(lines[0] ?? "{}")).toMatchObject({
       kill_state_telemetry: "TRIPPED",
       kill_switch_write: "WRITTEN",
@@ -105,7 +102,6 @@ describe("live HTX execution admission (DEE-1151)", () => {
       },
     ];
     for (const item of cases) {
-      const placeOrder = vi.fn(async () => ({ orderId: "must-not-post" }));
       const lines: string[] = [];
       await expect(
         assertLiveHtxExecutionAdmission({
@@ -113,10 +109,8 @@ describe("live HTX execution admission (DEE-1151)", () => {
           credentialId: item.credentialId,
           credential: item.credential,
           sink: (line) => lines.push(line),
-          placeOrder,
         }),
       ).rejects.toThrow(LiveHtxExecutionAdmissionError);
-      expect(placeOrder).not.toHaveBeenCalled();
       const event = JSON.parse(lines[0] ?? "{}") as {
         outcome?: string;
         kill_state_telemetry?: string;
