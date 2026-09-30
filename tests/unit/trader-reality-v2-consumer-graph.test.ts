@@ -75,6 +75,8 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
       file,
       ["getAccountInfo", "getBalances", "getOrder", "getTradeHistory", "placeOrder", "cancelOrder"],
     );
+    // Two placeOrder property accesses wrap the existing connector call.
+    // They recheck stored scope and do not add a Reality venue effect.
     expect(references.map(({ method }) => method)).toEqual([
       "getAccountInfo",
       "placeOrder",
