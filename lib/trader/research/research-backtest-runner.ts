@@ -11,7 +11,7 @@ import {
   type StreamingEvidenceManifestRef,
 } from "@/lib/trader/backtest/streaming-evidence";
 import { HistoricalBarReplaySource } from "@/lib/trader/market-data/historical-bar-replay-source";
-import type { InformationSufficiencyRuntimeAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-runtime-authority-v2";
+import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-runtime-authority-v2";
 import type { Bar, Regime } from "@/lib/trader/intelligence/types";
 import {
   CLOSED_TRADE_SEMANTICS_VERSION,
@@ -155,10 +155,10 @@ export type RunResearchValidationBacktestInput = {
   /** HTR-WP21: opt-in epistemic closure fields. */
   historicalProfile?: HistoricalIntelligenceProfile;
   /**
-   * When set, paper cycles may submit mock research orders. Absent authority
-   * blocks signals before submitOrder.
+   * When set, paper cycles may submit mock research orders under an explicit
+   * research non-capital admission. The caller does not supply an authority object.
    */
-  informationSufficiencyAuthority?: InformationSufficiencyRuntimeAuthorityV2;
+  submitResearchMockOrders?: boolean;
   intelligenceRecordsSink?: IntelligenceCycleBundleRepository;
   forecastDecisionSink?: ForecastDecisionBundleRepository;
   outcomeResolutionSink?: OutcomeResolutionSink;
@@ -509,7 +509,12 @@ async function runResearchValidationBacktestV1(
     evidenceSealReason: input.evidenceSealReason,
     historicalExecutionProfile: input.historicalExecutionProfile,
     historicalProfile: input.historicalProfile,
-    informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+    informationSufficiencyAuthority: input.submitResearchMockOrders
+      ? declareResearchNonCapitalInformationAuthorityV2({
+          organizationId: input.context.organizationId,
+          reason: "RESEARCH_MOCK_ORDER_ADMISSION",
+        })
+      : undefined,
     intelligenceRecordsSink: input.intelligenceRecordsSink,
     forecastDecisionSink: input.forecastDecisionSink,
     outcomeResolutionSink: input.outcomeResolutionSink,
@@ -659,7 +664,12 @@ async function runResearchValidationBacktestV2(
     evidenceSealReason: input.evidenceSealReason,
     historicalExecutionProfile: input.historicalExecutionProfile,
     historicalProfile: input.historicalProfile,
-    informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+    informationSufficiencyAuthority: input.submitResearchMockOrders
+      ? declareResearchNonCapitalInformationAuthorityV2({
+          organizationId: input.context.organizationId,
+          reason: "RESEARCH_MOCK_ORDER_ADMISSION",
+        })
+      : undefined,
     intelligenceRecordsSink: input.intelligenceRecordsSink,
     forecastDecisionSink: input.forecastDecisionSink,
     outcomeResolutionSink: input.outcomeResolutionSink,

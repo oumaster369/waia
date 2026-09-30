@@ -25,7 +25,6 @@ import { deleteMockExecutionArtifactsForOrgPostgres } from "@/lib/trader/executi
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
 import { createForecastDecisionBundleRepositoryPostgres } from "@/lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
-import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-runtime-authority-v2";
 import { createWp21RuntimeDepsPostgres } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
 import { createIntelligenceCycleBundleRepositoryPostgres } from "@/lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres";
 import type { Bar } from "@/lib/trader/intelligence/types";
@@ -467,10 +466,6 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail CLI path on a m
       operatorBlindAuthorization: computeM9BlindAuthorizationDigest(blindScope),
       blindScope,
       ...cli,
-      informationSufficiencyAuthority: declareResearchNonCapitalInformationAuthorityV2({
-        organizationId: context.organizationId,
-        reason: "DEE540_MAX_POOL_RESEARCH_ORDER",
-      }),
     };
   }
 
@@ -511,7 +506,7 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail CLI path on a m
           requireMultiRegimeCoverage: false,
           deps: prepared.deps,
           createOrderRepository: prepared.createOrderRepository,
-          informationSufficiencyAuthority: prepared.informationSufficiencyAuthority,
+          submitResearchMockOrders: true,
           newId: () => crypto.randomUUID(),
           pipelineBacktest: {
             operatorBlindAuthorization: prepared.operatorBlindAuthorization,
@@ -569,7 +564,7 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail CLI path on a m
           requireMultiRegimeCoverage: false,
           deps: prepared.deps,
           createOrderRepository: prepared.createOrderRepository,
-          informationSufficiencyAuthority: prepared.informationSufficiencyAuthority,
+          submitResearchMockOrders: true,
           newId: () => crypto.randomUUID(),
           pipelineBacktest: {
             operatorBlindAuthorization: prepared.operatorBlindAuthorization,
@@ -621,7 +616,7 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail CLI path on a m
             requireMultiRegimeCoverage: false,
             deps: prepared.deps,
             createOrderRepository: prepared.createOrderRepository,
-            informationSufficiencyAuthority: prepared.informationSufficiencyAuthority,
+            submitResearchMockOrders: true,
             newId: () => crypto.randomUUID(),
             pipelineBacktest: {
               operatorBlindAuthorization: prepared.operatorBlindAuthorization,

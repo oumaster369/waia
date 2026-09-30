@@ -102,7 +102,6 @@ import type { OutcomeResolutionSink } from "@/lib/trader/intelligence/outcome-re
 import type { Wp21RuntimeDeps } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
 import type { ConfidenceUpdateSink } from "@/lib/trader/knowledge/knowledge-confidence-update-repository-postgres";
 import type { OutcomeResolutionReadPort } from "@/lib/trader/knowledge/mkb-read-model.types";
-import type { InformationSufficiencyRuntimeAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-runtime-authority-v2";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 
 /**
@@ -162,10 +161,10 @@ export type RunResearchPipelineInput = {
   /** HTR-WP21: provenance for epistemic records. */
   wp21Provenance?: { codeSha: string; datasetContentDigest: string };
   /**
-   * Research-only admission so a blind-window signal can reach submitOrder.
-   * Production callers leave this unset.
+   * When set, research windows may submit mock orders. Production callers leave
+   * this unset. This is not a holdout authority object.
    */
-  informationSufficiencyAuthority?: InformationSufficiencyRuntimeAuthorityV2;
+  submitResearchMockOrders?: boolean;
   /**
    * Runs inside the blind-window transaction after the strategy backtest
    * returns. A throw is a backtest failure: the consume and one terminal row
@@ -314,7 +313,7 @@ function buildIsolatedBacktestInput(
         : undefined),
     historicalExecutionProfile: input.historicalExecutionProfile,
     historicalProfile: input.historicalProfile,
-    informationSufficiencyAuthority: input.informationSufficiencyAuthority,
+    submitResearchMockOrders: input.submitResearchMockOrders,
     intelligenceRecordsSink: params.bound
       ? params.bound.intelligenceRecordsSink
       : input.intelligenceRecordsSink,
