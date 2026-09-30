@@ -39,6 +39,7 @@ const MIGRATIONS = Object.freeze([
   "db/migrations_postgres/0007_exchange_credentials_rls.sql",
   "db/migrations_postgres/0205_trader_account_observation_v1.sql",
   "db/migrations_postgres/0210_trader_account_observation_credential_v1.sql",
+  "db/migrations_postgres/0229_trader_observation_read_only_credential_v1.sql",
 ]);
 
 describe.skipIf(!enabled)(
@@ -692,7 +693,13 @@ describe.skipIf(!enabled)(
             has_column_privilege('waia_account_observation_credential', 'public.exchange_credentials', 'encrypted_payload', 'SELECT') AS parent_projection,
             has_database_privilege(session_user, current_database(), 'CONNECT') AS connect,
             has_database_privilege(session_user, current_database(), 'TEMP') AS temp`;
-        expect(actual[0]).toEqual({ login, login_projection: false, parent_projection: true, connect: true, temp: true });
+        expect(actual[0]).toEqual({
+          login,
+          login_projection: false,
+          parent_projection: true,
+          connect: true,
+          temp: true,
+        });
         // Explicit direct TEMP is the same database-ACL exception, not a hidden CONNECT-only claim.
         try {
           await admin.unsafe(`GRANT TEMP ON DATABASE "${database}" TO ${login}`);
@@ -705,49 +712,82 @@ describe.skipIf(!enabled)(
       });
 
       it("refuses a different actual authenticated login", async () => {
-        await expect(probeObservationCredentialPool(open("reader"))).rejects.toThrow(/^OBSERVATION_CREDENTIAL_ROLE_REFUSED$/);
+        await expect(probeObservationCredentialPool(open("reader"))).rejects.toThrow(
+          /^OBSERVATION_CREDENTIAL_ROLE_REFUSED$/,
+        );
       });
 
       it("refuses a session that already switched current_user", async () => {
         const switched = postgres(runtimeUrl("credential"), {
-          max: 1, connect_timeout: 3, max_lifetime: 60, prepare: false,
+          max: 1,
+          connect_timeout: 3,
+          max_lifetime: 60,
+          prepare: false,
           connection: { options: "-c role=waia_account_observation_credential" },
         });
         try {
-          const identity = await switched`SELECT session_user::text AS login, current_user::text AS current`;
+          const identity =
+            await switched`SELECT session_user::text AS login, current_user::text AS current`;
           expect(identity[0]).toEqual({ login, current: parent });
-          await expect(probeObservationCredentialPool(switched)).rejects.toThrow(/^OBSERVATION_CREDENTIAL_ROLE_REFUSED$/);
-        } finally { await switched.end({ timeout: 2 }); }
+          await expect(probeObservationCredentialPool(switched)).rejects.toThrow(
+            /^OBSERVATION_CREDENTIAL_ROLE_REFUSED$/,
+          );
+        } finally {
+          await switched.end({ timeout: 2 });
+        }
       });
 
       it.each([
-        ["INHERIT", "NOINHERIT"], ["SUPERUSER", "NOSUPERUSER"], ["BYPASSRLS", "NOBYPASSRLS"],
-        ["CREATEDB", "NOCREATEDB"], ["CREATEROLE", "NOCREATEROLE"], ["REPLICATION", "NOREPLICATION"],
-        ["NOLOGIN", "LOGIN"], ["CONNECTION LIMIT 3", "CONNECTION LIMIT 2"],
-      ])("refuses actual login attribute %s and recovers after exact restoration", async (bad, good) => {
-        await changedPosture(`ALTER ROLE ${login} ${bad}`, `ALTER ROLE ${login} ${good}`);
-      });
+        ["INHERIT", "NOINHERIT"],
+        ["SUPERUSER", "NOSUPERUSER"],
+        ["BYPASSRLS", "NOBYPASSRLS"],
+        ["CREATEDB", "NOCREATEDB"],
+        ["CREATEROLE", "NOCREATEROLE"],
+        ["REPLICATION", "NOREPLICATION"],
+        ["NOLOGIN", "LOGIN"],
+        ["CONNECTION LIMIT 3", "CONNECTION LIMIT 2"],
+      ])(
+        "refuses actual login attribute %s and recovers after exact restoration",
+        async (bad, good) => {
+          await changedPosture(`ALTER ROLE ${login} ${bad}`, `ALTER ROLE ${login} ${good}`);
+        },
+      );
 
       it.each([
-        ["LOGIN", "NOLOGIN"], ["INHERIT", "NOINHERIT"], ["SUPERUSER", "NOSUPERUSER"],
-        ["BYPASSRLS", "NOBYPASSRLS"], ["CREATEDB", "NOCREATEDB"],
-        ["CREATEROLE", "NOCREATEROLE"], ["REPLICATION", "NOREPLICATION"],
+        ["LOGIN", "NOLOGIN"],
+        ["INHERIT", "NOINHERIT"],
+        ["SUPERUSER", "NOSUPERUSER"],
+        ["BYPASSRLS", "NOBYPASSRLS"],
+        ["CREATEDB", "NOCREATEDB"],
+        ["CREATEROLE", "NOCREATEROLE"],
+        ["REPLICATION", "NOREPLICATION"],
       ])("refuses actual parent attribute %s and recovers", async (bad, good) => {
         await changedPosture(`ALTER ROLE ${parent} ${bad}`, `ALTER ROLE ${parent} ${good}`);
       });
 
-      it.each(["ADMIN TRUE", "INHERIT TRUE", "SET FALSE"])("refuses membership option %s", async bad => {
-        await changedPosture(`GRANT ${parent} TO ${login} WITH ${bad}`,
-          `GRANT ${parent} TO ${login} WITH ADMIN FALSE, INHERIT FALSE, SET TRUE`);
-      });
+      it.each(["ADMIN TRUE", "INHERIT TRUE", "SET FALSE"])(
+        "refuses membership option %s",
+        async (bad) => {
+          await changedPosture(
+            `GRANT ${parent} TO ${login} WITH ${bad}`,
+            `GRANT ${parent} TO ${login} WITH ADMIN FALSE, INHERIT FALSE, SET TRUE`,
+          );
+        },
+      );
 
       it("refuses missing membership, extra membership and a nested parent", async () => {
-        await changedPosture(`REVOKE ${parent} FROM ${login}`,
-          `GRANT ${parent} TO ${login} WITH ADMIN FALSE, INHERIT FALSE, SET TRUE`);
-        await changedPosture(`GRANT waia_account_observation_reader TO ${login} WITH INHERIT FALSE, SET TRUE`,
-          `REVOKE waia_account_observation_reader FROM ${login}`);
-        await changedPosture(`GRANT waia_account_observation_reader TO ${parent} WITH INHERIT FALSE, SET TRUE`,
-          `REVOKE waia_account_observation_reader FROM ${parent}`);
+        await changedPosture(
+          `REVOKE ${parent} FROM ${login}`,
+          `GRANT ${parent} TO ${login} WITH ADMIN FALSE, INHERIT FALSE, SET TRUE`,
+        );
+        await changedPosture(
+          `GRANT waia_account_observation_reader TO ${login} WITH INHERIT FALSE, SET TRUE`,
+          `REVOKE waia_account_observation_reader FROM ${login}`,
+        );
+        await changedPosture(
+          `GRANT waia_account_observation_reader TO ${parent} WITH INHERIT FALSE, SET TRUE`,
+          `REVOKE waia_account_observation_reader FROM ${parent}`,
+        );
       });
 
       it.each([
@@ -766,132 +806,195 @@ describe.skipIf(!enabled)(
       ])("refuses effective or direct excess grant %s to %s", async (privilege, grantee) => {
         // PostgreSQL REVOKE table SELECT also revokes the original column SELECT ACLs.
         // Restore that exact baseline rather than mistaking a later refusal for a new case.
-        const restoreProjection = privilege === "SELECT ON public.exchange_credentials" && grantee === parent
-          ? `; GRANT SELECT (id, organization_id, exchange_account_id, status, observation_read_only, encrypted_payload,
+        const restoreProjection =
+          privilege === "SELECT ON public.exchange_credentials" && grantee === parent
+            ? `; GRANT SELECT (id, organization_id, exchange_account_id, status, observation_read_only, encrypted_payload,
               payload_key_version, wrapped_dek_key_version, wrapped_dek_key) ON public.exchange_credentials TO ${parent}`
-          : "";
-        await changedPosture(`GRANT ${privilege} TO ${grantee}`, `REVOKE ${privilege} FROM ${grantee}${restoreProjection}`);
+            : "";
+        await changedPosture(
+          `GRANT ${privilege} TO ${grantee}`,
+          `REVOKE ${privilege} FROM ${grantee}${restoreProjection}`,
+        );
       });
 
       it("refuses missing required projection on either relation", async () => {
-        for (const projection of ["SELECT (encrypted_payload) ON public.exchange_credentials",
-          "SELECT (credential_id) ON public.trader_account_collection_state"]) {
-          await changedPosture(`REVOKE ${projection} FROM ${parent}`, `GRANT ${projection} TO ${parent}`);
+        for (const projection of [
+          "SELECT (encrypted_payload) ON public.exchange_credentials",
+          "SELECT (credential_id) ON public.trader_account_collection_state",
+        ]) {
+          await changedPosture(
+            `REVOKE ${projection} FROM ${parent}`,
+            `GRANT ${projection} TO ${parent}`,
+          );
         }
       });
 
       it("refuses effective permanent CREATE from database, schema and PUBLIC", async () => {
         for (const grantee of [login, parent, "PUBLIC"]) {
-          await changedPosture(`GRANT CREATE ON DATABASE "${database}" TO ${grantee}`,
-            `REVOKE CREATE ON DATABASE "${database}" FROM ${grantee}`);
-          await changedPosture(`GRANT CREATE ON SCHEMA public TO ${grantee}`,
-            `REVOKE CREATE ON SCHEMA public FROM ${grantee}`);
+          await changedPosture(
+            `GRANT CREATE ON DATABASE "${database}" TO ${grantee}`,
+            `REVOKE CREATE ON DATABASE "${database}" FROM ${grantee}`,
+          );
+          await changedPosture(
+            `GRANT CREATE ON SCHEMA public TO ${grantee}`,
+            `REVOKE CREATE ON SCHEMA public FROM ${grantee}`,
+          );
         }
       });
 
       it("refuses disabled RLS and missing state FORCE without requiring credential FORCE", async () => {
         for (const relation of ["exchange_credentials", "trader_account_collection_state"]) {
-          await changedPosture(`ALTER TABLE public.${relation} DISABLE ROW LEVEL SECURITY`,
-            `ALTER TABLE public.${relation} ENABLE ROW LEVEL SECURITY`);
+          await changedPosture(
+            `ALTER TABLE public.${relation} DISABLE ROW LEVEL SECURITY`,
+            `ALTER TABLE public.${relation} ENABLE ROW LEVEL SECURITY`,
+          );
         }
-        await changedPosture("ALTER TABLE public.trader_account_collection_state NO FORCE ROW LEVEL SECURITY",
-          "ALTER TABLE public.trader_account_collection_state FORCE ROW LEVEL SECURITY");
-        const bits = await admin`SELECT relforcerowsecurity FROM pg_class WHERE oid='public.exchange_credentials'::regclass`;
+        await changedPosture(
+          "ALTER TABLE public.trader_account_collection_state NO FORCE ROW LEVEL SECURITY",
+          "ALTER TABLE public.trader_account_collection_state FORCE ROW LEVEL SECURITY",
+        );
+        const bits =
+          await admin`SELECT relforcerowsecurity FROM pg_class WHERE oid='public.exchange_credentials'::regclass`;
         expect(bits[0].relforcerowsecurity).toBe(false);
       });
 
       it("refuses ownership of the current database for either identity", async () => {
         for (const owner of [login, parent]) {
-          await changedPosture(`ALTER DATABASE "${database}" OWNER TO ${owner}`,
-            `ALTER DATABASE "${database}" OWNER TO waia_local_admin`);
+          await changedPosture(
+            `ALTER DATABASE "${database}" OWNER TO ${owner}`,
+            `ALTER DATABASE "${database}" OWNER TO waia_local_admin`,
+          );
         }
       });
 
       it("refuses object ownership and non-database direct ACL even in another database", async () => {
         const otherDatabase = "dee1127_acl_" + randomUUID().replaceAll("-", "");
         await root.unsafe(`CREATE DATABASE "${otherDatabase}"`);
-        const other = postgres(url.replace("/waia_dee960_local", "/" + otherDatabase), { max: 1, prepare: false });
+        const other = postgres(url.replace("/waia_dee960_local", "/" + otherDatabase), {
+          max: 1,
+          prepare: false,
+        });
         try {
           await other`CREATE TABLE public.startup_owned (id int)`;
           try {
             await other.unsafe(`GRANT SELECT ON public.startup_owned TO ${login}`);
             await expect(probeObservationCredentialPool(open("credential"))).rejects.toThrow();
-          } finally { await other.unsafe(`REVOKE SELECT ON public.startup_owned FROM ${login}`); }
+          } finally {
+            await other.unsafe(`REVOKE SELECT ON public.startup_owned FROM ${login}`);
+          }
           for (const owner of [login, parent]) {
             try {
               await other.unsafe(`ALTER TABLE public.startup_owned OWNER TO ${owner}`);
               await expect(probeObservationCredentialPool(open("credential"))).rejects.toThrow();
-            } finally { await other.unsafe("ALTER TABLE public.startup_owned OWNER TO waia_local_admin"); }
+            } finally {
+              await other.unsafe("ALTER TABLE public.startup_owned OWNER TO waia_local_admin");
+            }
           }
-        } finally { await other.end({ timeout: 2 }); }
+        } finally {
+          await other.end({ timeout: 2 });
+        }
         await expect(probeObservationCredentialPool(open("credential"))).resolves.toBe(login);
       });
 
-      it.each(["probe", "provider"])("actual CLI cancels a late %s completion and eventually closes all real SQL sessions", async stage => {
-        for (const client of clients.values()) await client.end({ timeout: 2 });
-        clients.clear();
-        const manifest = sealManifest();
-        const controller = new AbortController();
-        const events: string[] = [];
-        const fetchImpl = vi.fn<typeof fetch>();
-        let reached!: () => void;
-        let deliver!: () => void;
-        const entered = new Promise<void>(resolve => { reached = resolve; });
-        const pending = new Promise<void>(resolve => { deliver = resolve; });
-        // Both execute their real native/crypto operation before holding only the returned promise.
-        // This is a lifecycle barrier, not fabricated SQL posture or a fabricated provider.
-        const originalProbe = credentialProbe.probeObservationCredentialPool;
-        const originalCreate = SecretsStoreMasterKeyProvider.create;
-        const probe = vi.spyOn(credentialProbe, "probeObservationCredentialPool");
-        const create = vi.spyOn(SecretsStoreMasterKeyProvider, "create");
-        if (stage === "probe") probe.mockImplementation(async sql => {
-          const result = await originalProbe(sql); reached(); await pending; return result;
-        });
-        else create.mockImplementation(async input => {
-          const result = await originalCreate(input); reached(); await pending; return result;
-        });
-        let run: Promise<void> | undefined;
-        let deadline: ReturnType<typeof setTimeout> | undefined;
-        try {
-          run = runAccountObservationCollector({
-            env: {
-              WAIA_TRADER_CLI: "1", WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
-              WAIA_OBSERVATION_OWNER_ID: "dee1127-cancel",
-              WAIA_OBSERVATION_ASSIGNMENT_MANIFEST: "/synthetic/native-manifest.json",
-              WAIA_OBSERVATION_ASSIGNMENT_MANIFEST_SHA256: manifest.digest,
-              WAIA_OBSERVATION_COLLECTOR_DATABASE_URL: runtimeUrl("collector"),
-              WAIA_OBSERVATION_READER_DATABASE_URL: runtimeUrl("reader"),
-              WAIA_OBSERVATION_CREDENTIAL_DATABASE_URL: runtimeUrl("credential"),
-              WAIA_OBSERVATION_MASTER_KEY: MASTER_KEY,
-            }, signal: controller.signal, readManifest: () => manifest.text,
-            fetchImpl, report: event => { events.push(event); },
+      it.each(["probe", "provider"])(
+        "actual CLI cancels a late %s completion and eventually closes all real SQL sessions",
+        async (stage) => {
+          for (const client of clients.values()) await client.end({ timeout: 2 });
+          clients.clear();
+          const manifest = sealManifest();
+          const controller = new AbortController();
+          const events: string[] = [];
+          const fetchImpl = vi.fn<typeof fetch>();
+          let reached!: () => void;
+          let deliver!: () => void;
+          const entered = new Promise<void>((resolve) => {
+            reached = resolve;
           });
-          await Promise.race([entered, run.then(() => { throw new Error("EARLY_NATIVE_STOP"); }),
-            new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new Error("NATIVE_BARRIER_TIMEOUT")), 10000); })]);
-          controller.abort(); await run;
-          expect(events).not.toContain("HOST_STARTED"); expect(fetchImpl).not.toHaveBeenCalled();
-          if (stage === "probe") expect(create).not.toHaveBeenCalled();
-          const held = await admin`SELECT count(*)::int AS count FROM pg_stat_activity
+          const pending = new Promise<void>((resolve) => {
+            deliver = resolve;
+          });
+          // Both execute their real native/crypto operation before holding only the returned promise.
+          // This is a lifecycle barrier, not fabricated SQL posture or a fabricated provider.
+          const originalProbe = credentialProbe.probeObservationCredentialPool;
+          const originalCreate = SecretsStoreMasterKeyProvider.create;
+          const probe = vi.spyOn(credentialProbe, "probeObservationCredentialPool");
+          const create = vi.spyOn(SecretsStoreMasterKeyProvider, "create");
+          if (stage === "probe")
+            probe.mockImplementation(async (sql) => {
+              const result = await originalProbe(sql);
+              reached();
+              await pending;
+              return result;
+            });
+          else
+            create.mockImplementation(async (input) => {
+              const result = await originalCreate(input);
+              reached();
+              await pending;
+              return result;
+            });
+          let run: Promise<void> | undefined;
+          let deadline: ReturnType<typeof setTimeout> | undefined;
+          try {
+            run = runAccountObservationCollector({
+              env: {
+                WAIA_TRADER_CLI: "1",
+                WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
+                WAIA_OBSERVATION_OWNER_ID: "dee1127-cancel",
+                WAIA_OBSERVATION_ASSIGNMENT_MANIFEST: "/synthetic/native-manifest.json",
+                WAIA_OBSERVATION_ASSIGNMENT_MANIFEST_SHA256: manifest.digest,
+                WAIA_OBSERVATION_COLLECTOR_DATABASE_URL: runtimeUrl("collector"),
+                WAIA_OBSERVATION_READER_DATABASE_URL: runtimeUrl("reader"),
+                WAIA_OBSERVATION_CREDENTIAL_DATABASE_URL: runtimeUrl("credential"),
+                WAIA_OBSERVATION_MASTER_KEY: MASTER_KEY,
+              },
+              signal: controller.signal,
+              readManifest: () => manifest.text,
+              fetchImpl,
+              report: (event) => {
+                events.push(event);
+              },
+            });
+            await Promise.race([
+              entered,
+              run.then(() => {
+                throw new Error("EARLY_NATIVE_STOP");
+              }),
+              new Promise<never>((_, reject) => {
+                deadline = setTimeout(() => reject(new Error("NATIVE_BARRIER_TIMEOUT")), 10000);
+              }),
+            ]);
+            controller.abort();
+            await run;
+            expect(events).not.toContain("HOST_STARTED");
+            expect(fetchImpl).not.toHaveBeenCalled();
+            if (stage === "probe") expect(create).not.toHaveBeenCalled();
+            const held = await admin`SELECT count(*)::int AS count FROM pg_stat_activity
             WHERE datname=${database} AND application_name='waia-account-observation-credential'`;
-          expect(held[0].count).toBe(1); // abort alone has not yet disposed the unreturned resource
-          deliver();
-          const until = Date.now() + 5000;
-          let remaining = 1;
-          while (remaining && Date.now() < until) {
-            const sessions = await admin`SELECT count(*)::int AS count FROM pg_stat_activity
+            expect(held[0].count).toBe(1); // abort alone has not yet disposed the unreturned resource
+            deliver();
+            const until = Date.now() + 5000;
+            let remaining = 1;
+            while (remaining && Date.now() < until) {
+              const sessions = await admin`SELECT count(*)::int AS count FROM pg_stat_activity
               WHERE datname=${database} AND application_name LIKE 'waia-account-observation-%'`;
-            remaining = sessions[0].count;
-            if (remaining) await new Promise(resolve => setTimeout(resolve, 10));
+              remaining = sessions[0].count;
+              if (remaining) await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+            expect(remaining).toBe(0);
+            expect(events).not.toContain("HOST_STARTED");
+            if (stage === "probe") expect(create).not.toHaveBeenCalled();
+          } finally {
+            if (deadline) clearTimeout(deadline);
+            controller.abort();
+            deliver();
+            await run?.catch(() => {});
+            probe.mockRestore();
+            create.mockRestore();
           }
-          expect(remaining).toBe(0);
-          expect(events).not.toContain("HOST_STARTED");
-          if (stage === "probe") expect(create).not.toHaveBeenCalled();
-        } finally {
-          if (deadline) clearTimeout(deadline);
-          controller.abort(); deliver(); await run?.catch(() => {});
-          probe.mockRestore(); create.mockRestore();
-        }
-      }, 20000);
+        },
+        20000,
+      );
 
       it("the real private CLI factory refuses unsafe SQL before provider/HOST_STARTED/transport, then restarts", async () => {
         for (const client of clients.values()) await client.end({ timeout: 2 });
@@ -903,26 +1006,36 @@ describe.skipIf(!enabled)(
         const create = vi.spyOn(SecretsStoreMasterKeyProvider, "create");
         try {
           await admin.unsafe(`ALTER ROLE ${login} INHERIT`);
-          await expect(runAccountObservationCollector({
-            env: {
-              WAIA_TRADER_CLI: "1", WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
-              WAIA_OBSERVATION_OWNER_ID: "dee1127-refusal",
-              WAIA_OBSERVATION_ASSIGNMENT_MANIFEST: "/synthetic/native-manifest.json",
-              WAIA_OBSERVATION_ASSIGNMENT_MANIFEST_SHA256: manifest.digest,
-              WAIA_OBSERVATION_COLLECTOR_DATABASE_URL: runtimeUrl("collector"),
-              WAIA_OBSERVATION_READER_DATABASE_URL: runtimeUrl("reader"),
-              WAIA_OBSERVATION_CREDENTIAL_DATABASE_URL: runtimeUrl("credential"),
-              WAIA_OBSERVATION_MASTER_KEY: MASTER_KEY,
-            }, signal: controller.signal, readManifest: () => manifest.text,
-            fetchImpl, report: event => { events.push(event); },
-          })).rejects.toThrow(/^ACCOUNT_OBSERVATION_HOST_FAILED$/);
-          expect(create).not.toHaveBeenCalled(); expect(fetchImpl).not.toHaveBeenCalled();
+          await expect(
+            runAccountObservationCollector({
+              env: {
+                WAIA_TRADER_CLI: "1",
+                WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
+                WAIA_OBSERVATION_OWNER_ID: "dee1127-refusal",
+                WAIA_OBSERVATION_ASSIGNMENT_MANIFEST: "/synthetic/native-manifest.json",
+                WAIA_OBSERVATION_ASSIGNMENT_MANIFEST_SHA256: manifest.digest,
+                WAIA_OBSERVATION_COLLECTOR_DATABASE_URL: runtimeUrl("collector"),
+                WAIA_OBSERVATION_READER_DATABASE_URL: runtimeUrl("reader"),
+                WAIA_OBSERVATION_CREDENTIAL_DATABASE_URL: runtimeUrl("credential"),
+                WAIA_OBSERVATION_MASTER_KEY: MASTER_KEY,
+              },
+              signal: controller.signal,
+              readManifest: () => manifest.text,
+              fetchImpl,
+              report: (event) => {
+                events.push(event);
+              },
+            }),
+          ).rejects.toThrow(/^ACCOUNT_OBSERVATION_HOST_FAILED$/);
+          expect(create).not.toHaveBeenCalled();
+          expect(fetchImpl).not.toHaveBeenCalled();
           expect(events).not.toContain("HOST_STARTED");
           const sessions = await admin`SELECT count(*)::int AS count FROM pg_stat_activity
             WHERE datname=${database} AND application_name LIKE 'waia-account-observation-%'`;
           expect(sessions[0].count).toBe(0);
         } finally {
-          controller.abort(); create.mockRestore();
+          controller.abort();
+          create.mockRestore();
           await admin.unsafe(`ALTER ROLE ${login} NOINHERIT`);
         }
         await expect(probeObservationCredentialPool(open("credential"))).resolves.toBe(login);
@@ -931,7 +1044,8 @@ describe.skipIf(!enabled)(
         const restart = new AbortController();
         await runAccountObservationCollector({
           env: {
-            WAIA_TRADER_CLI: "1", WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
+            WAIA_TRADER_CLI: "1",
+            WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
             WAIA_OBSERVATION_OWNER_ID: "dee1127-restart",
             WAIA_OBSERVATION_ASSIGNMENT_MANIFEST: "/synthetic/native-manifest.json",
             WAIA_OBSERVATION_ASSIGNMENT_MANIFEST_SHA256: manifest.digest,
@@ -939,8 +1053,14 @@ describe.skipIf(!enabled)(
             WAIA_OBSERVATION_READER_DATABASE_URL: runtimeUrl("reader"),
             WAIA_OBSERVATION_CREDENTIAL_DATABASE_URL: runtimeUrl("credential"),
             WAIA_OBSERVATION_MASTER_KEY: MASTER_KEY,
-          }, signal: restart.signal, readManifest: () => manifest.text, fetchImpl,
-          report: event => { events.push(event); if (event === "HOST_STARTED") restart.abort(); },
+          },
+          signal: restart.signal,
+          readManifest: () => manifest.text,
+          fetchImpl,
+          report: (event) => {
+            events.push(event);
+            if (event === "HOST_STARTED") restart.abort();
+          },
         });
         expect(events).toContain("HOST_STARTED");
         expect(events).toContain("HOST_STOPPED");
