@@ -39,10 +39,10 @@ import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-co
 
 const integrationEnabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
-const USER_ID = "00000000-0000-4000-8000-0000000540b1";
+const USER_ID = crypto.randomUUID();
 const DEADLINE_MS = 8_000;
 
-function buildBar(close: string): Bar {
+function buildBar(close: string, openMs: number): Bar {
   return {
     symbol: "BTC/USDT",
     interval: "1m",
@@ -51,8 +51,8 @@ function buildBar(close: string): Bar {
     low: close,
     close,
     volume: "1",
-    barOpenTime: "2026-06-22T09:40:00.000Z",
-    barCloseTime: "2026-06-22T09:41:00.000Z",
+    barOpenTime: new Date(openMs).toISOString(),
+    barCloseTime: new Date(openMs + 60_000).toISOString(),
   };
 }
 
@@ -100,7 +100,6 @@ async function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail on a max:1 pool", () => {
   let organizationId = "";
-  const digests: string[] = [];
 
   async function openPool(): Promise<{
     client: postgres.Sql;
@@ -115,9 +114,8 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail on a max:1 pool
 
   async function cleanupOrg(client: postgres.Sql): Promise<void> {
     const orgId = organizationId || personalOrganizationIdFromUserId(USER_ID);
-    for (const digest of digests) {
-      await client`delete from trader_dee540_bar_consumption where blind_digest = ${digest}`;
-    }
+    // trader_dee540_bar_consumption is append-only. A fresh bar-content digest
+    // per run leaves that row in place; this cleanup never deletes it.
     await client`delete from trader_blind_validation_results where organization_id = ${orgId}`;
     await client`delete from trader_strategy_candidates where organization_id = ${orgId}`;
     await client`delete from research_dataset where organization_id = ${orgId}`;
@@ -140,7 +138,7 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail on a max:1 pool
       await db.insert(pgSchema.users).values({
         id: USER_ID,
         identityLabel: "DEE-540 max pool",
-        email: "dee540-max-pool@waia.invalid",
+        email: `${USER_ID}@waia.invalid`,
         passwordHash: null,
       });
       organizationId = await ensureUserCoreSeedPostgres(db, {
@@ -163,9 +161,9 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail on a max:1 pool
 
   async function seedHoldout(db: WaiaPostgresDb, close: string, strategyVersion: string) {
     const context = requireOrgContext(organizationId);
-    const bars = [buildBar(close)];
+    const openMs = Date.UTC(2026, 5, 22, 9, 40, 0) + crypto.getRandomValues(new Uint32Array(1))[0]!;
+    const bars = [buildBar(close, openMs)];
     const blindDigest = computeBarSetDigest(bars);
-    digests.push(blindDigest);
     const datasetId = crypto.randomUUID();
     const candidateId = crypto.randomUUID();
     await insertResearchDatasetPostgres(db, context, {
