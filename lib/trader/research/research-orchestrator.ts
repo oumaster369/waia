@@ -14,6 +14,7 @@ import {
   createHtrHistoricalCostModelAuthorityV1,
   type CostModelV1,
 } from "@/lib/trader/execution/cost-model";
+import { createPostgresOrderRepositoryFromExecutor } from "@/lib/trader/execution/repository-adapters";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
 import { listMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
 import type { ResearchDatasetRecord } from "@/lib/trader/market-data/research-dataset-repository-postgres";
@@ -60,6 +61,7 @@ import {
   MultiRegimeCoverageError,
   ResearchOrchestratorError,
   ResearchPipelineRegimeFailureError,
+  StrategyCandidateNotFoundError,
 } from "@/lib/trader/research/errors";
 import { recordResearchPipelineKnowledgePostgres } from "@/lib/trader/research/record-research-knowledge";
 import { runIsolatedResearchBacktest } from "@/lib/trader/research/research-backtest-isolation";
@@ -70,6 +72,7 @@ import {
 import type { ResearchEvidenceDocument } from "@/lib/trader/research/research-evidence-export.types";
 import {
   getBlindValidationResultForCandidatePostgres,
+  getStrategyCandidateByIdPostgres,
   insertBlindValidationResultPostgres,
   insertWalkForwardWindowPostgres,
   markStrategyCandidateBlindUsedPostgres,
@@ -204,6 +207,7 @@ function buildIsolatedBacktestInput(
     newId: () => string;
     cycleIdPrefix: string;
     artifactSink?: ResearchValidationBacktestArtifactSink;
+    wp21PostgresExecutor?: RunResearchPipelineInput["wp21PostgresExecutor"];
   },
 ) {
   const pipelineBacktest = input.pipelineBacktest;
@@ -251,7 +255,7 @@ function buildIsolatedBacktestInput(
     confidenceUpdateSink: input.confidenceUpdateSink,
     wp21RuntimeDeps: input.wp21RuntimeDeps,
     outcomeResolutionReadPort: input.outcomeResolutionReadPort,
-    wp21PostgresExecutor: input.wp21PostgresExecutor,
+    wp21PostgresExecutor: params.wp21PostgresExecutor ?? input.wp21PostgresExecutor,
     wp21Provenance: input.wp21Provenance,
   };
 }
@@ -498,52 +502,63 @@ export async function runResearchPipelinePostgres(
     }
   }
 
-  const blind = skipBlindTail
-    ? {
+  const blind = await (async () => {
+    if (skipBlindTail) {
+      return {
         result: { id: RESEARCH_PIPELINE_BLIND_TAIL_NOT_RUN },
         metrics: emptyBlindMetrics,
-      }
-    : await commitDee540BlindHoldout(ex, {
-        blindDigest: sealed.blindDigest,
-        context: input.context,
-        candidate: { ...candidate, status: "walk_forward_validated", blindUsed: false },
-        datasetId: dataset.id,
-        blindBars: splits.blind,
-        expectedBlindDigest: dataset.blindDigest,
-        runBacktest: async ({ bars }) => {
-          const repo = await resolveOrderRepository(input.createOrderRepository);
-          return runIsolatedResearchBacktest(
-            ex,
-            buildIsolatedBacktestInput(input, {
-              bars,
-              datasetId: dataset.id,
-              runId: backtestRunId,
-              split: "blind",
-              costModel,
-              orderRepository: repo,
-              accountKey,
-              defaultQuantity,
-              newId,
-              cycleIdPrefix: buildResearchBlindCycleIdPrefix(backtestRunId),
-            }),
-          );
-        },
-        readRepository: {
-          getBlindValidationResultForCandidate: (context, candidateId) =>
-            getBlindValidationResultForCandidatePostgres(ex, context, candidateId),
-        },
-        bindRepository: (tx) => ({
-          getBlindValidationResultForCandidate: (context, candidateId) =>
-            getBlindValidationResultForCandidatePostgres(tx, context, candidateId),
-          insertBlindValidationResult: (context, row) =>
-            insertBlindValidationResultPostgres(tx, context, row),
-          markStrategyCandidateBlindUsed: (context, candidateId) =>
-            markStrategyCandidateBlindUsedPostgres(tx, context, candidateId),
-          updateStrategyCandidateStatus: (context, candidateId, status) =>
-            updateStrategyCandidateStatusPostgres(tx, context, candidateId, status),
-        }),
-        newId,
-      });
+      };
+    }
+    const persistedCandidate = await getStrategyCandidateByIdPostgres(
+      ex,
+      input.context,
+      candidate.id,
+    );
+    if (!persistedCandidate) {
+      throw new StrategyCandidateNotFoundError(candidate.id);
+    }
+    return commitDee540BlindHoldout(ex, {
+      blindDigest: sealed.blindDigest,
+      context: input.context,
+      candidate: persistedCandidate,
+      datasetId: dataset.id,
+      blindBars: splits.blind,
+      expectedBlindDigest: dataset.blindDigest,
+      runBacktest: async ({ bars, executor }) => {
+        return runIsolatedResearchBacktest(
+          executor,
+          buildIsolatedBacktestInput(input, {
+            bars,
+            datasetId: dataset.id,
+            runId: backtestRunId,
+            split: "blind",
+            costModel,
+            orderRepository: createPostgresOrderRepositoryFromExecutor(executor),
+            accountKey,
+            defaultQuantity,
+            newId,
+            cycleIdPrefix: buildResearchBlindCycleIdPrefix(backtestRunId),
+            wp21PostgresExecutor: input.wp21PostgresExecutor ? executor : undefined,
+          }),
+        );
+      },
+      readRepository: {
+        getBlindValidationResultForCandidate: (context, candidateId) =>
+          getBlindValidationResultForCandidatePostgres(ex, context, candidateId),
+      },
+      bindRepository: (tx) => ({
+        getBlindValidationResultForCandidate: (context, candidateId) =>
+          getBlindValidationResultForCandidatePostgres(tx, context, candidateId),
+        insertBlindValidationResult: (context, row) =>
+          insertBlindValidationResultPostgres(tx, context, row),
+        markStrategyCandidateBlindUsed: (context, candidateId) =>
+          markStrategyCandidateBlindUsedPostgres(tx, context, candidateId),
+        updateStrategyCandidateStatus: (context, candidateId, status) =>
+          updateStrategyCandidateStatusPostgres(tx, context, candidateId, status),
+      }),
+      newId,
+    });
+  })();
 
   const evidenceDocument = buildResearchEvidenceDocument({
     organizationId: input.context.organizationId,

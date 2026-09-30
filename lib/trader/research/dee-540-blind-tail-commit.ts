@@ -21,14 +21,29 @@ import {
 
 export const DEE540_BLIND_TERMINAL_SCHEMA = "dee540_blind_terminal_v1" as const;
 
-type BlindTailTx = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
+/** Drizzle transaction client. Queries on this handle do not take a second pool connection. */
+export type Dee540BlindTailExecutor = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
 
-export type CommitDee540BlindHoldoutInput = Omit<RunBlindHoldoutValidationInput, "repository"> & {
+export type Dee540BlindTailBacktestInput = Parameters<
+  RunBlindHoldoutValidationInput["runBacktest"]
+>[0] & {
+  executor: Dee540BlindTailExecutor;
+};
+
+export type CommitDee540BlindHoldoutInput = Omit<
+  RunBlindHoldoutValidationInput,
+  "repository" | "runBacktest"
+> & {
   blindDigest: string;
   /** Reads used only before the strategy sees the bars. A throw here commits nothing. */
   readRepository: Pick<BlindHoldoutRepository, "getBlindValidationResultForCandidate">;
   /** Writes bound to the same transaction as the bar-content consume. */
-  bindRepository: (tx: BlindTailTx) => BlindHoldoutRepository;
+  bindRepository: (tx: Dee540BlindTailExecutor) => BlindHoldoutRepository;
+  /**
+   * Runs on `executor` while the consume transaction holds the only pool connection.
+   * Callers must not query the parent handle from this callback.
+   */
+  runBacktest: (input: Dee540BlindTailBacktestInput) => Promise<ResearchValidationMetrics>;
 };
 
 let savepointCounter = 0;
@@ -63,7 +78,7 @@ export function dee540BlindTerminalRecord(input: {
 }
 
 async function withOutcomeSavepoint<T>(
-  tx: Pick<WaiaPostgresDb, "execute">,
+  tx: Pick<Dee540BlindTailExecutor, "execute">,
   run: () => Promise<T>,
 ): Promise<T> {
   savepointCounter += 1;
@@ -116,6 +131,7 @@ async function persistTerminal(
  * transaction. Checks that run before the strategy sees the bars throw with
  * nothing written. After the strategy sees the bars, a backtest or result-insert
  * failure still commits the token together with a terminal error row.
+ * The backtest receives the transaction client and must use it for every query.
  * There is no path that clears the token.
  */
 export async function commitDee540BlindHoldout(
@@ -141,6 +157,7 @@ export async function commitDee540BlindHoldout(
         strategyId: input.candidate.strategyId,
         strategyVersion: input.candidate.strategyVersion,
         paramsJson: input.candidate.paramsJson,
+        executor: tx,
       });
     } catch (error) {
       failure = error;

@@ -124,7 +124,9 @@ export async function assertBlindHoldoutNotYetRead(
 
 /** Writes the success row after the strategy has already seen the blind bars. */
 export async function persistBlindHoldoutSuccess(
-  input: RunBlindHoldoutValidationInput & { metrics: ResearchValidationMetrics },
+  input: Omit<RunBlindHoldoutValidationInput, "runBacktest"> & {
+    metrics: ResearchValidationMetrics;
+  },
 ): Promise<BlindHoldoutValidationResult> {
   const metrics = input.metrics;
   const validatedAt = input.validatedAt ?? new Date();

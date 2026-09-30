@@ -176,6 +176,9 @@ on:
       - "lib/trader/intelligence/forecast-v2/**"
       - "db/postgres-reserved-close-guard.ts"
       - "db/postgres-client.ts"
+      - "lib/trader/research/dee-540-blind-tail-commit.ts"
+      - "lib/trader/research/research-orchestrator.ts"
+      - "tests/integration/postgres-dee540-blind-tail-max-pool.test.ts"
       - "db/postgres-session-transaction.ts"
       - "scripts/ops/provision-historical-runner-login.mjs"
       - "lib/trader/intelligence/forecast-v2/predictive-package-storage-postgres-v1.ts"
@@ -376,6 +379,7 @@ jobs:
           tests/integration/postgres-predictive-package-storage-v1.test.ts
           tests/unit/postgres-session-transaction-v2.test.ts
           tests/unit/historical-postgres-ci-cli-profile.test.ts
+          tests/integration/postgres-dee540-blind-tail-max-pool.test.ts
 
   historical-postgres17:
     name: PostgreSQL 17 historical regression guard

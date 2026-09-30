@@ -237,6 +237,7 @@ describe("DEE-540 blind consume commits with the validation outcome", () => {
     expect(source).not.toContain("replay");
     expect(source).toContain("SAVEPOINT ");
     expect(source).toContain("ROLLBACK TO SAVEPOINT ");
+    expect(source).toContain("executor: tx");
   });
 
   it("commits nothing when the status read fails before the bars are shown", async () => {

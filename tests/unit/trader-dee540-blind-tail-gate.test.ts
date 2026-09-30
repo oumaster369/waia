@@ -171,8 +171,20 @@ describe("DEE-540 blind tail gate", () => {
     expect(blindCommit.indexOf("consumeDee540BlindTailAuthorization(")).toBeLessThan(
       blindCommit.indexOf("runBacktest("),
     );
+    expect(blindCommit).toContain("executor: tx");
     expect(blindCommit).not.toContain("WAIA_DEE540_CONSUMPTION_PATH");
     expect(blindCommit).not.toContain("replay");
+    expect(orchestrator).not.toContain("walk_forward_validated");
+    expect(orchestrator).not.toContain("blindUsed: false");
+    expect(orchestrator.indexOf("getStrategyCandidateByIdPostgres(")).toBeGreaterThan(-1);
+    expect(orchestrator.indexOf("getStrategyCandidateByIdPostgres(")).toBeLessThan(
+      orchestrator.indexOf("commitDee540BlindHoldout("),
+    );
+    const blindWindow = orchestrator.slice(orchestrator.indexOf("commitDee540BlindHoldout("));
+    expect(blindWindow).toContain("createPostgresOrderRepositoryFromExecutor(executor)");
+    expect(blindWindow).toContain("runIsolatedResearchBacktest(");
+    expect(blindWindow).not.toMatch(/runIsolatedResearchBacktest\(\s*ex\s*,/);
+    expect(blindWindow).not.toContain("resolveOrderRepository");
     const campaign = readFileSync(
       resolve(process.cwd(), "scripts/trader/ri-evidence-campaign.ts"),
       "utf8",
