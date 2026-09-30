@@ -238,6 +238,34 @@ describe("DEE-540 blind consume commits with the validation outcome", () => {
     expect(source).toContain("SAVEPOINT ");
     expect(source).toContain("ROLLBACK TO SAVEPOINT ");
     expect(source).toContain("executor: tx");
+    expect(source).toContain("DEE540_BLIND_PARENT_HANDLE_FORBIDDEN");
+    expect(source).toContain("That remaining edge is left for Linear.");
+  });
+
+  it("throws immediately when the blind backtest queries the parent handle", async () => {
+    const harness = createHarness();
+    const parent = harness.ex as { select?: () => Promise<void> };
+    parent.select = async () => undefined;
+    await expect(
+      commitDee540BlindHoldout(
+        harness.ex as never,
+        baseInput(harness, {
+          runBacktest: async () => {
+            await parent.select?.();
+            return buildMetrics();
+          },
+        }),
+      ),
+    ).rejects.toThrow("DEE540_BLIND_PARENT_HANDLE_FORBIDDEN");
+    expect(committedConsumes(harness)).toHaveLength(1);
+    expect(committedResults(harness)).toHaveLength(1);
+    expect(
+      JSON.parse((committedResults(harness)[0] as { metricsJson: string }).metricsJson),
+    ).toMatchObject({
+      schemaVersion: DEE540_BLIND_TERMINAL_SCHEMA,
+      outcome: "error",
+      phase: "backtest",
+    });
   });
 
   it("commits nothing when the status read fails before the bars are shown", async () => {

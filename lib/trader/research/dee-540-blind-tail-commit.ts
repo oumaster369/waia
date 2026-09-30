@@ -21,6 +21,41 @@ import {
 
 export const DEE540_BLIND_TERMINAL_SCHEMA = "dee540_blind_terminal_v1" as const;
 
+/**
+ * Thrown when the blind window queries the parent pool while the consume
+ * transaction holds its connection. A hang on `max: 1` cannot be broken by
+ * `statement_timeout`, so the parent handle fails immediately instead.
+ */
+export const DEE540_BLIND_PARENT_HANDLE_FORBIDDEN = "DEE540_BLIND_PARENT_HANDLE_FORBIDDEN";
+
+const PARENT_HANDLE_METHODS = [
+  "select",
+  "insert",
+  "update",
+  "delete",
+  "execute",
+  "transaction",
+] as const;
+
+function armDee540ParentHandleGuard(ex: object): () => void {
+  const target = ex as Record<string, unknown>;
+  const saved: Array<[string, unknown]> = [];
+  const forbid = () => {
+    throw new Error(
+      `${DEE540_BLIND_PARENT_HANDLE_FORBIDDEN}: blind-window query used the parent pool while the consume transaction is open`,
+    );
+  };
+  for (const method of PARENT_HANDLE_METHODS) {
+    const current = target[method];
+    if (typeof current !== "function") continue;
+    saved.push([method, current]);
+    target[method] = forbid;
+  }
+  return () => {
+    for (const [method, original] of saved) target[method] = original;
+  };
+}
+
 /** Drizzle transaction client. Queries on this handle do not take a second pool connection. */
 export type Dee540BlindTailExecutor = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
 
@@ -133,6 +168,10 @@ async function persistTerminal(
  * failure still commits the token together with a terminal error row.
  * The backtest receives the transaction client and must use it for every query.
  * There is no path that clears the token.
+ *
+ * If the terminal error-row insert itself throws, this transaction rolls back
+ * after the strategy has already seen the bars. Nothing outside this
+ * transaction records the burn. That remaining edge is left for Linear.
  */
 export async function commitDee540BlindHoldout(
   ex: Pick<WaiaPostgresDb, "transaction">,
@@ -148,32 +187,37 @@ export async function commitDee540BlindHoldout(
 
   let failure: unknown = null;
   const recorded = await ex.transaction(async (tx) => {
-    await consumeDee540BlindTailAuthorization(tx, { blindDigest: input.blindDigest });
-    const repository = input.bindRepository(tx);
-    let metrics: ResearchValidationMetrics;
+    const disarmParentGuard = armDee540ParentHandleGuard(ex);
     try {
-      metrics = await input.runBacktest({
-        bars: input.blindBars,
-        strategyId: input.candidate.strategyId,
-        strategyVersion: input.candidate.strategyVersion,
-        paramsJson: input.candidate.paramsJson,
-        executor: tx,
-      });
-    } catch (error) {
-      failure = error;
-      return persistTerminal(input, repository, "backtest", error);
-    }
-    try {
-      return await withOutcomeSavepoint(tx, () =>
-        persistBlindHoldoutSuccess({
-          ...input,
-          repository,
-          metrics,
-        }),
-      );
-    } catch (error) {
-      failure = error;
-      return persistTerminal(input, repository, "result_insert", error);
+      await consumeDee540BlindTailAuthorization(tx, { blindDigest: input.blindDigest });
+      const repository = input.bindRepository(tx);
+      let metrics: ResearchValidationMetrics;
+      try {
+        metrics = await input.runBacktest({
+          bars: input.blindBars,
+          strategyId: input.candidate.strategyId,
+          strategyVersion: input.candidate.strategyVersion,
+          paramsJson: input.candidate.paramsJson,
+          executor: tx,
+        });
+      } catch (error) {
+        failure = error;
+        return persistTerminal(input, repository, "backtest", error);
+      }
+      try {
+        return await withOutcomeSavepoint(tx, () =>
+          persistBlindHoldoutSuccess({
+            ...input,
+            repository,
+            metrics,
+          }),
+        );
+      } catch (error) {
+        failure = error;
+        return persistTerminal(input, repository, "result_insert", error);
+      }
+    } finally {
+      disarmParentGuard();
     }
   });
   if (failure) throw failure;

@@ -182,9 +182,20 @@ describe("DEE-540 blind tail gate", () => {
     );
     const blindWindow = orchestrator.slice(orchestrator.indexOf("commitDee540BlindHoldout("));
     expect(blindWindow).toContain("createPostgresOrderRepositoryFromExecutor(executor)");
+    expect(blindWindow).toContain("bindBlindWindowToExecutor(input, executor)");
     expect(blindWindow).toContain("runIsolatedResearchBacktest(");
     expect(blindWindow).not.toMatch(/runIsolatedResearchBacktest\(\s*ex\s*,/);
     expect(blindWindow).not.toContain("resolveOrderRepository");
+    expect(blindWindow).not.toContain("deps: input.deps");
+    const binder = orchestrator.slice(
+      orchestrator.indexOf("function bindBlindWindowToExecutor"),
+      orchestrator.indexOf("function buildIsolatedBacktestInput"),
+    );
+    expect(binder).toContain("createPostgresOrderExecutionServiceFromExecutor(executor)");
+    expect(binder).toContain("createPostgresReconciliationServiceFromExecutor(executor)");
+    expect(binder).toContain("createIntelligenceCycleBundleRepositoryPostgres(executor)");
+    expect(binder).toContain("createForecastDecisionBundleRepositoryPostgres(executor)");
+    expect(binder).toContain("createWp21RuntimeDepsPostgres(executor)");
     const campaign = readFileSync(
       resolve(process.cwd(), "scripts/trader/ri-evidence-campaign.ts"),
       "utf8",

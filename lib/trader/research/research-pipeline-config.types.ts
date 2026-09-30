@@ -32,6 +32,8 @@ export type ResearchPipelineBacktestOptions = {
    */
   skipBlindTail?: boolean;
   validationArtifactSink?: ResearchValidationBacktestArtifactSink;
+  /** Cycle results from the blind window only. Not read by production callers. */
+  blindArtifactSink?: ResearchValidationBacktestArtifactSink;
   /** Optional replay provider sidecar for tier-2 cross-venue/crowd/global in M9 artifacts. */
   providerSidecar?: ReplayProviderSidecar;
   retentionMode?: ReplayRetentionMode;
