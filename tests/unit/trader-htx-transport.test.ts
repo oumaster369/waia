@@ -125,14 +125,19 @@ describe("HtxTransport (DEE-346)", () => {
       now: () => 1_000,
       sleep: vi.fn(async () => undefined),
     };
-    const transport = new HtxTransport(fetchImpl, {
-      ...DEFAULT_HTX_TRANSPORT_POLICY,
-      minIntervalMs: 0,
-      maxRetries: 4,
-    }, clock);
+    const transport = new HtxTransport(
+      fetchImpl,
+      {
+        ...DEFAULT_HTX_TRANSPORT_POLICY,
+        minIntervalMs: 0,
+        maxRetries: 4,
+      },
+      clock,
+    );
 
-    await expect(transport.fetch("https://api.huobi.pro/market/history/candles"))
-      .rejects.toBe(applicationError);
+    await expect(transport.fetch("https://api.huobi.pro/market/history/candles")).rejects.toBe(
+      applicationError,
+    );
     expect(attempts).toBe(1);
     expect(clock.sleep).not.toHaveBeenCalled();
   });
@@ -149,14 +154,19 @@ describe("HtxTransport (DEE-346)", () => {
       now: () => 1_000,
       sleep: vi.fn(async () => undefined),
     };
-    const transport = new HtxTransport(fetchImpl, {
-      ...DEFAULT_HTX_TRANSPORT_POLICY,
-      minIntervalMs: 0,
-      maxRetries: 2,
-    }, clock);
+    const transport = new HtxTransport(
+      fetchImpl,
+      {
+        ...DEFAULT_HTX_TRANSPORT_POLICY,
+        minIntervalMs: 0,
+        maxRetries: 2,
+      },
+      clock,
+    );
 
-    await expect(transport.fetch("https://api.huobi.pro/market/history/candles"))
-      .resolves.toHaveProperty("status", 200);
+    await expect(
+      transport.fetch("https://api.huobi.pro/market/history/candles"),
+    ).resolves.toHaveProperty("status", 200);
     expect(attempts).toBe(3);
     expect(clock.sleep).toHaveBeenCalledTimes(2);
   });
@@ -172,14 +182,19 @@ describe("HtxTransport (DEE-346)", () => {
       now: () => 1_000,
       sleep: vi.fn(async () => undefined),
     };
-    const transport = new HtxTransport(fetchImpl, {
-      ...DEFAULT_HTX_TRANSPORT_POLICY,
-      minIntervalMs: 0,
-      maxRetries: 2,
-    }, clock);
+    const transport = new HtxTransport(
+      fetchImpl,
+      {
+        ...DEFAULT_HTX_TRANSPORT_POLICY,
+        minIntervalMs: 0,
+        maxRetries: 2,
+      },
+      clock,
+    );
 
-    await expect(transport.fetch("https://api.huobi.pro/market/history/candles"))
-      .rejects.toBe(networkError);
+    await expect(transport.fetch("https://api.huobi.pro/market/history/candles")).rejects.toBe(
+      networkError,
+    );
     expect(attempts).toBe(3);
     expect(clock.sleep).toHaveBeenCalledTimes(2);
   });
@@ -255,6 +270,40 @@ describe("HtxTransport (DEE-346)", () => {
     expect(response.status).toBe(400);
     expect(attempts).toBe(1);
   });
+
+  it("does not retry POST on HTTP 429 or a connection error", async () => {
+    let httpAttempts = 0;
+    const httpFetch = (async () => {
+      httpAttempts += 1;
+      return jsonResponse({ status: "error" }, 429);
+    }) as typeof fetch;
+    const httpTransport = new HtxTransport(
+      httpFetch,
+      { ...DEFAULT_HTX_TRANSPORT_POLICY, minIntervalMs: 0, maxRetries: 4 },
+      { now: () => 1_000, sleep: async () => undefined },
+    );
+    const httpResponse = await httpTransport.fetch("https://api.huobi.pro/v1/order/orders/place", {
+      method: "POST",
+    });
+    expect(httpResponse.status).toBe(429);
+    expect(httpAttempts).toBe(1);
+
+    const networkError = new TypeError("fetch failed");
+    let networkAttempts = 0;
+    const networkFetch = (async () => {
+      networkAttempts += 1;
+      throw networkError;
+    }) as typeof fetch;
+    const networkTransport = new HtxTransport(
+      networkFetch,
+      { ...DEFAULT_HTX_TRANSPORT_POLICY, minIntervalMs: 0, maxRetries: 4 },
+      { now: () => 1_000, sleep: async () => undefined },
+    );
+    await expect(
+      networkTransport.fetch("https://api.huobi.pro/v1/order/orders/place", { method: "POST" }),
+    ).rejects.toBe(networkError);
+    expect(networkAttempts).toBe(1);
+  });
 });
 
 describe("HtxRestClient envelope rate-limit retry (DEE-346)", () => {
@@ -322,5 +371,34 @@ describe("HtxRestClient envelope rate-limit retry (DEE-346)", () => {
     await vi.runAllTimersAsync();
     await expectation;
     vi.useRealTimers();
+  });
+
+  it("does not retry a signed POST when the rate-limit envelope comes back", async () => {
+    let attempts = 0;
+    const fetchImpl = (async () => {
+      attempts += 1;
+      return jsonResponse({
+        status: "error",
+        "err-code": "rate-limit-error",
+        "err-msg": "exceededratelimit",
+      });
+    }) as typeof fetch;
+    const client = new HtxRestClient({
+      apiKey: "key",
+      apiSecret: "secret",
+      fetchImpl,
+      transportPolicy: { ...DEFAULT_HTX_TRANSPORT_POLICY, minIntervalMs: 0, maxRetries: 4 },
+    });
+    await expect(
+      client.placeOrder({
+        accountId: "1",
+        symbol: "btcusdt",
+        side: "buy",
+        type: "market",
+        quantity: "1",
+        clientOrderId: "client-1",
+      }),
+    ).rejects.toBeInstanceOf(HtxApiError);
+    expect(attempts).toBe(1);
   });
 });
