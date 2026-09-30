@@ -64,6 +64,7 @@ export type WaiaRuntimeRouteKey =
   | "trader_admin_console_strategies"
   | "trader_admin_console_research_catalog"
   | "trader_admin_console_research_runs"
+  | "trader_admin_discovery_loop"
   | "trader_admin_console_research_detail"
   | "trader_admin_console_research_compare"
   | "trader_admin_console_strategy_detail"

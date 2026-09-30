@@ -26,6 +26,7 @@ import {
 import {
   deleteLiveCapitalEnvelopeRows,
   publishMirroredLiveCapitalEnvelopeV2,
+  TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
 } from "./live-capital-test-envelope";
 
 const hex64 = (seed: string): string => createHash("sha256").update(seed).digest("hex");
@@ -92,6 +93,7 @@ async function initializeRiskAccountStateV2Postgres(
 ) {
   await initializeRiskAccountStateRaw(database, context, state);
   await publishMirroredLiveCapitalEnvelopeV2({
+    sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
     organizationId: context.organizationId,
     accountId: state.accountId,
     exposureLimitNotional: state.accounting.exposureLimitNotional,

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CredentialGateKillWriteFailedError,
+  refusalForPrePostThrow,
+} from "@/lib/trader/execution/v2/credential-gate-kill";
+import {
   evaluatePrePostRecheck,
   type PrePostRecheckFacts,
 } from "@/lib/trader/execution/v2/pre-post-recheck-v2";
@@ -128,5 +132,19 @@ describe("Execution V2 pre-POST recheck (DEE-1151 P1-1)", () => {
     ],
   ])("refuses %s", (_label, facts, reason) => {
     expect(evaluatePrePostRecheck(facts)).toBe(reason);
+  });
+
+  it("keeps the credential reason when the kill-switch write throws", () => {
+    expect(
+      refusalForPrePostThrow(new CredentialGateKillWriteFailedError("CREDENTIAL_NOT_TRADE_SCOPED")),
+    ).toBe("CREDENTIAL_NOT_TRADE_SCOPED");
+    expect(
+      refusalForPrePostThrow(
+        new Error("transaction aborted", {
+          cause: new CredentialGateKillWriteFailedError("CREDENTIAL_REQUIRED"),
+        }),
+      ),
+    ).toBe("CREDENTIAL_REQUIRED");
+    expect(refusalForPrePostThrow(new Error("read failed"))).toBe("PRE_POST_RECHECK_UNAVAILABLE");
   });
 });

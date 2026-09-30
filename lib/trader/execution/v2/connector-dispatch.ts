@@ -4,6 +4,7 @@ enforceServerOnly();
 
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type { ExchangeConnector } from "@/lib/trader/connectors/exchange-connector";
+import { isCredentialGateKillReason } from "@/lib/trader/execution/v2/credential-gate-kill";
 import type { Order } from "@/lib/trader/connectors/types";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import {
@@ -54,14 +55,16 @@ async function submitCommittedAttemptToConnectorV2(
   });
 }
 
-export function createPostgresExecutionV2Service(input: Readonly<{
-  db: WaiaPostgresDb;
-  connectorFor: ExecutionV2ConnectorResolver;
-  assertLiveAuthorized?: (
-    context: OrgContext,
-    request: BindExecutionAuthorityV2Input,
-  ) => Promise<void>;
-}>) {
+export function createPostgresExecutionV2Service(
+  input: Readonly<{
+    db: WaiaPostgresDb;
+    connectorFor: ExecutionV2ConnectorResolver;
+    assertLiveAuthorized?: (
+      context: OrgContext,
+      request: BindExecutionAuthorityV2Input,
+    ) => Promise<void>;
+  }>,
+) {
   return Object.freeze({
     async submit(
       context: OrgContext,
@@ -71,7 +74,8 @@ export function createPostgresExecutionV2Service(input: Readonly<{
         throw new Error("Execution V2 connector cannot represent non-GTC TIF exactly");
       }
       if (request.executionMode === "live") {
-        if (!input.assertLiveAuthorized) throw new Error("Execution V2 live path is not authorized");
+        if (!input.assertLiveAuthorized)
+          throw new Error("Execution V2 live path is not authorized");
         await input.assertLiveAuthorized(context, request);
       }
       const authority = await bindExecutionAuthorityV2Postgres(input.db, context, request);
@@ -81,7 +85,9 @@ export function createPostgresExecutionV2Service(input: Readonly<{
         context,
         authority.attempt.executionAttemptId,
         async (_payload, submittedAuthority) => {
-          if (submittedAuthority.effectIdentityDigestHex !== authority.attempt.effectIdentityDigestHex) {
+          if (
+            submittedAuthority.effectIdentityDigestHex !== authority.attempt.effectIdentityDigestHex
+          ) {
             throw new Error("Execution V2 dispatcher authority mismatch");
           }
           return submitCommittedAttemptToConnectorV2(
@@ -89,6 +95,13 @@ export function createPostgresExecutionV2Service(input: Readonly<{
             authority.attempt,
             submittedAuthority.timeoutMs,
           );
+        },
+        undefined,
+        (reason) => {
+          if (!isCredentialGateKillReason(reason)) return;
+          const drop = (connector as ExchangeConnector & { dropInMemoryCredentials?: () => void })
+            .dropInMemoryCredentials;
+          drop?.call(connector);
         },
       );
       return Object.freeze({ authority, outcome });

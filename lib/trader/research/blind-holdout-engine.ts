@@ -80,9 +80,18 @@ export function computeBlindValidationEvidenceDigest(
   });
 }
 
-export async function runBlindHoldoutValidation(
-  input: RunBlindHoldoutValidationInput,
-): Promise<BlindHoldoutValidationResult> {
+/**
+ * Refuses the holdout before any strategy call. A throw here has not shown
+ * the blind bars to the strategy.
+ */
+export async function assertBlindHoldoutNotYetRead(
+  input: Pick<
+    RunBlindHoldoutValidationInput,
+    "context" | "candidate" | "blindBars" | "expectedBlindDigest"
+  > & {
+    repository: Pick<BlindHoldoutRepository, "getBlindValidationResultForCandidate">;
+  },
+): Promise<void> {
   if (input.candidate.blindUsed) {
     throw new StrategyCandidateBlindLockoutError(input.candidate.id);
   }
@@ -111,14 +120,15 @@ export async function runBlindHoldoutValidation(
       `blind split digest mismatch (expected ${input.expectedBlindDigest}, got ${blindDigest})`,
     );
   }
+}
 
-  const metrics = await input.runBacktest({
-    bars: input.blindBars,
-    strategyId: input.candidate.strategyId,
-    strategyVersion: input.candidate.strategyVersion,
-    paramsJson: input.candidate.paramsJson,
-  });
-
+/** Writes the success row after the strategy has already seen the blind bars. */
+export async function persistBlindHoldoutSuccess(
+  input: Omit<RunBlindHoldoutValidationInput, "runBacktest"> & {
+    metrics: ResearchValidationMetrics;
+  },
+): Promise<BlindHoldoutValidationResult> {
+  const metrics = input.metrics;
   const validatedAt = input.validatedAt ?? new Date();
   const evidenceDigest = computeBlindValidationEvidenceDigest(
     metrics,
@@ -145,4 +155,17 @@ export async function runBlindHoldoutValidation(
   );
 
   return { result, metrics };
+}
+
+export async function runBlindHoldoutValidation(
+  input: RunBlindHoldoutValidationInput,
+): Promise<BlindHoldoutValidationResult> {
+  await assertBlindHoldoutNotYetRead(input);
+  const metrics = await input.runBacktest({
+    bars: input.blindBars,
+    strategyId: input.candidate.strategyId,
+    strategyVersion: input.candidate.strategyVersion,
+    paramsJson: input.candidate.paramsJson,
+  });
+  return persistBlindHoldoutSuccess({ ...input, metrics });
 }

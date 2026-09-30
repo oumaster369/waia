@@ -54,8 +54,9 @@ export type HtxClientConfig = {
 };
 
 export class HtxRestClient {
-  private readonly apiKey: string;
-  private readonly apiSecret: string;
+  private apiKey: string;
+  private apiSecret: string;
+  private inMemoryCredentialsDropped = false;
   private readonly restHost: string;
   private readonly host: string;
   private readonly transport: HtxTransport;
@@ -73,6 +74,23 @@ export class HtxRestClient {
 
   getRestHost(): string {
     return this.restHost;
+  }
+
+  /** Clears the signing key held in this process. Later signed calls fail closed. */
+  dropInMemoryCredentials(): void {
+    this.inMemoryCredentialsDropped = true;
+    this.apiKey = "";
+    this.apiSecret = "";
+  }
+
+  private assertInMemoryCredentials(): void {
+    if (
+      this.inMemoryCredentialsDropped ||
+      this.apiKey.length === 0 ||
+      this.apiSecret.length === 0
+    ) {
+      throw new Error("[trader] HTX in-memory credentials were dropped");
+    }
   }
 
   async getAccounts(): Promise<HtxAccountRow[]> {
@@ -366,6 +384,7 @@ export class HtxRestClient {
   }
 
   private async signedGet<T>(path: string, params: Record<string, string> = {}): Promise<T> {
+    this.assertInMemoryCredentials();
     const query = buildSignedQueryString({
       accessKeyId: this.apiKey,
       secret: this.apiSecret,
@@ -378,6 +397,7 @@ export class HtxRestClient {
   }
 
   private async signedPost<T>(path: string, body: Record<string, string | number>): Promise<T> {
+    this.assertInMemoryCredentials();
     const query = buildSignedPostQueryString({
       accessKeyId: this.apiKey,
       secret: this.apiSecret,

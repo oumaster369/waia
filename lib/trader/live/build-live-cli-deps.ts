@@ -93,6 +93,7 @@ export async function buildLiveCliPostgresDeps(
     context,
     credentialId: input.credentialId,
     credentialService,
+    killSwitchDb: db,
   });
   const connectorForMode = createLiveConnectorForMode(liveConnector);
 

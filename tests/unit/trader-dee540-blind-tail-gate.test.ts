@@ -1,6 +1,5 @@
-import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -107,7 +106,7 @@ describe("DEE-540 blind tail gate", () => {
     );
   });
 
-  it("accepts a content-bound grant and still reports the official holdout as sealed", () => {
+  it("accepts a content-bound grant and still reports the official holdout as sealed", async () => {
     const { scope, digest } = authorizedScope();
     const grant = resolveResearchPipelineCliBlindTail(
       new Map([
@@ -117,19 +116,28 @@ describe("DEE-540 blind tail gate", () => {
     );
     expect(grant.officialHoldoutStatus).toBe("SEALED_NOT_ACCESSED");
     expect(grant.blindAuthorizationScope.blindDigest).toBe(scope.blindDigest);
-    const storePath = join(mkdtempSync(join(tmpdir(), "waia-dee540-")), "consumed.jsonl");
-    consumeDee540BlindTailAuthorization({
-      authorizationDigest: grant.operatorBlindAuthorization,
-      storePath,
+    const seen = new Set<string>();
+    const ex = {
+      insert() {
+        return {
+          values(row: { barContentToken: string }) {
+            if (seen.has(row.barContentToken)) {
+              throw Object.assign(new Error("duplicate"), { code: "23505" });
+            }
+            seen.add(row.barContentToken);
+            return Promise.resolve();
+          },
+        };
+      },
+    };
+    await consumeDee540BlindTailAuthorization(ex as never, {
+      blindDigest: grant.blindAuthorizationScope.blindDigest,
     });
-    expectGateCode(
-      () =>
-        consumeDee540BlindTailAuthorization({
-          authorizationDigest: grant.operatorBlindAuthorization,
-          storePath,
-        }),
-      "DEE540_AUTHORIZATION_ALREADY_CONSUMED",
-    );
+    await expect(
+      consumeDee540BlindTailAuthorization(ex as never, {
+        blindDigest: grant.blindAuthorizationScope.blindDigest,
+      }),
+    ).rejects.toMatchObject({ code: "DEE540_AUTHORIZATION_ALREADY_CONSUMED" });
   });
 
   it("checks the gate before listing bars or running the blind backtest", () => {
@@ -145,18 +153,49 @@ describe("DEE-540 blind tail gate", () => {
     expect(cli.indexOf("resolveResearchPipelineCliBlindTail(flags)")).toBeLessThan(
       cli.indexOf("listMarketBarsPostgres("),
     );
-    expect(orchestrator.indexOf("assertDee540BlindTailAuthorized")).toBeLessThan(
-      orchestrator.indexOf("runBlindHoldoutValidation"),
+    expect(orchestrator.indexOf("assertDee540BlindTailAuthorized(")).toBeLessThan(
+      orchestrator.indexOf("commitDee540BlindHoldout("),
     );
-    expect(orchestrator.indexOf("assertDee540BlindTailAuthorized")).toBeLessThan(
-      orchestrator.indexOf("resolveM9ResearchDatasetPostgres"),
+    expect(orchestrator.indexOf("assertDee540BlindTailAuthorized(")).toBeLessThan(
+      orchestrator.indexOf("resolveM9ResearchDatasetPostgres("),
+    );
+    expect(orchestrator).not.toContain("runBlindHoldoutValidation");
+    const blindCommit = readFileSync(
+      resolve(process.cwd(), "lib/trader/research/dee-540-blind-tail-commit.ts"),
+      "utf8",
     );
     expect(orchestrator.indexOf("assertResearchPipelineRegimeCoverage(")).toBeLessThan(
-      orchestrator.indexOf("consumeDee540BlindTailAuthorization({"),
+      orchestrator.indexOf("commitDee540BlindHoldout("),
     );
-    expect(orchestrator.indexOf("consumeDee540BlindTailAuthorization({")).toBeLessThan(
-      orchestrator.indexOf("return runBlindHoldoutValidation({"),
+    expect(orchestrator).not.toContain("consumeDee540BlindTailAuthorization(");
+    expect(blindCommit.indexOf("consumeDee540BlindTailAuthorization(")).toBeLessThan(
+      blindCommit.indexOf("runBacktest("),
     );
+    expect(blindCommit).toContain("executor: tx");
+    expect(blindCommit).not.toContain("WAIA_DEE540_CONSUMPTION_PATH");
+    expect(blindCommit).not.toContain("replay");
+    expect(orchestrator).not.toContain("walk_forward_validated");
+    expect(orchestrator).not.toContain("blindUsed: false");
+    expect(orchestrator.indexOf("getStrategyCandidateByIdPostgres(")).toBeGreaterThan(-1);
+    expect(orchestrator.indexOf("getStrategyCandidateByIdPostgres(")).toBeLessThan(
+      orchestrator.indexOf("commitDee540BlindHoldout("),
+    );
+    const blindWindow = orchestrator.slice(orchestrator.indexOf("commitDee540BlindHoldout("));
+    expect(blindWindow).toContain("createPostgresOrderRepositoryFromExecutor(executor)");
+    expect(blindWindow).toContain("bindBlindWindowToExecutor(input, executor)");
+    expect(blindWindow).toContain("runIsolatedResearchBacktest(");
+    expect(blindWindow).not.toMatch(/runIsolatedResearchBacktest\(\s*ex\s*,/);
+    expect(blindWindow).not.toContain("resolveOrderRepository");
+    expect(blindWindow).not.toContain("deps: input.deps");
+    const binder = orchestrator.slice(
+      orchestrator.indexOf("function bindBlindWindowToExecutor"),
+      orchestrator.indexOf("function buildIsolatedBacktestInput"),
+    );
+    expect(binder).toContain("createPostgresOrderExecutionServiceFromExecutor(executor)");
+    expect(binder).toContain("createPostgresReconciliationServiceFromExecutor(executor)");
+    expect(binder).toContain("createIntelligenceCycleBundleRepositoryPostgres(executor)");
+    expect(binder).toContain("createForecastDecisionBundleRepositoryPostgres(executor)");
+    expect(binder).toContain("createWp21RuntimeDepsPostgres(executor)");
     const campaign = readFileSync(
       resolve(process.cwd(), "scripts/trader/ri-evidence-campaign.ts"),
       "utf8",

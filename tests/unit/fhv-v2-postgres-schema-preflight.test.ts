@@ -35,13 +35,13 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
   })();
 
   it("accepts all exact migration bytes applied by the full checkout migration job", () => {
-    expect(fullApplied).toHaveLength(227);
+    expect(fullApplied).toHaveLength(229);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: fullApplied }),
     ).not.toThrow();
   });
 
-  it("requires the complete Cody policy prefix and admits 0208-0226 only as explicit compatible additive", () => {
+  it("requires the complete Cody policy prefix and admits 0208-0228 only as explicit compatible additive", () => {
     const journal = JSON.parse(
       readFileSync(join(process.cwd(), "db/migrations_postgres/meta/_journal.json"), "utf8"),
     ) as { entries: Array<{ idx: number; when: number; tag: string }> };
@@ -72,6 +72,8 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
       "0224_trader_risk_current_account_basis",
       "0225_trader_noncapital_domain_ownership_v1",
       "0226_trader_live_capital_envelope_v2",
+      "0227_trader_discovery_loop_postgres_v1",
+      "0228_trader_discovery_loop_postgres_v1_rls",
     ]);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: baseline }),

@@ -1590,6 +1590,20 @@
       "when": 1780000000226,
       "tag": "0226_trader_live_capital_envelope_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 227,
+      "version": "7",
+      "when": 1780000000227,
+      "tag": "0227_trader_discovery_loop_postgres_v1",
+      "breakpoints": true
+    },
+    {
+      "idx": 228,
+      "version": "7",
+      "when": 1780000000228,
+      "tag": "0228_trader_discovery_loop_postgres_v1_rls",
+      "breakpoints": true
     }
   ]
 }

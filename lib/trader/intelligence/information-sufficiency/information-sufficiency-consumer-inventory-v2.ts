@@ -39,6 +39,7 @@ export type InformationSufficiencyConsumerDispositionV2 =
   | "LOW_LEVEL_READ_ONLY_COMPLETENESS"
   | "OBSERVATIONAL_ONLY_NO_AUTHORITY"
   | "EXCLUDED_RESERVED_LIVE_UNGATED"
+  | "SINK_REBIND_NO_AUTHORITY"
   | "EXPORT_ONLY";
 
 export type InformationSufficiencyConsumerInventoryEntryV2 = Readonly<{
@@ -56,7 +57,12 @@ export type InformationSufficiencyConsumerInventoryEntryV2 = Readonly<{
 export const INFORMATION_SUFFICIENCY_CONSUMERS_V2 = [
   {
     path: "lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1.ts",
-    symbols: ["runEvaluationCycle", "evaluateRecordedAnalysis", "UNEXPECTED_ANALYTICAL_AUTHORITY", "OBSERVATIONAL_ONLY"],
+    symbols: [
+      "runEvaluationCycle",
+      "evaluateRecordedAnalysis",
+      "UNEXPECTED_ANALYTICAL_AUTHORITY",
+      "OBSERVATIONAL_ONLY",
+    ],
     imports: ["RUN_EVALUATION_CYCLE"],
     disposition: "OBSERVATIONAL_ONLY_NO_AUTHORITY",
     authorityPurpose: "NONE",
@@ -363,6 +369,13 @@ export const INFORMATION_SUFFICIENCY_CONSUMERS_V2 = [
     authorityPurpose: "NONE",
   },
   {
+    path: "lib/trader/research/research-orchestrator.ts",
+    symbols: ["bindBlindWindowToExecutor", "createForecastDecisionBundleRepositoryPostgres"],
+    imports: ["FORECAST_DECISION_RAW_PERSISTENCE"],
+    disposition: "SINK_REBIND_NO_AUTHORITY",
+    authorityPurpose: "NONE",
+  },
+  {
     path: "lib/trader/paper/index.ts",
     symbols: ["runPaperCycleOnce"],
     imports: ["RUN_PAPER_CYCLE_ONCE"],
@@ -381,24 +394,55 @@ export const INFORMATION_SUFFICIENCY_CONSUMERS_V2 = [
 export const INFORMATION_SUFFICIENCY_PRODUCERS_V2 = [
   {
     path: "lib/trader/paper/research-understanding-v1/evaluate.ts",
-    symbols: ["evaluateSavedResearchUnderstanding", "evaluateInformationSufficiencyV2", "RESEARCH_NON_CAPITAL"],
+    symbols: [
+      "evaluateSavedResearchUnderstanding",
+      "evaluateInformationSufficiencyV2",
+      "RESEARCH_NON_CAPITAL",
+    ],
     disposition: "OWNED_RESEARCH_PROFILE_TWO_LANE_RECEIPT_ONLY",
   },
   {
     path: "lib/trader/paper/research-understanding-v1/repository-postgres.ts",
-    symbols: ["createSavedResearchOwner", "createSavedDomainResearchOwner", "prepareHeldSavedDomainResearchReplay", "persistRequiredInformationProfileWithinTransactionV2Postgres", "readResearchAssignmentWithinHeldTransaction as readAssignment", "captureFixedResearchCompletionSnapshot", "prepareFixedResearchCompletion", "writeFixedResearchCompletion"],
+    symbols: [
+      "createSavedResearchOwner",
+      "createSavedDomainResearchOwner",
+      "prepareHeldSavedDomainResearchReplay",
+      "persistRequiredInformationProfileWithinTransactionV2Postgres",
+      "readResearchAssignmentWithinHeldTransaction as readAssignment",
+      "captureFixedResearchCompletionSnapshot",
+      "prepareFixedResearchCompletion",
+      "writeFixedResearchCompletion",
+    ],
     disposition: "ASSIGNMENT_COMPLETION_BOUND_RESEARCH_PERSISTENCE_REPLAY",
   },
   {
     path: "lib/trader/paper/research-understanding-v1/held-replay.ts",
-    symbols: ["readResearchAssignmentWithinHeldTransaction", "researchActor", "checkRequestedProfile", "ASSIGNMENT_CONFIG_CONFLICT", "prepareCompletion", "writeCompletion", "writeSavedDomainCompletion", "readSavedDomainResearchAssignmentWithinHeldTransaction"],
-    disposition: "FIXED_ASSIGNMENT_READER_REPLAY_AND_HELD_COMPLETION_DELEGATION_NO_CALLER_AUTHORITY",
+    symbols: [
+      "readResearchAssignmentWithinHeldTransaction",
+      "researchActor",
+      "checkRequestedProfile",
+      "ASSIGNMENT_CONFIG_CONFLICT",
+      "prepareCompletion",
+      "writeCompletion",
+      "writeSavedDomainCompletion",
+      "readSavedDomainResearchAssignmentWithinHeldTransaction",
+    ],
+    disposition:
+      "FIXED_ASSIGNMENT_READER_REPLAY_AND_HELD_COMPLETION_DELEGATION_NO_CALLER_AUTHORITY",
   },
   {
     path: "lib/trader/paper/research-understanding-v1/completion-write-postgres.ts",
-    symbols: ["captureFixedResearchCompletionSnapshot", "captureFixedSavedDomainResearchCompletionSnapshot", "prepareFixedResearchCompletion", "writeFixedResearchCompletion", "writeFixedSavedDomainResearchCompletion",
-      "persistInformationSufficiencyReceiptWithinTransactionV2Postgres", "requireInformationSufficiencyAuthorityWithinTransactionV2Postgres",
-      "SOURCE_SNAPSHOT_CONFLICT", "PREDECESSOR_CONFLICT"],
+    symbols: [
+      "captureFixedResearchCompletionSnapshot",
+      "captureFixedSavedDomainResearchCompletionSnapshot",
+      "prepareFixedResearchCompletion",
+      "writeFixedResearchCompletion",
+      "writeFixedSavedDomainResearchCompletion",
+      "persistInformationSufficiencyReceiptWithinTransactionV2Postgres",
+      "requireInformationSufficiencyAuthorityWithinTransactionV2Postgres",
+      "SOURCE_SNAPSHOT_CONFLICT",
+      "PREDECESSOR_CONFLICT",
+    ],
     disposition: "INTERNAL_FIXED_COMPLETION_RECEIPT_WRITER_UNDER_PUBLIC_OWNER_OR_BOUND_HELD_CLIENT",
   },
   {
@@ -455,6 +499,7 @@ export function auditInformationSufficiencyConsumerInventoryV2(): string[] {
       entry.disposition === "LOW_LEVEL_READ_ONLY_COMPLETENESS" ||
       entry.disposition === "OBSERVATIONAL_ONLY_NO_AUTHORITY" ||
       entry.disposition === "EXCLUDED_RESERVED_LIVE_UNGATED" ||
+      entry.disposition === "SINK_REBIND_NO_AUTHORITY" ||
       entry.disposition === "RUN_BACKTEST_TYPE_ONLY"
     ) {
       if (entry.authorityPurpose !== "NONE") {

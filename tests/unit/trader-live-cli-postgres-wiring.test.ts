@@ -200,6 +200,12 @@ describe("trader live-cli Postgres wiring (IMP-U1 S7 / S8)", () => {
 
     expect(mocks.buildLiveCliPostgresDeps).not.toHaveBeenCalled();
     expect(mocks.getWaiaRuntimeDb).not.toHaveBeenCalled();
+    expect(mocks.createLiveHtxConnector).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentialId: "cred-1",
+        killSwitchDb: { sqlite: expect.anything() },
+      }),
+    );
     expect(mocks.runLiveCycleOnce).toHaveBeenCalledOnce();
   });
 

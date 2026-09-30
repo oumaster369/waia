@@ -269,6 +269,7 @@ export async function dispatchAndRecordExecutionAttemptV2(
   executionAttemptId: string,
   submit: ExecutionV2NetworkSubmitter<ExecutionV2VenueObservation>,
   afterSubmitStarted?: () => Promise<void>,
+  onRefusedBeforePost?: (reason: string) => void,
 ): Promise<DispatchAndRecordExecutionV2Result> {
   const dispatched = await dispatchCommittedExecutionAttemptV2(
     db,
@@ -276,6 +277,7 @@ export async function dispatchAndRecordExecutionAttemptV2(
     executionAttemptId,
     submit,
     afterSubmitStarted,
+    onRefusedBeforePost,
   );
   if (dispatched.status === "REFUSED_ALREADY_STARTED") {
     if (dispatched.lifecycleState === "SUBMIT_STARTED") {

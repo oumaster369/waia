@@ -11,6 +11,7 @@ const LINKS = {
   research: [
     { href: "/admin/fhv-operations", label: "Операции исследования" },
     { href: "/admin/research?tab=qualification", label: "Диагностика оценки" },
+    { href: "/admin/research/discovery", label: "Discovery" },
     { href: "/admin/account-observation", label: "Наблюдение счетов" },
   ],
 } as const;

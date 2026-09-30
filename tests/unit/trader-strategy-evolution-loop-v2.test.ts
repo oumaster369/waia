@@ -1,7 +1,3 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_DISCOVERY_RUN_CONFIG } from "@/lib/trader/discovery/discovery.types";
@@ -78,8 +74,7 @@ function parent(id: string, digest: string): StrategyParentRefV2 {
 const IS_NETS = passingIsDateNets(2022);
 
 function freshJournal() {
-  const dir = mkdtempSync(join(tmpdir(), "waia-admission-"));
-  return AppendOnlyStrategyAdmissionJournal.openDurable(join(dir, "journal.jsonl"));
+  return AppendOnlyStrategyAdmissionJournal.openDurableMemory();
 }
 const VALIDATION_NETS = admissionDateNets(2024, "0.02", 5);
 
@@ -405,6 +400,8 @@ describe("DEE-646 strategy evolution research-v2 spine", () => {
     expect(failed.walkForward.admission.scored).toBe(false);
     expect(failed.walkForward.failureReasons).toContain("IS_NOT_PASSED");
     expect(failed.walkForward.admission.assessment.verdict).toBe("rejected");
+    expect(failed.walkForward.evaluation.dateNets).toBeUndefined();
+    expect(failed.development.evaluation.dateNets).toBeDefined();
     expect(
       journal.splitUseCount({
         specSha256: STRATEGY_ADMISSION_SPEC_SHA256,

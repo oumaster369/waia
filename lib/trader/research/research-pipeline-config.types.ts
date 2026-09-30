@@ -31,9 +31,14 @@ export type ResearchPipelineBacktestOptions = {
    * validation and walk-forward only. Evidence records an empty blind result.
    */
   skipBlindTail?: boolean;
-  /** One-shot authorization consume file. Defaults to var/waia/dee540-consumed.jsonl. */
-  blindAuthorizationConsumptionPath?: string;
   validationArtifactSink?: ResearchValidationBacktestArtifactSink;
+  /** Cycle results from the blind window only. Not read by production callers. */
+  blindArtifactSink?: ResearchValidationBacktestArtifactSink;
+  /**
+   * When false, research windows do not build replay fused context. Trading
+   * permission then stays on the quality gate. Production callers leave this unset.
+   */
+  enableReplayFusedContext?: boolean;
   /** Optional replay provider sidecar for tier-2 cross-venue/crowd/global in M9 artifacts. */
   providerSidecar?: ReplayProviderSidecar;
   retentionMode?: ReplayRetentionMode;

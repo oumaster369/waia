@@ -1,11 +1,11 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import {
   AppendOnlyStrategyAdmissionJournal,
+  selectStrategyAdmissionSharpeVariance,
   STRATEGY_ADMISSION_CONTINUOUS_IS_MIN_TRADES,
   STRATEGY_ADMISSION_CONTINUOUS_VALIDATION_MIN_TRADES,
   STRATEGY_ADMISSION_EVENT_IS_MIN_DATES,
@@ -21,6 +21,9 @@ import {
   strategyAdmissionHolmPasses,
   studentTOneSidedUpperTail,
 } from "@/lib/trader/research/strategy-admission-v1";
+import { commitStrategyAdmissionJournal } from "@/lib/trader/research/strategy-admission-journal-postgres";
+import { recordQualificationV2 } from "@/lib/trader/research-v2/qualification-records-v2";
+import * as pgSchema from "@/db/schema.postgres";
 import { applyHolmAdjustment } from "@/lib/trader/research-v2/multiple-testing-holm-v2";
 import {
   STRATEGY_ADMISSION_SPEC_SHA256,
@@ -400,10 +403,10 @@ describe("strategy admission v1", () => {
     expect(haircut.verdict).not.toBe("passed_is");
   });
 
-  it("keeps a one-shot validation across a new journal on the same file", () => {
-    const dir = mkdtempSync(join(tmpdir(), "waia-admission-"));
-    const path = join(dir, "journal.jsonl");
-    const first = AppendOnlyStrategyAdmissionJournal.openDurable(path);
+  it("keeps a one-shot validation across a reloaded Postgres snapshot", async () => {
+    const first = AppendOnlyStrategyAdmissionJournal.openDurableMemory();
+    const separate = AppendOnlyStrategyAdmissionJournal.openDurableMemory();
+    expect(separate.list()).toHaveLength(0);
     first.registerFamily(SPEC, 1);
     first.append({
       correctsRowIndex: null,
@@ -425,9 +428,76 @@ describe("strategy admission v1", () => {
       flags: [],
       countsAsSplitUse: true,
     });
-    const second = AppendOnlyStrategyAdmissionJournal.openDurable(path);
+    const families = new Map<string, number>();
+    const consumes = new Set<string>();
+    const storedRows: unknown[] = [];
+    const ex = {
+      insert(table: unknown) {
+        return {
+          values(value: {
+            specSha256: string;
+            familySize?: number;
+            hypothesisId?: string;
+            split?: string;
+            payloadJson?: unknown;
+          }) {
+            const apply = (onConflict: boolean) => {
+              if (table === pgSchema.traderStrategyAdmissionFamily) {
+                if (!families.has(value.specSha256)) {
+                  families.set(value.specSha256, value.familySize ?? 0);
+                }
+                return;
+              }
+              if (table === pgSchema.traderStrategyAdmissionSplitConsume) {
+                const key = `${value.specSha256}:${value.hypothesisId}:${value.split}`;
+                if (consumes.has(key)) {
+                  throw Object.assign(new Error("duplicate"), { code: "23505" });
+                }
+                consumes.add(key);
+                return;
+              }
+              if (!onConflict) storedRows.push(value.payloadJson);
+            };
+            const query = {
+              then(onFulfilled: (value: void) => void, onRejected?: (error: unknown) => void) {
+                return Promise.resolve()
+                  .then(() => apply(false))
+                  .then(onFulfilled, onRejected);
+              },
+              onConflictDoNothing() {
+                return Promise.resolve().then(() => apply(true));
+              },
+            };
+            return query;
+          },
+        };
+      },
+      select() {
+        return {
+          from() {
+            return {
+              where() {
+                return {
+                  limit() {
+                    const family = [...families.entries()][0];
+                    return Promise.resolve(family ? [{ familySize: family[1] }] : []);
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+    await commitStrategyAdmissionJournal(ex as never, first, { rowCount: 0, families: new Map() });
+    const second = AppendOnlyStrategyAdmissionJournal.fromSnapshot({
+      families: [...families.entries()].map(([specSha256, familySize]) => ({
+        specSha256,
+        familySize,
+      })),
+      rows: storedRows as never,
+    });
     expect(second.registeredFamilySize(SPEC)).toBe(1);
-    expect(second.durable).toBe(true);
     expect(() =>
       second.assertSplitAvailable({
         specSha256: SPEC,
@@ -435,10 +505,78 @@ describe("strategy admission v1", () => {
         split: "validation",
       }),
     ).toThrow(/split_already_used/);
-    writeFileSync(join(dir, "not-a-directory"), "x");
+    const again = AppendOnlyStrategyAdmissionJournal.openDurableMemory();
+    again.registerFamily(SPEC, 1);
+    again.append({
+      correctsRowIndex: null,
+      hypothesisId: "same-hypothesis",
+      specSha256: SPEC,
+      split: "validation",
+      familySize: 1,
+      configParamsJson: "{}",
+      nEvents: 20,
+      nDates: 20,
+      netMeanDate: "0.01000000",
+      seMethod: "newey_west",
+      nwLag: 1,
+      t: "2.00000000",
+      pRaw: "0.02000000",
+      pHolm: "0.02000000",
+      verdict: "passed_validation",
+      verdictReason: "passed",
+      flags: [],
+      countsAsSplitUse: true,
+    });
+    await expect(
+      commitStrategyAdmissionJournal(ex as never, again, { rowCount: 0, families: new Map() }),
+    ).rejects.toMatchObject({ code: "split_already_used" });
+  });
+
+  it("treats trial-Sharpe variance just above 1e-12 as a near-duplicate family", () => {
+    const selected = selectStrategyAdmissionSharpeVariance({
+      crossSectional: 1.1e-12,
+      estimation: 0.00419,
+      sharpe: 0.17075689258423518,
+    });
+    expect(selected.nearDuplicate).toBe(true);
+    expect(selected.variance).toBe(0.00419);
+    const dust = reviewerIdenticalTrialSharpe();
+    const bumped = dust.observations.map((row) => ({
+      utcDate: row.utcDate,
+      net: (Number(row.net) + 1e-6).toFixed(8),
+    }));
+    const trials = Array.from({ length: 51 }, (_, index) => ({
+      hypothesisId: `near-${index}`,
+      observations: index === 1 ? bumped : dust.observations,
+    }));
+    const haircut = admit(
+      {
+        declaredFamilySize: 51,
+        trials,
+        confirmatoryIndex: 0,
+        kind: "event",
+        horizonBars: 1,
+      },
+      dust.observations,
+    );
+    expect(Number(haircut.dsr)).toBeLessThan(0.95);
+    expect(Number(haircut.dsr)).toBeGreaterThan(0.5);
+    expect(Number(haircut.dsr)).toBeCloseTo(0.672, 1);
+  });
+
+  it("rejects public replay so it cannot skip a split consume", () => {
     expect(() =>
-      AppendOnlyStrategyAdmissionJournal.openDurable(join(dir, "not-a-directory", "journal.jsonl")),
-    ).toThrow(/admission_journal_unavailable/);
+      recordQualificationV2({
+        partition: "DEVELOPMENT",
+        replay: true,
+      } as never),
+    ).toThrow(/admission_replay_read_only/);
+    const source = readFileSync(
+      resolve(process.cwd(), "lib/trader/research/strategy-admission-v1.ts"),
+      "utf8",
+    );
+    expect(source).not.toContain("WAIA_STRATEGY_ADMISSION_JOURNAL_PATH");
+    expect(source).not.toContain("openDurable(");
   });
 
   it("marks an implausibly strong IS result audit_required", () => {
