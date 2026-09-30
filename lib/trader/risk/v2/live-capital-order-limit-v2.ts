@@ -5,8 +5,9 @@ import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { compareDecimal, formatDecimal, minDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
 import {
   LIVE_CAPITAL_ENVELOPE_V2,
-  decideLiveCapitalEnvelopePublicationV2,
+  decideLiveCapitalEnvelopeWindowV2,
   liveCapitalEnvelopeCommandSchemaV2,
+  readStoredSourceMethodQualifiedV2,
   sealLiveCapitalEnvelopeV2,
 } from "@/lib/trader/risk/v2/live-capital-envelope-v2";
 import type { RiskAccountAccountingV2 } from "@/lib/trader/risk/v2/risk-admission-service-v2";
@@ -17,6 +18,7 @@ export const LIVE_CAPITAL_ORDER_LIMIT_REASONS = [
   "LIVE_CAPITAL_ENVELOPE_ABSENT",
   "LIVE_CAPITAL_ENVELOPE_STALE",
   "LIVE_CAPITAL_IDENTITY_CHANGED",
+  "SOURCE_METHOD_UNQUALIFIED",
   "LIVE_CAPITAL_LIMIT_MISMATCH",
   "LIVE_CAPITAL_NOT_POSITIVE",
   "LIVE_CAPITAL_LOSS_LIMIT_EXCEEDED",
@@ -135,10 +137,22 @@ export async function requireLiveCapitalOrderLimitV2(
   if (receipt.contentDigest !== current.envelopeDigest) {
     throw new LiveCapitalOrderLimitRefusedError("LIVE_CAPITAL_IDENTITY_CHANGED");
   }
+  const journalRows = await tx
+    .select({ bodyText: pgSchema.traderLiveCapitalEnvelopeJournalV2.bodyText })
+    .from(pgSchema.traderLiveCapitalEnvelopeJournalV2)
+    .where(
+      and(
+        eq(pgSchema.traderLiveCapitalEnvelopeJournalV2.organizationId, organizationId),
+        eq(pgSchema.traderLiveCapitalEnvelopeJournalV2.accountId, accountId),
+        eq(pgSchema.traderLiveCapitalEnvelopeJournalV2.commandId, current.commandId),
+        eq(pgSchema.traderLiveCapitalEnvelopeJournalV2.stage, "PUBLISHED"),
+      ),
+    )
+    .limit(1);
   const nowUtc = await clockNowUtc(tx);
-  const publication = decideLiveCapitalEnvelopePublicationV2({
+  const publication = decideLiveCapitalEnvelopeWindowV2({
     liveCapitalEnvelope: receipt,
-    sourceMethodQualified: false,
+    sourceMethodQualified: readStoredSourceMethodQualifiedV2(journalRows[0]?.bodyText),
     bound: {
       organizationId,
       accountId,
@@ -148,6 +162,9 @@ export async function requireLiveCapitalOrderLimitV2(
     },
   });
   if (publication.decision === "REFUSED") {
+    if (publication.reason === "SOURCE_METHOD_UNQUALIFIED") {
+      throw new LiveCapitalOrderLimitRefusedError("SOURCE_METHOD_UNQUALIFIED");
+    }
     if (publication.reason === "LIVE_CAPITAL_ENVELOPE_STALE") {
       throw new LiveCapitalOrderLimitRefusedError("LIVE_CAPITAL_ENVELOPE_STALE");
     }

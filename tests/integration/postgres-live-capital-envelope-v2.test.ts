@@ -9,6 +9,7 @@ import {
   type LiveCapitalEnvelopeCommandV2,
 } from "@/lib/trader/risk/v2/live-capital-envelope-v2";
 import type { LiveCapitalObservedIdentityV2 } from "@/lib/trader/risk/v2/live-capital-envelope-postgres";
+import { TEST_HUMAN_SOURCE_METHOD_QUALIFIED } from "../helpers/live-capital-test-envelope";
 import {
   advanceLiveCapitalEnvelopeStageV2,
   gateLiveCapitalIssueV2,
@@ -136,12 +137,14 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
       const issued = command(organizationId, accountId);
       for (const stage of LIVE_CAPITAL_ENVELOPE_STAGES_V2.slice(0, stop + 1)) {
         await advanceLiveCapitalEnvelopeStageV2(client, {
+          sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
           command: issued,
           boundOrganizationId: organizationId,
           stage,
           observed: watch(issued),
         });
         await advanceLiveCapitalEnvelopeStageV2(client, {
+          sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
           command: issued,
           boundOrganizationId: organizationId,
           stage,
@@ -150,11 +153,13 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
         expect(await stageCount(organizationId, issued.commandId, stage)).toBe(1);
       }
       const published = await produceLiveCapitalEnvelopeV2(client, {
+        sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
         command: issued,
         boundOrganizationId: organizationId,
         observed: watch(issued),
       });
       const replay = await produceLiveCapitalEnvelopeV2(client, {
+        sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
         command: issued,
         boundOrganizationId: organizationId,
         observed: watch(issued),
@@ -197,11 +202,13 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
       const rightCommand = command(organizationId, accountId);
       const [first, second] = await Promise.all([
         produceLiveCapitalEnvelopeV2(left, {
+          sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
           command: leftCommand,
           boundOrganizationId: organizationId,
           observed: watch(leftCommand),
         }),
         produceLiveCapitalEnvelopeV2(right, {
+          sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
           command: rightCommand,
           boundOrganizationId: organizationId,
           observed: watch(rightCommand),
@@ -244,6 +251,7 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
     for (const item of cases) {
       const issued = command(organizationId, item.accountId);
       const result = await produceLiveCapitalEnvelopeV2(client, {
+        sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
         command: issued,
         boundOrganizationId: organizationId,
         observed: watch(issued, item.observed),
@@ -298,6 +306,7 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
 
     const stale = command(organizationId, accountId, STALE);
     const staleResult = await produceLiveCapitalEnvelopeV2(client, {
+      sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
       command: stale,
       boundOrganizationId: organizationId,
       observed: watch(stale),
@@ -311,6 +320,7 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
       orderId: null,
     });
     const staleReplay = await produceLiveCapitalEnvelopeV2(client, {
+      sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
       command: stale,
       boundOrganizationId: organizationId,
       observed: watch(stale),
@@ -326,6 +336,7 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
 
     const issued = command(organizationId, `${accountId}-live`);
     const published = await produceLiveCapitalEnvelopeV2(client, {
+      sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
       command: issued,
       boundOrganizationId: organizationId,
       observed: watch(issued),
@@ -434,6 +445,7 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
     const issued = command(foreign.organizationId, "acct-foreign");
     await expect(
       produceLiveCapitalEnvelopeV2(client, {
+        sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
         command: issued,
         boundOrganizationId: home.organizationId,
         observed: watch(issued),
@@ -456,6 +468,7 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
     });
     await expect(
       produceLiveCapitalEnvelopeV2(client, {
+        sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
         command: heartbeat,
         boundOrganizationId: home.organizationId,
         observed: watch(heartbeat),
@@ -483,6 +496,7 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
     ) {
       const issued = command(organizationId, accountId, window);
       const published = await produceLiveCapitalEnvelopeV2(client, {
+        sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
         command: issued,
         boundOrganizationId: organizationId,
         observed: watch(issued),
@@ -506,6 +520,7 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
 
     const policy = await publish("acct-policy-after");
     const policyReplay = await produceLiveCapitalEnvelopeV2(client, {
+      sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
       command: policy,
       boundOrganizationId: organizationId,
       observed: watch(policy, { policyDigest: changedPolicy }),
@@ -519,6 +534,7 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
     });
     await expectCleared("acct-policy-after", policy.commandId);
     await produceLiveCapitalEnvelopeV2(client, {
+      sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
       command: policy,
       boundOrganizationId: organizationId,
       observed: watch(policy, { policyDigest: changedPolicy }),

@@ -312,6 +312,13 @@ run_case "cloud agent cursor/dee branch aligned metadata" 0 \
   "cursor/dee-1151-p0-1-execution-v2-path-8933" \
   "main" || fail=1
 
+run_case "cloud agent alphanumeric suffix aligned metadata" 0 \
+  "DEE-1151 fix(trader): fail closed on live credentials and source method" \
+  "**Linear:** \`DEE-1151\`
+**Tier:** T3" \
+  "cursor/dee-1151-p1-fail-closed-a50e" \
+  "main" || fail=1
+
 run_case "cursor branch without dee identity fails" 1 \
   "DEE-1151 feat(execution): paper and live create Execution V2" \
   "**Linear:** \`DEE-1151\`

@@ -6,7 +6,7 @@
     "db:generate": "drizzle-kit generate",
     "db:generate:postgres": "drizzle-kit generate --config drizzle.postgres.config.ts",
     "db:migrate": "drizzle-kit migrate",
-    "db:migrate:postgres": "drizzle-kit migrate --config drizzle.postgres.config.ts",
+    "db:migrate:postgres": "tsx scripts/ops/postgres-migrate-with-session-lock-budget.ts",
     "db:postgres:up": "docker compose -f docker-compose.postgres-validate.yml up -d --wait",
     "db:postgres:down": "docker compose -f docker-compose.postgres-validate.yml down",
     "db:postgres:auth-prelude": "tsx scripts/postgres-validation/apply-auth-prelude.ts",

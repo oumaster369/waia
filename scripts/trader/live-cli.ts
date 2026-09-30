@@ -250,6 +250,7 @@ async function buildLiveCycleDeps(
     context,
     credentialId,
     credentialService,
+    killSwitchDb: { sqlite: db },
   });
   const connectorForMode = createLiveConnectorForMode(liveConnector);
 

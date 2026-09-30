@@ -8,6 +8,11 @@ import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { compareDecimal } from "@/lib/trader/risk/numeric";
 import { HtxConnectorValidationError } from "@/lib/trader/connectors/htx/errors";
+import {
+  emitCredentialGateKillTelemetry,
+  isCredentialGateKillReason,
+  writeOrganizationCredentialKillSwitchPostgres,
+} from "@/lib/trader/execution/v2/credential-gate-kill";
 import { resolveOrg0OrganizationId } from "@/lib/trader/live/org0-allowlist";
 import { requireHtxStoredPermissionMetadata } from "@/lib/trader/security/htx-secure-credential-resolver";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
@@ -72,7 +77,8 @@ export type ExecutionV2LiveGateRequest = Readonly<{
   plan: Readonly<{ approvedNotionalCeiling: string }>;
 }>;
 
-type LiveGateExecutor = Pick<WaiaPostgresDb, "select" | "execute">;
+type LiveGateExecutor = Pick<WaiaPostgresDb, "select" | "execute" | "insert" | "update"> &
+  Partial<Pick<WaiaPostgresDb, "transaction">>;
 
 function refuse(reason: ExecutionV2LiveGateReason): ExecutionV2LiveGateVerdict {
   return Object.freeze({ ok: false, reason });
@@ -289,8 +295,24 @@ export async function assertExecutionV2LiveGatesPostgres(
   request: ExecutionV2LiveGateRequest,
   env?: Record<string, unknown>,
 ): Promise<void> {
+  const scoped = requireOrgContext(context.organizationId);
   const verdict = evaluateExecutionV2LiveGates(
     await loadExecutionV2LiveGateFactsPostgres(executor, context, request, env),
   );
-  if (!verdict.ok) throw new ExecutionV2LiveGateRefusedError(verdict.reason);
+  if (verdict.ok) return;
+  if (isCredentialGateKillReason(verdict.reason)) {
+    const killSwitchWrite = await writeOrganizationCredentialKillSwitchPostgres(
+      executor,
+      scoped.organizationId,
+      verdict.reason,
+      { joinCurrentTransaction: true },
+    );
+    await emitCredentialGateKillTelemetry({
+      organizationId: scoped.organizationId,
+      outcome: verdict.reason,
+      errorClass: "ExecutionV2LiveGateRefusedError",
+      killSwitchWrite,
+    });
+  }
+  throw new ExecutionV2LiveGateRefusedError(verdict.reason);
 }
