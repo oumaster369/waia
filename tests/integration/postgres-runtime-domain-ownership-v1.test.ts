@@ -107,9 +107,9 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
   }
   beforeAll(async () => {
     assertRecordedAnalysisTestDatabase(url); client = postgres(url!, { max: 4, debug: (_id, query, params) => trace.push({ query, params: [...params] }) });
-    expect(Number((await client`select count(*)::int n from drizzle.__drizzle_migrations`)[0]!.n)).toBe(229);
+    expect(Number((await client`select count(*)::int n from drizzle.__drizzle_migrations`)[0]!.n)).toBe(230);
     expect(await client`select created_at::text from drizzle.__drizzle_migrations order by created_at desc limit 2`)
-      .toEqual([{ created_at: "1780000000228" }, { created_at: "1780000000227" }]);
+      .toEqual([{ created_at: "1780000000229" }, { created_at: "1780000000228" }]);
   });
   beforeEach(async () => { userId = randomUUID(); organizationId = await seedWp13User(url!, userId, "DEE1136 synthetic domain proof");
     directory = await mkdtemp(path.join(tmpdir(), "dee1136-native-")); trace.length = 0; });

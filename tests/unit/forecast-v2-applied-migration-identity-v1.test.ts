@@ -115,6 +115,7 @@ describe("Forecast V2 applied migration identity", () => {
       "0226_trader_live_capital_envelope_v2",
       "0227_trader_discovery_loop_postgres_v1",
       "0228_trader_discovery_loop_postgres_v1_rls",
+      "0229_trader_observation_read_only_credential_v1",
     ]);
     expect(hashFile("0146_trader_forecast_v2_a3_storage_representation_v1")).toBe(
       identity.bindings.find((b) => b.tag.startsWith("0146_"))!.contentHash,

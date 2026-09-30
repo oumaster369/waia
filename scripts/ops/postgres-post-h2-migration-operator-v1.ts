@@ -104,6 +104,7 @@ const OBSERVATION_CREDENTIAL_COLUMNS = Object.freeze([
   "encrypted_payload",
   "exchange_account_id",
   "id",
+  "observation_read_only",
   "organization_id",
   "payload_key_version",
   "status",

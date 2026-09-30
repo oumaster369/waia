@@ -70,6 +70,7 @@ const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag:
   { idx: 226, when: 1780000000226, tag: "0226_trader_live_capital_envelope_v2" },
   { idx: 227, when: 1780000000227, tag: "0227_trader_discovery_loop_postgres_v1" },
   { idx: 228, when: 1780000000228, tag: "0228_trader_discovery_loop_postgres_v1_rls" },
+  { idx: 229, when: 1780000000229, tag: "0229_trader_observation_read_only_credential_v1" },
 ];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [

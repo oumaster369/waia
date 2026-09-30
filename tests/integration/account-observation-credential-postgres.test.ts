@@ -145,6 +145,7 @@ describe.skipIf(!enabled)(
         status?: string;
         configurationRevision?: string;
         symbols?: readonly string[];
+        permissionMetadata?: string;
       } = {},
     ) {
       const organizationId = randomUUID();
@@ -160,7 +161,8 @@ describe.skipIf(!enabled)(
         wrapped_dek_key_version, wrapped_dek_key, permission_metadata, status)
         VALUES (${credentialId}, ${organizationId}, 'htx', ${exchangeAccountId}, 'mask****',
           ${envelope.encryptedPayload}, ${envelope.payloadKeyVersion},
-          ${envelope.wrappedDekKeyVersion}, ${envelope.wrappedDekKey}, '{"read":true}',
+          ${envelope.wrappedDekKeyVersion}, ${envelope.wrappedDekKey},
+          ${options.permissionMetadata ?? '{"scopes":["read"]}'},
           ${options.status ?? "active"})`;
       if (options.assigned !== false) {
         await admin`INSERT INTO public.trader_account_collection_state
@@ -335,6 +337,17 @@ describe.skipIf(!enabled)(
         // DEE-1015 deliberately does not enable FORCE RLS on exchange_credentials.
         forced_rls: false,
       });
+    });
+
+    it("refuses a trade-scoped credential before plaintext is returned", async () => {
+      const assignment = await seed({ permissionMetadata: '{"scopes":["read","trade"]}' });
+      const reader = await credentialReader([assignment]);
+      await expect(
+        reader.getDecryptedCredentials(
+          { organizationId: assignment.organizationId },
+          assignment.credentialId,
+        ),
+      ).rejects.toThrow("ACCOUNT_OBSERVATION_CREDENTIAL_REFUSED:NOT_READ_ONLY");
     });
 
     it("decrypts exactly the assigned credential through the existing crypto path", async () => {
@@ -754,7 +767,7 @@ describe.skipIf(!enabled)(
         // PostgreSQL REVOKE table SELECT also revokes the original column SELECT ACLs.
         // Restore that exact baseline rather than mistaking a later refusal for a new case.
         const restoreProjection = privilege === "SELECT ON public.exchange_credentials" && grantee === parent
-          ? `; GRANT SELECT (id, organization_id, exchange_account_id, status, encrypted_payload,
+          ? `; GRANT SELECT (id, organization_id, exchange_account_id, status, observation_read_only, encrypted_payload,
               payload_key_version, wrapped_dek_key_version, wrapped_dek_key) ON public.exchange_credentials TO ${parent}`
           : "";
         await changedPosture(`GRANT ${privilege} TO ${grantee}`, `REVOKE ${privilege} FROM ${grantee}${restoreProjection}`);
