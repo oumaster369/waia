@@ -107,6 +107,20 @@ async function dbNow(tx: Sql): Promise<string> {
   return row!.now;
 }
 
+async function journalInvalidatedOnce(
+  tx: Sql,
+  command: LiveCapitalEnvelopeCommandV2,
+  rows: readonly JournalRow[],
+  fields: {
+    envelopeDigest: string | null;
+    basisDigest: string | null;
+    reason: string;
+  },
+): Promise<void> {
+  if (rows.some((row) => row.stage === "INVALIDATED")) return;
+  await journal(tx, command, "INVALIDATED", fields);
+}
+
 async function journal(
   tx: Sql,
   command: LiveCapitalEnvelopeCommandV2,
@@ -285,7 +299,12 @@ export async function advanceLiveCapitalEnvelopeStageV2(
     await lockScope(tx, command.organizationId, command.accountId);
     const rows = await loadJournal(tx, command);
     const invalidated = rows.find((row) => row.stage === "INVALIDATED");
-    if (invalidated) return refused(invalidated.reason ?? "LIVE_CAPITAL_ENVELOPE_STALE", true);
+    const publishedRow = rows.find((row) => row.stage === "PUBLISHED");
+    // A published command that was later invalidated stays closed. An invalidated
+    // command that never published is decided again; a second INVALIDATED row is not inserted.
+    if (invalidated && publishedRow) {
+      return refused(invalidated.reason ?? "LIVE_CAPITAL_ENVELOPE_STALE", true);
+    }
     const existing = rows.find((row) => row.stage === stage);
     if (existing?.stage === "PUBLISHED" && existing.envelope_digest && existing.basis_digest) {
       return recheckPublishedAuthorityV2(
@@ -362,10 +381,11 @@ export async function advanceLiveCapitalEnvelopeStageV2(
       sourceMethodQualified: input.sourceMethodQualified === true,
       bound: { ...input.observed, nowUtc },
     });
-    const current = await loadCurrent(tx, command.organizationId, command.accountId);
+    let current = await loadCurrent(tx, command.organizationId, command.accountId);
     if (decision.decision !== "PUBLISHED") {
+      if (invalidated) return refused(invalidated.reason ?? decision.reason, true);
       if (current?.command_id === command.commandId) {
-        await journal(tx, command, "INVALIDATED", {
+        await journalInvalidatedOnce(tx, command, rows, {
           envelopeDigest: current.envelope_digest,
           basisDigest: current.basis_digest,
           reason: decision.reason,
@@ -378,15 +398,38 @@ export async function advanceLiveCapitalEnvelopeStageV2(
           basisDigest: current.basis_digest,
         };
       }
-      await journal(tx, command, "INVALIDATED", {
+      await journalInvalidatedOnce(tx, command, rows, {
         envelopeDigest: receipt.contentDigest,
         basisDigest: null,
         reason: decision.reason,
       });
       return refused(decision.reason, true);
     }
-    if (current && current.command_id !== command.commandId)
+    if (!current && rows.some((row) => row.stage === "ADMITTED")) {
+      await tx`
+        insert into trader_live_capital_envelope_current_v2 (
+          organization_id, account_id, command_id, envelope_digest, policy_digest, release_sha,
+          basis_digest, revision, updated_at)
+        values (
+          ${command.organizationId}::uuid, ${command.accountId}, ${command.commandId}::uuid,
+          ${receipt.contentDigest}, ${command.policyDigest}, ${command.releaseSha},
+          null, 1, ${nowUtc}::timestamptz)`;
+      current = {
+        command_id: command.commandId,
+        envelope_digest: receipt.contentDigest,
+        policy_digest: command.policyDigest,
+        release_sha: command.releaseSha,
+        basis_digest: null,
+      };
+    }
+    if (current && current.command_id !== command.commandId) {
+      await journalInvalidatedOnce(tx, command, rows, {
+        envelopeDigest: receipt.contentDigest,
+        basisDigest: null,
+        reason: "OVERLAPPING_AUTHORITY",
+      });
       return refused("OVERLAPPING_AUTHORITY");
+    }
     if (stage === "ADMITTED") {
       if (!current) {
         await tx`
@@ -410,6 +453,11 @@ export async function advanceLiveCapitalEnvelopeStageV2(
       current.command_id !== command.commandId ||
       current.envelope_digest !== receipt.contentDigest
     ) {
+      await journalInvalidatedOnce(tx, command, rows, {
+        envelopeDigest: receipt.contentDigest,
+        basisDigest: null,
+        reason: "OVERLAPPING_AUTHORITY",
+      });
       return refused("OVERLAPPING_AUTHORITY");
     }
     const basis = liveCapitalBasisBindingV2(receipt);
