@@ -44,6 +44,30 @@ export function emitExecutionTerminalEvent(
   emitTraderTelemetry(payload, sink);
 }
 
+export type UnresolvedExecutionAttemptEventInput = {
+  organizationId: string;
+  executionAttemptId: string;
+  outcome: "CONNECTOR_UNCERTAIN" | "RECONCILIATION_REQUIRED";
+};
+
+/** Operator signal for an Execution V2 attempt that is not yet a venue terminal. */
+export function emitUnresolvedExecutionAttemptV2(
+  input: UnresolvedExecutionAttemptEventInput,
+  sink?: WaiaTraderTelemetrySink,
+): void {
+  emitTraderTelemetry(
+    {
+      event: "waia_trader_event",
+      kind: "execution",
+      organization_id: input.organizationId,
+      outcome: input.outcome,
+      severity: "critical",
+      execution_attempt_id: input.executionAttemptId,
+    },
+    sink,
+  );
+}
+
 export function emitExecutionTransitionEvent(
   input: ExecutionTransitionEventInput,
   sink?: WaiaTraderTelemetrySink,

@@ -37,9 +37,16 @@ export function splitStaleAccounts(
   return { active, quiet };
 }
 
+/** Attempt states that still have no accepted, rejected, filled, or cancelled terminal. */
+export const UNRESOLVED_EXECUTION_ATTEMPT_LIFECYCLE_STATES = [
+  "SUBMIT_STARTED",
+  "RECONCILIATION_REQUIRED",
+] as const;
+
 export type AttentionInput = {
   reconciliationRequiredOrderIds: string[];
   sentWithoutReportOrderIds: string[];
+  unresolvedExecutionAttemptIds: string[];
   runtimeHalted: boolean;
   killed: boolean;
   lotsMissingGuardian: string[];
@@ -72,6 +79,14 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
       severity: "critical",
       reason: "UNKNOWN_ORDER_OUTCOME",
       entityIds: unknown,
+      href: "/admin/orders",
+    });
+  }
+  if (input.unresolvedExecutionAttemptIds.length > 0) {
+    items.push({
+      severity: "critical",
+      reason: "UNRESOLVED_EXECUTION_ATTEMPT",
+      entityIds: input.unresolvedExecutionAttemptIds,
       href: "/admin/orders",
     });
   }
@@ -157,5 +172,5 @@ export function buildAttention(input: AttentionInput): AttentionItem[] {
     });
   }
   if (input.noTradeCount < 0) return [];
-  return items.map(item => ({ ...item, entityIds: [...new Set(item.entityIds)].sort() }));
+  return items.map((item) => ({ ...item, entityIds: [...new Set(item.entityIds)].sort() }));
 }
