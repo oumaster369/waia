@@ -512,6 +512,7 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail CLI path on a m
             operatorBlindAuthorization: prepared.operatorBlindAuthorization,
             blindAuthorizationScope: prepared.blindScope,
             officialHoldoutAccessRequested: false,
+            enableReplayFusedContext: false,
             blindArtifactSink: sink,
           },
         });
@@ -570,6 +571,7 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail CLI path on a m
             operatorBlindAuthorization: prepared.operatorBlindAuthorization,
             blindAuthorizationScope: prepared.blindScope,
             officialHoldoutAccessRequested: false,
+            enableReplayFusedContext: false,
             blindArtifactSink: sink,
           },
           ...closureInput(db, prepared.blindDigest),
@@ -622,6 +624,7 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail CLI path on a m
               operatorBlindAuthorization: prepared.operatorBlindAuthorization,
               blindAuthorizationScope: prepared.blindScope,
               officialHoldoutAccessRequested: false,
+              enableReplayFusedContext: false,
               blindArtifactSink: sink,
             },
             afterBlindBacktest: async () => {

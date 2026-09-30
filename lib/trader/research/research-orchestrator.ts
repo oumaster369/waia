@@ -299,6 +299,7 @@ function buildIsolatedBacktestInput(
     guardian: buildResearchGuardianContext(pipelineBacktest?.guardian),
     artifactSink: params.artifactSink,
     providerSidecar: pipelineBacktest?.providerSidecar,
+    enableReplayFusedContext: pipelineBacktest?.enableReplayFusedContext,
     retentionMode: pipelineBacktest?.retentionMode,
     evidenceSink:
       pipelineBacktest?.evidenceSink ??
