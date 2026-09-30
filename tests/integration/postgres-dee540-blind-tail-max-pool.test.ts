@@ -53,6 +53,7 @@ import {
   DEE540_BLIND_TERMINAL_SCHEMA,
   type Dee540BlindTailExecutor,
 } from "@/lib/trader/research/dee-540-blind-tail-commit";
+import { ResearchOrchestratorError } from "@/lib/trader/research/errors";
 import {
   getStrategyCandidateByIdPostgres,
   insertBlindValidationResultPostgres,
@@ -329,6 +330,90 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail on a max:1 pool
       await withDeadline(work, DEADLINE_MS);
     } finally {
       await client.end({ timeout: 5 });
+    }
+  }, 20_000);
+
+  it("lets only one of two concurrent openers see the bars when the terminal insert throws", async () => {
+    const first = await openPool();
+    const second = await openPool();
+    const work = (async () => {
+      const seeded = await seedHoldout(first.db, "64003", "concurrent-terminal");
+      let seen = 0;
+      const open = (db: WaiaPostgresDb) =>
+        commitDee540BlindHoldout(db, {
+          blindDigest: seeded.blindDigest,
+          context: seeded.context,
+          candidate: seeded.candidate,
+          datasetId: seeded.datasetId,
+          blindBars: seeded.bars,
+          expectedBlindDigest: seeded.blindDigest,
+          runBacktest: async () => {
+            seen += 1;
+            await new Promise((resolve) => setTimeout(resolve, 200));
+            return successMetrics();
+          },
+          readRepository: {
+            getBlindValidationResultForCandidate: (context, candidateId) =>
+              getBlindValidationResultForCandidatePostgres(db, context, candidateId),
+          },
+          bindRepository: (tx) => ({
+            ...bindRepository(tx),
+            insertBlindValidationResult: async () => {
+              throw new Error("terminal insert failed");
+            },
+          }),
+        });
+      const settled = await Promise.allSettled([open(first.db), open(second.db)]);
+      expect(seen).toBe(1);
+      expect(settled.every((entry) => entry.status === "rejected")).toBe(true);
+      const reasons = settled.map((entry) =>
+        entry.status === "rejected" ? entry.reason : undefined,
+      );
+      expect(reasons.filter((reason) => reason instanceof ResearchOrchestratorError)).toEqual([
+        expect.objectContaining({ code: "DEE540_AUTHORIZATION_ALREADY_CONSUMED" }),
+      ]);
+      expect(
+        reasons.some(
+          (reason) => reason instanceof Error && reason.message === "terminal insert failed",
+        ),
+      ).toBe(true);
+      const consumed = await first.db
+        .select()
+        .from(pgSchema.traderDee540BarConsumption)
+        .where(eq(pgSchema.traderDee540BarConsumption.blindDigest, seeded.blindDigest));
+      expect(consumed).toHaveLength(1);
+      const results = await first.db
+        .select()
+        .from(pgSchema.traderBlindValidationResults)
+        .where(eq(pgSchema.traderBlindValidationResults.candidateId, seeded.candidate.id));
+      expect(results).toHaveLength(0);
+      await expect(
+        commitDee540BlindHoldout(second.db, {
+          blindDigest: seeded.blindDigest,
+          context: seeded.context,
+          candidate: seeded.candidate,
+          datasetId: seeded.datasetId,
+          blindBars: seeded.bars,
+          expectedBlindDigest: seeded.blindDigest,
+          runBacktest: async () => {
+            seen += 1;
+            return successMetrics();
+          },
+          readRepository: {
+            getBlindValidationResultForCandidate: (context, candidateId) =>
+              getBlindValidationResultForCandidatePostgres(second.db, context, candidateId),
+          },
+          bindRepository,
+        }),
+      ).rejects.toMatchObject({ code: "DEE540_AUTHORIZATION_ALREADY_CONSUMED" });
+      expect(seen).toBe(1);
+    })();
+    work.catch(() => undefined);
+    try {
+      await withDeadline(work, DEADLINE_MS);
+    } finally {
+      await first.client.end({ timeout: 5 });
+      await second.client.end({ timeout: 5 });
     }
   }, 20_000);
 });
