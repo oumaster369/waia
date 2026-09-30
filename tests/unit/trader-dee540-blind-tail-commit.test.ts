@@ -75,19 +75,67 @@ function sqlText(query: { queryChunks?: Array<{ value?: string[] }> }): string {
  * In-memory transaction: a statement error aborts the transaction until
  * ROLLBACK TO SAVEPOINT. Returning from the callback commits; throwing discards.
  */
-function createHarness(options?: { failFirstResultInsert?: boolean }) {
+function createHarness(options?: {
+  failFirstResultInsert?: boolean;
+  failAllResultInserts?: boolean;
+}) {
   const committed: LogEntry[] = [];
+  const committedTokens = new Set<string>();
+  const holders = new Set<string>();
+  const waiters = new Map<string, Array<() => void>>();
   let transactionCalls = 0;
-  const states = new WeakMap<object, { log: LogEntry[]; aborted: boolean }>();
+  const states = new WeakMap<object, { log: LogEntry[]; aborted: boolean; token: string | null }>();
+
+  function uniqueViolation(): Error {
+    return Object.assign(new Error("duplicate key value violates unique constraint"), {
+      code: "23505",
+    });
+  }
+
+  function wake(token: string): void {
+    const pending = waiters.get(token) ?? [];
+    waiters.delete(token);
+    for (const resolve of pending) resolve();
+  }
+
+  async function acquire(token: string): Promise<void> {
+    while (true) {
+      if (committedTokens.has(token)) throw uniqueViolation();
+      if (!holders.has(token)) {
+        holders.add(token);
+        return;
+      }
+      await new Promise<void>((resolve) => {
+        const pending = waiters.get(token) ?? [];
+        pending.push(resolve);
+        waiters.set(token, pending);
+      });
+    }
+  }
+
+  function commitToken(token: string): void {
+    holders.delete(token);
+    committedTokens.add(token);
+    wake(token);
+  }
+
+  function releaseToken(token: string): void {
+    holders.delete(token);
+    wake(token);
+  }
 
   const ex = {
     transaction: async <T>(fn: (tx: object) => Promise<T>): Promise<T> => {
       transactionCalls += 1;
-      const state = { log: [] as LogEntry[], aborted: false };
+      const state = { log: [] as LogEntry[], aborted: false, token: null as string | null };
       const tx = {
         insert: () => ({
-          values: async (row: { blindDigest: string }) => {
+          values: async (row: { blindDigest: string; barContentToken?: string }) => {
             if (state.aborted) throw new Error("current transaction is aborted");
+            if (row.barContentToken) {
+              await acquire(row.barContentToken);
+              state.token = row.barContentToken;
+            }
             state.log.push({ kind: "consume", blindDigest: row.blindDigest });
           },
         }),
@@ -127,9 +175,13 @@ function createHarness(options?: { failFirstResultInsert?: boolean }) {
       try {
         const value = await fn(tx);
         if (state.aborted) throw new Error("current transaction is aborted");
+        if (state.token) commitToken(state.token);
+        state.token = null;
         committed.push(...state.log);
         return value;
       } catch (error) {
+        if (state.token) releaseToken(state.token);
+        state.token = null;
         throw error;
       }
     },
@@ -144,6 +196,9 @@ function createHarness(options?: { failFirstResultInsert?: boolean }) {
       insertBlindValidationResult: vi.fn(
         async (_context: unknown, row: { metricsJson: string }) => {
           if (state.aborted) throw new Error("current transaction is aborted");
+          if (options?.failAllResultInserts) {
+            throw new Error("terminal insert failed");
+          }
           resultInserts += 1;
           state.log.push({ kind: "result", metricsJson: row.metricsJson });
           if (options?.failFirstResultInsert && resultInserts === 1) {
@@ -239,7 +294,13 @@ describe("DEE-540 blind consume commits with the validation outcome", () => {
     expect(source).toContain("ROLLBACK TO SAVEPOINT ");
     expect(source).toContain("executor: tx");
     expect(source).toContain("DEE540_BLIND_PARENT_HANDLE_FORBIDDEN");
-    expect(source).toContain("That remaining edge is left for Linear.");
+    expect(source).not.toContain("That remaining edge is left for Linear.");
+    const transactions = source.split("ex.transaction");
+    expect(transactions).toHaveLength(3);
+    expect(transactions[1]).toContain("consumeDee540BlindTailAuthorization(");
+    expect(transactions[1]).not.toContain("runBacktest(");
+    expect(transactions[2]).toContain("runBacktest(");
+    expect(transactions[2]).not.toContain("consumeDee540BlindTailAuthorization(");
   });
 
   it("throws immediately when the blind backtest queries the parent handle", async () => {
@@ -414,5 +475,37 @@ describe("DEE-540 blind consume commits with the validation outcome", () => {
     });
     expect(harness.committed().some((entry) => entry.kind === "mark")).toBe(true);
     expect(harness.committed()).toContainEqual({ kind: "status", status: "blind_validated" });
+  });
+
+  it("lets only one of two concurrent openers see the bars when the terminal insert throws", async () => {
+    const harness = createHarness({ failAllResultInserts: true });
+    const bars = buildBars(3);
+    let seen = 0;
+    const runBacktest = vi.fn(async () => {
+      seen += 1;
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return buildMetrics();
+    });
+    const input = baseInput(harness, { bars, runBacktest });
+    const settled = await Promise.allSettled([
+      commitDee540BlindHoldout(harness.ex as never, input),
+      commitDee540BlindHoldout(harness.ex as never, input),
+    ]);
+    expect(seen).toBe(1);
+    expect(runBacktest).toHaveBeenCalledTimes(1);
+    expect(settled.every((entry) => entry.status === "rejected")).toBe(true);
+    const reasons = settled.map((entry) =>
+      entry.status === "rejected" ? entry.reason : undefined,
+    );
+    expect(reasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "DEE540_AUTHORIZATION_ALREADY_CONSUMED" }),
+        expect.objectContaining({ message: "terminal insert failed" }),
+      ]),
+    );
+    expect(committedConsumes(harness)).toEqual([
+      { kind: "consume", blindDigest: computeBarSetDigest(bars) },
+    ]);
+    expect(committedResults(harness)).toHaveLength(0);
   });
 });
