@@ -165,7 +165,9 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
     expect(readdirSync(tmpdir()).filter(n => n.startsWith("waia-dee1130-prefix-")).sort()).toEqual(before);
   });
   it("removes temporary INPUT and closes the client on migrator failure, never resets the DB", async () => {
-    const query = vi.fn().mockResolvedValue([{ public_relations: 0, migration_table: null, auth_table: null }]);
+    const query = vi.fn()
+      .mockResolvedValueOnce([{ public_relations: 0, migration_table: null, auth_table: null }])
+      .mockResolvedValueOnce([{ lock_timeout_ms: "5000", statement_timeout_ms: "120000" }]);
     const end = vi.fn().mockResolvedValue(undefined); const simple = vi.fn().mockResolvedValue(undefined);
     const unsafe = vi.fn((statement: string) => { void statement; return { simple }; });
     vi.mocked(postgres).mockReturnValueOnce(Object.assign(query, { end, unsafe }) as unknown as ReturnType<typeof postgres>);
@@ -181,8 +183,10 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
       throw new Error("controlled migration failure");
     });
     await expect(prepareHistoricalReconciliationFixture(local)).rejects.toThrow("controlled migration failure");
-    expect(end).toHaveBeenCalledTimes(1); expect(unsafe).toHaveBeenCalledTimes(1);
+    expect(end).toHaveBeenCalledTimes(1); expect(unsafe).toHaveBeenCalledTimes(3);
     expect(unsafe.mock.calls[0]![0]).toBe(readFileSync("scripts/postgres-validation/prelude-auth-stub.sql", "utf8"));
+    expect(unsafe.mock.calls[1]![0]).toContain("SET lock_timeout = '5s'");
+    expect(unsafe.mock.calls[2]![0]).toContain("SET statement_timeout = '120s'");
     expect(migrate).toHaveBeenCalledTimes(1);
     expect(readdirSync(tmpdir()).filter(n => n.startsWith("waia-dee1130-prefix-")).sort()).toEqual(before);
     // This is failure cleanup/ordering proof with inert ports, NOT migration success.

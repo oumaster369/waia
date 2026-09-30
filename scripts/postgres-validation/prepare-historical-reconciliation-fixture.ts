@@ -7,9 +7,9 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { drizzle } from "drizzle-orm/postgres-js";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
+
+import { migratePostgresConnectionWithSessionLockBudget } from "../ops/postgres-migrate-with-session-lock-budget";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const root = resolve(scriptDirectory, "../..");
@@ -127,8 +127,7 @@ export async function prepareHistoricalReconciliationFixture(env: Readonly<Recor
     for (const migration of source.migrations) writeFileSync(join(temporary, `${migration.entry.tag}.sql`), migration.bytes);
     const journalPath = join(temporary, "meta/_journal.json");
     writeFileSync(journalPath, JSON.stringify({ ...source.journal, entries: source.journal.entries.slice(0, 222) }));
-    const db = drizzle(sql);
-    await migrate(db, { migrationsFolder: temporary });
+    await migratePostgresConnectionWithSessionLockBudget(sql, temporary);
     const prefix = await readApplied(sql);
     assertAppliedMigrationIdentity(prefix, source.migrations.slice(0, 222).map(m => m.identity));
     await assertNoMode(sql);
@@ -137,7 +136,7 @@ export async function prepareHistoricalReconciliationFixture(env: Readonly<Recor
     await assertNoMode(sql);
     // Only the private migrator INPUT changes. Applied/source histories do not.
     writeFileSync(journalPath, JSON.stringify(source.journal));
-    await migrate(db, { migrationsFolder: temporary });
+    await migratePostgresConnectionWithSessionLockBudget(sql, temporary);
     const applied = await readApplied(sql);
     assertAppliedMigrationIdentity(applied, source.migrations.map(m => m.identity));
     assertPrefixRows(await readPrefix(sql));
