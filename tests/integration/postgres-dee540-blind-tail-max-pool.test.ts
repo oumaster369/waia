@@ -25,6 +25,7 @@ import { deleteMockExecutionArtifactsForOrgPostgres } from "@/lib/trader/executi
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
 import { createForecastDecisionBundleRepositoryPostgres } from "@/lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import { declareResearchNonCapitalInformationAuthorityV2 } from "@/lib/trader/intelligence/information-sufficiency/information-sufficiency-runtime-authority-v2";
 import { createWp21RuntimeDepsPostgres } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
 import { createIntelligenceCycleBundleRepositoryPostgres } from "@/lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres";
 import type { Bar } from "@/lib/trader/intelligence/types";
@@ -333,6 +334,9 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail on a max:1 pool
   }, 20_000);
 });
 
+const MINUTE_MS = 60_000;
+const DAY_MS = 24 * 60 * MINUTE_MS;
+
 function shiftBars(bars: readonly Bar[], shiftMs: number): Bar[] {
   return bars.map((bar) => {
     const openMs = Date.parse(bar.barOpenTime) + shiftMs;
@@ -348,8 +352,7 @@ function shiftBars(bars: readonly Bar[], shiftMs: number): Bar[] {
 function blindWindowEmittedOrder(sink: ResearchValidationBacktestArtifactSink): boolean {
   return (sink.cycleResults ?? []).some(
     (cycle) =>
-      cycle.execution != null ||
-      cycle.strategyExecutions.some((row) => row.execution != null),
+      cycle.execution != null || cycle.strategyExecutions.some((row) => row.execution != null),
   );
 }
 
@@ -427,7 +430,8 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail CLI path on a m
   async function prepare(db: WaiaPostgresDb, client: postgres.Sql, label: string) {
     shiftNonce += 1;
     const context = await seedOrg(db, client);
-    const bars = shiftBars(buildResearchIntegrationBars(), shiftNonce * 10_000_000_000);
+    const uniqueDays = shiftNonce + (crypto.getRandomValues(new Uint32Array(1))[0]! % 50_000);
+    const bars = shiftBars(buildResearchIntegrationBars(), uniqueDays * DAY_MS);
     await insertMarketBarsPostgres(
       db,
       context,
@@ -463,6 +467,10 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail CLI path on a m
       operatorBlindAuthorization: computeM9BlindAuthorizationDigest(blindScope),
       blindScope,
       ...cli,
+      informationSufficiencyAuthority: declareResearchNonCapitalInformationAuthorityV2({
+        organizationId: context.organizationId,
+        reason: "DEE540_MAX_POOL_RESEARCH_ORDER",
+      }),
     };
   }
 
@@ -485,112 +493,14 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail CLI path on a m
     };
   }
 
-  it("completes the CLI pipeline when the blind window emits an order", async () => {
-    const sink: ResearchValidationBacktestArtifactSink = {};
-    const { client, db } = await openPool();
-    const work = (async () => {
-      const prepared = await prepare(db, client, "orders");
-      const result = await runResearchPipelinePostgres(db, {
-        context: prepared.context,
-        datasetName: prepared.datasetName,
-        symbol: "BTC/USDT",
-        interval: "1m",
-        strategyId: "mean_reversion_v0",
-        strategyVersion: prepared.strategyVersion,
-        oosBarCount: 20,
-        requireMultiRegimeCoverage: false,
-        deps: prepared.deps,
-        createOrderRepository: prepared.createOrderRepository,
-        newId: () => crypto.randomUUID(),
-        pipelineBacktest: {
-          operatorBlindAuthorization: prepared.operatorBlindAuthorization,
-          blindAuthorizationScope: prepared.blindScope,
-          officialHoldoutAccessRequested: false,
-          blindArtifactSink: sink,
-        },
-      });
-      expect(blindWindowEmittedOrder(sink)).toBe(true);
-      expect(result.dataset.blindDigest).toBe(prepared.blindDigest);
-      const consumed = await db
-        .select()
-        .from(pgSchema.traderDee540BarConsumption)
-        .where(eq(pgSchema.traderDee540BarConsumption.blindDigest, prepared.blindDigest));
-      expect(consumed).toHaveLength(1);
-      const results = await db
-        .select()
-        .from(pgSchema.traderBlindValidationResults)
-        .where(eq(pgSchema.traderBlindValidationResults.candidateId, result.strategyCandidateId));
-      expect(results).toHaveLength(1);
-      expect(JSON.parse(results[0]!.metricsJson).schemaVersion).toBe("1.0.0");
-      const stored = await getStrategyCandidateByIdPostgres(
-        db,
-        prepared.context,
-        result.strategyCandidateId,
-      );
-      expect(stored?.status).toBe("blind_validated");
-      expect(stored?.blindUsed).toBe(true);
-    })();
-    work.catch(() => undefined);
-    try {
-      await withDeadline(work, PIPELINE_DEADLINE_MS);
-    } finally {
-      await client.end({ timeout: 5 });
-    }
-  }, PIPELINE_DEADLINE_MS + 30_000);
-
-  it("completes the CLI pipeline with epistemic closure when the blind window emits an order", async () => {
-    const sink: ResearchValidationBacktestArtifactSink = {};
-    const { client, db } = await openPool();
-    const work = (async () => {
-      const prepared = await prepare(db, client, "closure");
-      const result = await runResearchPipelinePostgres(db, {
-        context: prepared.context,
-        datasetName: prepared.datasetName,
-        symbol: "BTC/USDT",
-        interval: "1m",
-        strategyId: "mean_reversion_v0",
-        strategyVersion: prepared.strategyVersion,
-        oosBarCount: 20,
-        requireMultiRegimeCoverage: false,
-        deps: prepared.deps,
-        createOrderRepository: prepared.createOrderRepository,
-        newId: () => crypto.randomUUID(),
-        pipelineBacktest: {
-          operatorBlindAuthorization: prepared.operatorBlindAuthorization,
-          blindAuthorizationScope: prepared.blindScope,
-          officialHoldoutAccessRequested: false,
-          blindArtifactSink: sink,
-        },
-        ...closureInput(db, prepared.blindDigest),
-      });
-      expect(blindWindowEmittedOrder(sink)).toBe(true);
-      const consumed = await db
-        .select()
-        .from(pgSchema.traderDee540BarConsumption)
-        .where(eq(pgSchema.traderDee540BarConsumption.blindDigest, prepared.blindDigest));
-      expect(consumed).toHaveLength(1);
-      const results = await db
-        .select()
-        .from(pgSchema.traderBlindValidationResults)
-        .where(eq(pgSchema.traderBlindValidationResults.candidateId, result.strategyCandidateId));
-      expect(results).toHaveLength(1);
-      expect(JSON.parse(results[0]!.metricsJson).schemaVersion).toBe("1.0.0");
-    })();
-    work.catch(() => undefined);
-    try {
-      await withDeadline(work, PIPELINE_DEADLINE_MS);
-    } finally {
-      await client.end({ timeout: 5 });
-    }
-  }, PIPELINE_DEADLINE_MS + 30_000);
-
-  it("commits consume and one terminal row when the blind backtest throws after an order", async () => {
-    const sink: ResearchValidationBacktestArtifactSink = {};
-    const { client, db } = await openPool();
-    const work = (async () => {
-      const prepared = await prepare(db, client, "thrown");
-      await expect(
-        runResearchPipelinePostgres(db, {
+  it(
+    "completes the CLI pipeline when the blind window emits an order",
+    async () => {
+      const sink: ResearchValidationBacktestArtifactSink = {};
+      const { client, db } = await openPool();
+      const work = (async () => {
+        const prepared = await prepare(db, client, "orders");
+        const result = await runResearchPipelinePostgres(db, {
           context: prepared.context,
           datasetName: prepared.datasetName,
           symbol: "BTC/USDT",
@@ -601,6 +511,7 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail CLI path on a m
           requireMultiRegimeCoverage: false,
           deps: prepared.deps,
           createOrderRepository: prepared.createOrderRepository,
+          informationSufficiencyAuthority: prepared.informationSufficiencyAuthority,
           newId: () => crypto.randomUUID(),
           pipelineBacktest: {
             operatorBlindAuthorization: prepared.operatorBlindAuthorization,
@@ -608,40 +519,159 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail CLI path on a m
             officialHoldoutAccessRequested: false,
             blindArtifactSink: sink,
           },
-          afterBlindBacktest: async () => {
-            throw new Error("blind backtest failed after order");
+        });
+        expect(blindWindowEmittedOrder(sink)).toBe(true);
+        expect(result.dataset.blindDigest).toBe(prepared.blindDigest);
+        const consumed = await db
+          .select()
+          .from(pgSchema.traderDee540BarConsumption)
+          .where(eq(pgSchema.traderDee540BarConsumption.blindDigest, prepared.blindDigest));
+        expect(consumed).toHaveLength(1);
+        const results = await db
+          .select()
+          .from(pgSchema.traderBlindValidationResults)
+          .where(eq(pgSchema.traderBlindValidationResults.candidateId, result.strategyCandidateId));
+        expect(results).toHaveLength(1);
+        expect(JSON.parse(results[0]!.metricsJson).schemaVersion).toBe("1.0.0");
+        const stored = await getStrategyCandidateByIdPostgres(
+          db,
+          prepared.context,
+          result.strategyCandidateId,
+        );
+        expect(stored?.status).toBe("blind_validated");
+        expect(stored?.blindUsed).toBe(true);
+      })();
+      work.catch(() => undefined);
+      try {
+        await withDeadline(work, PIPELINE_DEADLINE_MS);
+      } finally {
+        await client.end({ timeout: 5 });
+      }
+    },
+    PIPELINE_DEADLINE_MS + 30_000,
+  );
+
+  it(
+    "completes the CLI pipeline with epistemic closure when the blind window emits an order",
+    async () => {
+      const sink: ResearchValidationBacktestArtifactSink = {};
+      const { client, db } = await openPool();
+      const work = (async () => {
+        const prepared = await prepare(db, client, "closure");
+        const result = await runResearchPipelinePostgres(db, {
+          context: prepared.context,
+          datasetName: prepared.datasetName,
+          symbol: "BTC/USDT",
+          interval: "1m",
+          strategyId: "mean_reversion_v0",
+          strategyVersion: prepared.strategyVersion,
+          oosBarCount: 20,
+          requireMultiRegimeCoverage: false,
+          deps: prepared.deps,
+          createOrderRepository: prepared.createOrderRepository,
+          informationSufficiencyAuthority: prepared.informationSufficiencyAuthority,
+          newId: () => crypto.randomUUID(),
+          pipelineBacktest: {
+            operatorBlindAuthorization: prepared.operatorBlindAuthorization,
+            blindAuthorizationScope: prepared.blindScope,
+            officialHoldoutAccessRequested: false,
+            blindArtifactSink: sink,
           },
-        }),
-      ).rejects.toThrow("blind backtest failed after order");
-      expect(blindWindowEmittedOrder(sink)).toBe(true);
-      const consumed = await db
-        .select()
-        .from(pgSchema.traderDee540BarConsumption)
-        .where(eq(pgSchema.traderDee540BarConsumption.blindDigest, prepared.blindDigest));
-      expect(consumed).toHaveLength(1);
-      const results = await db
-        .select()
-        .from(pgSchema.traderBlindValidationResults)
-        .where(eq(pgSchema.traderBlindValidationResults.organizationId, prepared.context.organizationId));
-      expect(results).toHaveLength(1);
-      expect(JSON.parse(results[0]!.metricsJson)).toMatchObject({
-        schemaVersion: DEE540_BLIND_TERMINAL_SCHEMA,
-        outcome: "error",
-        phase: "backtest",
-      });
-      const candidates = await db
-        .select()
-        .from(pgSchema.traderStrategyCandidates)
-        .where(eq(pgSchema.traderStrategyCandidates.organizationId, prepared.context.organizationId));
-      expect(candidates).toHaveLength(1);
-      expect(candidates[0]?.status).toBe("walk_forward_validated");
-      expect(candidates[0]?.blindUsed).toBe(false);
-    })();
-    work.catch(() => undefined);
-    try {
-      await withDeadline(work, PIPELINE_DEADLINE_MS);
-    } finally {
-      await client.end({ timeout: 5 });
-    }
-  }, PIPELINE_DEADLINE_MS + 30_000);
+          ...closureInput(db, prepared.blindDigest),
+        });
+        expect(blindWindowEmittedOrder(sink)).toBe(true);
+        const consumed = await db
+          .select()
+          .from(pgSchema.traderDee540BarConsumption)
+          .where(eq(pgSchema.traderDee540BarConsumption.blindDigest, prepared.blindDigest));
+        expect(consumed).toHaveLength(1);
+        const results = await db
+          .select()
+          .from(pgSchema.traderBlindValidationResults)
+          .where(eq(pgSchema.traderBlindValidationResults.candidateId, result.strategyCandidateId));
+        expect(results).toHaveLength(1);
+        expect(JSON.parse(results[0]!.metricsJson).schemaVersion).toBe("1.0.0");
+      })();
+      work.catch(() => undefined);
+      try {
+        await withDeadline(work, PIPELINE_DEADLINE_MS);
+      } finally {
+        await client.end({ timeout: 5 });
+      }
+    },
+    PIPELINE_DEADLINE_MS + 30_000,
+  );
+
+  it(
+    "commits consume and one terminal row when the blind backtest throws after an order",
+    async () => {
+      const sink: ResearchValidationBacktestArtifactSink = {};
+      const { client, db } = await openPool();
+      const work = (async () => {
+        const prepared = await prepare(db, client, "thrown");
+        await expect(
+          runResearchPipelinePostgres(db, {
+            context: prepared.context,
+            datasetName: prepared.datasetName,
+            symbol: "BTC/USDT",
+            interval: "1m",
+            strategyId: "mean_reversion_v0",
+            strategyVersion: prepared.strategyVersion,
+            oosBarCount: 20,
+            requireMultiRegimeCoverage: false,
+            deps: prepared.deps,
+            createOrderRepository: prepared.createOrderRepository,
+            informationSufficiencyAuthority: prepared.informationSufficiencyAuthority,
+            newId: () => crypto.randomUUID(),
+            pipelineBacktest: {
+              operatorBlindAuthorization: prepared.operatorBlindAuthorization,
+              blindAuthorizationScope: prepared.blindScope,
+              officialHoldoutAccessRequested: false,
+              blindArtifactSink: sink,
+            },
+            afterBlindBacktest: async () => {
+              throw new Error("blind backtest failed after order");
+            },
+          }),
+        ).rejects.toThrow("blind backtest failed after order");
+        expect(blindWindowEmittedOrder(sink)).toBe(true);
+        const consumed = await db
+          .select()
+          .from(pgSchema.traderDee540BarConsumption)
+          .where(eq(pgSchema.traderDee540BarConsumption.blindDigest, prepared.blindDigest));
+        expect(consumed).toHaveLength(1);
+        const results = await db
+          .select()
+          .from(pgSchema.traderBlindValidationResults)
+          .where(
+            eq(
+              pgSchema.traderBlindValidationResults.organizationId,
+              prepared.context.organizationId,
+            ),
+          );
+        expect(results).toHaveLength(1);
+        expect(JSON.parse(results[0]!.metricsJson)).toMatchObject({
+          schemaVersion: DEE540_BLIND_TERMINAL_SCHEMA,
+          outcome: "error",
+          phase: "backtest",
+        });
+        const candidates = await db
+          .select()
+          .from(pgSchema.traderStrategyCandidates)
+          .where(
+            eq(pgSchema.traderStrategyCandidates.organizationId, prepared.context.organizationId),
+          );
+        expect(candidates).toHaveLength(1);
+        expect(candidates[0]?.status).toBe("walk_forward_validated");
+        expect(candidates[0]?.blindUsed).toBe(false);
+      })();
+      work.catch(() => undefined);
+      try {
+        await withDeadline(work, PIPELINE_DEADLINE_MS);
+      } finally {
+        await client.end({ timeout: 5 });
+      }
+    },
+    PIPELINE_DEADLINE_MS + 30_000,
+  );
 });
