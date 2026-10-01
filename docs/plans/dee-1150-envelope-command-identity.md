@@ -9,16 +9,16 @@ requiredValidation: [lint, typecheck, build, targeted-unit, postgres-integration
 approvalGates: [independent-review, exact-head-ci]
 state:
   status: in-progress
-  currentWorkPackage: actual-main-readiness
-  completedWorkPackages: [command-identity-regression, implementation, native-proof, independent-review, actual-main-rebase, actual-base-local-readiness]
-  remainingWorkPackages: [current-base-review, exact-head-ci, merge]
+  currentWorkPackage: current-main-review
+  completedWorkPackages: [command-identity-regression, implementation, native-proof, independent-review, current-main-rebase, current-base-focused-readiness]
+  remainingWorkPackages: [exact-head-ci, merge]
   prNumber: null
   prUrl: null
   blockedReason: null
-  nextAction: "Complete root review of the actual-main commit, then publish and wait for exact-head CI before merge."
+  nextAction: "Publish after the current serial queue; root source review is complete, and exact-head CI is required before merge."
 provenance:
   createdFrom: user-authorized-ai-trader-audit-2026-10-01
-  authoritativeBase: 42810ef804150dab0b1f9c01cb38b5bd8bac3659
+  authoritativeBase: 5914d9f4dc37b7d78be4c5363b33b12d22d444c6
   supersedes: null
 ---
 
@@ -58,27 +58,10 @@ can still complete. Then scoped readiness, independent review and exact-head CI.
 
 ## Current validation
 
-The original source failed six focused command-identity/stage regressions. A
-separate independent-review correction reproduced mutable-command leakage into
-SQL values (one RED case). The rebased actual-main commit is `3b27d57a`, based on
-`42810ef804150dab0b1f9c01cb38b5bd8bac3659`. Current-base local readiness passed:
-full lint (327 warnings, zero errors), typecheck, build, canonical validation,
-both consumer graph validators, and 21 focused units across three files.
-Fresh isolated synthetic PostgreSQL 16.14 on implementation commit `3b27d57a`
-passed all nine envelope cases, with zero failures/skips and all 1,975 captured
-proof-source pins unchanged during execution. The subsequent plan-only refresh
-does not change any captured native proof source. The earlier nine-case receipt
-on the 4f54 predecessor remains historical: 19 of its repo-wide pins changed
-across intervening merged work, including four DEE-1161 signer-gate files. None
-of the changed paths belongs to the envelope implementation or its native test
-path; the fresh run captures the current source set.
-The current-main rebased patch is content-equivalent to the previously reviewed
-single DEE-1150 commit. Exact-head CI remains required; full unit suite was not
-run locally.
+The original source failed six focused command-identity/stage regressions. Independent review also reproduced mutable-command leakage into SQL values (one RED case). The rebased branch is `a325afd81b7e05c2b0fc16e9cd45e65392c03a79`, based on `5914d9f4dc37b7d78be4c5363b33b12d22d444c6`. Rebase changed only the commit parent; all four patch paths and their content are unchanged from the previously reviewed DEE-1150 patch.
 
-An exploratory combined native run also selected the separate current-account
-suite, whose four cases correctly skipped without its acquisition fixture
-profile; these are not accepted evidence. A bootstrap with that other namespace
-correctly refused. Final envelope proof uses the approved historical-validation
-bootstrap namespace and only its nine executed cases; no test guard was changed.
-No production database or venue action occurred.
+Focused readiness on the rebased tree passed: the three envelope unit suites (21 tests), typecheck, both consumer-graph validators, canonical validation (278 files), and ESLint on the three changed source/test files. The existing nine-case isolated synthetic PostgreSQL proof passed on implementation commit `3b27d57a` based on `42810ef8`, with zero failures/skips and 1,975 captured source pins unchanged during execution. The rebased patch's six envelope-specific production/helper/test pins match that proof exactly. The broad proof manifest has seven mismatches from the later DEE-1183 merge: `execution-service.ts`, `market-bars-repository-postgres.ts`, `blind-holdout-engine.ts`, `dee-540-blind-tail-commit.ts`, `m9-dataset-seal-preview.ts`, `reconstruct-research-failure-artifacts.ts`, and `research-orchestrator.ts`. These are outside the envelope implementation and its native test path; the native run was not repeated. This is inherited proof, not an exact-HEAD native run.
+
+No build or full unit suite was repeated on this rebased tree. Exact-head GitHub CI remains required. No production database or venue action occurred.
+
+Root review confirms the rebased owned source and tests remain byte-identical to the independently reviewed implementation. The earlier exploratory combined run selected another fixture-dependent account suite whose four cases skipped; that attempt is retained as rejected evidence and is not part of the accepted nine-case envelope proof. No test guard was relaxed.
