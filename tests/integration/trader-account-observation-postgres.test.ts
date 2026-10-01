@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import postgres, { type Sql } from "postgres";
 import { createPostgresObservationRepository } from "@/lib/trader/account-observation/postgres-repository";
+import { createPostgresObservationReader } from "@/lib/trader/account-observation/postgres-reader";
 import { createAccountObservationService } from "@/lib/trader/account-observation/service";
 import { accountObservationClock } from "@/lib/trader/account-observation/clock";
 import { createObservationConfiguration, createPostgresAccountObservationRuntime } from "@/lib/trader/account-observation/runtime";
@@ -393,6 +394,116 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
     expect(tenantBody.balances.values[0].free).toBe("12.50");
     expect(tenantBody).not.toHaveProperty("pnl");
     expect(tenantBody.observationId).toBe(tick.status === "COMMITTED" ? tick.observation.observationId : null);
+  });
+
+  // This suite exercises the current local-validation schema only. It is not evidence
+  // that numbered migration 0229 is deployable or that a production role is authorized.
+  describe("DEE-1153 synthetic configured futures projection through PostgreSQL", () => {
+    const readerLimits = { pageSize: 10, maxPages: 1, maxRecords: 20, maxResponseBytes: 4096, tradeWindowMs: 3600000 };
+    let b: ObservationBinding;
+    let readerSql: Sql;
+    let stored: AccountObservation | null = null;
+    let isolatedRow: Record<string, unknown>;
+    beforeAll(async () => {
+      const config = createObservationConfiguration({ symbols: ["BTCUSDT"], pollIntervalMs: 1000,
+        maxBackoffMs: 8000, readTimeoutMs: 1000, leaseTtlMs: 12000,
+        htxCoverage: { ...readerLimits, host: "api.huobi.pro" },
+        htxDerivativesFamilies: ["usdt_isolated_perpetual"] });
+      b = { ...await seed("654321"), configurationRevision: config.revision };
+      await admin`UPDATE trader_account_collection_state SET configuration_revision=${config.revision}
+        WHERE credential_id=${b.credentialId}`;
+      const name = String((await admin`SELECT current_database() AS name`)[0].name);
+      const login = "dee1153_read_" + randomUUID().replaceAll("-", "");
+      await admin.unsafe(`CREATE ROLE "${login}" LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE
+        PASSWORD 'synthetic_futures_reader';
+        GRANT waia_account_observation_reader TO "${login}" WITH INHERIT FALSE, SET TRUE;`);
+      readerSql = postgres(`postgres://${login}:synthetic_futures_reader@127.0.0.1:55460/${name}`,
+        { max: 2, connect_timeout: 3, prepare: false, connection: { statement_timeout: 3000 } });
+      const configured = [{ binding: b, config, readerLimits }];
+      let committed = 0;
+      const stop = new AbortController();
+      const runtime = createConfiguredHtxObservationRuntime({
+        collectorSql: client, readerSql, configured, clock: accountObservationClock,
+        ownerId: "local-dee1153-proof", intervalMs: 1000, iterationTimeoutMs: 15000, host: "api.huobi.pro",
+        protectedCredentialService: { async getDecryptedCredentials(context, id) {
+          expect(context.organizationId).toBe(b.organizationId); expect(id).toBe(b.credentialId);
+          return { apiKey: "synthetic-key", apiSecret: "synthetic-secret" };
+        } },
+        async fetchImpl(input, init) {
+          const request = new URL(String(input));
+          expect(init?.redirect).toBe("error");
+          expect(request.searchParams.get("Signature")).toBeTruthy();
+          if (request.hostname === "api.hbdm.com") {
+            expect(init?.method).toBe("POST");
+            expect(request.pathname).toBe("/linear-swap-api/v1/swap_account_info");
+            expect(JSON.parse(String(init?.body))).toEqual({});
+            return Response.json({ status: "ok", ts: 1790841600000, data: [{
+              contract_code: "BTC-USDT", symbol: "BTC", margin_account: "BTC-USDT", margin_mode: "isolated",
+              margin_balance: "7.25000000", margin_available: "5.5", margin_position: "1.75", margin_frozen: "0",
+              margin_static: "6.0", profit_real: "-0.2", profit_unreal: "0.15", risk_rate: "0.3",
+              liquidation_price: "42000", lever_rate: 10,
+            }] });
+          }
+          expect(request.origin).toBe("https://api.huobi.pro"); expect(init?.method).toBe("GET");
+          if (request.pathname === "/v1/account/accounts") return Response.json({ status: "ok",
+            data: [{ id: 654321, type: "spot", state: "working" }] });
+          if (request.pathname === "/v2/user/uid") return Response.json({ code: 200, data: 456 });
+          if (request.pathname === "/v2/user/api-key") return Response.json({ code: 200,
+            data: [{ accessKey: "synthetic-key", status: "normal", permission: "readOnly" }] });
+          const data = request.pathname.endsWith("/balance") ? { id: 654321, type: "spot", state: "working",
+            list: [{ currency: "usdt", type: "trade", balance: "42" }, { currency: "usdt", type: "frozen", balance: "0" }] } : [];
+          return Response.json({ status: "ok", data });
+        },
+        report(event) { if (event === "COLLECTION_COMMITTED" && ++committed === 1) stop.abort(); },
+      });
+      const timeout = setTimeout(() => stop.abort(), 12000);
+      try { await runtime.run(stop.signal); } finally { clearTimeout(timeout); runtime.dispose(); }
+      expect(committed).toBe(1);
+      const sqlReader = createPostgresObservationReader(readerSql);
+      stored = await sqlReader.readLatest(b);
+      expect(stored?.schemaVersion).toBe("account-observation/v2");
+      expect(stored?.derivatives?.families).toHaveLength(4);
+      isolatedRow = stored!.derivatives!.families.find(item => item.family === "usdt_isolated_perpetual")!.accounts![0] as unknown as Record<string, unknown>;
+    }, 20000);
+    afterAll(async () => { await readerSql?.end({ timeout: 2 }); });
+
+    const makeDeps = (): ObservationReadDependencies => {
+      const sqlReader = createPostgresObservationReader(readerSql);
+      return {
+        getUserId: async () => "local-dee1153-user", hasTraderAccess: async () => true,
+        hasOrgMembership: async (_user, org) => org === b.organizationId,
+        hasOperatorAccess: async () => true, isAdminListedOrganization: async org => org === b.organizationId,
+        resolveActiveBinding: scope => sqlReader.resolveActiveBinding(scope),
+        readLatest: binding => sqlReader.readLatest(binding),
+      };
+    };
+    const requestFor = (binding: ObservationBinding) => new Request(
+      "http://localhost/api/local-observation?" + new URLSearchParams(binding));
+
+    it("persists and parses the configured family through JSONB, with tenant/Admin response parity", async () => {
+      expect(stored?.derivatives?.families.find(item => item.family === "usdt_isolated_perpetual"))
+        .toMatchObject({ status: "COMPLETE", accounts: [isolatedRow] });
+      expect(isolatedRow).toMatchObject({ collateralAsset: "USDT", marginBalance: "7.25000000", unrealizedPnl: "0.15" });
+      const deps = makeDeps();
+      const tenant = await handleAccountObservationGet(requestFor(b), "tenant", deps);
+      const adminResponse = await handleAccountObservationGet(requestFor(b), "admin", deps);
+      expect(tenant.status).toBe(200); expect(adminResponse.status).toBe(200);
+      expect(await adminResponse.json()).toEqual(await tenant.json());
+    });
+    it("refuses another tenant and stale credential/configuration bindings", async () => {
+      const deps = makeDeps();
+      expect((await handleAccountObservationGet(requestFor({ ...b, organizationId: randomUUID() }), "tenant", deps)).status).toBe(403);
+      expect((await handleAccountObservationGet(requestFor({ ...b, credentialRevision: "2" }), "tenant", deps)).status).toBe(403);
+      expect((await handleAccountObservationGet(requestFor({ ...b, configurationRevision: "stale-config" }), "tenant", deps)).status).toBe(403);
+    });
+    it("hides a retained derivative projection immediately after credential revocation", async () => {
+      await admin`UPDATE exchange_credentials SET status='revoked' WHERE id=${b.credentialId}`;
+      expect(await createPostgresObservationReader(readerSql).readLatest(b)).toBeNull();
+      expect((await handleAccountObservationGet(requestFor(b), "admin", makeDeps())).status).toBe(403);
+      const retained = await admin`SELECT payload FROM trader_account_observations WHERE credential_id=${b.credentialId}`;
+      expect(retained).toHaveLength(1);
+      expect(retained[0].payload.derivatives.families[0].accounts[0].marginBalance).toBe("7.25000000");
+    });
   });
 });
 

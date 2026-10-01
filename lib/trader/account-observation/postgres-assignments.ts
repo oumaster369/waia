@@ -36,7 +36,8 @@ export function createPostgresObservationAssignmentSource(
     accounts.add(account);
     approved.set(key(binding), Object.freeze({ binding, config }));
   }
-  const envelope = configured[0];
+  // Only a spot envelope can admit self-service inventory, regardless of manifest order.
+  const envelope = [...approved.values()].find(item => !item.config.htxDerivativesFamilies?.length);
   const reader = createPostgresObservationReader(sql);
   let loading = false;
   let live = new Map<string, ObservationAssignment>();
@@ -50,7 +51,9 @@ export function createPostgresObservationAssignmentSource(
     return result;
   };
   async function inventory(signal: AbortSignal): Promise<readonly ObservationAssignment[]> {
-    if (!collectorSql || !envelope) return [];
+    // A spot self-service configuration match cannot grant derivatives family
+    // access or displace exact manifest-listed assignments from the bounded list.
+    if (!collectorSql || !envelope || envelope.config.htxDerivativesFamilies?.length) return [];
     cancelled(signal);
     try {
       const rows = await collectorSql.begin(async (tx) => {
@@ -124,11 +127,13 @@ export function createPostgresObservationAssignmentSource(
           seenAccounts.add(account);
           next.set(key(assignment.binding), assignment);
         };
-        for (const assignment of await inventory(signal)) {
+        // Reserve scheduler capacity for exact operator assignments, including
+        // futures accounts when the first assignment is a spot-only envelope.
+        for (const assignment of approved.values()) {
           if (await current(assignment, signal)) add(assignment);
         }
-        for (const assignment of approved.values()) {
-          if (next.has(key(assignment.binding))) continue;
+        for (const assignment of await inventory(signal)) {
+          if (seenAccounts.has(accountKey(assignment.binding)) || next.size >= 20) continue;
           if (await current(assignment, signal)) add(assignment);
         }
         live = next;

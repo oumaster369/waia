@@ -3,6 +3,8 @@ import {
   ACCOUNT_OBSERVATION_MANIFEST_MAX_BYTES,
   parseAccountObservationAssignmentManifest,
 } from "@/lib/trader/account-observation/assignment-manifest";
+import { createObservationConfiguration } from "@/lib/trader/account-observation/runtime";
+import type { HtxDerivativesAccountFamily } from "@/lib/trader/account-observation/derivatives/types";
 import {
   ACCOUNT_A,
   ACCOUNT_B,
@@ -25,6 +27,20 @@ function parse(text: string, digest: string, releaseSha = RELEASE_SHA) {
   });
 }
 
+function assignmentWithFamilies(htxDerivativesFamilies: readonly HtxDerivativesAccountFamily[]) {
+  const base = assignment();
+  const config = createObservationConfiguration({
+    symbols: base.symbols,
+    pollIntervalMs: base.pollIntervalMs,
+    maxBackoffMs: base.maxBackoffMs,
+    readTimeoutMs: base.readTimeoutMs,
+    leaseTtlMs: base.leaseTtlMs,
+    htxCoverage: { ...base.readerLimits, host: "api.huobi.pro" },
+    htxDerivativesFamilies,
+  });
+  return { ...base, htxDerivativesFamilies: [...htxDerivativesFamilies], configurationRevision: config.revision };
+}
+
 describe("account observation trusted assignment manifest", () => {
   it("accepts an exact operator manifest and yields configured assignments", () => {
     const { text, digest } = sealed();
@@ -44,8 +60,51 @@ describe("account observation trusted assignment manifest", () => {
     });
     expect(only.config.symbols).toEqual(["BTCUSDT"]);
     expect(only.config.htxCoverage).toEqual({ ...READER_LIMITS, host: "api.huobi.pro" });
+    expect(only.config.htxDerivativesFamilies).toBeUndefined();
+    expect(only.config.revision).toBe(assignment().configurationRevision);
     expect(Object.isFrozen(trusted.configured)).toBe(true);
     expect(Object.isFrozen(only.binding)).toBe(true);
+  });
+
+  it("content-binds configured derivatives families and derives a distinct immutable revision", () => {
+    const isolated = assignmentWithFamilies(["usdt_isolated_perpetual"]);
+    const cross = assignmentWithFamilies(["usdt_cross_shared"]);
+    expect(isolated.configurationRevision).not.toBe(cross.configurationRevision);
+
+    const { text, digest } = sealed({ assignments: [isolated] });
+    const [configured] = parse(text, digest).configured;
+    expect(configured.config.htxDerivativesFamilies).toEqual(["usdt_isolated_perpetual"]);
+    expect(configured.config.revision).toBe(isolated.configurationRevision);
+    expect(Object.isFrozen(configured.config.htxDerivativesFamilies)).toBe(true);
+  });
+
+  it("refuses a derivatives-family mutation that is not included in the sealed digest", () => {
+    const { text, digest } = sealed({ assignments: [assignmentWithFamilies(["coin_perpetual"])] });
+    const tampered = JSON.parse(text) as { assignments: Array<Record<string, unknown>> };
+    tampered.assignments[0]!.htxDerivativesFamilies = ["coin_delivery_futures"];
+
+    expect(() => parse(JSON.stringify(tampered), digest)).toThrow(/REFUSED:CONTENT_DIGEST/);
+  });
+
+  it("refuses a family allow-list change that keeps the previous configuration revision", () => {
+    const staleRevision = assignment().configurationRevision;
+    const tampered = { ...assignment(), htxDerivativesFamilies: ["coin_perpetual" as const],
+      configurationRevision: staleRevision };
+    const sealedTamper = sealed({ assignments: [tampered] });
+
+    expect(() => parse(sealedTamper.text, sealedTamper.digest)).toThrow(/REFUSED:CONFIGURATION_REVISION/);
+  });
+
+  it.each([
+    ["unknown", ["unknown_family"]],
+    ["duplicate", ["coin_perpetual", "coin_perpetual"]],
+    ["empty", []],
+  ] as const)("refuses malformed %s derivatives-family allow-list", (_name, families) => {
+    const { text, digest } = sealed({ assignments: [assignmentWithFamilies(["coin_perpetual"])] });
+    const tampered = JSON.parse(text) as { assignments: Array<Record<string, unknown>> };
+    tampered.assignments[0]!.htxDerivativesFamilies = families;
+
+    expect(() => parse(JSON.stringify(tampered), digest)).toThrow(/REFUSED:SCHEMA/);
   });
 
   it("is content-identified independently of key order and whitespace", () => {

@@ -13,6 +13,7 @@ import { createPostgresObservationReader } from "./postgres-reader";
 import { createObservationCredentialStore } from "./credential-store";
 import { openHtxObservationReader, type HtxObservationCredentialHandle } from "./htx-reader-opener";
 import { createHtxReadAdmission } from "./htx-read-admission";
+import { createHtxDerivativesObservationReader } from "./derivatives/reader";
 import type { HtxObservationReaderOptions } from "./htx-reader";
 import { observationBindingSchema } from "./validation";
 import { AccountObservationReadFailure } from "./service";
@@ -128,30 +129,51 @@ export function createConfiguredHtxObservationRuntime(
   const bindingReader = createPostgresObservationReader(readerSql);
   const stores = new Map<string, ReturnType<typeof createObservationCredentialStore>>();
   const options = new Map<string, HtxObservationReaderOptions>();
+  const derivativeReaders = new Set<ReturnType<typeof createHtxDerivativesObservationReader>>();
+  const admissions = new Set<ReturnType<typeof createHtxReadAdmission>>();
+  const closingAdmissions = new WeakSet<ReturnType<typeof createHtxReadAdmission>>();
+  let derivativeCleanupFailed = false;
+  const releaseDerivatives = (reader: ReturnType<typeof createHtxDerivativesObservationReader> | undefined) => {
+    if (!reader) return;
+    reader.dispose();
+    void reader.settled().then(() => derivativeReaders.delete(reader), () => { derivativeCleanupFailed = true; });
+  };
+  const releaseAdmission = (admission: ReturnType<typeof createHtxReadAdmission> | undefined) => {
+    if (!admission || closingAdmissions.has(admission)) return;
+    closingAdmissions.add(admission);
+    admission.dispose();
+    // Abort cannot force an injected fetch to settle. Keep ownership and count
+    // against the open limit until all metadata work actually settles.
+    void admission.settled().then(() => admissions.delete(admission), () => { derivativeCleanupFailed = true; });
+  };
   const template = fixed[0];
   const ensureStore = (binding: ObservationBinding) => {
     const id = key(binding);
+    const assignment = fixed.find(item => key(item.binding) === id) ??
+      (template && !template.config.htxDerivativesFamilies?.length &&
+        binding.configurationRevision === template.config.revision ? template : undefined);
+    if (!assignment) return null;
+    const config = assignment.config;
     const existingStore = stores.get(id);
     const existingOptions = options.get(id);
     if (existingStore && existingOptions)
-      return { store: existingStore, readerOptions: existingOptions };
-    if (!template || binding.configurationRevision !== template.config.revision) return null;
+      return { store: existingStore, readerOptions: existingOptions, config };
     const store = createObservationCredentialStore({
       credentialService: protectedCredentialService,
       bindingReader,
       authorizeOpen: source.authorizeOpen,
       clock,
-      timeoutMs: template.config.readTimeoutMs,
+      timeoutMs: config.readTimeoutMs,
     });
     const readerOptions = Object.freeze({
-      ...template.readerLimits,
+      ...assignment.readerLimits,
       binding,
-      symbols: template.config.symbols,
-      readTimeoutMs: template.config.readTimeoutMs,
+      symbols: config.symbols,
+      readTimeoutMs: config.readTimeoutMs,
     });
     stores.set(id, store);
     options.set(id, readerOptions);
-    return { store, readerOptions };
+    return { store, readerOptions, config };
   };
   for (const item of fixed) ensureStore(item.binding);
   const controller = new AbortController();
@@ -165,6 +187,12 @@ export function createConfiguredHtxObservationRuntime(
     controller.abort();
     for (const pending of opening) pending.abort();
     let failed = false;
+    for (const admission of admissions) {
+      try { releaseAdmission(admission); } catch { failed = true; }
+    }
+    for (const reader of derivativeReaders) {
+      try { reader.dispose(); } catch { failed = true; }
+    }
     for (const reader of readers) {
       try {
         reader.dispose();
@@ -191,7 +219,7 @@ export function createConfiguredHtxObservationRuntime(
     iterationTimeoutMs,
     maxAccounts: 20,
     async openReader(requested, signal) {
-      if (closed || !started || signal.aborted)
+      if (closed || !started || signal.aborted || derivativeCleanupFailed || derivativeReaders.size >= 20 || admissions.size >= 20)
         throw new AccountObservationReadFailure("READ_FAILED");
       let binding: ObservationBinding;
       try {
@@ -201,7 +229,7 @@ export function createConfiguredHtxObservationRuntime(
       }
       const opened = ensureStore(binding);
       if (!opened) throw new AccountObservationReadFailure("IDENTITY_MISMATCH");
-      const { store, readerOptions } = opened;
+      const { store, readerOptions, config } = opened;
       const abort = new AbortController();
       opening.add(abort);
       const cancel = () => abort.abort();
@@ -209,6 +237,12 @@ export function createConfiguredHtxObservationRuntime(
       if (signal.aborted || closed) cancel();
       let owned: AccountObservationReader | undefined;
       let admission: ReturnType<typeof createHtxReadAdmission> | undefined;
+      let derivatives: ReturnType<typeof createHtxDerivativesObservationReader> | undefined;
+      const verifyExactKey: AdmissionVerifier = async (scope, digest, admissionSignal) => {
+        if (closed || admissionSignal.aborted || !admission) return false;
+        if (verifyReadAdmission && (await verifyReadAdmission(scope, digest, admissionSignal)) !== true) return false;
+        return admission.verifyReadAdmission(scope, digest, admissionSignal);
+      };
       try {
         owned = await openHtxObservationReader(
           {
@@ -226,8 +260,19 @@ export function createConfiguredHtxObservationRuntime(
                   fetchImpl,
                   timeoutMs: readerOptions.readTimeoutMs,
                   maxResponseBytes: readerOptions.maxResponseBytes,
+                  requireReadOnlyPermission: Boolean(config.htxDerivativesFamilies?.length),
                   authorizeCurrent: source.authorizeOpen,
                 });
+                admissions.add(admission);
+                if (config.htxDerivativesFamilies?.length) {
+                  derivatives = createHtxDerivativesObservationReader({
+                    credential: handle, families: config.htxDerivativesFamilies,
+                    clock, fetchImpl, timeoutMs: readerOptions.readTimeoutMs,
+                    maxResponseBytes: readerOptions.maxResponseBytes,
+                    verifyReadOnlyAdmission: verifyExactKey,
+                  });
+                  derivativeReaders.add(derivatives);
+                }
                 // Keep the protected store's non-enumerable, disposal-aware accessors;
                 // never spread/copy secrets into an enumerable wrapper or retain new strings.
                 const wrapped: HtxObservationCredentialHandle = {
@@ -240,9 +285,9 @@ export function createConfiguredHtxObservationRuntime(
                   },
                   dispose() {
                     try {
-                      admission?.dispose();
+                      releaseDerivatives(derivatives);
                     } finally {
-                      handle.dispose();
+                      try { releaseAdmission(admission); } finally { handle.dispose(); }
                     }
                   },
                 };
@@ -256,15 +301,7 @@ export function createConfiguredHtxObservationRuntime(
                 throw error;
               }
             },
-            async verifyReadAdmission(scope, digest, admissionSignal) {
-              if (
-                verifyReadAdmission &&
-                (await verifyReadAdmission(scope, digest, admissionSignal)) !== true
-              )
-                return false;
-              if (!admission || admissionSignal.aborted) return false;
-              return admission.verifyReadAdmission(scope, digest, admissionSignal);
-            },
+            verifyReadAdmission: verifyExactKey,
           },
           readerOptions,
           abort.signal,
@@ -279,6 +316,7 @@ export function createConfiguredHtxObservationRuntime(
           readBalances: reader.readBalances,
           readOpenOrders: reader.readOpenOrders,
           readTrades: reader.readTrades,
+          ...(derivatives ? { readDerivativesAccount: derivatives.readDerivativesAccount } : {}),
           dispose() {
             if (released) return;
             released = true;
@@ -292,7 +330,9 @@ export function createConfiguredHtxObservationRuntime(
         readers.add(wrapped);
         return wrapped;
       } finally {
-        if (!owned) admission?.dispose();
+        if (!owned) {
+          try { releaseDerivatives(derivatives); } finally { releaseAdmission(admission); }
+        }
         signal.removeEventListener("abort", cancel);
         opening.delete(abort);
         abort.abort();

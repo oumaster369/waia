@@ -3,6 +3,7 @@ import type { Sql } from "postgres";
 import { createObservationConfiguration, createPostgresAccountObservationRuntime } from "@/lib/trader/account-observation/runtime";
 import type { ObservationAssignment } from "@/lib/trader/account-observation/runtime";
 import { createHash } from "node:crypto";
+import type { HtxDerivativesAccountFamily } from "@/lib/trader/account-observation/derivatives/types";
 
 const ports = vi.hoisted(() => ({ claimDue: vi.fn(async () => null) }));
 vi.mock("@/lib/trader/account-observation/postgres-repository", () => ({
@@ -45,6 +46,23 @@ describe("explicit recurring PostgreSQL observation composition", () => {
     expect(config.htxCoverage?.pageSize).toBe(10); expect(Object.isFrozen(config.htxCoverage)).toBe(true);
     expect(() => createObservationConfiguration({ ...parameters,
       htxCoverage: { ...htxCoverage, maxResponseBytes: 1048577 } })).toThrow();
+  });
+  it("binds an immutable explicit derivatives family allowlist while preserving the legacy spot digest", () => {
+    const inputFamilies: HtxDerivativesAccountFamily[] = ["usdt_cross_shared", "coin_perpetual"];
+    const configured = createObservationConfiguration({ ...parameters, htxDerivativesFamilies: inputFamilies });
+    inputFamilies.push("coin_delivery_futures");
+    expect(configured.htxDerivativesFamilies).toEqual(["usdt_cross_shared", "coin_perpetual"]);
+    expect(configured.htxDerivativesFamilies).not.toBe(inputFamilies);
+    expect(Object.isFrozen(configured.htxDerivativesFamilies)).toBe(true);
+    expect(configured.revision).not.toBe(createObservationConfiguration(parameters).revision);
+    expect(() => createObservationConfiguration({ ...parameters, htxDerivativesFamilies: [] })).toThrow();
+    expect(() => createObservationConfiguration({ ...parameters,
+      htxDerivativesFamilies: ["coin_perpetual", "coin_perpetual"] })).toThrow();
+    expect(() => createObservationConfiguration({ ...parameters,
+      htxDerivativesFamilies: ["unknown-family"] as unknown as HtxDerivativesAccountFamily[] })).toThrow();
+    expect(() => createObservationConfiguration({ ...parameters, readTimeoutMs: 200, leaseTtlMs: 1200,
+      htxDerivativesFamilies: ["usdt_isolated_perpetual", "usdt_cross_shared", "coin_perpetual", "coin_delivery_futures"] }))
+      .toThrow();
   });
   it("starts only when awaited, recurs without a browser, and stops cleanly", async () => {
     const stop = new AbortController(); const openReader = vi.fn(); const loadAssignments = vi.fn(async () => [assignment()]);

@@ -18,17 +18,24 @@ function payload(path: string): unknown {
   if (path === "/v2/user/uid") return { code: 200, data: 456 };
   return { code: 200, data: [{ accessKey: apiKey, status: "normal", permission: "readOnly" }] };
 }
-function setup(change?: (path: string, value: unknown) => unknown) {
+function setup(change?: (path: string, value: unknown) => unknown, options?: { requireReadOnlyPermission?: boolean }) {
   const fetchImpl = vi.fn<typeof fetch>(async url => {
     const path = new URL(String(url)).pathname;
     return json(change ? change(path, payload(path)) : payload(path));
   });
   const credential = { binding: { ...binding }, apiKey, apiSecret, dispose: vi.fn() };
   const authorizeCurrent = vi.fn(async () => true);
-  const input = { credential, host: "api.huobi.pro" as const, clock: accountObservationClock,
-    fetchImpl, timeoutMs: 1000, maxResponseBytes: 4096, authorizeCurrent };
+  const input: { credential: typeof credential; host: "api.huobi.pro"; clock: typeof accountObservationClock;
+    fetchImpl: typeof fetchImpl; timeoutMs: number; maxResponseBytes: number;
+    requireReadOnlyPermission?: boolean; authorizeCurrent: typeof authorizeCurrent } = {
+      credential, host: "api.huobi.pro", clock: accountObservationClock,
+      fetchImpl, timeoutMs: 1000, maxResponseBytes: 4096, authorizeCurrent,
+    };
+  if (options && Object.hasOwn(options, "requireReadOnlyPermission")) {
+    input.requireReadOnlyPermission = options.requireReadOnlyPermission;
+  }
   const admission = createHtxReadAdmission(input);
-  return { ...input, admission, check: () => admission.verifyReadAdmission(binding, digest, signal()) };
+  return { ...input, input, admission, check: () => admission.verifyReadAdmission(binding, digest, signal()) };
 }
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-10T00:00:00Z")); });
 afterEach(() => vi.useRealTimers());
@@ -83,6 +90,47 @@ describe("fresh exact-key read-only HTX admission, synthetic keys and mock fetch
       ? { code: 200, data: [{ accessKey: apiKey, status: "normal", permission: "readOnly,trade" }] } : value);
     expect(await f.check()).toBe(true); expect(Object.keys(f.admission).sort()).toEqual(["dispose", "verifyReadAdmission"]);
     expect(f.fetchImpl.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true); f.admission.dispose();
+  });
+  it("accepts a freshly verified exact read-only permission in strict mode", async () => {
+    const f = setup(undefined, { requireReadOnlyPermission: true });
+    expect(await f.check()).toBe(true);
+    expect(f.fetchImpl).toHaveBeenCalledTimes(3);
+    expect(f.authorizeCurrent).toHaveBeenCalledTimes(6);
+    f.admission.dispose();
+  });
+  it("strict mode refuses read-only plus trade despite valid current binding and metadata", async () => {
+    const f = setup((path, value) => path === "/v2/user/api-key"
+      ? { code: 200, data: [{ accessKey: apiKey, status: "normal", permission: "readOnly,trade" }] } : value,
+    { requireReadOnlyPermission: true });
+    await expect(f.check()).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+    expect(f.authorizeCurrent).toHaveBeenCalledTimes(6);
+    expect(f.fetchImpl).toHaveBeenCalledTimes(3);
+    f.admission.dispose();
+  });
+  it("keeps explicit false and omitted policy on the legacy read-admission contract", async () => {
+    const tradePermission = (path: string, value: unknown) => path === "/v2/user/api-key"
+      ? { code: 200, data: [{ accessKey: apiKey, status: "normal", permission: "readOnly,trade" }] } : value;
+    const omitted = setup(tradePermission);
+    expect(Object.hasOwn(omitted.input, "requireReadOnlyPermission")).toBe(false);
+    expect(await omitted.check()).toBe(true);
+    omitted.admission.dispose();
+
+    const explicitFalse = setup(tradePermission, { requireReadOnlyPermission: false });
+    expect(await explicitFalse.check()).toBe(true);
+    explicitFalse.admission.dispose();
+  });
+  it("captures strict admission at construction so later input mutation cannot downgrade it", async () => {
+    const f = setup((path, value) => path === "/v2/user/api-key"
+      ? { code: 200, data: [{ accessKey: apiKey, status: "normal", permission: "readOnly,trade" }] } : value,
+    { requireReadOnlyPermission: true });
+    f.input.requireReadOnlyPermission = false;
+    await expect(f.check()).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+    expect(f.fetchImpl).toHaveBeenCalledTimes(3);
+    f.admission.dispose();
+  });
+  it("refuses a malformed provided strict-admission flag", () => {
+    expect(() => setup(undefined, { requireReadOnlyPermission: "true" as unknown as boolean }))
+      .toThrow("PERMISSION_DENIED");
   });
   it("accepts the documented API-key envelope and metadata fields for the exact synthetic key", async () => {
     // https://huobiapi.github.io/docs/spot/v1/en/#api-key-query; synthetic identities only.

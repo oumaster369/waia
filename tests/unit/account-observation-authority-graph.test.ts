@@ -117,6 +117,64 @@ function pathTo(closure: Map<string, string[]>, target: string): string[] {
   return [];
 }
 
+const DERIVATIVES_TRANSPORT = "lib/trader/account-observation/derivatives/htx-account-transport.ts";
+
+/** A single reviewed private POST reader is allowed, with a closed source shape.
+ * Behavioral transport tests separately exercise family routing and admission refusal.
+ * A renamed/generalized reader must receive a fresh authority review. */
+function derivativesBoundaryViolations(source: string): string[] {
+  const violations: string[] = [];
+  const endpoints = [...source.matchAll(/path:\s*"([^"\n]+)", body: Object\.freeze\((\{[^}]*\})\)/g)]
+    .map((match) => [match[1], JSON.parse(match[2]!.replace(/margin_account:/, '"margin_account":'))]);
+  const expected = [
+    ["/linear-swap-api/v1/swap_account_info", {}],
+    ["/linear-swap-api/v1/swap_cross_account_info", { margin_account: "USDT" }],
+    ["/swap-api/v1/swap_account_info", {}],
+    ["/api/v1/contract_account_info", {}],
+  ];
+  if (JSON.stringify(endpoints) !== JSON.stringify(expected)) violations.push("fixed endpoint/body inventory");
+  const input = source.match(/export function createHtxDerivativesAccountTransport\(input: Readonly<\{([\s\S]*?)\}>\)/)?.[1];
+  if (!input || /\b(?:path|body|url|method)\s*[?:]/.test(input)) violations.push("generic request input");
+  for (const required of [
+    'input.host !== "api.hbdm.com"',
+    'const host = input.host;',
+    'if (!HTX_DERIVATIVES_ACCOUNT_FAMILIES.includes(family) || disposed || active || signal.aborted)',
+    'const { path, body } = endpoints[family];',
+    'const verifyReadAdmission = input.verifyReadAdmission;',
+    'if (await verifyReadAdmission(admissionRequest, controller.signal) !== true) fail("PERMISSION_DENIED");',
+    'const url = `https://${host}${path}?${auth}`;',
+    'response = await fetchImpl(url, { method: "POST", signal: controller.signal,',
+    'redirect: "error", credentials: "omit", cache: "no-store",',
+    'body: JSON.stringify(body)',
+  ]) if (!source.includes(required)) violations.push(`missing boundary: ${required}`);
+  const networkCalls = [...source.matchAll(/\b(?:fetchImpl|fetch)\s*\(|\bhttps?\.request\s*\(/g)];
+  const methods = [...source.matchAll(/method:\s*["']([^"']+)["']/g)].map((match) => match[1]);
+  if (networkCalls.length !== 1 || JSON.stringify(methods) !== '["POST"]') violations.push("network call/method inventory");
+  const checks = [...source.matchAll(/await isCurrent\(\);/g)];
+  const fetchAt = source.indexOf("response = await fetchImpl(");
+  if (checks.length !== 2 || checks[0]!.index! >= fetchAt || checks[1]!.index! <= fetchAt ||
+    checks[1]!.index! >= source.indexOf("return text;")) violations.push("pre/post read admission");
+  return violations;
+}
+
+function observationNetworkViolations(sources: ReadonlyMap<string, string>): string[] {
+  const violations: string[] = [];
+  for (const [file, source] of sources) {
+    if (file === DERIVATIVES_TRANSPORT) {
+      violations.push(...derivativesBoundaryViolations(source).map((reason) => `${file}: ${reason}`));
+      continue;
+    }
+    // The shared signer declares methods without making requests. No other consumer
+    // may call its POST signer, even if it delegates networking to another module.
+    if (file !== "lib/trader/connectors/htx/signing.ts" && /buildSignedPostQueryString/.test(source)) {
+      violations.push(`${file}: POST signer`);
+    }
+    if (!/\bfetchImpl\s*\(|\bfetch\s*\(|\bhttps?\.request\s*\(/.test(source)) continue;
+    if (/method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/.test(source)) violations.push(`${file}: non-GET request`);
+  }
+  return violations;
+}
+
 const closure = importClosure(ENTRYPOINTS);
 const closureSources = new Map(
   [...closure.keys()].map((file) => [file, readFileSync(path.join(REPO_ROOT, file), "utf8")]),
@@ -206,34 +264,37 @@ describe("DEE-1015 observation authority graph", () => {
     expect(violations).toEqual([]);
   });
 
-  it("issues no non-GET request from any module that can reach the network", () => {
-    const violations: string[] = [];
-    for (const [file, source] of closureSources) {
-      // A method literal only matters where a request is actually issued; the shared HTX
-      // signature builder names methods but performs no I/O.
-      if (!/\bfetchImpl\s*\(|\bfetch\s*\(|\bhttps?\.request\s*\(/.test(source)) continue;
-      if (/method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/.test(source)) {
-        violations.push(`${file}: non-GET request`);
-      }
-    }
-
-    expect(violations).toEqual([]);
-    // The assertion is only meaningful if a networking module is present at all.
+  it("permits only GET networking plus the closed derivatives account-info reader", () => {
+    expect(closure.has(DERIVATIVES_TRANSPORT)).toBe(true);
     expect(closure.has("lib/trader/account-observation/htx-get-transport.ts")).toBe(true);
-  });
-
-  it("imports the GET signer and never calls the POST signer", () => {
-    const callers: string[] = [];
-    for (const [file, source] of closureSources) {
-      // signing.ts declares both; only a consumer calling the POST signer is a violation.
-      if (file === "lib/trader/connectors/htx/signing.ts") continue;
-      if (/buildSignedPostQueryString/.test(source)) callers.push(file);
-    }
-
-    expect(callers).toEqual([]);
+    expect(observationNetworkViolations(closureSources)).toEqual([]);
     expect(closureSources.get("lib/trader/account-observation/htx-get-transport.ts")).toContain(
       "buildSignedQueryString",
     );
+  });
+
+  it.each([
+    ["different method", (source: string) => source.replace('method: "POST"', 'method: "PUT"')],
+    ["venue write endpoint", (source: string) => source.replace("/api/v1/contract_account_info", "/api/v1/contract_order")],
+    ["fifth endpoint", (source: string) => source.replace('const uuid =', 'const extra = { path: "/api/v1/extra", body: Object.freeze({}) };\nconst uuid =')],
+    ["arbitrary body", (source: string) => source.replace('body: JSON.stringify(body)', 'body: JSON.stringify(input)')],
+    ["other host", (source: string) => source.replace('input.host !== "api.hbdm.com"', 'input.host !== "other.example"')],
+    ["removed admission", (source: string) => source.replace('await isCurrent();', '')],
+    ["bypassed admission", (source: string) => source.replace('if (await verifyReadAdmission(admissionRequest, controller.signal) !== true)', 'if (false)')],
+  ] as const)("rejects derivatives authority mutation: %s", (_label, mutate) => {
+    const sources = new Map(closureSources);
+    sources.set(DERIVATIVES_TRANSPORT, mutate(sources.get(DERIVATIVES_TRANSPORT)!));
+    expect(observationNetworkViolations(sources).length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ['await fetchImpl("https://example.invalid", { method: "POST" });', "non-GET request"],
+    ['const signed = buildSignedPostQueryString(input);', "POST signer"],
+  ])("rejects POST authority in any other closure consumer: %s", (extra, reason) => {
+    const file = "lib/trader/account-observation/host.ts";
+    const sources = new Map(closureSources);
+    sources.set(file, `${sources.get(file)}\n${extra}`);
+    expect(observationNetworkViolations(sources)).toContain(`${file}: ${reason}`);
   });
 
   it("keeps the observation transport GET-only", () => {

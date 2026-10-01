@@ -36,8 +36,22 @@ test("mounted Admin and tenant update the same observation automatically and cle
       readCompletedAtMs: at,
       error: null,
     };
+    const derivativeRow = (accountCode: string, collateralAsset: string,
+      marginMode: "isolated" | "cross" | null, marginBalance: string,
+      withdrawAvailable: string | null = null, marginAvailable: string | null = "0") => ({
+      accountCode, collateralAsset, marginMode,
+      marginBalance, marginAvailable, withdrawAvailable, marginPosition: null, marginFrozen: "0",
+      marginStatic: null, realizedPnl: null, unrealizedPnl: "0", riskRate: null,
+      liquidationPrice: null, leverage: null,
+    });
+    const families = [
+      ["usdt_isolated_perpetual", [derivativeRow("BTC-USDT", "USDT", "isolated", "100.25")]],
+      ["usdt_cross_shared", [derivativeRow("USDT", "USDT", "cross", "200.50", "180.25", null)]],
+      ["coin_perpetual", [derivativeRow("BTC-USD", "BTC", null, "0.003")]],
+      ["coin_delivery_futures", [derivativeRow("BTC", "BTC", null, "0.004")]],
+    ] as const;
     return {
-      schemaVersion: "account-observation/v1",
+      schemaVersion: "account-observation/v2",
       binding,
       observationId:
         version === 1
@@ -50,6 +64,13 @@ test("mounted Admin and tenant update the same observation automatically and cle
       openOrders: empty,
       holdings: [],
       trades: [{ symbol: "BTCUSDT", component: empty }],
+      derivatives: {
+        schemaVersion: "htx-derivatives-observation/v1",
+        families: families.map(([family, accounts]) => ({
+          family, status: "COMPLETE", accounts, readStartedAtMs: at,
+          readCompletedAtMs: at, responseGeneratedAtMs: at, error: null,
+        })),
+      },
     };
   };
   const wire = async (target: Page, admin: boolean) => {
@@ -105,6 +126,13 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await page.goto("/trader");
   const tenantPanel = page.getByRole("region", { name: "Account observation", exact: true });
   await expect(tenantPanel.getByText(observation().observationId)).toBeVisible();
+  const tenantCross = tenantPanel.getByRole("region", { name: "USDT cross · shared derivatives pool" });
+  await expect(tenantCross.getByText("200.50", { exact: true })).toBeVisible();
+  await expect(tenantCross.getByText("180.25", { exact: true })).toBeVisible();
+  await expect(tenantCross.getByText("Shared USDT pool for perpetual and delivery contracts. Account totals are shown once; contract details are not added again.")).toBeVisible();
+  for (const family of ["USDT perpetual · isolated accounts", "Coin-margined perpetual accounts", "Coin-margined delivery futures accounts"]) {
+    await expect(tenantPanel.getByRole("region", { name: family })).toBeVisible();
+  }
   await expect(page.getByTestId("trader-unpublished-note")).toBeVisible();
   await expect(tenantPanel.getByRole("button")).toHaveCount(0);
 
@@ -126,6 +154,10 @@ test("mounted Admin and tenant update the same observation automatically and cle
   );
   const adminPanel = admin.getByRole("region", { name: "Account observation", exact: true });
   await expect(adminPanel.getByText(observation().observationId)).toBeVisible();
+  const adminCross = adminPanel.getByRole("region", { name: "USDT cross · shared derivatives pool" });
+  await expect(adminCross.getByText("200.50", { exact: true })).toBeVisible();
+  await expect(adminCross.getByText("180.25", { exact: true })).toBeVisible();
+  await expect(adminCross.getByText("Shared USDT pool for perpetual and delivery contracts. Account totals are shown once; contract details are not added again.")).toBeVisible();
   await expect(adminPanel.getByRole("button")).toHaveCount(0);
   await expect(tenantPanel.getByText("Reconnecting automatically.")).toBeVisible();
   await expect(adminPanel.getByText("Reconnecting automatically.")).toBeVisible();
@@ -150,6 +182,8 @@ test("mounted Admin and tenant update the same observation automatically and cle
   });
   await expect(tenantPanel.getByText(observation().observationId)).toHaveCount(0);
   await expect(adminPanel.getByText(observation().observationId)).toHaveCount(0);
+  await expect(tenantPanel.getByText("200.50", { exact: true })).toHaveCount(0);
+  await expect(adminPanel.getByText("200.50", { exact: true })).toHaveCount(0);
   await admin.close();
 });
 

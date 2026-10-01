@@ -34,11 +34,15 @@ export function createHtxReadAdmission(input: Readonly<{
   credential: HtxObservationCredentialHandle;
   host: "api.huobi.pro" | "api-aws.huobi.pro";
   clock: ObservationClock; fetchImpl: typeof fetch; timeoutMs: number; maxResponseBytes: number;
+  /** Derivatives observation requires a freshly observed exact read-only scope. */
+  requireReadOnlyPermission?: boolean;
   authorizeCurrent(binding: ObservationBinding, signal: AbortSignal): Promise<boolean>;
 }>) {
   const fixed = (() => {
     try {
       const { credential, host, clock, fetchImpl, timeoutMs, maxResponseBytes, authorizeCurrent } = input;
+      if (input.requireReadOnlyPermission !== undefined && typeof input.requireReadOnlyPermission !== "boolean") denied();
+      const requireReadOnlyPermission = input.requireReadOnlyPermission === true;
       const binding = Object.freeze(observationBindingSchema.parse(credential.binding));
       const apiKey = z.string().min(1).max(256).regex(/^[A-Za-z0-9_-]+$/).parse(credential.apiKey);
       const apiSecret = z.string().min(1).max(512).parse(credential.apiSecret);
@@ -47,10 +51,10 @@ export function createHtxReadAdmission(input: Readonly<{
       const transport = createHtxMetadataGetTransport({ binding, apiKey, apiSecret, host, clock,
         fetchImpl, timeoutMs, authorizeCurrent });
       return { binding, apiKey, keyDigest: createHash("sha256").update(apiKey).digest("hex"),
-        transport, clock, timeoutMs, maxResponseBytes };
+        transport, clock, timeoutMs, maxResponseBytes, requireReadOnlyPermission };
     } catch { return denied(); }
   })();
-  const { binding, keyDigest, transport, clock, timeoutMs, maxResponseBytes } = fixed;
+  const { binding, keyDigest, transport, clock, timeoutMs, maxResponseBytes, requireReadOnlyPermission } = fixed;
   let apiKey = fixed.apiKey; fixed.apiKey = "";
   let disposed = false; let active: AbortController | null = null;
   const pending = new Set<Promise<unknown>>();
@@ -102,7 +106,8 @@ export function createHtxReadAdmission(input: Readonly<{
         const key = keySchema.parse(matching[0]);
         const permissions = key.permission.split(",").map(token => token.trim().toLowerCase());
         if (!permissions.includes("readonly") || new Set(permissions).size !== permissions.length ||
-          permissions.some(permission => permission !== "readonly" && permission !== "trade")) denied();
+          permissions.some(permission => permission !== "readonly" && permission !== "trade") ||
+          (requireReadOnlyPermission && (permissions.length !== 1 || permissions[0] !== "readonly"))) denied();
         current(); return true;
       };
       try {

@@ -1,13 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountObservationFailure, AccountObservationReadFailure, createAccountObservationService } from
   "@/lib/trader/account-observation/service";
+import { parseAccountObservation } from "@/lib/trader/account-observation/validation";
 import type { AccountObservation, AccountObservationReader, ObservationBinding, ObservationClock,
   ObservationConfig, ObservationLease, ObservationRepository, ObservedOrder, ReadEnvelope } from
   "@/lib/trader/account-observation/types";
 import type { Balance, Trade } from "@/lib/trader/connectors/types";
+import { HTX_DERIVATIVES_ACCOUNT_FAMILIES, type HtxDerivativesAccountFamily,
+  type HtxDerivativesAccountSnapshot } from "@/lib/trader/account-observation/derivatives/types";
 
-const initial: ObservationBinding = { organizationId: "org-1", credentialId: "credential-1",
-  exchangeAccountId: "account-1", credentialRevision: "revision-1", configurationRevision: "config-1" };
+const initial: ObservationBinding = { organizationId: "00000000-0000-4000-8000-000000000001",
+  credentialId: "00000000-0000-4000-8000-000000000002", exchangeAccountId: "account-1",
+  credentialRevision: "1", configurationRevision: "config-1" };
 const config: ObservationConfig = { revision: "config-1", symbols: ["BTCUSDT", "ETHUSDT"],
   pollIntervalMs: 100, maxBackoffMs: 800, readTimeoutMs: 10, leaseTtlMs: 1000 };
 const clock: ObservationClock = { now: () => Date.now(), sleep: (ms, signal) => new Promise((resolve, reject) => {
@@ -43,14 +47,33 @@ function setup(overrides: Partial<ObservationConfig> = {}) {
   };
   const envelope = <T>(values: readonly T[] = []): ReadEnvelope<T> =>
     ({ binding: { ...state.binding }, values, complete: true, sourceAsOfMs: null });
+  const snapshot = (family: HtxDerivativesAccountFamily): HtxDerivativesAccountSnapshot => {
+    const accountCode = family === "usdt_cross_shared" ? "USDT" :
+      family === "usdt_isolated_perpetual" ? "BTC-USDT" : family === "coin_perpetual" ? "THETA-USD" : "BTC";
+    const collateralAsset = family === "usdt_cross_shared" || family === "usdt_isolated_perpetual" ? "USDT" :
+      family === "coin_perpetual" ? "THETA" : "BTC";
+    return { schemaVersion: "htx-derivatives-account/v1", family, responseGeneratedAtMs: null,
+      accounts: [{ accountCode, collateralAsset,
+        marginMode: family === "usdt_cross_shared" ? "cross" : family === "usdt_isolated_perpetual" ? "isolated" : null,
+        marginBalance: "1.250000000000000001", marginAvailable: "1",
+        withdrawAvailable: family === "usdt_cross_shared" ? "1" : null,
+        marginPosition: "0", marginFrozen: "0",
+        marginStatic: "1", realizedPnl: "0", unrealizedPnl: "-0.000000000000000001", riskRate: "0",
+        liquidationPrice: "0", leverage: "1" }],
+    };
+  };
   const reader: AccountObservationReader = { readBalances: vi.fn(async () => envelope<Balance>()),
-    readOpenOrders: vi.fn(async () => envelope<ObservedOrder>()), readTrades: vi.fn(async () => envelope<Trade>()), dispose: vi.fn() };
+    readOpenOrders: vi.fn(async () => envelope<ObservedOrder>()), readTrades: vi.fn(async () => envelope<Trade>()),
+    readDerivativesAccount: vi.fn(async (family: HtxDerivativesAccountFamily) => ({
+      binding: { ...state.binding }, snapshot: snapshot(family),
+    })), dispose: vi.fn() };
   const openReader = vi.fn(async (_binding: ObservationBinding, _signal: AbortSignal) => {
     void _binding; void _signal; return reader;
   });
-  const deps = { repository, clock, openReader, newObservationId: () => `observation-${state.counter}` };
+  const deps = { repository, clock, openReader,
+    newObservationId: () => `10000000-0000-4000-8000-${String(state.counter).padStart(12, "0")}` };
   const service = createAccountObservationService(deps, { ...config, ...overrides });
-  return { state, repository, reader, openReader, service, envelope, beforeCommit, deps };
+  return { state, repository, reader, openReader, service, envelope, snapshot, beforeCommit, deps };
 }
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(10000); });
 afterEach(() => { vi.useRealTimers(); });
@@ -100,7 +123,7 @@ describe("DEE-960 injected account observation — no production adapter or real
     const f = setup(); const result = await f.service.tick(initial, "owner-1");
     expect(result.status).toBe("COMMITTED");
     const observation = f.state.observations[0]!;
-    expect(observation).toMatchObject({ observationId: "observation-1", binding: initial,
+    expect(observation).toMatchObject({ observationId: "10000000-0000-4000-8000-000000000001", binding: initial,
       status: "COMPLETE", holdings: [], collectionStartedAtMs: 10000, collectionCompletedAtMs: 10000,
       balances: { status: "COMPLETE", values: [], sourceAsOfMs: null } });
     expect(f.reader.readTrades).toHaveBeenNthCalledWith(1, "BTCUSDT", expect.any(AbortSignal));
@@ -108,6 +131,203 @@ describe("DEE-960 injected account observation — no production adapter or real
     expect(f.reader.dispose).toHaveBeenCalledOnce();
     expect(f.state.nextDue).toBe(10100);
     expect(Object.isFrozen(observation)).toBe(true);
+    expect(observation.schemaVersion).toBe("account-observation/v1");
+  });
+  it("commits configured derivatives families as v2 with other families explicitly unconfigured", async () => {
+    const family: HtxDerivativesAccountFamily = "usdt_isolated_perpetual";
+    const f = setup({ htxDerivativesFamilies: [family] });
+    expect(await f.service.tick(initial, "owner")).toMatchObject({ status: "COMMITTED" });
+    const observation = f.state.observations[0]!;
+    expect(observation.schemaVersion).toBe("account-observation/v2");
+    if (observation.schemaVersion !== "account-observation/v2") throw new Error("expected v2");
+    expect(f.reader.readDerivativesAccount).toHaveBeenCalledOnce();
+    expect(f.reader.readDerivativesAccount).toHaveBeenCalledWith(family, expect.any(AbortSignal));
+    expect(observation.derivatives!.families.map(item => [item.family, item.status])).toEqual(
+      HTX_DERIVATIVES_ACCOUNT_FAMILIES.map(item => [item, item === family ? "COMPLETE" : "NOT_CONFIGURED"]));
+    expect(observation.derivatives!.families[0]?.accounts?.[0]?.marginBalance).toBe("1.250000000000000001");
+    expect(observation.status).toBe("COMPLETE");
+    expect(f.reader.dispose).toHaveBeenCalledOnce();
+  });
+  it("uses cross withdrawAvailable as transferable balance without requiring per-contract marginAvailable", async () => {
+    const f = setup({ htxDerivativesFamilies: ["usdt_cross_shared"] });
+    vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => ({
+      binding: { ...initial },
+      snapshot: {
+        ...f.snapshot(family),
+        accounts: [{
+          ...f.snapshot(family).accounts[0]!,
+          marginAvailable: null,
+          withdrawAvailable: "0.75",
+        } as unknown as HtxDerivativesAccountSnapshot["accounts"][number]],
+      },
+    }));
+
+    expect(await f.service.tick(initial, "owner")).toMatchObject({ status: "COMMITTED" });
+    const observation = f.state.observations[0]!;
+    expect(observation.status).toBe("COMPLETE");
+    expect(observation.derivatives!.families.find(item => item.family === "usdt_cross_shared")?.accounts?.[0])
+      .toMatchObject({ marginAvailable: null, withdrawAvailable: "0.75" });
+    const malformedDerivatives = {
+      ...observation.derivatives!,
+      families: observation.derivatives!.families.map(item => item.family === "usdt_cross_shared"
+        ? { ...item, accounts: item.accounts?.map(account => ({ ...account, withdrawAvailable: null })) }
+        : item),
+    };
+    expect(() => parseAccountObservation({ ...observation, derivatives: malformedDerivatives }))
+      .toThrow("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
+
+    const missingTransferBalance = setup({ htxDerivativesFamilies: ["usdt_cross_shared"] });
+    vi.mocked(missingTransferBalance.reader.readDerivativesAccount!).mockImplementation(async family => ({
+      binding: { ...initial },
+      snapshot: { ...missingTransferBalance.snapshot(family), accounts: [{
+        ...missingTransferBalance.snapshot(family).accounts[0]!, withdrawAvailable: null,
+      }] },
+    }));
+    await missingTransferBalance.service.tick(initial, "owner");
+    expect(missingTransferBalance.state.observations[0]?.status).toBe("PARTIAL");
+    expect(missingTransferBalance.state.observations[0]?.derivatives!.families
+      .find(item => item.family === "usdt_cross_shared")?.status).toBe("PARTIAL");
+  });
+
+  it.each(["PARTIAL", "ERROR"] as const)(
+    "includes configured derivative %s in aggregate status without treating unconfigured families as failures",
+    async derivativeStatus => {
+      const f = setup({ htxDerivativesFamilies: ["coin_perpetual"] });
+      if (derivativeStatus === "PARTIAL") {
+        vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => ({
+          binding: { ...initial },
+          snapshot: { ...f.snapshot(family), accounts: [{
+            ...f.snapshot(family).accounts[0]!, marginAvailable: null,
+          }] },
+        }));
+      } else {
+        vi.mocked(f.reader.readDerivativesAccount!).mockRejectedValue(new Error("synthetic read failure"));
+      }
+
+      const result = await f.service.tick(initial, "owner");
+      expect(result).toMatchObject({ status: "COMMITTED" });
+      const observation = f.state.observations[0]!;
+      expect(observation.status).toBe("PARTIAL");
+      expect(observation.derivatives!.families.find(item => item.family === "coin_perpetual")?.status)
+        .toBe(derivativeStatus);
+      expect(() => parseAccountObservation({ ...observation, status: "COMPLETE" }))
+        .toThrow("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
+      expect(observation.derivatives!.families.filter(item => item.status === "NOT_CONFIGURED"))
+        .toHaveLength(HTX_DERIVATIVES_ACCOUNT_FAMILIES.length - 1);
+    },
+  );
+
+  it("copies the configured family list and rejects empty, duplicate, or non-family entries", async () => {
+    const families: HtxDerivativesAccountFamily[] = ["usdt_cross_shared"];
+    const f = setup({ htxDerivativesFamilies: families });
+    families.push("coin_perpetual");
+    await f.service.tick(initial, "owner");
+    const observation = f.state.observations[0]!;
+    expect(observation.schemaVersion).toBe("account-observation/v2");
+    if (observation.schemaVersion !== "account-observation/v2") throw new Error("expected v2");
+    expect(f.reader.readDerivativesAccount).toHaveBeenCalledOnce();
+    expect(observation.derivatives!.families.find(item => item.family === "coin_perpetual")?.status)
+      .toBe("NOT_CONFIGURED");
+    for (const value of [[], ["usdt_cross_shared", "usdt_cross_shared"], ["unknown-family"]]) {
+      const f = setup();
+      expect(() => createAccountObservationService(f.deps,
+        { ...config, htxDerivativesFamilies: value as HtxDerivativesAccountFamily[] }))
+        .toThrow("ACCOUNT_OBSERVATION_INVALID_CONFIG");
+    }
+  });
+  it("uses PARTIAL for a valid row with null account metrics, not an error", async () => {
+    const f = setup({ htxDerivativesFamilies: ["coin_perpetual"] });
+    vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => ({
+      binding: { ...initial },
+      snapshot: { ...f.snapshot(family), accounts: [{ ...f.snapshot(family).accounts[0]!, marginAvailable: null }] },
+    }));
+    await f.service.tick(initial, "owner");
+    const observation = f.state.observations[0]!;
+    expect(observation.schemaVersion).toBe("account-observation/v2");
+    if (observation.schemaVersion !== "account-observation/v2") throw new Error("expected v2");
+    expect(observation.derivatives!.families.find(item => item.family === "coin_perpetual"))
+      .toMatchObject({ status: "PARTIAL", error: null, accounts: [{ marginAvailable: null }] });
+  });
+  it("preserves a complete balance summary when optional position metrics are unavailable", async () => {
+    const f = setup({ htxDerivativesFamilies: ["coin_perpetual"] });
+    vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => ({
+      binding: { ...initial }, snapshot: { ...f.snapshot(family), accounts: [{
+        ...f.snapshot(family).accounts[0]!, riskRate: null, liquidationPrice: null, leverage: null,
+        realizedPnl: null, unrealizedPnl: null, marginPosition: null, marginStatic: null, marginFrozen: null,
+      }] },
+    }));
+    await f.service.tick(initial, "owner");
+    expect(f.state.observations[0]!.derivatives!.families.find(item => item.family === "coin_perpetual"))
+      .toMatchObject({ status: "COMPLETE", error: null, accounts: [{ marginAvailable: "1", liquidationPrice: null }] });
+  });
+  it.each(["binding", "family"] as const)("fences a derivatives %s mismatch without publishing", async mismatch => {
+    const f = setup({ htxDerivativesFamilies: ["usdt_isolated_perpetual", "coin_perpetual"] });
+    vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => ({
+      binding: mismatch === "binding" ? { ...initial, credentialRevision: "2" } : { ...initial },
+      snapshot: mismatch === "family" ? f.snapshot("usdt_cross_shared") : f.snapshot(family),
+    }));
+    expect(await f.service.tick(initial, "owner")).toEqual({ status: "FENCED" });
+    expect(f.reader.readDerivativesAccount).toHaveBeenCalledOnce();
+    expect(f.state.observations).toEqual([]);
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.repository.release).toHaveBeenCalledOnce();
+  });
+  it("rechecks the exact current binding after each family and fences a mid-read rotation", async () => {
+    const f = setup({ htxDerivativesFamilies: ["usdt_isolated_perpetual", "usdt_cross_shared"] });
+    vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => {
+      const response = { binding: { ...initial }, snapshot: f.snapshot(family) };
+      f.state.binding.credentialRevision = "2";
+      return response;
+    });
+    expect(await f.service.tick(initial, "owner")).toEqual({ status: "FENCED" });
+    expect(f.reader.readDerivativesAccount).toHaveBeenCalledOnce();
+    expect(f.state.observations).toEqual([]);
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.repository.release).toHaveBeenCalledOnce();
+  });
+  it("fails configured families closed when the reader method is absent", async () => {
+    const f = setup({ htxDerivativesFamilies: ["usdt_cross_shared"] });
+    Object.defineProperty(f.reader, "readDerivativesAccount", { value: undefined });
+    await expect(f.service.tick(initial, "owner")).rejects.toMatchObject({
+      code: "ACCOUNT_OBSERVATION_DERIVATIVES_READER_UNAVAILABLE",
+    });
+    expect(f.reader.readBalances).not.toHaveBeenCalled();
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.state.observations).toEqual([]);
+  });
+  it("stores malformed family projection as safe ERROR and includes it in backoff", async () => {
+    const f = setup({ htxDerivativesFamilies: ["usdt_isolated_perpetual"] });
+    vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => ({
+      binding: { ...initial },
+      snapshot: { ...f.snapshot(family), accounts: [{ ...f.snapshot(family).accounts[0]!, collateralAsset: "BTC" }] },
+    }));
+    await f.service.tick(initial, "owner");
+    const observation = f.state.observations[0]!;
+    expect(observation.schemaVersion).toBe("account-observation/v2");
+    if (observation.schemaVersion !== "account-observation/v2") throw new Error("expected v2");
+    expect(observation.derivatives!.families[0]).toMatchObject({
+      status: "ERROR", accounts: null, error: "INVALID_RESPONSE",
+    });
+    expect(f.state.failures).toBe(1);
+    expect(f.state.nextDue).toBe(10200);
+  });
+  it("bounds derivative reads, aborts timed-out calls and stores only a safe error", async () => {
+    const f = setup({ htxDerivativesFamilies: ["coin_delivery_futures"] });
+    let signal!: AbortSignal;
+    vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async (_family, requestSignal) => {
+      signal = requestSignal;
+      return new Promise(() => {});
+    });
+    const pending = f.service.tick(initial, "owner");
+    await vi.advanceTimersByTimeAsync(11);
+    const result = await pending;
+    expect(result).toMatchObject({ status: "COMMITTED", observation: { schemaVersion: "account-observation/v2" } });
+    expect(signal.aborted).toBe(true);
+    const observation = f.state.observations[0]!;
+    expect(observation.schemaVersion).toBe("account-observation/v2");
+    if (observation.schemaVersion !== "account-observation/v2") throw new Error("expected v2");
+    expect(observation.derivatives!.families.find(item => item.family === "coin_delivery_futures"))
+      .toMatchObject({ status: "ERROR", accounts: null, error: "TIMEOUT" });
   });
   it.each(["organizationId", "credentialId", "exchangeAccountId", "credentialRevision", "configurationRevision"] as const)(
     "refuses caller mismatch in %s before reading", async key => {

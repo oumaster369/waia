@@ -9,6 +9,7 @@ import { createObservationConfiguration } from "@/lib/trader/account-observation
 import { accountObservationClock } from "@/lib/trader/account-observation/clock";
 import type { ObservationBinding, ObservationLease } from "@/lib/trader/account-observation/types";
 import type { ConnectorCredentialInput } from "@/lib/trader/connectors/types";
+import type { HtxDerivativesAccountFamily } from "@/lib/trader/account-observation/derivatives/types";
 
 const ports = vi.hoisted(() => ({
   createRepository: vi.fn(),
@@ -70,6 +71,12 @@ function assignment(account = "123", credentialSuffix = "2"): ConfiguredHtxObser
 }
 type Input = Parameters<typeof createConfiguredHtxObservationRuntime>[0];
 type MutableInput = { -readonly [Key in keyof Input]: Input[Key] };
+function withDerivatives(item: ConfiguredHtxObservationAssignment,
+  families: readonly HtxDerivativesAccountFamily[] = ["usdt_cross_shared"]): ConfiguredHtxObservationAssignment {
+  const { revision: _revision, ...parameters } = item.config;
+  const config = createObservationConfiguration({ ...parameters, htxDerivativesFamilies: families });
+  return { ...item, config, binding: { ...item.binding, configurationRevision: config.revision } };
+}
 function setup(overrides: Partial<Input> = {}) {
   const item = assignment();
   const collectorSql = { purpose: "collector" } as unknown as Sql;
@@ -160,6 +167,166 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("configured observation runtime, real local composition with mock persistence/network", () => {
+  const derivativesResponse = () => Response.json({ status: "ok", ts: Date.now(), data: [{
+    margin_account: "USDT", margin_balance: "200.50", withdraw_available: "190.25",
+  }] });
+  const derivativesCalls = (f: ReturnType<typeof setup>) => f.fetchImpl.mock.calls.filter(
+    ([url]) => new URL(String(url)).hostname === "api.hbdm.com");
+  function bindConfiguredRows(f: ReturnType<typeof setup>) {
+    ports.resolveActiveBinding.mockImplementation(async (scope: Partial<ObservationBinding>) =>
+      f.input.configured.find(item => item.binding.organizationId === scope.organizationId &&
+        item.binding.exchangeAccountId === scope.exchangeAccountId)?.binding ?? null);
+  }
+  async function stopAfterTick(f: ReturnType<typeof setup>) {
+    bindConfiguredRows(f);
+    const stop = new AbortController();
+    const work = createConfiguredHtxObservationRuntime(f.input).run(stop.signal);
+    await vi.advanceTimersByTimeAsync(0);
+    stop.abort();
+    await work;
+    return work;
+  }
+  it("collects only the exact configured derivatives family through real admission, parser and service", async () => {
+    const f = setup();
+    const item = withDerivatives(f.item);
+    f.input.configured = [item];
+    const spot = f.fetchImpl.getMockImplementation()!;
+    f.fetchImpl.mockImplementation((url, options) => new URL(String(url)).hostname === "api.hbdm.com"
+      ? Promise.resolve(derivativesResponse()) : spot(url, options));
+    await stopAfterTick(f);
+    expect(derivativesCalls(f)).toHaveLength(1);
+    const [url, options] = derivativesCalls(f)[0];
+    expect(new URL(String(url)).pathname).toBe("/linear-swap-api/v1/swap_cross_account_info");
+    expect(options).toMatchObject({ method: "POST", body: '{"margin_account":"USDT"}' });
+    expect(ports.commitIfCurrent).toHaveBeenCalledTimes(1);
+    const observation = ports.commitIfCurrent.mock.calls[0][0].observation;
+    expect(observation).toMatchObject({ schemaVersion: "account-observation/v2", binding: item.binding,
+      derivatives: { families: expect.arrayContaining([expect.objectContaining({ family: "usdt_cross_shared", status: "COMPLETE",
+        accounts: expect.arrayContaining([expect.objectContaining({ marginBalance: "200.50", collateralAsset: "USDT" })]),
+        readStartedAtMs: expect.any(Number), readCompletedAtMs: expect.any(Number), error: null })]) } });
+    expect(observation.derivatives.families.filter((family: { status: string }) => family.status === "NOT_CONFIGURED")).toHaveLength(3);
+    expect(JSON.stringify(ports.commitIfCurrent.mock.calls)).not.toMatch(/synthetic|Signature|AccessKey/);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("uses the second explicit account's own family configuration instead of the first template", async () => {
+    const f = setup();
+    const second = withDerivatives(assignment("124", "3"));
+    f.input.configured = [f.item, second];
+    f.input.protectedCredentialService = { async getDecryptedCredentials(_scope, credentialId) {
+      return { apiKey: `synthetic-key-${credentialId === second.binding.credentialId ? "124" : "123"}`, apiSecret: "synthetic-secret" };
+    } };
+    f.fetchImpl.mockImplementation(async (url) => {
+      const target = new URL(String(url));
+      const accessKey = target.searchParams.get("AccessKeyId")!;
+      const account = accessKey.endsWith("124") ? 124 : 123;
+      if (target.hostname === "api.hbdm.com") {
+        expect(account).toBe(124);
+        return derivativesResponse();
+      }
+      if (target.pathname === "/v1/account/accounts") return Response.json({ status: "ok",
+        data: [{ id: account, type: "spot", state: "working" }] });
+      if (target.pathname === "/v2/user/uid") return Response.json({ code: 200, data: account + 1000 });
+      if (target.pathname === "/v2/user/api-key") return Response.json({ code: 200,
+        data: [{ accessKey, status: "normal", permission: "readOnly" }] });
+      return Response.json({ status: "ok", data: target.pathname.endsWith("/balance")
+        ? { id: account, type: "spot", state: "working", list: [] } : [] });
+    });
+    await stopAfterTick(f);
+    expect(ports.commitIfCurrent).toHaveBeenCalledTimes(2);
+    const observations = ports.commitIfCurrent.mock.calls.map(([value]) => value.observation);
+    expect(observations.find(value => value.binding.exchangeAccountId === "123")).toMatchObject({ schemaVersion: "account-observation/v1" });
+    expect(observations.find(value => value.binding.exchangeAccountId === "124")).toMatchObject({ schemaVersion: "account-observation/v2" });
+    expect(derivativesCalls(f)).toHaveLength(1);
+  });
+  it("does not let an extra verifier grant a derivatives read for a trading key", async () => {
+    const f = setup();
+    f.input.configured = [withDerivatives(f.item)];
+    const spot = f.fetchImpl.getMockImplementation()!;
+    f.fetchImpl.mockImplementation((url, options) => new URL(String(url)).pathname === "/v2/user/api-key"
+      ? Promise.resolve(Response.json({ code: 200, data: [{ accessKey: "synthetic-key", status: "normal", permission: "readOnly,trade" }] }))
+      : spot(url, options));
+    await stopAfterTick(f);
+    expect(f.verifyReadAdmission).toHaveBeenCalled();
+    expect(derivativesCalls(f)).toHaveLength(0);
+    expect(ports.commitIfCurrent).not.toHaveBeenCalled();
+  });
+  it("discards futures values if fresh venue permission changes during the read", async () => {
+    const f = setup();
+    f.input.configured = [withDerivatives(f.item)];
+    const spot = f.fetchImpl.getMockImplementation()!;
+    let changed = false;
+    f.fetchImpl.mockImplementation((url, options) => {
+      const target = new URL(String(url));
+      if (target.hostname === "api.hbdm.com") { changed = true; return Promise.resolve(derivativesResponse()); }
+      if (changed && target.pathname === "/v2/user/api-key") return Promise.resolve(Response.json({ code: 200,
+        data: [{ accessKey: "synthetic-key", status: "normal", permission: "readOnly,trade" }] }));
+      return spot(url, options);
+    });
+    await stopAfterTick(f);
+    expect(derivativesCalls(f)).toHaveLength(1);
+    expect(ports.commitIfCurrent).toHaveBeenCalledTimes(1);
+    expect(ports.commitIfCurrent.mock.calls[0][0].observation.derivatives.families).toContainEqual(
+      expect.objectContaining({ family: "usdt_cross_shared", status: "ERROR", accounts: null, error: "PERMISSION_DENIED" }));
+    expect(JSON.stringify(ports.commitIfCurrent.mock.calls)).not.toContain("200.50");
+  });
+  it("fences the whole commit when the persisted assignment is revoked during a futures read", async () => {
+    const f = setup();
+    f.input.configured = [withDerivatives(f.item)];
+    const spot = f.fetchImpl.getMockImplementation()!;
+    f.fetchImpl.mockImplementation((url, options) => {
+      if (new URL(String(url)).hostname === "api.hbdm.com") {
+        ports.isCurrentAssignment.mockResolvedValue(false);
+        ports.isCurrent.mockResolvedValue(false);
+        return Promise.resolve(derivativesResponse());
+      }
+      return spot(url, options);
+    });
+    await stopAfterTick(f);
+    expect(derivativesCalls(f)).toHaveLength(1);
+    expect(ports.commitIfCurrent).not.toHaveBeenCalled();
+  });
+  it("aborts an active derivatives request on shutdown and cancels a late response body", async () => {
+    const f = setup();
+    f.input.configured = [withDerivatives(f.item)];
+    const spot = f.fetchImpl.getMockImplementation()!;
+    let finish!: (response: Response) => void;
+    f.fetchImpl.mockImplementation((url, options) => new URL(String(url)).hostname === "api.hbdm.com"
+      ? new Promise(resolve => { finish = resolve; }) : spot(url, options));
+    bindConfiguredRows(f);
+    const runtime = createConfiguredHtxObservationRuntime(f.input);
+    const work = runtime.run(new AbortController().signal);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(derivativesCalls(f)).toHaveLength(1);
+    runtime.dispose();
+    await work;
+    expect(derivativesCalls(f)[0][1]?.signal?.aborted).toBe(true);
+    const cancel = vi.fn();
+    finish(new Response(new ReadableStream({ cancel })));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(ports.commitIfCurrent).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("bounds unresolved metadata requests across repeated ticks even when fetch ignores abort", async () => {
+    const f = setup();
+    f.input.configured = [withDerivatives(f.item)];
+    bindConfiguredRows(f);
+    const finish: Array<(response: Response) => void> = [];
+    f.fetchImpl.mockImplementation(() => new Promise(resolve => { finish.push(resolve); }));
+    const runtime = createConfiguredHtxObservationRuntime(f.input);
+    const work = runtime.run(new AbortController().signal);
+    await vi.advanceTimersByTimeAsync(25000);
+    expect(f.fetchImpl).toHaveBeenCalledTimes(20);
+    expect(f.getDecryptedCredentials).toHaveBeenCalledTimes(20);
+    expect(ports.commitIfCurrent).not.toHaveBeenCalled();
+    runtime.dispose();
+    await work;
+    const cancel = vi.fn();
+    for (const resolve of finish) resolve(new Response(new ReadableStream({ cancel })));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cancel).toHaveBeenCalledTimes(20);
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it("does no I/O before run, keeps pool roles separate, and commits through all local adapters", async () => {
     const f = setup();
     const runtime = createConfiguredHtxObservationRuntime(f.input);
