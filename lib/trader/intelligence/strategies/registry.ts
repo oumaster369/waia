@@ -64,7 +64,21 @@ export function getStrategyRegistryEntry(strategyId: string): StrategyRegistryEn
 }
 
 export function isMvpStrategyId(strategyId: string): strategyId is MvpStrategyId {
-  return strategyId in EVALUATORS;
+  return Object.hasOwn(EVALUATORS, strategyId);
+}
+
+/** Validate an explicit caller selection before any strategy evaluation begins. */
+export function validateMvpStrategyIds(strategyIds: readonly string[]): readonly MvpStrategyId[] {
+  const selected = [...strategyIds];
+  for (const strategyId of selected) {
+    if (!isMvpStrategyId(strategyId)) {
+      throw new Error(`[trader/intelligence] unknown strategy signal ID: ${strategyId}`);
+    }
+  }
+  if (new Set(selected).size !== selected.length) {
+    throw new Error("[trader/intelligence] duplicate strategy signal ID");
+  }
+  return Object.freeze(selected) as readonly MvpStrategyId[];
 }
 
 export function evaluateRegisteredStrategies(
@@ -76,7 +90,7 @@ export function evaluateRegisteredStrategies(
     ? resolveHistoricalProfileStrategyIds(context.historicalProfile)
     : resolveMvpStrategyAssignments(context.organizationId),
 ): StrategySignal[] {
-  return strategyIds.map((strategyId) => {
+  return validateMvpStrategyIds(strategyIds).map((strategyId) => {
     const evaluator = EVALUATORS[strategyId];
     const signal = evaluator(msv, features, context);
     if (isResearchOnlyStrategyForProfile(strategyId, context.historicalProfile)) {

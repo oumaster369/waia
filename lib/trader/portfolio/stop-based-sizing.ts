@@ -13,7 +13,9 @@ import type { PortfolioRunConfig } from "@/lib/trader/portfolio/portfolio-run-co
 import type {
   StopDistanceProvider,
   StopDistanceSource,
+  StopDistanceResult,
 } from "@/lib/trader/portfolio/stop-distance-provider.types";
+import { resolveDefaultStopDistance } from "@/lib/trader/portfolio/default-stop-distance-provider";
 import {
   addDecimal,
   compareDecimal,
@@ -111,16 +113,17 @@ export function trimQtyToAffordable(
   return trimQtyToAffordable(entryPrice, trimmed, availableBalanceUsdt, costModel);
 }
 
-/**
- * Deterministic stop-based position sizing. Stop distance always resolved via injected provider.
- */
-export function computeStopBasedQuantity(
-  input: ComputeStopBasedQuantityInput,
+type CommonSizingInput = Omit<ComputeStopBasedQuantityInput,
+  "signal" | "stopDistanceProvider" | "capitalAuthorityPath"> & { symbol: string };
+
+/** One arithmetic implementation for legacy and research sizing. */
+function computeStopBasedQuantityCore(
+  input: CommonSizingInput & { legacyMaxRisk?: string; resolveStopDistance(): StopDistanceResult },
 ): StopBasedSizingResult {
   const minOrderQty = resolveMinOrderQty(input.runConfig);
 
   if (input.side === "sell") {
-    const held = getPositionQuantity(input.account.positions, input.signal.symbol);
+    const held = getPositionQuantity(input.account.positions, input.symbol);
     if (compareDecimal(held, "0") <= 0) {
       return { ok: false, reason: "SELL_NO_POSITION" };
     }
@@ -132,13 +135,7 @@ export function computeStopBasedQuantity(
     let stopDistanceUsdt = "0";
     let stopDistanceSource: StopDistanceSource = "RUN_DEFAULT_PCT";
     try {
-      const stop = input.stopDistanceProvider.resolveStopDistance({
-        entryPrice: input.entryPrice,
-        symbol: input.signal.symbol,
-        side: input.side,
-        signal: input.signal,
-        runConfig: input.runConfig,
-      });
+      const stop = input.resolveStopDistance();
       stopDistanceUsdt = stop.stopDistanceUsdt;
       stopDistanceSource = stop.source;
     } catch {
@@ -155,13 +152,7 @@ export function computeStopBasedQuantity(
   let stopDistanceUsdt: string;
   let stopDistanceSource: StopDistanceSource;
   try {
-    const stop = input.stopDistanceProvider.resolveStopDistance({
-      entryPrice: input.entryPrice,
-      symbol: input.signal.symbol,
-      side: input.side,
-      signal: input.signal,
-      runConfig: input.runConfig,
-    });
+    const stop = input.resolveStopDistance();
     stopDistanceUsdt = stop.stopDistanceUsdt;
     stopDistanceSource = stop.source;
   } catch {
@@ -188,11 +179,10 @@ export function computeStopBasedQuantity(
   qty = minDecimal(qty, input.defaultQuantity);
 
   if (
-    !isV2CapitalAuthorityPath(input.capitalAuthorityPath) &&
-    input.signal.maxRisk &&
+    input.legacyMaxRisk &&
     compareDecimal(input.entryPrice, "0") > 0
   ) {
-    qty = minDecimal(qty, divideDecimal(input.signal.maxRisk, input.entryPrice));
+    qty = minDecimal(qty, divideDecimal(input.legacyMaxRisk, input.entryPrice));
   }
 
   if (compareDecimal(input.entryPrice, "0") > 0) {
@@ -218,4 +208,35 @@ export function computeStopBasedQuantity(
     stopDistanceUsdt,
     stopDistanceSource,
   };
+}
+
+/** Existing signal/provider API, including the quarantined legacy maxRisk cap. */
+export function computeStopBasedQuantity(
+  input: ComputeStopBasedQuantityInput,
+): StopBasedSizingResult {
+  return computeStopBasedQuantityCore({ ...input, symbol: input.signal.symbol,
+    legacyMaxRisk: isV2CapitalAuthorityPath(input.capitalAuthorityPath) ? undefined : input.signal.maxRisk,
+    resolveStopDistance: () => input.stopDistanceProvider.resolveStopDistance({
+      entryPrice: input.entryPrice, symbol: input.signal.symbol, side: input.side,
+      signal: input.signal, runConfig: input.runConfig,
+    }),
+  });
+}
+
+/** Research arithmetic only: no fabricated StrategySignal/MVP identity, no
+ * signal-owned capital limit and no injected stop policy. The current canonical
+ * provisional stop-distance resolver is shared with HTR research. This neither
+ * grants an order allowance nor places a protective stop. The stage owner must
+ * obtain these inputs from its registered policy and actual modeled account. */
+export function computeResearchStopBasedQuantity(
+  input: CommonSizingInput,
+): StopBasedSizingResult {
+  return computeStopBasedQuantityCore({
+    side: input.side, symbol: input.symbol, entryPrice: input.entryPrice,
+    defaultQuantity: input.defaultQuantity, account: input.account, limits: input.limits,
+    runConfig: input.runConfig, costModel: input.costModel,
+    resolveStopDistance: () => resolveDefaultStopDistance({
+      entryPrice: input.entryPrice, runConfig: input.runConfig,
+    }),
+  });
 }

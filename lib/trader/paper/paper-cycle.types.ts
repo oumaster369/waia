@@ -319,6 +319,8 @@ export type PaperCycleResult = {
 
 /** Shared N-cycle runner context (fixture replay + poll sources). */
 export type RunMultiPaperCyclesSharedInput = {
+  /** Explicit evaluator selection; snapshot activeStrategyIds still controls actionability. */
+  strategySignalIds?: readonly string[];
   deps: PaperCycleDeps;
   context: OrgContext;
   n: number;

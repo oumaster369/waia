@@ -1214,6 +1214,7 @@ export async function runFixturePaperCycles(
     const forecastRuntimeInput =
       (await input.forecastRuntimeInputResolver?.(next.snapshot)) ?? undefined;
     const result = await runPaperCycleOnce(input.deps, {
+      strategySignalIds: input.strategySignalIds,
       context: input.context,
       snapshot: next.snapshot,
       fusedContext:
@@ -1287,6 +1288,7 @@ export async function runPollPaperCycles(
     const forecastRuntimeInput =
       (await input.forecastRuntimeInputResolver?.(snapshot)) ?? undefined;
     const result = await runPaperCycleOnce(input.deps, {
+      strategySignalIds: input.strategySignalIds,
       context: input.context,
       snapshot,
       fusedContext,

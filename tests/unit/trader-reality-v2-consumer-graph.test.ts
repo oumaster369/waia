@@ -47,8 +47,9 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         // DEE-1151 stops retrying HTX POST, which changes the existing connector bodies.
         // DEE-1153 adds one observation-only HTX derivatives account-info transport.
         // DEE-1196 adds one fixed Org0 read-only credential account-info probe.
-        consumers: 152,
-        consumerDigestHex: "f448e75259e17a6ab7abc961e62e4fd2919c8888e26a662f04a9cf234b2863c8",
+        // DEE-1200 adds one research diagnostic consumer under the existing excluded/lineage-only rule.
+        consumers: 153,
+        consumerDigestHex: "b7a68c9b4fe1e8552a04b86178c38dc379e04e919f7d606761533425826aa855",
         // DEE-1099 adds one read of freshly validated account permissions,
         // not a financial observation or a venue effect.
         // DEE-1151 keeps that read on the live connector and does not add placeOrder.

@@ -24,6 +24,7 @@ import { recordFullHistoryRescan } from "@/lib/trader/backtest/replay-runtime-me
 import {
   evaluateRegisteredStrategies,
   selectPrimaryStrategySignal,
+  validateMvpStrategyIds,
 } from "@/lib/trader/intelligence/strategies/registry";
 import { emitStrategySignalCounters } from "@/lib/trader/intelligence/strategy-telemetry";
 import type { ReconstructionSnapshot } from "@/lib/trader/intelligence/reconstruction/reconstruction.types";
@@ -43,6 +44,9 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
   const miCore = profileActive
     ? true
     : (input.miCoreEnabled ?? isMiCoreEnabled(undefined, input.historicalProfile));
+  const selectedStrategyIds = input.strategySignalIds?.length
+    ? validateMvpStrategyIds(input.strategySignalIds)
+    : undefined;
   const evaluatedAt = input.evaluatedAt ?? input.bars.at(-1)?.barCloseTime;
   if (!evaluatedAt) {
     throw new Error(
@@ -108,7 +112,7 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
       organizationId: input.organizationId,
       bars: input.bars,
       newId,
-    });
+    }, selectedStrategyIds);
 
     for (const signal of signals) {
       emitStrategySignalCounters(signal, input.telemetrySink);
@@ -214,9 +218,7 @@ export function runEvaluationCycle(input: EvaluationCycleInput): EvaluationCycle
       newId,
       historicalProfile: profileActive ? input.historicalProfile : undefined,
     },
-    input.strategySignalIds?.length
-      ? (input.strategySignalIds as Parameters<typeof evaluateRegisteredStrategies>[3])
-      : undefined,
+    selectedStrategyIds,
   );
 
   if (input.telemetrySink) {
