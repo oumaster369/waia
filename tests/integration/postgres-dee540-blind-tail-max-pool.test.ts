@@ -662,6 +662,75 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail CLI path on a m
   }
 
   it(
+    "rejects a transaction handle at the public research pipeline boundary before querying bars",
+    async () => {
+      const { client, db } = await openPool();
+      const work = (async () => {
+        const prepared = await prepare(db, client, "outer-pipeline");
+        const outerRollback = new Error("rollback outer transaction after root refusal");
+        let pipelineError: unknown;
+        let selectSpy: ReturnType<typeof vi.spyOn> | undefined;
+        const createOrderRepository = vi.fn(() => {
+          throw new Error("pipeline reached backtest setup before root check");
+        });
+
+        await expect(
+          db.transaction(async (outerTx) => {
+            selectSpy = vi.spyOn(outerTx, "select");
+            try {
+              await runResearchPipelinePostgres(outerTx as unknown as WaiaPostgresDb, {
+                context: prepared.context,
+                datasetName: prepared.datasetName,
+                symbol: "BTC/USDT",
+                interval: "1m",
+                strategyId: "mean_reversion_v0",
+                strategyVersion: prepared.strategyVersion,
+                oosBarCount: 20,
+                requireMultiRegimeCoverage: false,
+                deps: prepared.deps,
+                createOrderRepository,
+                submitResearchMockOrders: true,
+                newId: () => crypto.randomUUID(),
+                pipelineBacktest: {
+                  skipBlindTail: true,
+                  enableReplayFusedContext: false,
+                },
+              });
+            } catch (error) {
+              pipelineError = error;
+            }
+            console.error(
+              "DEE1160_PUBLIC_PIPELINE_ROOT_PROOF",
+              JSON.stringify({
+                transactionSelectCalls: selectSpy.mock.calls.length,
+                orderRepositoryFactoryCalls: createOrderRepository.mock.calls.length,
+                error:
+                  pipelineError instanceof Error
+                    ? { name: pipelineError.name, message: pipelineError.message }
+                    : String(pipelineError),
+              }),
+            );
+            throw outerRollback;
+          }),
+        ).rejects.toBe(outerRollback);
+
+        expect(pipelineError).toMatchObject({
+          message: expect.stringContaining("RESEARCH_ROOT_DATABASE_REQUIRED"),
+        });
+        expect(selectSpy).toHaveBeenCalledTimes(0);
+        expect(createOrderRepository).not.toHaveBeenCalled();
+      })();
+      work.catch(() => undefined);
+      try {
+        await withDeadline(work, PIPELINE_DEADLINE_MS);
+      } finally {
+        await client.end({ timeout: 5 });
+      }
+    },
+    PIPELINE_DEADLINE_MS + 30_000,
+  );
+
+  it(
     "completes the CLI pipeline when the blind window emits an order",
     async () => {
       const sink: ResearchValidationBacktestArtifactSink = {};
