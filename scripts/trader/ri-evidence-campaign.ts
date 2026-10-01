@@ -30,8 +30,6 @@ import {
   TREND_MOMENTUM_V0,
   TREND_MOMENTUM_V0_VERSION,
 } from "@/lib/trader/intelligence/types";
-import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
-import { listMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
 import { buildEvolutionCycleMvp } from "@/lib/trader/research/build-evolution-cycle-mvp";
 import { finalizeResearchCampaignFailurePostgres } from "@/lib/trader/research/finalize-research-campaign-failure";
 import { ResearchPipelineRegimeFailureError } from "@/lib/trader/research/errors";
@@ -45,6 +43,7 @@ import {
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
 import { runResearchPipelinePostgres } from "@/lib/trader/research/research-orchestrator";
+import { computeM9DatasetSealPreviewPostgres } from "@/lib/trader/research/m9-dataset-seal-preview";
 import { writeCampaignFailureVaultArtifacts } from "@/lib/trader/research/write-campaign-failure-vault";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
@@ -219,8 +218,9 @@ async function main(): Promise<void> {
     writeAudit,
   });
 
-  const barRecords = await listMarketBarsPostgres(db, context, { symbol, interval });
-  const barSetDigest = computeBarSetDigest(barRecords);
+  // Metadata-only preflight; each authorized pipeline run fetches and verifies its own bars.
+  const datasetPreview = await computeM9DatasetSealPreviewPostgres(db, context, { symbol, interval });
+  const barSetDigest = datasetPreview.contentDigest;
 
   const manifestTracks: RiEvidenceCampaignManifest["tracks"] = [];
   let trackARegimeFailed = false;
@@ -247,7 +247,7 @@ async function main(): Promise<void> {
         evidenceDocument: result.evidenceDocument,
         dataset: result.dataset,
         barSetDigest,
-        barCount: barRecords.length,
+        barCount: datasetPreview.barCount,
         symbol,
         interval,
         walkForwardWindowCount: result.walkForwardWindowCount,

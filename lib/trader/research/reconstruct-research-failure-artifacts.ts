@@ -4,7 +4,7 @@ enforceServerOnly();
 
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type { BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
-import { listMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
+import { computeM9DatasetSealPreviewPostgres, loadM9ResearchPayloadPostgres } from "@/lib/trader/research/m9-dataset-seal-preview";
 import { buildEvolutionCycleMvp } from "@/lib/trader/research/build-evolution-cycle-mvp";
 import { buildResearchRejectionRecord } from "@/lib/trader/research/build-research-rejection-record";
 import {
@@ -20,7 +20,6 @@ import type {
 import { assertResearchPipelineRegimeCoverage } from "@/lib/trader/research/regime-coverage";
 import { updateStrategyCandidateStatusPostgres } from "@/lib/trader/research/strategy-candidate-repository-postgres";
 import type { ResearchValidationMetrics } from "@/lib/trader/research/strategy-candidate.types";
-import { verifySealedResearchDatasetFromBars } from "@/lib/trader/research/verify-sealed-research-dataset";
 import {
   writeCampaignFailureVaultArtifacts,
   type VaultArtifactNaming,
@@ -110,24 +109,22 @@ export async function reconstructResearchFailureArtifactsPostgres(
   const symbol = input.symbol ?? loaded.dataset.symbol;
   const interval = input.interval ?? loaded.dataset.interval;
 
-  const barRecords = await listMarketBarsPostgres(ex, context, { symbol, interval });
-  const bars = barRecords.map((record) => ({
-    symbol: record.symbol,
-    interval: record.interval,
-    open: record.open,
-    high: record.high,
-    low: record.low,
-    close: record.close,
-    volume: record.volume,
-    barOpenTime: record.barOpenTime,
-    barCloseTime: record.barCloseTime,
-  }));
-
-  const verified = verifySealedResearchDatasetFromBars(bars, loaded.dataset);
+  const preview = await computeM9DatasetSealPreviewPostgres(ex, context, { symbol, interval });
+  if (preview.barCount < 60) {
+    throw new ResearchFailureReconstructionError("INSUFFICIENT_MARKET_BARS", "need at least 60 committed bars");
+  }
+  if (symbol !== loaded.dataset.symbol || interval !== loaded.dataset.interval ||
+      (["trainBarCount", "validationBarCount", "blindBarCount", "trainDigest", "validationDigest", "blindDigest"] as const)
+        .some(key => preview.sealed[key] !== loaded.dataset[key])) {
+    throw new ResearchFailureReconstructionError("SEALED_DATASET_DIGEST_MISMATCH", "stored metadata differs from sealed dataset");
+  }
+  // Reconstruction uses validation only. It neither reopens nor verifies the
+  // blind payload; retained blind metrics come from the existing result row.
+  const validationBars = await loadM9ResearchPayloadPostgres(ex, context, preview, { partition: "validation" });
 
   const validationMetrics = await rederiveValidationMetricsFromSealedDataset({
     context,
-    validationBars: verified.splits.validation,
+    validationBars,
     strategyId: loaded.candidate.strategyId,
     strategyVersion: loaded.candidate.strategyVersion,
     datasetId: loaded.dataset.id,

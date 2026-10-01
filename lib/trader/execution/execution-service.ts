@@ -1033,21 +1033,22 @@ export function createPostgresOrderExecutionService(
 
 export function createPostgresOrderExecutionServiceFromExecutor(
   ex: PgExecutionExecutor,
-  overrides: Partial<OrderExecutionServiceDeps> = {},
+  overrides: Partial<Pick<OrderExecutionServiceDeps,
+    "nowMs" | "lifecycleRecorder" | "historicalExecution"
+  >> = {},
 ): OrderExecutionService {
   const nowMs = overrides.nowMs ?? (() => Date.now());
   return createOrderExecutionService({
-    riskEngine: overrides.riskEngine ?? createPostgresRiskEngineService(ex, { nowMs }),
-    orderRepository: overrides.orderRepository ?? createPostgresOrderRepositoryFromExecutor(ex),
-    killSwitchResolver:
-      overrides.killSwitchResolver ??
-      createKillSwitchResolver({
-        repository: createPostgresKillSwitchRepository(ex),
-        nowMs,
-      }),
-    connectorForMode: overrides.connectorForMode ?? createDefaultConnectorForMode(),
-    writeAudit:
-      overrides.writeAudit ?? ((input: TraderAuditInput) => writeTraderAuditLogPostgres(ex, input)),
+    riskEngine: createPostgresRiskEngineService(ex, { nowMs }),
+    orderRepository: createPostgresOrderRepositoryFromExecutor(ex),
+    killSwitchResolver: createKillSwitchResolver({
+      repository: createPostgresKillSwitchRepository(ex),
+      nowMs,
+    }),
+    connectorForMode: createDefaultConnectorForMode(),
+    writeAudit: (input: TraderAuditInput) => writeTraderAuditLogPostgres(ex, input),
     nowMs,
+    lifecycleRecorder: overrides.lifecycleRecorder,
+    historicalExecution: overrides.historicalExecution,
   });
 }

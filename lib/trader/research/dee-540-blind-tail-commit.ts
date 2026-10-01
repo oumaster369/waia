@@ -2,12 +2,13 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
 
-import { sql } from "drizzle-orm";
+import type { Bar } from "@/lib/trader/intelligence/types";
 
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
   persistBlindHoldoutSuccess,
-  assertBlindHoldoutNotYetRead,
+  assertBlindHoldoutCandidateEligible,
+  assertBlindHoldoutPayload,
   type BlindHoldoutRepository,
   type BlindHoldoutValidationResult,
   type RunBlindHoldoutValidationInput,
@@ -15,6 +16,7 @@ import {
 import { consumeDee540BlindTailAuthorization } from "@/lib/trader/research/dee-540-authorization-store";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
 import { assertResearchRootPostgresDbV1 } from "@/lib/trader/research/research-root-postgres-db-v1";
+import { BlindHoldoutValidationError } from "@/lib/trader/research/errors";
 import {
   RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
   type ResearchValidationMetrics,
@@ -38,27 +40,69 @@ const PARENT_HANDLE_METHODS = [
   "transaction",
 ] as const;
 
+const parentHandleGuards = new WeakMap<object, {
+  activeOutcomes: number;
+  saved: Array<[string, unknown]>;
+}>();
+
 function armDee540ParentHandleGuard(ex: object): () => void {
   const target = ex as Record<string, unknown>;
-  const saved: Array<[string, unknown]> = [];
-  const forbid = () => {
-    throw new Error(
-      `${DEE540_BLIND_PARENT_HANDLE_FORBIDDEN}: blind-window query used the parent pool while the consume transaction is open`,
-    );
-  };
-  for (const method of PARENT_HANDLE_METHODS) {
-    const current = target[method];
-    if (typeof current !== "function") continue;
-    saved.push([method, current]);
-    target[method] = forbid;
+  let guard = parentHandleGuards.get(ex);
+  if (!guard) {
+    guard = { activeOutcomes: 0, saved: [] };
+    const forbid = () => {
+      throw new Error(
+        `${DEE540_BLIND_PARENT_HANDLE_FORBIDDEN}: blind-window query used the parent pool while the consume transaction is open`,
+      );
+    };
+    for (const method of PARENT_HANDLE_METHODS) {
+      const current = target[method];
+      if (typeof current !== "function") continue;
+      guard.saved.push([method, current]);
+      target[method] = forbid;
+    }
+    parentHandleGuards.set(ex, guard);
   }
+  guard.activeOutcomes += 1;
+  let armed = true;
   return () => {
-    for (const [method, original] of saved) target[method] = original;
+    if (!armed) return;
+    armed = false;
+    guard.activeOutcomes -= 1;
+    // Several root outcome transactions can already be admitted by a pool
+    // before their callbacks run. Keep the original methods until the last
+    // outcome exits; never restore another outcome's temporary forbid wrapper.
+    if (guard.activeOutcomes === 0) {
+      for (const [method, original] of guard.saved) target[method] = original;
+      parentHandleGuards.delete(ex);
+    }
   };
 }
 
 /** Drizzle transaction client. Queries on this handle do not take a second pool connection. */
 export type Dee540BlindTailExecutor = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
+
+declare const blindPayloadCapabilityBrand: unique symbol;
+export type Dee540BlindPayloadCapability = Readonly<{ [blindPayloadCapabilityBrand]: true }>;
+const activePayloadReads = new WeakMap<object, {
+  executor: object;
+  blindDigest: string;
+  claimed: boolean;
+}>();
+
+/** The data loader claims this invocation's just-committed burn once. A token
+ * found in the database from a past run never confers a fresh payload read. */
+export function claimDee540BlindPayloadRead(
+  executor: object,
+  capability: Dee540BlindPayloadCapability,
+  blindDigest: string,
+): void {
+  const active = activePayloadReads.get(capability);
+  if (!active || active.executor !== executor || active.blindDigest !== blindDigest || active.claimed) {
+    throw new BlindHoldoutValidationError("DEE540_ACTIVE_BLIND_PAYLOAD_CAPABILITY_REQUIRED");
+  }
+  active.claimed = true;
+}
 
 export type Dee540BlindTailBacktestInput = Parameters<
   RunBlindHoldoutValidationInput["runBacktest"]
@@ -68,9 +112,13 @@ export type Dee540BlindTailBacktestInput = Parameters<
 
 export type CommitDee540BlindHoldoutInput = Omit<
   RunBlindHoldoutValidationInput,
-  "repository" | "runBacktest"
+  "repository" | "runBacktest" | "blindBars"
 > & {
   blindDigest: string;
+  /** Payload producer runs only after the durable consume, on its outcome client. */
+  loadBlindBars?: (tx: Dee540BlindTailExecutor, capability: Dee540BlindPayloadCapability) => Promise<readonly Bar[]>;
+  /** Already-owned in-memory fixtures; database-backed callers use loadBlindBars. */
+  blindBars?: readonly Bar[];
   /** Reads used only before the strategy sees the bars. A throw here commits nothing. */
   readRepository: Pick<BlindHoldoutRepository, "getBlindValidationResultForCandidate">;
   /** Writes bound to the same transaction as the bar-content consume. */
@@ -82,15 +130,13 @@ export type CommitDee540BlindHoldoutInput = Omit<
   runBacktest: (input: Dee540BlindTailBacktestInput) => Promise<ResearchValidationMetrics>;
 };
 
-let savepointCounter = 0;
-
 function errorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : "blind holdout failed";
   return message.slice(0, 500);
 }
 
 export function dee540BlindTerminalRecord(input: {
-  phase: "backtest" | "result_insert";
+  phase: "payload_read" | "backtest" | "result_insert";
   message: string;
   candidateId: string;
   datasetId: string;
@@ -114,26 +160,19 @@ export function dee540BlindTerminalRecord(input: {
 }
 
 async function withOutcomeSavepoint<T>(
-  tx: Pick<Dee540BlindTailExecutor, "execute">,
-  run: () => Promise<T>,
+  tx: Dee540BlindTailExecutor,
+  run: (scope: Dee540BlindTailExecutor) => Promise<T>,
 ): Promise<T> {
-  savepointCounter += 1;
-  const name = `dee540_blind_outcome_${savepointCounter}`;
-  await tx.execute(sql.raw(`SAVEPOINT ${name}`));
-  try {
-    const value = await run();
-    await tx.execute(sql.raw(`RELEASE SAVEPOINT ${name}`));
-    return value;
-  } catch (error) {
-    await tx.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${name}`));
-    throw error;
-  }
+  // Use the driver's nested transaction, including its scoped error state.
+  // Raw SAVEPOINT / ROLLBACK TO SAVEPOINT SQL leaves Postgres.js's outer
+  // uncaughtError set after a query fails, so it later rolls back a terminal row.
+  return tx.transaction(run);
 }
 
 async function persistTerminal(
   input: CommitDee540BlindHoldoutInput,
   repository: BlindHoldoutRepository,
-  phase: "backtest" | "result_insert",
+  phase: "payload_read" | "backtest" | "result_insert",
   error: unknown,
 ): Promise<BlindHoldoutValidationResult> {
   const validatedAt = input.validatedAt ?? new Date();
@@ -172,7 +211,9 @@ async function persistTerminal(
  * a terminal error row when that insert commits. If the terminal insert itself
  * throws, the burn stays committed and no second opener can run the backtest.
  * The backtest receives the outcome transaction client and must use it for
- * every query. There is no path that clears the token.
+ * every query. Backtest effects and its success result share one savepoint;
+ * result-insert failure rolls both back before recording the terminal error.
+ * There is no path that clears the token.
  */
 export async function commitDee540BlindHoldout(
   ex: Pick<WaiaPostgresDb, "transaction">,
@@ -181,52 +222,61 @@ export async function commitDee540BlindHoldout(
   // Reject an outer transaction before status reads or bar disclosure: its
   // nested transaction is only a savepoint, so it cannot commit the burn.
   assertResearchRootPostgresDbV1(ex);
-  await assertBlindHoldoutNotYetRead({
-    context: input.context,
-    candidate: input.candidate,
-    blindBars: input.blindBars,
-    expectedBlindDigest: input.expectedBlindDigest,
-    repository: input.readRepository,
+  if ((input.blindBars === undefined) === (input.loadBlindBars === undefined) ||
+      (input.expectedBlindDigest !== undefined && input.expectedBlindDigest !== input.blindDigest)) {
+    throw new BlindHoldoutValidationError("DEE540_BLIND_PAYLOAD_SOURCE_MISMATCH");
+  }
+  await assertBlindHoldoutCandidateEligible({
+    context: input.context, candidate: input.candidate, repository: input.readRepository,
   });
+  if (input.blindBars !== undefined) {
+    assertBlindHoldoutPayload({ blindBars: input.blindBars, expectedBlindDigest: input.blindDigest });
+  }
 
   await ex.transaction(async (tx) => {
     await consumeDee540BlindTailAuthorization(tx, { blindDigest: input.blindDigest });
   });
 
-  let failure: unknown = null;
+  let failure: unknown;
+  let failed = false;
   const recorded = await ex.transaction(async (tx) => {
     const disarmParentGuard = armDee540ParentHandleGuard(ex);
     try {
       const repository = input.bindRepository(tx);
-      let metrics: ResearchValidationMetrics;
+      let phase: "payload_read" | "backtest" | "result_insert" = "payload_read";
+      const capability = Object.freeze({}) as Dee540BlindPayloadCapability;
       try {
-        metrics = await input.runBacktest({
-          bars: input.blindBars,
-          strategyId: input.candidate.strategyId,
-          strategyVersion: input.candidate.strategyVersion,
-          paramsJson: input.candidate.paramsJson,
-          executor: tx,
+        return await withOutcomeSavepoint(tx, async scope => {
+          activePayloadReads.set(capability, { executor: scope, blindDigest: input.blindDigest, claimed: false });
+          const payload = input.loadBlindBars ? await input.loadBlindBars(scope, capability) : input.blindBars!;
+          assertBlindHoldoutPayload({ blindBars: payload, expectedBlindDigest: input.blindDigest });
+          phase = "backtest";
+          const metrics = await input.runBacktest({
+            bars: payload,
+            strategyId: input.candidate.strategyId,
+            strategyVersion: input.candidate.strategyVersion,
+            paramsJson: input.candidate.paramsJson,
+            executor: scope,
+          });
+          phase = "result_insert";
+          return persistBlindHoldoutSuccess({
+            ...input,
+            blindBars: payload,
+            repository: input.bindRepository(scope),
+            metrics,
+          });
         });
       } catch (error) {
+        failed = true;
         failure = error;
-        return persistTerminal(input, repository, "backtest", error);
-      }
-      try {
-        return await withOutcomeSavepoint(tx, () =>
-          persistBlindHoldoutSuccess({
-            ...input,
-            repository,
-            metrics,
-          }),
-        );
-      } catch (error) {
-        failure = error;
-        return persistTerminal(input, repository, "result_insert", error);
+        return persistTerminal(input, repository, phase, error);
+      } finally {
+        activePayloadReads.delete(capability);
       }
     } finally {
       disarmParentGuard();
     }
   });
-  if (failure) throw failure;
+  if (failed) throw failure;
   return recorded;
 }

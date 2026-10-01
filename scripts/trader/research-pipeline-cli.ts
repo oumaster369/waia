@@ -28,9 +28,8 @@ import {
 import { buildProductionKnowledgeAsset } from "@/lib/trader/knowledge/build-production-knowledge-asset";
 import { serializeProductionKnowledgeAsset } from "@/lib/trader/knowledge/serialize-production-knowledge-asset";
 import type { BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
-import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
-import { listMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
 import { resolveResearchPipelineCliBlindTail } from "@/lib/trader/research/dee-540-blind-tail-gate";
+import { computeM9DatasetSealPreviewPostgres } from "@/lib/trader/research/m9-dataset-seal-preview";
 import { runResearchPipelinePostgres } from "@/lib/trader/research/research-orchestrator";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
 import { createIntelligenceCycleBundleRepositoryPostgres } from "@/lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres";
@@ -166,8 +165,9 @@ async function main(): Promise<void> {
 
   const blindTail = resolveResearchPipelineCliBlindTail(flags);
 
-  const barRecords = await listMarketBarsPostgres(db, context, { symbol, interval });
-  const barSetDigest = computeBarSetDigest(barRecords);
+  // Metadata-only preflight; permitted orchestrator reads and verifies bars during execution.
+  const datasetPreview = await computeM9DatasetSealPreviewPostgres(db, context, { symbol, interval });
+  const barSetDigest = datasetPreview.contentDigest;
 
   const wp21Deps = htrEpistemicClosure ? createWp21RuntimeDepsPostgres(db) : undefined;
 
@@ -219,7 +219,7 @@ async function main(): Promise<void> {
       evidenceDocument: result.evidenceDocument,
       dataset: result.dataset,
       barSetDigest,
-      barCount: barRecords.length,
+      barCount: datasetPreview.barCount,
       symbol,
       interval,
       walkForwardWindowCount: result.walkForwardWindowCount,

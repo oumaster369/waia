@@ -2,7 +2,7 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
 
-import { and, asc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, eq, gte, lt, lte } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -46,6 +46,8 @@ export type ListMarketBarsQuery = {
   interval: BarInterval;
   barOpenTimeFrom?: Date;
   barOpenTimeTo?: Date;
+  /** Exclusive upper bound for partition-isolated reads. */
+  barOpenTimeBefore?: Date;
 };
 
 function mapRow(row: typeof pgSchema.traderMarketBars.$inferSelect): MarketBarRecord {
@@ -129,6 +131,10 @@ export async function listMarketBarsPostgres(
   }
   if (query.barOpenTimeTo) {
     conditions.push(lte(pgSchema.traderMarketBars.barOpenTime, query.barOpenTimeTo));
+  }
+
+  if (query.barOpenTimeBefore) {
+    conditions.push(lt(pgSchema.traderMarketBars.barOpenTime, query.barOpenTimeBefore));
   }
 
   const rows = await ex

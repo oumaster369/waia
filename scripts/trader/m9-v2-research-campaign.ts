@@ -33,8 +33,6 @@ import {
 import { buildProductionKnowledgeAsset } from "@/lib/trader/knowledge/build-production-knowledge-asset";
 import { serializeProductionKnowledgeAsset } from "@/lib/trader/knowledge/serialize-production-knowledge-asset";
 import { createLifecycleRecorder, createPostgresLifecycleRepository } from "@/lib/trader/lifecycle";
-import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
-import { listMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
 import {
   applyCampaignSuffixToStrategyVersion,
   assertStrategyCandidateSlotAvailablePostgres,
@@ -260,10 +258,9 @@ async function main(): Promise<void> {
   }
 
   async function runM9CampaignBody(): Promise<void> {
-    // Preflight seal (DEE-398 / ADR-0022): binds the blind authorization to the actual sealed
-    // replay content — not just the dataset name/label — before any authorization record or
-    // side effect is written. The orchestrator re-seals and re-verifies this same content at
-    // runtime (fail-closed on mismatch).
+    // Metadata-only preflight (DEE-398 / ADR-0022): bind authorization to the sealed dataset
+    // identity before side effects. Raw bars are fetched and content-verified only by the
+    // permitted orchestrator execution path.
     // Idempotent read — safe to retry a transient connection drop (DEE-399).
     const sealPreview = await withCampaignDbRetry(() =>
       computeM9DatasetSealPreviewPostgres(db, context, { symbol, interval }),
@@ -347,10 +344,7 @@ async function main(): Promise<void> {
     });
 
     // Idempotent read — safe to retry a transient connection drop (DEE-399).
-    const barRecords = await withCampaignDbRetry(() =>
-      listMarketBarsPostgres(db, context, { symbol, interval }),
-    );
-    const barSetDigest = computeBarSetDigest(barRecords);
+    const barSetDigest = sealPreview.contentDigest;
     const builderGitSha = process.env.GITHUB_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null;
     const validationArtifactSink: ResearchValidationBacktestArtifactSink = {};
     const evidenceRunDir = resolve(vaultDir, "streaming-evidence");
@@ -437,7 +431,7 @@ async function main(): Promise<void> {
         evidenceDocument: result.evidenceDocument,
         dataset: result.dataset,
         barSetDigest,
-        barCount: barRecords.length,
+        barCount: sealPreview.barCount,
         symbol,
         interval,
         walkForwardWindowCount: result.walkForwardWindowCount,

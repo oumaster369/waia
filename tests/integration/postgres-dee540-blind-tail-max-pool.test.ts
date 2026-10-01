@@ -17,14 +17,18 @@ import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
 import {
   createOrderExecutionServiceFromDeps,
+  createPostgresOrderExecutionService,
   createPostgresOrderRepository,
   createPostgresReconciliationService,
 } from "@/lib/trader/execution";
 import { createPostgresOrderRepositoryFromExecutor } from "@/lib/trader/execution/repository-adapters";
+import { bindHistoricalExecutionModelToSession } from "@/lib/trader/backtest/historical-execution-profile";
 import { deleteMockExecutionArtifactsForOrgPostgres } from "@/lib/trader/execution/repository-postgres";
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
 import { createForecastDecisionBundleRepositoryPostgres } from "@/lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import { createLifecycleRecorder } from "@/lib/trader/lifecycle/lifecycle-recorder";
+import { createPostgresLifecycleRepository } from "@/lib/trader/lifecycle/lifecycle-repository-postgres";
 import { createWp21RuntimeDepsPostgres } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
 import { createIntelligenceCycleBundleRepositoryPostgres } from "@/lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres";
 import type { Bar } from "@/lib/trader/intelligence/types";
@@ -38,7 +42,11 @@ import {
   type M9CampaignAuthorizationScope,
 } from "@/lib/trader/research/m9-operator-authorization";
 import { computeM9DatasetSealPreviewPostgres } from "@/lib/trader/research/m9-dataset-seal-preview";
-import { runResearchPipelinePostgres } from "@/lib/trader/research/research-orchestrator";
+import {
+  bindBlindWindowToExecutor,
+  runResearchPipelinePostgres,
+  type RunResearchPipelineInput,
+} from "@/lib/trader/research/research-orchestrator";
 import type { ResearchValidationBacktestArtifactSink } from "@/lib/trader/research/research-backtest-runner";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
 import {
@@ -412,6 +420,312 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail on a max:1 pool
       );
       expect(stored?.status).toBe("walk_forward_validated");
       expect(stored?.blindUsed).toBe(false);
+    })();
+    work.catch(() => undefined);
+    try {
+      await withDeadline(work, DEADLINE_MS);
+    } finally {
+      await client.end({ timeout: 5 });
+    }
+  }, 20_000);
+
+  it("keeps blind lifecycle reads and writes on the outcome transaction", async () => {
+    const { client, db } = await openPool();
+    const witnessClient = postgres(url!, { max: 1 });
+    const witnessDb = drizzle(witnessClient, { schema: pgSchema });
+    const work = (async () => {
+      const seeded = await seedHoldout(db, "64005", `lifecycle-${crypto.randomUUID()}`);
+      const entityId = `blind-lifecycle-${crypto.randomUUID()}`;
+      const eventId = crypto.randomUUID();
+      const clockMs = Date.UTC(2026, 5, 22, 9, 41, 0);
+      class ReceiverClock {
+        constructor(private currentMs: number) {}
+        nowMs() { return this.currentMs; }
+        setNowMs(ms: number) { this.currentMs = ms; }
+      }
+      const replayDeterminism = {
+        clock: new ReceiverClock(clockMs),
+        resetWindowState: () => undefined,
+        eventId,
+        newId() { return this.eventId; },
+      };
+      const parentRepository = createPostgresLifecycleRepository(witnessDb);
+      const parentRecorder = createLifecycleRecorder({ repository: parentRepository });
+      const parentRead = vi.spyOn(parentRepository, "listLifecycleEvents");
+      const parentWrite = vi.spyOn(parentRecorder, "recordSignalAcceptedLifecycleEvent");
+      const input: RunResearchPipelineInput = {
+        context: seeded.context,
+        datasetName: "unused-lifecycle-binding",
+        symbol: "BTC/USDT",
+        interval: "1m",
+        strategyId: "dee540_max_pool",
+        strategyVersion: "lifecycle",
+        deps: {
+          execution: createPostgresOrderExecutionService(db),
+          reconciliation: createPostgresReconciliationService(db),
+          lifecycleRepository: parentRepository,
+          lifecycleRecorder: parentRecorder,
+          researchReplayDeterminism: replayDeterminism,
+        },
+        createOrderRepository: () => createPostgresOrderRepository(db),
+      };
+      const failure = new Error("rollback blind lifecycle outcome");
+      let insideEvent: { id: string; occurredAt: Date } | undefined;
+      await expect(
+        commitDee540BlindHoldout(db, {
+          blindDigest: seeded.blindDigest,
+          context: seeded.context,
+          candidate: seeded.candidate,
+          datasetId: seeded.datasetId,
+          blindBars: seeded.bars,
+          expectedBlindDigest: seeded.blindDigest,
+          runBacktest: async ({ executor }) => {
+            const bound = bindBlindWindowToExecutor(input, executor);
+            const before = await bound.deps.lifecycleRepository!.listLifecycleEvents(
+              seeded.context,
+              { entityType: "STRATEGY_SIGNAL", entityId },
+            );
+            expect(before).toHaveLength(0);
+            await bound.deps.lifecycleRecorder!.recordSignalAcceptedLifecycleEvent({
+              context: seeded.context,
+              strategySignalId: entityId,
+            });
+            const inside = await bound.deps.lifecycleRepository!.listLifecycleEvents(
+              seeded.context,
+              { entityType: "STRATEGY_SIGNAL", entityId },
+            );
+            expect(inside).toHaveLength(1);
+            insideEvent = inside[0];
+            throw failure;
+          },
+          readRepository: {
+            getBlindValidationResultForCandidate: (context, candidateId) =>
+              getBlindValidationResultForCandidatePostgres(db, context, candidateId),
+          },
+          bindRepository,
+        }),
+      ).rejects.toBe(failure);
+
+      const parentReadCalls = parentRead.mock.calls.length;
+      const parentWriteCalls = parentWrite.mock.calls.length;
+      const outside = await parentRepository.listLifecycleEvents(seeded.context, {
+        entityType: "STRATEGY_SIGNAL",
+        entityId,
+      });
+      console.error(
+        "DEE1159_BLIND_LIFECYCLE_BINDING_PROOF",
+        JSON.stringify({ parentReadCalls, parentWriteCalls, outsideRows: outside.length }),
+      );
+      expect(parentReadCalls).toBe(0);
+      expect(parentWriteCalls).toBe(0);
+      expect(outside).toHaveLength(0);
+      expect(insideEvent?.id).toBe(eventId);
+      expect(insideEvent?.occurredAt.toISOString()).toBe(new Date(clockMs).toISOString());
+      expect(await dee540BarContentConsumed(db, seeded.blindDigest)).toBe(true);
+      parentRead.mockRestore();
+      parentWrite.mockRestore();
+    })();
+    work.catch(() => undefined);
+    try {
+      await withDeadline(work, DEADLINE_MS);
+    } finally {
+      await witnessClient.end({ timeout: 5 });
+      await client.end({ timeout: 5 });
+    }
+  }, 20_000);
+
+  it("refuses an incomplete historical replay binding before payload access or blind burn", async () => {
+    const { client, db } = await openPool();
+    try {
+      const seeded = await seedHoldout(db, "64007", `missing-replay-${crypto.randomUUID()}`);
+      const input: RunResearchPipelineInput = {
+        context: seeded.context,
+        datasetName: "unused-missing-replay-binding",
+        symbol: "BTC/USDT", interval: "1m",
+        strategyId: "dee540_max_pool", strategyVersion: "missing-replay",
+        deps: {
+          execution: createPostgresOrderExecutionService(db),
+          reconciliation: createPostgresReconciliationService(db),
+        },
+        historicalExecutionProfile: bindHistoricalExecutionModelToSession(),
+        createOrderRepository: () => createPostgresOrderRepository(db),
+      };
+      const select = vi.spyOn(db, "select");
+      try {
+        await expect(runResearchPipelinePostgres(db, input)).rejects.toMatchObject({
+          code: "RESEARCH_HISTORICAL_REPLAY_BINDING_REQUIRED",
+        });
+        expect(select).not.toHaveBeenCalled();
+      } finally {
+        select.mockRestore();
+      }
+      expect(await dee540BarContentConsumed(db, seeded.blindDigest)).toBe(false);
+    } finally {
+      await client.end({ timeout: 5 });
+    }
+  });
+
+  it("preserves historical fill and cancellation runtime on the blind outcome executor", async () => {
+    const { client, db } = await openPool();
+    const work = (async () => {
+      const seeded = await seedHoldout(db, "64006", `historical-runtime-${crypto.randomUUID()}`);
+      const orderId = crypto.randomUUID();
+      const profile = bindHistoricalExecutionModelToSession();
+      const replayClock = {
+        currentMs: Date.parse(seeded.bars[0]!.barCloseTime),
+        nowMs() { return this.currentMs; },
+        setNowMs(ms: number) { this.currentMs = ms; },
+      };
+      const decisionBarIndex = { value: 0 };
+      const nowMs = () => replayClock.nowMs();
+      const parentRepository = createPostgresOrderRepository(db);
+      const parentFill = vi.spyOn(parentRepository, "recordFill");
+      const parentProgress = vi.spyOn(parentRepository, "recordFillProgress");
+      const parentLifecycleRepository = createPostgresLifecycleRepository(db);
+      const parentLifecycleRecorder = createLifecycleRecorder({
+        repository: parentLifecycleRepository,
+      });
+      const parentLifecycleWrite = vi.spyOn(parentLifecycleRecorder, "recordFillLifecycle");
+      const parentKillSwitch = createKillSwitchResolver({
+        repository: createPostgresKillSwitchRepository(db),
+        nowMs,
+      });
+      const input: RunResearchPipelineInput = {
+        context: seeded.context,
+        datasetName: "unused-historical-runtime-binding",
+        symbol: "BTC/USDT",
+        interval: "1m",
+        strategyId: "dee540_max_pool",
+        strategyVersion: "historical-runtime",
+        deps: {
+          execution: createOrderExecutionServiceFromDeps({
+            riskEngine: createPostgresRiskEngineService(db, { nowMs }),
+            orderRepository: parentRepository,
+            killSwitchResolver: parentKillSwitch,
+            connectorForMode: () => new MockExchangeConnector({ nowMs }),
+            writeAudit: (audit) => writeTraderAuditLogPostgres(db, audit),
+            nowMs,
+            lifecycleRecorder: parentLifecycleRecorder,
+            historicalExecution: {
+              enabled: true,
+              model: profile.model,
+              exchange: profile.exchange,
+              getDecisionBarIndex: () => decisionBarIndex.value,
+              getReplayNowMs: nowMs,
+            },
+          }),
+          reconciliation: createPostgresReconciliationService(db),
+          lifecycleRecorder: parentLifecycleRecorder,
+          lifecycleRepository: parentLifecycleRepository,
+          researchReplayDeterminism: {
+            clock: replayClock,
+            resetWindowState: () => undefined,
+            setDecisionBarIndex: (index) => { decisionBarIndex.value = index; },
+            getDecisionBarIndex: () => decisionBarIndex.value,
+            historicalExecutionSession: true,
+          },
+        },
+        historicalExecutionProfile: profile,
+        createOrderRepository: () => parentRepository,
+      };
+      const failure = new Error("rollback historical blind outcome");
+      let insideFillCount = 0;
+      let insideEconomicsCount = 0;
+      let insideCancelled = false;
+      try {
+        await expect(
+          commitDee540BlindHoldout(db, {
+            blindDigest: seeded.blindDigest,
+            context: seeded.context,
+            candidate: seeded.candidate,
+            datasetId: seeded.datasetId,
+            blindBars: seeded.bars,
+            expectedBlindDigest: seeded.blindDigest,
+            runBacktest: async ({ executor }) => {
+              const bound = bindBlindWindowToExecutor(input, executor);
+              const scopedOrders = createPostgresOrderRepositoryFromExecutor(executor);
+              const created = await scopedOrders.createOrder(seeded.context, {
+                id: orderId,
+                venue: "HTX",
+                executionMode: "mock",
+                symbol: "BTCUSDT",
+                side: "buy",
+                type: "market",
+                quantity: "0.20000000",
+                clientOrderId: `blind-historical-${orderId}`,
+                idempotencyKey: `blind-historical-${orderId}`,
+                riskDecisionId: crypto.randomUUID(),
+              });
+              const approved = await scopedOrders.transitionOrder(seeded.context, {
+                orderId: created.id,
+                expectedStateVersion: created.stateVersion,
+                toState: "RISK_APPROVED",
+              });
+              const sent = await scopedOrders.transitionOrder(seeded.context, {
+                orderId: approved.id,
+                expectedStateVersion: approved.stateVersion,
+                toState: "SENT_TO_EXCHANGE",
+              });
+              const accepted = await scopedOrders.transitionOrder(seeded.context, {
+                orderId: sent.id,
+                expectedStateVersion: sent.stateVersion,
+                toState: "ACCEPTED",
+              });
+              const partial = await bound.deps.execution.recordSimulatedFill!(
+                seeded.context,
+                accepted,
+                {
+                  orderId,
+                  organizationId: seeded.context.organizationId,
+                  symbol: "BTCUSDT",
+                  side: "buy",
+                  fillSequence: 1,
+                  sourceBarIndex: 1,
+                  sourceBar: seeded.bars[0]!,
+                  grossFillPrice: "64006",
+                  sliceQuantity: "0.10000000",
+                  remainingQuantityAfter: "0.10000000",
+                  acceptedAt: new Date(seeded.bars[0]!.barOpenTime),
+                  fillTimestamp: new Date(seeded.bars[0]!.barCloseTime),
+                  submitLatencyMs: 50,
+                  cancelLatencyMs: null,
+                },
+                true,
+              );
+              insideFillCount = (await scopedOrders.listFills(seeded.context, orderId)).length;
+              insideEconomicsCount = (await executor.select()
+                .from(pgSchema.traderFillExecutionEconomics)
+                .where(eq(pgSchema.traderFillExecutionEconomics.organizationId, seeded.context.organizationId))).length;
+              const cancelled = await bound.deps.execution.transitionOrderCancelled!(seeded.context, partial);
+              insideCancelled = cancelled.state === "CANCELLED";
+              throw failure;
+            },
+            readRepository: {
+              getBlindValidationResultForCandidate: (context, candidateId) =>
+                getBlindValidationResultForCandidatePostgres(db, context, candidateId),
+            },
+            bindRepository,
+          }),
+        ).rejects.toBe(failure);
+        expect(insideFillCount).toBe(1);
+        expect(insideEconomicsCount).toBe(1);
+        expect(insideCancelled).toBe(true);
+        expect(await parentRepository.getOrderById(seeded.context, orderId)).toBeNull();
+        expect((await db.select().from(pgSchema.traderFills)
+          .where(eq(pgSchema.traderFills.orderId, orderId)))).toHaveLength(0);
+        expect((await db.select().from(pgSchema.traderFillExecutionEconomics)
+          .where(eq(pgSchema.traderFillExecutionEconomics.orderId, orderId)))).toHaveLength(0);
+        expect((await db.select().from(pgSchema.traderOrderEvents)
+          .where(eq(pgSchema.traderOrderEvents.orderId, orderId)))).toHaveLength(0);
+        expect(parentFill).not.toHaveBeenCalled();
+        expect(parentProgress).not.toHaveBeenCalled();
+        expect(parentLifecycleWrite).not.toHaveBeenCalled();
+        expect(await dee540BarContentConsumed(db, seeded.blindDigest)).toBe(true);
+      } finally {
+        parentFill.mockRestore();
+        parentProgress.mockRestore();
+        parentLifecycleWrite.mockRestore();
+      }
     })();
     work.catch(() => undefined);
     try {

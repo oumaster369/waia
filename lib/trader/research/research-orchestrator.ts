@@ -18,15 +18,14 @@ import { createPostgresOrderExecutionServiceFromExecutor } from "@/lib/trader/ex
 import { createPostgresReconciliationServiceFromExecutor } from "@/lib/trader/execution/reconciliation-service";
 import { createPostgresOrderRepositoryFromExecutor } from "@/lib/trader/execution/repository-adapters";
 import type { OrderRepository } from "@/lib/trader/execution/order-repository.types";
-import { listMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
 import type { ResearchDatasetRecord } from "@/lib/trader/market-data/research-dataset-repository-postgres";
 import {
   computeBarSetDigest,
-  sealResearchDataset,
-  splitBarsThreeWay,
 } from "@/lib/trader/market-data/research-dataset";
 import { computeSidecarContentDigest } from "@/lib/trader/market-data/replay/sidecar-content-digest";
 import type { Bar, BarInterval, InstrumentId } from "@/lib/trader/intelligence/types";
+import { createLifecycleRecorder } from "@/lib/trader/lifecycle/lifecycle-recorder";
+import { createPostgresLifecycleRepositoryFromExecutor } from "@/lib/trader/lifecycle/lifecycle-repository-postgres";
 import type { PaperCycleDeps, PaperCycleResult } from "@/lib/trader/paper/paper-cycle.types";
 import type { PortfolioCycleContext } from "@/lib/trader/paper/paper-cycle.types";
 import { assertDee540BlindTailAuthorized } from "@/lib/trader/research/dee-540-blind-tail-gate";
@@ -39,7 +38,7 @@ import {
   buildResearchEvaluationPlan,
   type ResearchEvaluationPlanV1,
 } from "@/lib/trader/research/research-train-parameter-fit";
-import { barsFromMarketBarRecords } from "@/lib/trader/research/m9-dataset-seal-preview";
+import { computeM9DatasetSealPreviewPostgres, loadM9ResearchPayloadPostgres } from "@/lib/trader/research/m9-dataset-seal-preview";
 import { resolveM9ResearchDatasetPostgres } from "@/lib/trader/research/m9-dataset-preflight";
 import { buildResearchGuardianContext } from "@/lib/trader/research/research-guardian-config";
 import type { ResearchPipelineBacktestOptions } from "@/lib/trader/research/research-pipeline-config.types";
@@ -225,21 +224,61 @@ type BlindWindowBinding = {
   wp21PostgresExecutor?: RunResearchPipelineInput["wp21PostgresExecutor"];
 };
 
+function assertHistoricalReplayBinding(input: RunResearchPipelineInput): void {
+  if (!input.historicalExecutionProfile) return;
+  const replay = input.deps.researchReplayDeterminism;
+  if (!replay || typeof replay.clock?.nowMs !== "function" ||
+      typeof replay.getDecisionBarIndex !== "function") {
+    throw new ResearchOrchestratorError(
+      "RESEARCH_HISTORICAL_REPLAY_BINDING_REQUIRED",
+      "historical execution requires the session replay clock and decision-bar index before blind consumption",
+    );
+  }
+}
+
 /**
- * Every Postgres dependency the blind window can touch, bound to the consume
- * transaction. Nested `transaction()` on that client is a savepoint. The
- * parent pool is guarded and must not be queried from here.
+ * Repository-backed blind-window ports below use the consume transaction.
+ * Nested `transaction()` on that client is a savepoint. Other caller-provided
+ * ports require separate binding before they may be treated as transaction-safe.
  */
-function bindBlindWindowToExecutor(
+export function bindBlindWindowToExecutor(
   input: RunResearchPipelineInput,
   executor: Dee540BlindTailExecutor,
 ): BlindWindowBinding {
+  assertHistoricalReplayBinding(input);
   const wp21 = input.wp21RuntimeDeps ? createWp21RuntimeDepsPostgres(executor) : undefined;
+  const lifecycleRepository = createPostgresLifecycleRepositoryFromExecutor(executor);
+  const replay = input.deps.researchReplayDeterminism;
+  const nowMs = replay ? () => replay.clock.nowMs() : undefined;
+  const lifecycleRecorder = input.deps.lifecycleRecorder
+    ? createLifecycleRecorder({
+        repository: lifecycleRepository,
+        newId: replay?.newId
+          ? () => replay.newId!()
+          : input.newId
+            ? () => input.newId!()
+            : undefined,
+        nowMs,
+      })
+    : undefined;
+  const profile = input.historicalExecutionProfile;
   return {
     deps: {
       ...input.deps,
-      execution: createPostgresOrderExecutionServiceFromExecutor(executor),
+      execution: createPostgresOrderExecutionServiceFromExecutor(executor, {
+        nowMs,
+        lifecycleRecorder,
+        historicalExecution: profile ? {
+          enabled: true,
+          model: profile.model,
+          exchange: profile.exchange,
+          getDecisionBarIndex: () => replay!.getDecisionBarIndex!(),
+          getReplayNowMs: () => replay!.clock.nowMs(),
+        } : undefined,
+      }),
       reconciliation: createPostgresReconciliationServiceFromExecutor(executor),
+      lifecycleRepository: input.deps.lifecycleRepository ? lifecycleRepository : undefined,
+      lifecycleRecorder,
     },
     intelligenceRecordsSink: input.intelligenceRecordsSink
       ? createIntelligenceCycleBundleRepositoryPostgres(executor)
@@ -356,6 +395,7 @@ export async function runResearchPipelinePostgres(
   input: RunResearchPipelineInput,
 ): Promise<RunResearchPipelineResult> {
   assertResearchRootPostgresDbV1(ex);
+  assertHistoricalReplayBinding(input);
   const newId = input.newId ?? crypto.randomUUID.bind(crypto);
   const costModel =
     input.costModel ?? costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
@@ -364,30 +404,16 @@ export async function runResearchPipelinePostgres(
   const oosBarCount = input.oosBarCount ?? 20;
   const requireMultiRegimeCoverage = input.requireMultiRegimeCoverage ?? true;
 
-  const barRecords = await listMarketBarsPostgres(ex, input.context, {
-    symbol: input.symbol,
-    interval: input.interval,
+  const preview = await computeM9DatasetSealPreviewPostgres(ex, input.context, {
+    symbol: input.symbol, interval: input.interval,
   });
-
-  if (barRecords.length < 60) {
-    throw new ResearchOrchestratorError(
-      "RESEARCH_PIPELINE_INSUFFICIENT_BARS",
-      `need at least 60 stored bars (got ${barRecords.length})`,
-    );
+  if (preview.barCount < 60) {
+    throw new ResearchOrchestratorError("RESEARCH_PIPELINE_INSUFFICIENT_BARS",
+      `need at least 60 stored bars (got ${preview.barCount})`);
   }
+  const sealed = preview.sealed;
 
-  const bars = barsFromMarketBarRecords(barRecords);
-  const splits = splitBarsThreeWay(bars);
-  const sealed = sealResearchDataset(bars, splits);
-  const parameterFit = buildResearchEvaluationPlan({
-    trainBars: splits.train,
-    validationBars: splits.validation,
-  });
-
-  // 2. DEE-540 verifies the grant before dataset persistence. Consumption is
-  // one-shot and happens immediately before the blind backtest, after the
-  // regime check, so a coverage failure cannot be used to retune on the tail.
-  // skipBlindTail does not self-authorize and does not read the holdout.
+  // Grant validation uses metadata only. skipBlindTail never fetches blind OHLCV.
   const pipelineBacktest = input.pipelineBacktest;
   const skipBlindTail = pipelineBacktest?.skipBlindTail === true;
   const blindGrant = skipBlindTail
@@ -431,11 +457,23 @@ export async function runResearchPipelinePostgres(
     sealed,
     metadata: {
       source: "trader_market_bars",
-      barCount: bars.length,
-      contentDigest: computeBarSetDigest(bars),
+      barCount: preview.barCount,
+      contentDigest: preview.contentDigest,
+      partitionCommitment: {
+        schemaVersion: "m9.metadata-partition.v1",
+        firstOpenTime: preview.commitments[0]!.barOpenTime,
+        validationFirstOpenTime: preview.commitments[sealed.trainBarCount]!.barOpenTime,
+        blindFirstOpenTime: preview.commitments[sealed.trainBarCount + sealed.validationBarCount]!.barOpenTime,
+        lastCloseTime: preview.commitments.at(-1)!.barCloseTime,
+      },
     },
     sealedAt: new Date(sealed.sealedAt),
   });
+
+  // Dataset identity is committed before any scoring or payload-dependent fit.
+  const nonblind = await loadM9ResearchPayloadPostgres(ex, input.context, preview, { partition: "nonblind" });
+  const splits = { train: nonblind.slice(0, sealed.trainBarCount), validation: nonblind.slice(sealed.trainBarCount) };
+  const parameterFit = buildResearchEvaluationPlan({ trainBars: splits.train, validationBars: splits.validation });
 
   const candidate = await registerStrategyCandidatePostgres(ex, input.context, {
     id: newId(),
@@ -470,7 +508,7 @@ export async function runResearchPipelinePostgres(
         },
         {
           backtestRunId: checkpoint.backtestRunId,
-          datasetContentDigest: computeBarSetDigest(bars),
+          datasetContentDigest: preview.contentDigest,
           codeSha: input.replayResume.codeSha,
         },
       );
@@ -603,7 +641,9 @@ export async function runResearchPipelinePostgres(
       context: input.context,
       candidate: persistedCandidate,
       datasetId: dataset.id,
-      blindBars: splits.blind,
+      loadBlindBars: (tx, capability) => loadM9ResearchPayloadPostgres(tx, input.context, preview, {
+        partition: "blind", grant: blindGrant!, capability,
+      }),
       expectedBlindDigest: dataset.blindDigest,
       runBacktest: async ({ bars, executor }) => {
         const metrics = await runIsolatedResearchBacktest(
