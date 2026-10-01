@@ -44,6 +44,7 @@ import {
   listExecutionReportsV2Postgres,
   readExecutionAttemptProjectionV2Postgres,
   readExecutionAttemptV2Postgres,
+  readExecutionAttemptProjectionV2Postgres,
 } from "@/lib/trader/execution/v2/repository-postgres";
 import { HtxPlacementRejectedError } from "@/lib/trader/connectors/htx/classify-htx-placement";
 import {
@@ -2711,9 +2712,9 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
         "LOCK_WAIT_CLOCK_PROOF",
       )));
       await observeLockWait(holder, recovery, "attempt", trace);
-      const [deadline] = await holder.tx!.execute<{ at: Date }>(sqlQuery`
+      const [deadline] = await holder.tx!.execute<{ at: Date | string }>(sqlQuery`
         SELECT clock_timestamp() + interval '50 milliseconds' AS at`);
-      boundary = deadline!.at.toISOString();
+      boundary = new Date(deadline!.at).toISOString();
       trace.push({ kind: "recovery-report-time-boundary", at: boundary });
       await waitPastDeadline(holder, boundary, trace);
     } catch (error) {
@@ -2731,22 +2732,23 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     expect(report.sequence).toBe(String(before.reports!.length + 1));
     expect(report.previous).toBe(before.reports!.at(-1)?.digest ?? null);
     expect(report.digest).toMatch(/^[0-9a-f]{64}$/);
-    const [persisted] = await sql<{ observed_at: Date }[]>`
+    const [persisted] = await sql<{ observed_at: Date | string }[]>`
       SELECT observed_at FROM trader_execution_reports_v2
       WHERE organization_id = ${orgA}::uuid
         AND execution_attempt_id = ${bound.attempt.executionAttemptId}::uuid
       ORDER BY report_sequence DESC LIMIT 1`;
     expect(persisted).toBeDefined();
-    expect(persisted!.observed_at.getTime()).toBeGreaterThanOrEqual(new Date(boundary).getTime());
+    expect(new Date(persisted!.observed_at).getTime()).toBeGreaterThanOrEqual(new Date(boundary).getTime());
     expect({ ...proof.state!.counts, reports: before.counts!.reports }).toEqual(before.counts);
     expect(proof.state!.allowance).toEqual(before.allowance);
     expect(proof.state!.events).toEqual(before.events);
     expect(proof.state!.account).toEqual(before.account);
     expect(proof.state!.reports!.slice(0, -1)).toEqual(before.reports);
-    const attempt = await readExecutionAttemptV2Postgres(
+    const projection = await readExecutionAttemptProjectionV2Postgres(
       db, { organizationId: orgA }, bound.attempt.executionAttemptId,
     );
-    expect(attempt?.lifecycleState).toBe("RECONCILIATION_REQUIRED");
+    expect(projection?.lifecycleState).toBe("RECONCILIATION_REQUIRED");
+    expect(projection?.attempt).toEqual(bound.attempt);
   }, 30_000);
 
   it("DEE-1151 does not post after SUBMIT_STARTED when a kill switch is tripped", async () => {
