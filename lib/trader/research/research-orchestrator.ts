@@ -224,6 +224,18 @@ type BlindWindowBinding = {
   wp21PostgresExecutor?: RunResearchPipelineInput["wp21PostgresExecutor"];
 };
 
+function assertHistoricalReplayBinding(input: RunResearchPipelineInput): void {
+  if (!input.historicalExecutionProfile) return;
+  const replay = input.deps.researchReplayDeterminism;
+  if (!replay || typeof replay.clock?.nowMs !== "function" ||
+      typeof replay.getDecisionBarIndex !== "function") {
+    throw new ResearchOrchestratorError(
+      "RESEARCH_HISTORICAL_REPLAY_BINDING_REQUIRED",
+      "historical execution requires the session replay clock and decision-bar index before blind consumption",
+    );
+  }
+}
+
 /**
  * Repository-backed blind-window ports below use the consume transaction.
  * Nested `transaction()` on that client is a savepoint. Other caller-provided
@@ -233,26 +245,40 @@ export function bindBlindWindowToExecutor(
   input: RunResearchPipelineInput,
   executor: Dee540BlindTailExecutor,
 ): BlindWindowBinding {
+  assertHistoricalReplayBinding(input);
   const wp21 = input.wp21RuntimeDeps ? createWp21RuntimeDepsPostgres(executor) : undefined;
   const lifecycleRepository = createPostgresLifecycleRepositoryFromExecutor(executor);
   const replay = input.deps.researchReplayDeterminism;
+  const nowMs = replay ? () => replay.clock.nowMs() : undefined;
+  const lifecycleRecorder = input.deps.lifecycleRecorder
+    ? createLifecycleRecorder({
+        repository: lifecycleRepository,
+        newId: replay?.newId
+          ? () => replay.newId!()
+          : input.newId
+            ? () => input.newId!()
+            : undefined,
+        nowMs,
+      })
+    : undefined;
+  const profile = input.historicalExecutionProfile;
   return {
     deps: {
       ...input.deps,
-      execution: createPostgresOrderExecutionServiceFromExecutor(executor),
+      execution: createPostgresOrderExecutionServiceFromExecutor(executor, {
+        nowMs,
+        lifecycleRecorder,
+        historicalExecution: profile ? {
+          enabled: true,
+          model: profile.model,
+          exchange: profile.exchange,
+          getDecisionBarIndex: () => replay!.getDecisionBarIndex!(),
+          getReplayNowMs: () => replay!.clock.nowMs(),
+        } : undefined,
+      }),
       reconciliation: createPostgresReconciliationServiceFromExecutor(executor),
       lifecycleRepository: input.deps.lifecycleRepository ? lifecycleRepository : undefined,
-      lifecycleRecorder: input.deps.lifecycleRecorder
-        ? createLifecycleRecorder({
-            repository: lifecycleRepository,
-            newId: replay?.newId
-              ? () => replay.newId!()
-              : input.newId
-                ? () => input.newId!()
-                : undefined,
-            nowMs: replay ? () => replay.clock.nowMs() : undefined,
-          })
-        : undefined,
+      lifecycleRecorder,
     },
     intelligenceRecordsSink: input.intelligenceRecordsSink
       ? createIntelligenceCycleBundleRepositoryPostgres(executor)
@@ -369,6 +395,7 @@ export async function runResearchPipelinePostgres(
   input: RunResearchPipelineInput,
 ): Promise<RunResearchPipelineResult> {
   assertResearchRootPostgresDbV1(ex);
+  assertHistoricalReplayBinding(input);
   const newId = input.newId ?? crypto.randomUUID.bind(crypto);
   const costModel =
     input.costModel ?? costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());

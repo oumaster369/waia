@@ -12,12 +12,12 @@ state:
   currentWorkPackage: WP-4
   completedWorkPackages: [reviewed-scope, canonical-plan, source-extraction, focused-regressions, exact-native-proof, static-validation, rebase-current-main, exact-rebased-local-readiness, root-final-review]
   remainingWorkPackages: [required-ci]
-  prNumber: null
-  prUrl: null
+  prNumber: 730
+  prUrl: https://github.com/oumaster369/waia/pull/730
   lastValidatedGitSha: 8acb1cb3bed2f42ad4e7c6b8986ff141c65f51ac
   lastValidationAt: "2026-10-01T19:10:54Z"
   blockedReason: null
-  nextAction: "Publish the reviewed patch and wait for all required and applicable current-head PR CI."
+  nextAction: "Publish the reviewed historical-runtime correction, resolve its review thread, and wait for all required and applicable current-head PR CI."
 provenance:
   createdFrom: "DEE-1183 plus focused independent source audit on 2026-10-01"
   gapRegistry: null
@@ -57,6 +57,7 @@ Production scope:
 - `lib/trader/research/m9-dataset-seal-preview.ts`
 - `lib/trader/research/reconstruct-research-failure-artifacts.ts`
 - `lib/trader/research/research-orchestrator.ts`
+- `lib/trader/execution/execution-service.ts`
 - `scripts/trader/m9-v2-research-campaign.ts`
 - `scripts/trader/research-pipeline-cli.ts`
 - `scripts/trader/ri-evidence-campaign.ts`
@@ -66,6 +67,7 @@ Focused tests and graph evidence:
 - `tests/integration/postgres-research-blind-ingress-v1.test.ts`
 - `tests/integration/postgres-dee540-blind-tail-max-pool.test.ts`
 - `tests/integration/postgres-research-intelligence-parity.test.ts`
+- `tests/integration/htr-postgres-fixture-prelude.ts`
 - `tests/unit/trader-dee540-blind-tail-commit.test.ts`
 - `tests/unit/trader-dee540-blind-tail-gate.test.ts`
 - `tests/unit/trader-reality-v2-consumer-graph.test.ts`
@@ -76,6 +78,10 @@ Focused tests and graph evidence:
 No schema or migration files are in scope. The source was extracted from the reviewed DEE-1159 snapshot at `dfeb61244466d9e762f5c5c97b5ec07ff82b61ff`, then rebased from `2589bb3a` onto the current `origin/main` commit `42810ef804150dab0b1f9c01cb38b5bd8bac3659`. Only the files listed above were brought across; the prepared branch's registries, training reader, research kernels, and scoped ledger stay out. All 13 functional/test files are byte-identical between the pre-rebase commit `ecc710f7` and current head `8acb1cb3`; the inventory diff includes the merged DEE-1161 main changes and this child’s four content pins.
 
 ## Work packages
+
+### PR review correction — historical execution options
+
+GitHub review on `fa51a304` identified that rebinding blind execution lost the historical model/exchange, deterministic replay clock, and execution lifecycle recorder. Preserve these runtime settings while reconstructing every persistence port against the outcome executor; never reuse a parent execution service or parent lifecycle recorder. Validate the required replay-clock/index contract before metadata access or a one-shot burn. The executor factory must actually forward the bounded runtime settings. Prove real simulated fills/economics and cancellation/rollback on isolated PostgreSQL; the legacy submission fence remains unchanged. Earlier native receipts do not cover this correction; require fresh proof, independent review and current-head CI.
 
 1. Extract the reviewed production correction and its focused tests onto the current `origin/main` base. Preserve compatibility with the already merged DEE-1160 root-transaction boundary.
 2. Regenerate the consumer inventory/pins and run the three native lifecycle/ingress suites on an isolated synthetic PostgreSQL instance. Prove metadata-before-payload, committed burn before read, one-shot refusal, rollback of real mock-order/lifecycle writes on result-insert failure, and guard lifetime under overlap.
@@ -93,7 +99,7 @@ No schema or migration files are in scope. The source was extracted from the rev
 
 ## Validation
 
-On 2026-10-01, the pre-rebase child branch passed 52 focused unit tests, the three native synthetic PostgreSQL suites (29 passed, 0 failed, 0 skipped) on the pre-rebase source, lint, typecheck, build, canonical validation, and consumer-graph validation. After rebasing onto `42810ef8`, all 13 native-covered functional/test files remained byte-identical; rebased focused checks passed again (53 units, lint, typecheck, build, canon, graph). Exact native source hashes and execution receipts are retained in the external Oct01 audit folder under `dee1183-blind-boundary-native`; rebased source-equivalence and command receipts are under `dee1183-rebased-*`. Root re-reviewed the rebased functional diff and exact native source equivalence with no new actionable finding. Only this plan changed after the rebased validation; the final commit binding records the unchanged functional files. Required PR CI has not run yet.
+On 2026-10-01, the pre-rebase child branch passed 52 focused unit tests, the three native synthetic PostgreSQL suites (29 passed, 0 failed, 0 skipped) on the pre-rebase source, lint, typecheck, build, canonical validation, and consumer-graph validation. After rebasing onto `42810ef8`, all 13 native-covered functional/test files remained byte-identical; rebased focused checks passed again (53 units, lint, typecheck, build, canon, graph). Exact native source hashes and execution receipts are retained in the external Oct01 audit folder under `dee1183-blind-boundary-native`; rebased source-equivalence and command receipts are under `dee1183-rebased-*`. Root re-reviewed the rebased functional diff and exact native source equivalence with no new actionable finding. Only this plan changed after the rebased validation; the final commit binding records the unchanged functional files. PR730 CI ran on that initial head; a subsequent P1 runtime-options review requires an updated head and fresh CI.
 
 Expected local checks:
 
@@ -108,3 +114,9 @@ pnpm validate:reality-v2-consumer-graph
 ```
 
 Native tests must use the repository's isolated loopback PostgreSQL fixture with synthetic content only. Do not run a full unit suite locally; GitHub PR CI is authoritative.
+
+### PR730 historical-runtime review correction — 2026-10-01
+
+Original fa51a304 with the added actual historical-fill regression produced 29 PASS / 1 FAIL: missing historical model at simulated fill persistence. The first corrected run (24 PASS / 7 FAIL) showed that the shared Postgres HTR fixture exposed its index setter but omitted the getter already used by its own runtime. Exposing that same existing index, without inventing or bypassing it, restored the declared replay contract. Production in-memory sessions already exposed the getter. Both failed receipts remain retained.
+
+Fresh isolated PostgreSQL16.14 `pr730-runtime-green2` executes all three selected suites:31 PASS,0 FAIL,0 SKIP with unchanged captured bytes. It proves real fill/economics, historical cancellation, rollback of order/events/fills/economics with retained burn, no parent persistence calls, and incomplete replay binding rejected before any SELECT/burn. The executor factory only accepts nowMs/lifecycleRecorder/historicalExecution settings; repository, Risk, kill-switch, connector and audit are constructed against its executor. A single outcome-bound recorder is shared by the paper and execution dependencies. New-order legacy submission remains disabled. The earlier53 units remain historical; the correction passed44 focused units across three directly affected files, both consumer graphs, full lint/typecheck/build. This final plan refresh is documentation only after native capture. Independent review and all updated-head PR CI are required before merge. In-memory exchange checkpoint restoration and qualification of caller-provided optional research ports remain outside this bounded database/runtime repair.

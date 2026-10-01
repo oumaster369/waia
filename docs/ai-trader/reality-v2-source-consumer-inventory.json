@@ -354,7 +354,7 @@
       {"path": "lib/trader/credentials/envelope-crypto.ts","sha256": "2ec82a65d30aac64fa3ef09d442a9710775d74b1c42488451895e582991cf271"},
       {"path": "lib/trader/credentials/types.ts","sha256": "7fe77ed605856ade8599d85ca5874311c1c8ed18484a758fe28bacba62ac2d31"},
       {"path": "lib/trader/execution/connector-status-map.ts","sha256": "27089d9a417a9fecfb3a16e4a8fba13a2911bca2d1d4fec7b5cacb2d68a1a0c7"},
-      {"path": "lib/trader/execution/execution-service.ts","sha256": "9969f5e9f9c33f1bce90884a94738d2a7adab02ab2dc9ff1e800ad896392c5dd"},
+      {"path": "lib/trader/execution/execution-service.ts","sha256": "bc22ab2b58896520f0e85054fe9d900d44102494da09f809c39b8bf2a8bfd260"},
       {"path": "lib/trader/execution/execution-service.types.ts","sha256": "e6c8c7bcb857ad712c0d6ff7244b70aabeb995326c30610d4da32f3280f33c52"},
       {"path": "lib/trader/execution/index.ts","sha256": "8672cb79a318eb3ca952136c2ee8d7fc1e12ff1119d718aeb4e8f87ee685830a"},
       {"path": "lib/trader/execution/reconciliation-classification.ts","sha256": "187e773b119b1b62bab8aa131e4b4be6058edbaa3d3addb75d6683d4ee73255b"},

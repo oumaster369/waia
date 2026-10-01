@@ -249,6 +249,7 @@ export async function buildHtrPostgresResearchSession(
         setDecisionBarIndex: (index: number) => {
           decisionBarIndex.value = index;
         },
+        getDecisionBarIndex: () => decisionBarIndex.value,
         historicalExecutionSession: true,
       },
     },

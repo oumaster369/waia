@@ -193,7 +193,7 @@ describe("DEE-540 blind tail gate", () => {
       orchestrator.indexOf("function bindBlindWindowToExecutor"),
       orchestrator.indexOf("function buildIsolatedBacktestInput"),
     );
-    expect(binder).toContain("createPostgresOrderExecutionServiceFromExecutor(executor)");
+    expect(binder).toContain("createPostgresOrderExecutionServiceFromExecutor(executor, {");
     expect(binder).toContain("createPostgresReconciliationServiceFromExecutor(executor)");
     expect(binder).toContain("createIntelligenceCycleBundleRepositoryPostgres(executor)");
     expect(binder).toContain("createForecastDecisionBundleRepositoryPostgres(executor)");
