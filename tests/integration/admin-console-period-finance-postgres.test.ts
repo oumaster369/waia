@@ -528,7 +528,9 @@ describe.skipIf(!enabled)("immutable period finance on Postgres", () => {
     const binding = await seed();
     await trade(binding, "live", "USDT", "8");
     await trade(binding, "paper", "USDT", "108");
-    await trade(binding, "mock", "USDT", "1008");
+    // Decimal on purpose: a 4-nibble token such as "1008" occurs inside
+    // adminRevision (sha256 hex) and random UUIDs, so the leak check flakes.
+    await trade(binding, "mock", "USDT", "1008.25");
     const read = async (version: string) =>
       handleAdminConsoleStrategyDetailGet(
         new Request(
@@ -557,7 +559,7 @@ describe.skipIf(!enabled)("immutable period finance on Postgres", () => {
         ],
       },
     });
-    expect(JSON.stringify(result.body)).not.toContain("1008");
+    expect(JSON.stringify(result.body)).not.toContain("1008.25");
     const otherVersion = await read("2");
     expect(otherVersion.body).toMatchObject({
       data: {

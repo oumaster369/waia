@@ -101,6 +101,7 @@ export const HANDLER_TABLES = {
   attention: [
     "trader_admin_diagnostic_event",
     "trader_orders",
+    "trader_execution_attempts_v2",
     "trader_execution_reports_v2",
     "trader_runtime_authority_assessments_v2",
     "trader_risk_account_state_v2",

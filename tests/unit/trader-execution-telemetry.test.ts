@@ -4,6 +4,7 @@ import type { SubmitOrderResult } from "@/lib/trader/execution/execution-service
 import {
   emitExecutionTerminalEvent,
   emitExecutionTransitionEvent,
+  emitUnresolvedExecutionAttemptV2,
 } from "@/lib/trader/execution/execution-telemetry";
 
 const ORG_ID = "00000000-0000-4000-8000-000000000254";
@@ -115,5 +116,42 @@ describe("execution-telemetry", () => {
       execution_mode: "mock",
     });
     expect(parsed.duration_ms).toBeUndefined();
+  });
+
+  it("emitUnresolvedExecutionAttemptV2 names the attempt and keeps secrets out", () => {
+    const { lines, sink } = captureSink();
+    emitUnresolvedExecutionAttemptV2(
+      {
+        organizationId: ORG_ID,
+        executionAttemptId: "00000000-0000-4000-8000-000000000901",
+        outcome: "CONNECTOR_UNCERTAIN",
+      },
+      sink,
+    );
+    const parsed = JSON.parse(lines[0]!) as Record<string, unknown>;
+    expect(parsed).toEqual({
+      event: "waia_trader_event",
+      kind: "execution",
+      organization_id: ORG_ID,
+      outcome: "CONNECTOR_UNCERTAIN",
+      severity: "critical",
+      execution_attempt_id: "00000000-0000-4000-8000-000000000901",
+    });
+    expect(parsed).not.toHaveProperty("secret");
+    expect(parsed).not.toHaveProperty("client_order_id");
+    expect(parsed).not.toHaveProperty("quantity");
+    expect(parsed).not.toHaveProperty("price");
+    expect(parsed).not.toHaveProperty("message");
+
+    const reconciliation = captureSink();
+    emitUnresolvedExecutionAttemptV2(
+      {
+        organizationId: ORG_ID,
+        executionAttemptId: "00000000-0000-4000-8000-000000000902",
+        outcome: "RECONCILIATION_REQUIRED",
+      },
+      reconciliation.sink,
+    );
+    expect(JSON.parse(reconciliation.lines[0]!).outcome).toBe("RECONCILIATION_REQUIRED");
   });
 });

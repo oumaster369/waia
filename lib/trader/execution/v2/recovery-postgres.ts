@@ -8,6 +8,7 @@ import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postg
 import { HtxPlacementRejectedError } from "@/lib/trader/connectors/htx/classify-htx-placement";
 import type { Order, Trade } from "@/lib/trader/connectors/types";
 import { addDecimal, compareDecimal } from "@/lib/trader/risk/numeric";
+import { emitUnresolvedExecutionAttemptV2 } from "@/lib/trader/execution/execution-telemetry";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 import {
   dispatchCommittedExecutionAttemptV2,
@@ -252,7 +253,7 @@ export async function markExecutionAttemptReconciliationRequiredV2Postgres(
     )
   )
     return null;
-  return appendReports(db, context, executionAttemptId, [
+  const recorded = await appendReports(db, context, executionAttemptId, [
     {
       reportType: "RECONCILIATION_REQUIRED",
       source: "EXECUTION",
@@ -260,6 +261,12 @@ export async function markExecutionAttemptReconciliationRequiredV2Postgres(
       venueOrderId: null,
     },
   ]);
+  emitUnresolvedExecutionAttemptV2({
+    organizationId: context.organizationId,
+    executionAttemptId,
+    outcome: "RECONCILIATION_REQUIRED",
+  });
+  return recorded;
 }
 
 /** Submits once through the committed dispatcher, then stores only raw venue observations. */
@@ -344,6 +351,11 @@ export async function dispatchAndRecordExecutionAttemptV2(
         venueOrderId: null,
       },
     ]);
+    emitUnresolvedExecutionAttemptV2({
+      organizationId: context.organizationId,
+      executionAttemptId,
+      outcome: "CONNECTOR_UNCERTAIN",
+    });
     return { status: "RECONCILIATION_REQUIRED", attempt };
   }
 
@@ -407,6 +419,11 @@ async function recordObservedVenueResult(
         venueOrderId: order.orderId,
       },
     ]);
+    emitUnresolvedExecutionAttemptV2({
+      organizationId: context.organizationId,
+      executionAttemptId: attempt.executionAttemptId,
+      outcome: "RECONCILIATION_REQUIRED",
+    });
     return { status: "RECONCILIATION_REQUIRED", attempt: recovered };
   }
 
