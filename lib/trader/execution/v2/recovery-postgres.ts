@@ -202,7 +202,7 @@ async function appendReportsInTransaction(
   );
   if (!initial) throw new Error("Execution V2 attempt not found");
   const timeRows = await tx.execute<{ durable_at: Date | string }>(
-    sql`select date_trunc('milliseconds', transaction_timestamp()) as durable_at`,
+    sql`select date_trunc('milliseconds', clock_timestamp()) as durable_at`,
   );
   const observedAtUtc = new Date(timeRows[0]!.durable_at).toISOString();
   for (const report of reports) {

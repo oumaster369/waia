@@ -51,7 +51,7 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         connectorReferences: 26,
         sourceContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
         consumerContentDigestHex:
-          "0a84d27994e0a48e736084972e7343a19a93ef6a3ce0e6361b554f27d42696ca",
+          "4b2f220c0fc11fbb30e337ea25c8c5aac5a61ec368a04bee0d2b3155c3f1c322",
       }),
     );
   });
