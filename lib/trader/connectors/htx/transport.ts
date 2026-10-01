@@ -79,8 +79,11 @@ export class HtxTransport {
 
   async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     let response: Response | null = null;
+    // POST is one shot. A retried order or cancel can duplicate a venue effect.
+    // GET keeps the bounded retry budget for public history and account reads.
+    const attempts = (init?.method ?? "GET").toUpperCase() === "POST" ? 0 : this.policy.maxRetries;
 
-    for (let attempt = 0; attempt <= this.policy.maxRetries; attempt++) {
+    for (let attempt = 0; attempt <= attempts; attempt++) {
       await this.throttle.awaitSlot();
       try {
         response = await this.fetchImpl(input, init);
@@ -91,7 +94,7 @@ export class HtxTransport {
         // retry budget to those failures as it does to transient 5xx replies.
         // The final error is rethrown unchanged so callers retain fail-closed
         // classification and never mistake exhaustion for an HTTP response.
-        if (!isRetryableFetchFailure(error) || attempt === this.policy.maxRetries) {
+        if (!isRetryableFetchFailure(error) || attempt === attempts) {
           throw error;
         }
         const delayMs = computeRetryDelayMs(attempt, this.policy, undefined, this.clock.now());
@@ -105,7 +108,7 @@ export class HtxTransport {
         return response;
       }
 
-      if (attempt === this.policy.maxRetries) {
+      if (attempt === attempts) {
         return response;
       }
 
