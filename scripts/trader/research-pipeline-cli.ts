@@ -215,7 +215,6 @@ async function main(): Promise<void> {
   }
 
   if (buildPka) {
-    const edgeVerified = result.evidenceDocument.evidenceBody.regimeCoverage.satisfiesRequirement;
     const pka = buildProductionKnowledgeAsset({
       evidenceDocument: result.evidenceDocument,
       dataset: result.dataset,
@@ -226,9 +225,9 @@ async function main(): Promise<void> {
       walkForwardWindowCount: result.walkForwardWindowCount,
       blindMetrics: result.blindMetrics,
       mkbLinkage: result.knowledge,
-      edgeConfidence: edgeVerified ? "0.7500" : "0.2500",
-      edgeStrength: "0.5000",
-      edgeVerified,
+      edgeConfidence: "0.0000",
+      edgeStrength: "0.0000",
+      edgeVerified: false,
       builderGitSha: process.env.GITHUB_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null,
     });
     const pkaSerialized = serializeProductionKnowledgeAsset(pka);

@@ -206,6 +206,11 @@ export function classifyLegacyPredictionKnowledgeState(
   }
 }
 
+export function isResearchPipelineCoverageEdge(edge: Pick<KnowledgeEdge, "relationKind">): boolean {
+  return edge.relationKind === "validated_by_research_pipeline" ||
+    edge.relationKind === "observed_by_research_pipeline";
+}
+
 export function classifyKnowledgeEdgeState(edge: KnowledgeEdge, asOf: Date): MkbKnowledgeState {
   if (edge.lifecycleState === "RETIRED") {
     return "INELIGIBLE";
@@ -213,6 +218,13 @@ export function classifyKnowledgeEdgeState(edge: KnowledgeEdge, asOf: Date): Mkb
 
   if (edge.createdAt.getTime() > asOf.getTime()) {
     return "INELIGIBLE";
+  }
+
+  // Legacy pipeline writers asserted verified from coverage alone. Preserve
+  // stored history, but neither that assertion nor the new descriptive edge
+  // can establish predictive knowledge without a durable qualification.
+  if (isResearchPipelineCoverageEdge(edge)) {
+    return isStaleAt(asOf, edge.updatedAt.toISOString()) ? "STALE" : "OBSERVATION_ONLY";
   }
 
   if (edge.verified) {

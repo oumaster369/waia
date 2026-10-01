@@ -108,16 +108,6 @@ import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 const LOG_PREFIX = "[trader:m9:campaign]";
 
-/**
- * Fixed governance-gate placeholder scale (NOT an evidence-derived score). PKA confidence
- * scoring from actual blind/walk-forward metrics is deferred to a future PR — see ADR-0021
- * scope note. Explicitly de-labeled per DEE-397 audit finding so this is not mistaken for a
- * measured edge-confidence metric.
- */
-const PKA_GOVERNANCE_GATE_EDGE_CONFIDENCE_VERIFIED = "0.7500";
-const PKA_GOVERNANCE_GATE_EDGE_CONFIDENCE_UNVERIFIED = "0.2500";
-const PKA_GOVERNANCE_GATE_EDGE_STRENGTH_PLACEHOLDER = "0.5000";
-
 export type M9ResearchCampaignManifest = {
   schemaVersion: "m9_v2_research_campaign_v1";
   campaignId: string;
@@ -442,7 +432,7 @@ async function main(): Promise<void> {
           ? { cycleResults: validationArtifactSink.cycleResults }
           : null;
 
-      const edgeVerified = result.evidenceDocument.evidenceBody.regimeCoverage.satisfiesRequirement;
+      const coverageSatisfied = result.evidenceDocument.evidenceBody.regimeCoverage.satisfiesRequirement;
       const pka = buildProductionKnowledgeAsset({
         evidenceDocument: result.evidenceDocument,
         dataset: result.dataset,
@@ -453,11 +443,9 @@ async function main(): Promise<void> {
         walkForwardWindowCount: result.walkForwardWindowCount,
         blindMetrics: result.blindMetrics,
         mkbLinkage: result.knowledge,
-        edgeConfidence: edgeVerified
-          ? PKA_GOVERNANCE_GATE_EDGE_CONFIDENCE_VERIFIED
-          : PKA_GOVERNANCE_GATE_EDGE_CONFIDENCE_UNVERIFIED,
-        edgeStrength: PKA_GOVERNANCE_GATE_EDGE_STRENGTH_PLACEHOLDER,
-        edgeVerified,
+        edgeConfidence: "0.0000",
+        edgeStrength: "0.0000",
+        edgeVerified: false,
         builderGitSha,
       });
 
@@ -610,7 +598,7 @@ async function main(): Promise<void> {
           blindAuthorization: operatorBlindAuthorization,
         },
         knowledgeId: pka.knowledgeId,
-        regimeSatisfiesRequirement: edgeVerified,
+        regimeSatisfiesRequirement: coverageSatisfied,
         note: "M9 v2 research campaign — promotion forbidden; mock ledger research isolation only.",
       };
 
@@ -644,11 +632,11 @@ async function main(): Promise<void> {
 
       console.error(
         `${LOG_PREFIX} complete strategy=${baseStrategy.strategyId}@${strategyVersion} ` +
-          `knowledgeId=${pka.knowledgeId} regimeOk=${edgeVerified} manifest=${sealedPaths.manifestPath} ` +
+          `knowledgeId=${pka.knowledgeId} regimeOk=${coverageSatisfied} manifest=${sealedPaths.manifestPath} ` +
           `diagnostics=${sealedPaths.operatorDiagnosticsPath}`,
       );
 
-      if (!edgeVerified) {
+      if (!coverageSatisfied) {
         console.error(`${LOG_PREFIX} regime coverage failed — promotion blocked (exit 1)`);
         process.exitCode = 1;
       }

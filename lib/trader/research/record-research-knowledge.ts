@@ -70,7 +70,6 @@ export async function recordResearchPipelineKnowledgePostgres(
   const edgePayload = {
     fromRef: `dataset:${body.datasetId}`,
     toRef: `strategy:${envelope.strategyId}@${envelope.strategyVersion}`,
-    relationKind: "validated_by_research_pipeline",
     candidateId: input.candidateId,
     evidenceDigest: envelope.contentDigest,
   };
@@ -79,12 +78,14 @@ export async function recordResearchPipelineKnowledgePostgres(
     id: crypto.randomUUID(),
     fromRef: edgePayload.fromRef,
     toRef: edgePayload.toRef,
-    relationKind: edgePayload.relationKind,
-    confidence: body.regimeCoverage.satisfiesRequirement ? "0.7500" : "0.2500",
-    strength: "0.5000",
+    // A completed pipeline and multi-regime coverage prove observation only.
+    // No durable qualification record currently authorizes a predictive edge.
+    relationKind: "observed_by_research_pipeline",
+    confidence: "0.0000",
+    strength: "0.0000",
     regimeScope: body.regimeCoverage.regimes.join("|") || "unknown",
     failureCasesJson: "[]",
-    verified: body.regimeCoverage.satisfiesRequirement,
+    verified: false,
     createdAt: recordedAt,
     updatedAt: recordedAt,
   });

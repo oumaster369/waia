@@ -90,6 +90,50 @@ describe("Production Knowledge Asset (RI-P7)", () => {
     expect(first.evidenceRef.contentDigest).toBe(evidence.envelope.contentDigest);
   });
 
+  it("keeps full-coverage negative-cost evidence unqualified despite caller promotion claims", () => {
+    const evidence = buildValidResearchEvidenceDocument(ORG);
+    expect(evidence.evidenceBody.regimeCoverage.satisfiesRequirement).toBe(true);
+    const negativeBlindMetrics = {
+      ...sampleBlindMetrics(),
+      periodRealizedPnl: "-20",
+      periodTotalFees: "2",
+      byRegime: sampleBlindMetrics().byRegime.map((slice) => ({
+        ...slice,
+        periodRealizedPnl: "-10",
+        periodTotalFees: "1",
+      })),
+    };
+
+    const asset = buildProductionKnowledgeAsset({
+      evidenceDocument: evidence,
+      dataset: sampleDataset(),
+      barSetDigest: "bar-set-digest",
+      barCount: 43200,
+      symbol: "BTC/USDT",
+      interval: "1m",
+      walkForwardWindowCount: 4,
+      blindMetrics: negativeBlindMetrics,
+      mkbLinkage: { marketEventId: "event-1", knowledgeEdgeId: "edge-1" },
+      edgeConfidence: "0.7500",
+      edgeStrength: "0.5000",
+      edgeVerified: true,
+      creationReason: "research_pipeline_blind_validated",
+      lifecycleState: "maturation",
+      sealedAt: new Date("2026-06-18T12:00:00.000Z"),
+    });
+
+    expect(asset.regimeCoverage.satisfiesRequirement).toBe(true);
+    expect(asset.validationHistory.blindHoldoutTradeCount).toBe(3);
+    expect(asset.validationHistory.blindHoldoutRegimeLabels).toEqual(["RANGE", "TREND_BEAR"]);
+    expect(asset.creationReason).toBe("research_pipeline_coverage_only");
+    expect(asset.evolutionMetadata.lifecycleState).toBe("creation");
+    expect(asset.confidenceMetadata).toEqual({
+      edgeConfidence: "0.0000",
+      edgeStrength: "0.0000",
+      edgeVerified: false,
+    });
+  });
+
   it("preserves immutability across serialize round-trip", () => {
     const evidence = buildValidResearchEvidenceDocument(ORG);
     const asset = buildProductionKnowledgeAsset({

@@ -242,7 +242,7 @@ async function main(): Promise<void> {
         pipelineBacktest: { skipBlindTail: true },
       });
 
-      const edgeVerified = result.evidenceDocument.evidenceBody.regimeCoverage.satisfiesRequirement;
+      const coverageSatisfied = result.evidenceDocument.evidenceBody.regimeCoverage.satisfiesRequirement;
       const pka = buildProductionKnowledgeAsset({
         evidenceDocument: result.evidenceDocument,
         dataset: result.dataset,
@@ -253,9 +253,9 @@ async function main(): Promise<void> {
         walkForwardWindowCount: result.walkForwardWindowCount,
         blindMetrics: result.blindMetrics,
         mkbLinkage: result.knowledge,
-        edgeConfidence: edgeVerified ? "0.7500" : "0.2500",
-        edgeStrength: "0.5000",
-        edgeVerified,
+        edgeConfidence: "0.0000",
+        edgeStrength: "0.0000",
+        edgeVerified: false,
         builderGitSha,
       });
 
@@ -282,18 +282,18 @@ async function main(): Promise<void> {
         pkaDigest: pka.reproducibilityDigest,
         marketEventId: result.knowledge.marketEventId,
         knowledgeEdgeId: result.knowledge.knowledgeEdgeId,
-        regimeSatisfiesRequirement: edgeVerified,
+        regimeSatisfiesRequirement: coverageSatisfied,
         regimeCoverage: result.evidenceDocument.evidenceBody.regimeCoverage,
         costModelVersion: result.evidenceDocument.evidenceBody.costModelVersion,
       });
 
-      if (track.trackId === "A" && !edgeVerified) {
+      if (track.trackId === "A" && !coverageSatisfied) {
         trackARegimeFailed = true;
       }
 
       console.error(
         `${LOG_PREFIX} track ${track.trackId} strategy=${track.strategyId} knowledgeId=${pka.knowledgeId} ` +
-          `regimeOk=${edgeVerified}`,
+          `regimeOk=${coverageSatisfied}`,
       );
     } catch (error) {
       if (error instanceof ResearchPipelineRegimeFailureError) {
