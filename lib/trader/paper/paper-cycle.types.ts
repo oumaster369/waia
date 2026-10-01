@@ -220,6 +220,8 @@ export type Wp16GatingContext = {
 export type PaperCycleInput = {
   context: OrgContext;
   snapshot: MarketSnapshot;
+  /** Retained PIT history for cursor evaluation only; Guardian keeps the source snapshot. */
+  evaluationBars?: MarketSnapshot["bars"];
   fusedContext?: FusedMarketContext;
   accountKey: string;
   defaultQuantity: string;
