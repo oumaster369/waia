@@ -43,3 +43,7 @@ The cumulative synthetic PostgreSQL acceptance requires DEE-1158's historical ev
 ## Acceptance
 
 Accept only when sufficient coverage with negative after-cost evidence remains observational, unverified, zero-confidence and creation-state even when callers request verification or maturation; historical serialized values remain readable and derived eligibility stays observation-only; completion, coverage and negative evidence remain recorded; and native PostgreSQL parity exercises the actual authorized pipeline and writer paths without fabricated metrics or bypassed authorization. The focused unit suites, typecheck, lint, build, exact-head CI and independent review must pass. This work does not qualify a strategy or complete DEE-1152 fitted-parameter identity.
+
+## Review correction — semantic knowledge identity
+
+The two research coverage relation kinds are now bound into the knowledge snapshot digest. A verified ordinary edge and a coverage-only edge must not share that digest when the fold yields different knowledge states. Ordinary and ACTIVE historical hashes remain stable; restrictive relation kinds and RETIRED state are explicitly represented. A regression first reproduced the collision and now verifies deterministic divergence for both coverage kinds. This does not convert coverage into scientific qualification.

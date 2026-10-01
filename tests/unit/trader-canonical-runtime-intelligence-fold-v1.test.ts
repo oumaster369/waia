@@ -152,6 +152,43 @@ describe("DEE-629 canonical PIT fold", () => {
     expect(await run("RETIRED")).toEqual(retired);
   });
 
+  it("binds the edge relation kind when verified support becomes observation-only coverage", async () => {
+    const a = hypothesis("hyp-relation", "a");
+    const edge: KnowledgeEdge = {
+      id: "edge-relation", organizationId: ORG,
+      fromRef: "evidence:ev-relation", toRef: `hypothesis:${a.id}`,
+      relationKind: "supports", confidence: "0.8000", strength: "1.0000",
+      regimeScope: "probe", failureCasesJson: "[]", hypothesisId: a.id,
+      verified: true, createdAt: new Date("2026-01-01T10:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T10:00:00.000Z"),
+    };
+    const input = {
+      context: { organizationId: ORG }, symbol: "BTC/USDT", asOf: AS_OF,
+      projectHypothesis: () => ({ hypothesisType: "trend_continuation" as const, expectedPath: "a" }),
+    };
+    const withRelation = (relationKind: string) =>
+      foldCanonicalRuntimeIntelligenceStateV1(input, deps([a], [evidence(a, "FOR", "ev-relation")], [
+        { ...edge, relationKind },
+      ]));
+    const supporting = await withRelation("supports");
+    const coverage = await withRelation("validated_by_research_pipeline");
+    const observed = await withRelation("observed_by_research_pipeline");
+    expect(supporting.hypotheses[0]?.knowledgeRefs).toEqual([
+      { knowledgeEdgeId: edge.id, knowledgeState: "RESOLVED_CORRECT" },
+    ]);
+    expect(coverage.hypotheses[0]?.knowledgeRefs).toEqual([]);
+    expect(supporting.hypotheses[0]?.ordinalJudgment).toBe("SUPPORTED");
+    expect(coverage.hypotheses[0]?.ordinalJudgment).toBe("WEAKENED");
+    expect(observed.hypotheses[0]?.knowledgeRefs).toEqual([]);
+    expect(observed.hypotheses[0]?.ordinalJudgment).toBe("WEAKENED");
+    expect(coverage.knowledgeSemanticDigest).not.toBe(supporting.knowledgeSemanticDigest);
+    expect(observed.knowledgeSemanticDigest).not.toBe(supporting.knowledgeSemanticDigest);
+    expect(observed.knowledgeSemanticDigest).not.toBe(coverage.knowledgeSemanticDigest);
+    expect(await withRelation("supports")).toEqual(supporting);
+    expect(await withRelation("validated_by_research_pipeline")).toEqual(coverage);
+    expect(await withRelation("observed_by_research_pipeline")).toEqual(observed);
+  });
+
   it("preserves exact FOR and AGAINST evidence without scalar netting", async () => {
     const a = hypothesis("hyp-a", "a");
     const state = await fold([a], [evidence(a, "FOR", "ev-for"), evidence(a, "AGAINST", "ev-against")]);

@@ -496,6 +496,9 @@ function snapshotDigest(
       .map((edge) => ({
         id: edge.id, hypothesisId: edge.hypothesisId, verified: edge.verified,
         createdAt: edge.createdAt.toISOString(), updatedAt: edge.updatedAt.toISOString(),
+        // Coverage-only relations cannot confer resolved knowledge. Bind their
+        // exact kind without changing historical ordinary-edge digest bytes.
+        ...(isResearchPipelineCoverageEdge(edge) ? { relationKind: edge.relationKind } : {}),
         // Bind restrictive retirement without changing legacy/ACTIVE digest bytes.
         ...(edge.lifecycleState === "RETIRED" ? { lifecycleState: "RETIRED" } : {}),
       }))
