@@ -196,9 +196,10 @@ function requireCommand(
   command: LiveCapitalEnvelopeCommandV2,
   boundOrganizationId: string,
 ): LiveCapitalEnvelopeCommandV2 {
-  if (command.organizationId !== boundOrganizationId)
+  const fixed = Object.freeze({ ...command });
+  if (fixed.organizationId !== boundOrganizationId)
     throw new RiskCurrentAccountRefusedV1("EXTERNAL_ORGANIZATION");
-  return command;
+  return fixed;
 }
 
 function requireObservedOrganization(
@@ -300,15 +301,26 @@ export async function advanceLiveCapitalEnvelopeStageV2(
     sourceMethodQualified?: boolean;
   },
 ): Promise<LiveCapitalEnvelopeResultV2> {
-  requireObservedOrganization(input.observed, input.boundOrganizationId);
+  const observed = Object.freeze({ ...input.observed });
+  const sourceMethodQualified = input.sourceMethodQualified === true;
+  requireObservedOrganization(observed, input.boundOrganizationId);
   const command = requireCommand(input.command, input.boundOrganizationId);
   const receipt = sealLiveCapitalEnvelopeV2(command);
   assertLiveCapitalEnvelopeReceiptV2(receipt);
   const stage = input.stage;
+  if (!LIVE_CAPITAL_ENVELOPE_STAGES_V2.includes(stage))
+    throw new RiskCurrentAccountRefusedV1("ENVELOPE_STAGE_INVALID");
   const prior = LIVE_CAPITAL_ENVELOPE_STAGES_V2[LIVE_CAPITAL_ENVELOPE_STAGES_V2.indexOf(stage) - 1];
   return sql.begin(async (tx) => {
     await lockScope(tx, command.organizationId, command.accountId);
     const rows = await loadJournal(tx, command);
+    // An idempotency key identifies the original command, not a mutable request.
+    // Legacy captured-only rows retained no payload identity and cannot be resumed safely.
+    const commandDigests = rows.flatMap(row => row.envelope_digest === null ? [] : [row.envelope_digest]);
+    if (rows.length > 0 && commandDigests.length === 0)
+      throw new RiskCurrentAccountRefusedV1("ENVELOPE_COMMAND_IDENTITY_UNAVAILABLE");
+    if (commandDigests.some(digest => digest !== receipt.contentDigest))
+      throw new RiskCurrentAccountRefusedV1("ENVELOPE_COMMAND_CONFLICT");
     const invalidated = rows.find((row) => row.stage === "INVALIDATED");
     const publishedRow = rows.find((row) => row.stage === "PUBLISHED");
     // A published command that was later invalidated stays closed. An invalidated
@@ -320,7 +332,7 @@ export async function advanceLiveCapitalEnvelopeStageV2(
     if (existing?.stage === "PUBLISHED" && existing.envelope_digest && existing.basis_digest) {
       return recheckPublishedAuthorityV2(
         tx,
-        input.observed,
+        observed,
         { organizationId: command.organizationId, accountId: command.accountId },
         existing.envelope_digest,
         existing.basis_digest,
@@ -350,7 +362,7 @@ export async function advanceLiveCapitalEnvelopeStageV2(
       if (publishedRow?.envelope_digest && publishedRow.basis_digest) {
         return recheckPublishedAuthorityV2(
           tx,
-          input.observed,
+          observed,
           { organizationId: command.organizationId, accountId: command.accountId },
           publishedRow.envelope_digest,
           publishedRow.basis_digest,
@@ -362,7 +374,7 @@ export async function advanceLiveCapitalEnvelopeStageV2(
       throw new RiskCurrentAccountRefusedV1("STAGE_ORDER");
     if (stage === "CAPTURED") {
       await journal(tx, command, "CAPTURED", {
-        envelopeDigest: null,
+        envelopeDigest: receipt.contentDigest,
         basisDigest: null,
         reason: null,
       });
@@ -389,8 +401,8 @@ export async function advanceLiveCapitalEnvelopeStageV2(
     const nowUtc = await dbNow(tx);
     const decision = decideLiveCapitalEnvelopePublicationV2({
       liveCapitalEnvelope: receipt,
-      sourceMethodQualified: input.sourceMethodQualified === true,
-      bound: { ...input.observed, nowUtc },
+      sourceMethodQualified,
+      bound: { ...observed, nowUtc },
     });
     let current = await loadCurrent(tx, command.organizationId, command.accountId);
     if (decision.decision !== "PUBLISHED") {
@@ -490,7 +502,7 @@ export async function advanceLiveCapitalEnvelopeStageV2(
       envelopeDigest: receipt.contentDigest,
       basisDigest: basis.contentDigest,
       reason: null,
-      sourceMethodQualified: input.sourceMethodQualified === true,
+      sourceMethodQualified,
     });
     return published(receipt.contentDigest, basis.contentDigest, false);
   });
@@ -507,9 +519,15 @@ export async function produceLiveCapitalEnvelopeV2(
     sourceMethodQualified?: boolean;
   },
 ): Promise<LiveCapitalEnvelopeResultV2> {
+  const fixed = Object.freeze({
+    command: requireCommand(input.command, input.boundOrganizationId),
+    boundOrganizationId: input.boundOrganizationId,
+    observed: Object.freeze({ ...input.observed }),
+    sourceMethodQualified: input.sourceMethodQualified === true,
+  });
   let last = refused("CAPTURED");
   for (const stage of LIVE_CAPITAL_ENVELOPE_STAGES_V2) {
-    last = await advanceLiveCapitalEnvelopeStageV2(sql, { ...input, stage });
+    last = await advanceLiveCapitalEnvelopeStageV2(sql, { ...fixed, stage });
     if (
       last.decision === "REFUSED" &&
       !last.replayed &&
