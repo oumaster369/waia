@@ -62,6 +62,7 @@ import {
   readPeriodRealizedPnl,
 } from "@/lib/trader/research/research-validation-metrics-taxonomy";
 import { buildResearchEvidenceDocument } from "@/lib/trader/research/build-research-evidence-export";
+import { assertResearchRootPostgresDbV1 } from "@/lib/trader/research/research-root-postgres-db-v1";
 import {
   MultiRegimeCoverageError,
   ResearchOrchestratorError,
@@ -354,6 +355,7 @@ export async function runResearchPipelinePostgres(
   ex: PgExecutor,
   input: RunResearchPipelineInput,
 ): Promise<RunResearchPipelineResult> {
+  assertResearchRootPostgresDbV1(ex);
   const newId = input.newId ?? crypto.randomUUID.bind(crypto);
   const costModel =
     input.costModel ?? costModelV1FromAuthority(createHtrHistoricalCostModelAuthorityV1());
