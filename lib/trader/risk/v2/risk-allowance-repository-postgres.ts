@@ -1075,6 +1075,14 @@ function issuedConsumptionBindingOrRefusal(input: {
  * A malformed bind request (nonce, digest, lineage, ceiling, order shape) must
  * roll back and leave that row ISSUED.
  */
+/** An ISSUED row under an enforcing kill switch is terminalized. Any other
+ * lifecycle still throws so a consumed allowance is not treated as eligible. */
+export function issuedAllowanceKillSwitchBindDispositionV2(
+  lifecycleState: string | null | undefined,
+): "TERMINALIZE" | "THROW" {
+  return lifecycleState === "ISSUED" ? "TERMINALIZE" : "THROW";
+}
+
 export function issuedAllowanceRefusalTerminalizesStoredRowV2(reason: string): boolean {
   switch (reason) {
     case "ALLOWANCE_EXPIRED":
@@ -1188,9 +1196,7 @@ export async function terminalizeIssuedAllowanceIfBindWouldRefuseV2(
 ): Promise<IssuedAllowanceBindPreflightV2 | null> {
   const scoped = requireOrgContext(context.organizationId);
   const state = await lockAccountState(tx, scoped.organizationId, input.accountId);
-  if (await enforcingKillSwitchCoversAccountV2(tx, scoped.organizationId)) {
-    throw new RiskV2AdmissionRefusedError("KILL_SWITCH_TRIPPED");
-  }
+  const killSwitch = await enforcingKillSwitchCoversAccountV2(tx, scoped.organizationId);
   const rows = await tx
     .select()
     .from(pgSchema.traderRiskAllowancesV2)
@@ -1202,6 +1208,22 @@ export async function terminalizeIssuedAllowanceIfBindWouldRefuseV2(
       ),
     );
   const row = rows[0];
+  if (killSwitch) {
+    if (issuedAllowanceKillSwitchBindDispositionV2(row?.lifecycleState) === "TERMINALIZE" && row) {
+      const durableAt = await freshEligibilityTime(tx);
+      await refuseIssuedAllowanceConsumptionV2({
+        tx,
+        state,
+        row,
+        eventId: input.consumptionEventId,
+        reason: "KILL_SWITCH_TRIPPED",
+        durableAt,
+        withoutOrder: true,
+      });
+      return { status: "REFUSED", reason: "KILL_SWITCH_TRIPPED", terminalized: true };
+    }
+    throw new RiskV2AdmissionRefusedError("KILL_SWITCH_TRIPPED");
+  }
   if (!row) throw new RiskV2AdmissionRefusedError("ALLOWANCE_NOT_FOUND");
   if (row.lifecycleState === "CONSUMED") return null;
   if (row.lifecycleState !== "ISSUED") {
