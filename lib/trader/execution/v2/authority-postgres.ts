@@ -43,7 +43,7 @@ import {
   readExecutionPolicyV2Postgres,
 } from "./repository-postgres";
 import { refusalForPrePostThrow } from "./credential-gate-kill";
-import { assertExecutionV2LiveGatesPostgres, ExecutionV2LiveGateRefusedError } from "./live-gates";
+import { recordExecutionV2LiveGateVerdictPostgres, emitCommittedExecutionV2LiveGateTelemetry } from "./live-gates";
 import { prePostNetworkRefusalV2 } from "./pre-post-recheck-v2";
 
 type PlanMechanicsV2 = Omit<CreateExecutionPlanV2Input, "executionPlanId" | "allowance" | "policy">;
@@ -204,17 +204,11 @@ export async function bindExecutionAuthorityV2Postgres(
     if (!(await readRiskAccountStateV2Postgres(tx, scoped, input.allowance.accountId, true))) {
       throw new RiskV2AdmissionRefusedError("RISK_ACCOUNT_STATE_MISSING");
     }
-    // Live gates run under the account lock, before any allowance consume.
-    // A refusal rolls the transaction back and leaves the ISSUED allowance reserved.
+    // No execution rows exist yet. Return a gate refusal so its credential kill
+    // switch can commit while the allowance remains ISSUED and unconsumed.
     if (input.executionMode === "live") {
-      try {
-        await assertExecutionV2LiveGatesPostgres(tx, scoped, input);
-      } catch (error) {
-        if (error instanceof ExecutionV2LiveGateRefusedError) {
-          throw new ExecutionV2AuthorityRefusedError(error.reason);
-        }
-        throw error;
-      }
+      const liveGate = await recordExecutionV2LiveGateVerdictPostgres(tx, scoped, input);
+      if (!liveGate.ok) return { status: "REFUSED" as const, reason: liveGate.reason, liveGate };
     }
     // Terminalize an allowance that is unfit on its own before policy/plan inserts,
     // then commit that write. A malformed request throws here so the transaction
@@ -384,7 +378,12 @@ export async function bindExecutionAuthorityV2Postgres(
       throw error;
     }
   });
-  if (outcome.status === "REFUSED") throw new ExecutionV2AuthorityRefusedError(outcome.reason);
+  if (outcome.status === "REFUSED") {
+    if ("liveGate" in outcome && outcome.liveGate) {
+      await emitCommittedExecutionV2LiveGateTelemetry(scoped.organizationId, outcome.liveGate);
+    }
+    throw new ExecutionV2AuthorityRefusedError(outcome.reason);
+  }
   return outcome.value;
 }
 

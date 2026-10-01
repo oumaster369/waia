@@ -4,10 +4,14 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
 
+import { sql } from "drizzle-orm";
+
 import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
-import type { OrgContext } from "@/lib/waia-core/scope/org-context";
+import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 import {
   admitRiskAllowanceV2Postgres,
+  readRiskAccountStateV2Postgres,
+  RiskV2AdmissionRefusedError,
   type AdmitRiskAllowanceV2Input,
   type AdmitRiskAllowanceV2Result,
 } from "@/lib/trader/risk/v2/risk-allowance-repository-postgres";
@@ -26,7 +30,7 @@ import {
   type ExecutionV2ConnectorResolver,
   type ExecutionV2SubmissionResult,
 } from "./connector-dispatch";
-import { assertExecutionV2LiveGatesPostgres, ExecutionV2LiveGateRefusedError } from "./live-gates";
+import { recordExecutionV2LiveGateVerdictPostgres, emitCommittedExecutionV2LiveGateTelemetry } from "./live-gates";
 
 export type ExecutionV2OrderService = ReturnType<typeof createPostgresExecutionV2Service>;
 
@@ -71,16 +75,23 @@ export function createAssertExecutionV2LiveAuthorized(
   env?: Record<string, unknown>,
 ): (context: OrgContext, request: BindExecutionAuthorityV2Input) => Promise<void> {
   return async (context, request) => {
-    await runWaiaPostgresTransaction(db, async (tx) => {
-      try {
-        await assertExecutionV2LiveGatesPostgres(tx, context, request, env);
-      } catch (error) {
-        if (error instanceof ExecutionV2LiveGateRefusedError) {
-          throw new ExecutionV2AuthorityRefusedError(error.reason);
-        }
-        throw error;
+    const scoped = requireOrgContext(context.organizationId);
+    if (request.allowance.organizationId !== scoped.organizationId ||
+        request.policy.organizationId !== scoped.organizationId) {
+      throw new ExecutionV2AuthorityRefusedError("TENANT_SCOPE_MISMATCH");
+    }
+    const verdict = await runWaiaPostgresTransaction(db, async (tx) => {
+      // Same lock order as direct bind and the final pre-POST check.
+      await tx.execute(sql`select set_config('lock_timeout', '5s', true)`);
+      if (!(await readRiskAccountStateV2Postgres(tx, scoped, request.allowance.accountId, true))) {
+        throw new RiskV2AdmissionRefusedError("RISK_ACCOUNT_STATE_MISSING");
       }
+      return recordExecutionV2LiveGateVerdictPostgres(tx, scoped, request, env);
     });
+    if (!verdict.ok) {
+      await emitCommittedExecutionV2LiveGateTelemetry(scoped.organizationId, verdict);
+      throw new ExecutionV2AuthorityRefusedError(verdict.reason);
+    }
   };
 }
 
