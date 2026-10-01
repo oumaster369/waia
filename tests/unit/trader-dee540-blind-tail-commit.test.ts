@@ -14,6 +14,13 @@ import type {
   StrategyCandidate,
 } from "@/lib/trader/research/strategy-candidate.types";
 
+// This file exercises commit ordering with an in-memory transaction fake. The
+// native PostgreSQL integration test covers the real root-database identity
+// boundary; keep this fake from claiming that capability.
+vi.mock("@/lib/trader/research/research-root-postgres-db-v1", () => ({
+  assertResearchRootPostgresDbV1: () => undefined,
+}));
+
 const ORG_ID = "00000000-0000-4000-8000-00000000d001";
 const CANDIDATE_ID = "00000000-0000-4000-8000-00000000d002";
 const DATASET_ID = "00000000-0000-4000-8000-00000000d003";

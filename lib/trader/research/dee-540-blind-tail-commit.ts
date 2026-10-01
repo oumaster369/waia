@@ -14,6 +14,7 @@ import {
 } from "@/lib/trader/research/blind-holdout-engine";
 import { consumeDee540BlindTailAuthorization } from "@/lib/trader/research/dee-540-authorization-store";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import { assertResearchRootPostgresDbV1 } from "@/lib/trader/research/research-root-postgres-db-v1";
 import {
   RESEARCH_VALIDATION_METRICS_SCHEMA_VERSION_V1,
   type ResearchValidationMetrics,
@@ -177,6 +178,9 @@ export async function commitDee540BlindHoldout(
   ex: Pick<WaiaPostgresDb, "transaction">,
   input: CommitDee540BlindHoldoutInput,
 ): Promise<BlindHoldoutValidationResult> {
+  // Reject an outer transaction before status reads or bar disclosure: its
+  // nested transaction is only a savepoint, so it cannot commit the burn.
+  assertResearchRootPostgresDbV1(ex);
   await assertBlindHoldoutNotYetRead({
     context: input.context,
     candidate: input.candidate,

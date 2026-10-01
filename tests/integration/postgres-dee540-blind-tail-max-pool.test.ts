@@ -6,7 +6,7 @@
  * This test fails that hang with a client-side deadline.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -30,6 +30,7 @@ import { createIntelligenceCycleBundleRepositoryPostgres } from "@/lib/trader/in
 import type { Bar } from "@/lib/trader/intelligence/types";
 import { insertMarketBarsPostgres } from "@/lib/trader/market-data/market-bars-repository-postgres";
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
+import { dee540BarContentConsumed } from "@/lib/trader/research/dee-540-authorization-store";
 import { insertResearchDatasetPostgres } from "@/lib/trader/market-data/research-dataset-repository-postgres";
 import {
   buildM9BlindAuthorizationScope,
@@ -269,6 +270,93 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail on a max:1 pool
       );
       expect(stored?.status).toBe("blind_validated");
       expect(stored?.blindUsed).toBe(true);
+    })();
+    work.catch(() => undefined);
+    try {
+      await withDeadline(work, DEADLINE_MS);
+    } finally {
+      await client.end({ timeout: 5 });
+    }
+  }, 20_000);
+
+  it("rejects an outer transaction before blind status read, token burn, or bar exposure", async () => {
+    const { client, db } = await openPool();
+    const work = (async () => {
+      const seeded = await seedHoldout(db, "64004", "outer-transaction");
+      const runBacktest = vi.fn(async () => successMetrics());
+      const outerRollback = new Error("rollback outer transaction after root refusal");
+      let nestedError: unknown;
+      let statusReads = 0;
+
+      await expect(
+        db.transaction(async (outerTx) => {
+          try {
+            await commitDee540BlindHoldout(outerTx as Dee540BlindTailExecutor, {
+              blindDigest: seeded.blindDigest,
+              context: seeded.context,
+              candidate: seeded.candidate,
+              datasetId: seeded.datasetId,
+              blindBars: seeded.bars,
+              expectedBlindDigest: seeded.blindDigest,
+              runBacktest,
+              readRepository: {
+                getBlindValidationResultForCandidate: (context, candidateId) => {
+                  statusReads += 1;
+                  return getBlindValidationResultForCandidatePostgres(
+                    outerTx,
+                    context,
+                    candidateId,
+                  );
+                },
+              },
+              bindRepository,
+            });
+          } catch (error) {
+            nestedError = error;
+          }
+          throw outerRollback;
+        }),
+      ).rejects.toBe(outerRollback);
+
+      const tokenConsumedAfterRollback = await dee540BarContentConsumed(db, seeded.blindDigest);
+      console.error(
+        "DEE1159_OUTER_TX_PROOF",
+        JSON.stringify({
+          statusReads,
+          backtestCalls: runBacktest.mock.calls.length,
+          tokenConsumedAfterRollback,
+          nestedError:
+            nestedError instanceof Error
+              ? { name: nestedError.name, message: nestedError.message }
+              : String(nestedError),
+        }),
+      );
+      expect(nestedError).toMatchObject({
+        message: expect.stringContaining("RESEARCH_ROOT_DATABASE_REQUIRED"),
+      });
+      expect(statusReads).toBe(0);
+      expect(runBacktest).not.toHaveBeenCalled();
+      expect(tokenConsumedAfterRollback).toBe(false);
+
+      // The rejected outer transaction never saw the bars or consumed the token;
+      // a legitimate root-pool retry remains the first and only opener.
+      const outcome = await commitDee540BlindHoldout(db, {
+        blindDigest: seeded.blindDigest,
+        context: seeded.context,
+        candidate: seeded.candidate,
+        datasetId: seeded.datasetId,
+        blindBars: seeded.bars,
+        expectedBlindDigest: seeded.blindDigest,
+        runBacktest,
+        readRepository: {
+          getBlindValidationResultForCandidate: (context, candidateId) =>
+            getBlindValidationResultForCandidatePostgres(db, context, candidateId),
+        },
+        bindRepository,
+      });
+      expect(outcome.metrics).toEqual(successMetrics());
+      expect(runBacktest).toHaveBeenCalledTimes(1);
+      expect(await dee540BarContentConsumed(db, seeded.blindDigest)).toBe(true);
     })();
     work.catch(() => undefined);
     try {
