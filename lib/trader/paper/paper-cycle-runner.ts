@@ -639,7 +639,7 @@ export async function runPaperCycleOnce(
   const evaluation = runEvaluationCycle({
     organizationId: context.organizationId,
     accountId: input.accountKey,
-    bars: snapshot.bars,
+    bars: input.evaluationBars ?? snapshot.bars,
     quote: snapshot.quote,
     evaluatedAt: snapshot.evaluatedAt,
     fusedContext: input.fusedContext,

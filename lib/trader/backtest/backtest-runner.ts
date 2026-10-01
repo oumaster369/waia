@@ -404,6 +404,35 @@ function trimBars1mPrefixForStreamOnly(prefix: Bar[]): void {
   }
 }
 
+/** Cursor IO supplies a delta; feature evaluation needs the retained PIT window. */
+function barsForHistoricalEvaluation(
+  snapshot: MarketSnapshot,
+  retainedPrefix: readonly Bar[],
+): readonly Bar[] {
+  // Expanding sources already supply their complete evaluation window.
+  if (snapshot.bars.length !== 1) return snapshot.bars;
+  const currentBar = snapshot.bars[0]!;
+  const anchorMs = Date.parse(snapshot.evaluatedAt);
+  if (currentBar.symbol !== snapshot.quote.symbol || !Number.isFinite(anchorMs)) {
+    throw new Error("BACKTEST_EVALUATION_CONTEXT_INVALID_ANCHOR");
+  }
+  const bars = retainedPrefix.filter(
+    (bar) => bar.symbol === currentBar.symbol && bar.interval === currentBar.interval,
+  );
+  if (bars.at(-1) !== currentBar) {
+    throw new Error("BACKTEST_EVALUATION_CONTEXT_CURRENT_BAR_MISSING");
+  }
+  let previousCloseMs = Number.NEGATIVE_INFINITY;
+  for (const bar of bars) {
+    const closeMs = Date.parse(bar.barCloseTime);
+    if (!Number.isFinite(closeMs) || closeMs <= previousCloseMs || closeMs > anchorMs) {
+      throw new Error("BACKTEST_EVALUATION_CONTEXT_INVALID_CHRONOLOGY");
+    }
+    previousCloseMs = closeMs;
+  }
+  return Object.freeze(bars.map((bar) => Object.freeze({ ...bar })));
+}
+
 /** DEE-431: structured non-economic stop result for checkpoint/pause paths. */
 export type BacktestCycleBoundaryDecision =
   | "continue"
@@ -1065,6 +1094,7 @@ export async function runBacktest(input: RunBacktestInput): Promise<RunBacktestR
       result = await runPaperCycleOnce(input.deps, {
         context: input.context,
         snapshot,
+        evaluationBars: barsForHistoricalEvaluation(snapshot, bars1mPrefix),
         fusedContext,
         accountKey: input.accountKey,
         defaultQuantity: input.defaultQuantity,
