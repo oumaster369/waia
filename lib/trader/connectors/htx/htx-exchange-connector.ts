@@ -458,8 +458,8 @@ export class HtxExchangeConnector implements ExchangeConnector {
     let responseBody: unknown;
     let responseBodyReadFailed = false;
     try {
-      // Execution V2 permits exactly one network submission. The generic HTX
-      // client retries POSTs, so this effect path deliberately bypasses it.
+      // Execution V2 permits exactly one network submission. This path does not
+      // call client.placeOrder. The shared client also refuses to retry POST.
       const fetchAndReadPromise = (async () => {
         response = await this.placementFetch(url, {
           method: "POST",

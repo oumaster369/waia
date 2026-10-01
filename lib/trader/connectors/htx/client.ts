@@ -417,7 +417,10 @@ export class HtxRestClient {
   }
 
   private async signedRequest<T>(url: string, init: RequestInit, path: string): Promise<T> {
-    for (let attempt = 0; attempt <= this.transportPolicy.maxRetries; attempt++) {
+    // Rate-limit envelopes are HTTP 200, so the transport retry never sees them.
+    // POST still must not be repeated. GET keeps the policy budget.
+    const attempts = init.method === "POST" ? 0 : this.transportPolicy.maxRetries;
+    for (let attempt = 0; attempt <= attempts; attempt++) {
       const response = await this.transport.fetch(url, init);
       if (!response.ok) {
         throw new HtxApiError("http-error", `HTTP ${response.status} for ${path}`);
@@ -428,7 +431,7 @@ export class HtxRestClient {
         HtxV2Response<unknown>;
 
       if (isHtxRateLimitEnvelope(body)) {
-        if (attempt === this.transportPolicy.maxRetries) {
+        if (attempt === attempts) {
           this.assertOk(body, path);
         }
         const delayMs = computeRetryDelayMs(attempt, this.transportPolicy, response.headers);
