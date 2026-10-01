@@ -53,6 +53,54 @@ function fixtureWithBlockedActiveStrategy(): BarReplaySource {
 }
 
 describe("paper strategy selection forwarding", () => {
+  it("still refuses an explicitly unknown evaluator before execution", async () => {
+    const { deps, submitOrder, reconcile } = dependencies();
+    await expect(runFixturePaperCycles({
+      deps, context: requireOrgContext(ORGANIZATION_ID), n: 1,
+      replay: fixtureWithBlockedActiveStrategy(),
+      strategySignalIds: ["__htr-blocked__"],
+      accountKey: ACCOUNT_ID, defaultQuantity: "0.01",
+      accountState: { positions: [], openOrderCount: 0, dailyPnl: "0", drawdown: "0",
+        quoteExposureByCurrency: {} },
+      informationSufficiencyAuthority: researchAuthority(),
+    })).rejects.toThrow("unknown strategy signal ID");
+    expect(submitOrder).not.toHaveBeenCalled();
+    expect(reconcile).not.toHaveBeenCalled();
+  });
+
+  it.each(["fixture", "poll"] as const)(
+    "keeps an actionability-only blocked ID out of evaluator selection in %s cycles",
+    async (source) => {
+      const { deps, submitOrder, reconcile } = dependencies();
+      const replay = fixtureWithBlockedActiveStrategy();
+      const common = {
+        deps, context: requireOrgContext(ORGANIZATION_ID), n: 1,
+        accountKey: ACCOUNT_ID, defaultQuantity: "0.01",
+        accountState: { positions: [], openOrderCount: 0, dailyPnl: "0", drawdown: "0",
+          quoteExposureByCurrency: {} },
+        informationSufficiencyAuthority: researchAuthority(),
+      };
+      const { results } = source === "fixture"
+        ? await runFixturePaperCycles({ ...common, replay })
+        : await runPollPaperCycles({ ...common, poll: {
+          reset: () => replay.reset(),
+          fetchSnapshot: async () => {
+            const next = replay.next();
+            if (next.done) throw new Error("fixture unexpectedly exhausted");
+            return next.snapshot;
+          },
+        } });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]!.evaluation.signals.length).toBeGreaterThan(0);
+      expect(results[0]!.evaluation.signals.map(signal => signal.strategyId))
+        .not.toContain("__htr-blocked__");
+      expect(results[0]!.strategyExecutions).toHaveLength(0);
+      expect(submitOrder).not.toHaveBeenCalled();
+      expect(reconcile).not.toHaveBeenCalled();
+    },
+  );
+
   it("forwards explicit evaluator selection through fixture cycles while active IDs still block execution", async () => {
     const { deps, submitOrder, reconcile } = dependencies();
     const replay = fixtureWithBlockedActiveStrategy();

@@ -658,7 +658,10 @@ export async function runPaperCycleOnce(
     informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
     forecastRuntimeInput: input.forecastRuntimeInput,
     omitIntelligenceArtifacts: input.omitIntelligenceArtifacts,
-    strategySignalIds: input.strategySignalIds ?? input.snapshot.activeStrategyIds,
+    // Evaluator selection and permission to act are separate contracts. Snapshot
+    // IDs are only the post-evaluation actionability filter below; they may
+    // intentionally match no registered evaluator to suppress every order.
+    strategySignalIds: input.strategySignalIds,
   });
 
   const actionableSignals = evaluation.signals.filter(

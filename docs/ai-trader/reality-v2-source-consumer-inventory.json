@@ -416,7 +416,7 @@
       {"path": "lib/trader/observability/fhv-execution-checkpoint-runtime.ts","sha256": "fc32f1f4af3938549c6c52923e8c5a52f36fe8e6fb7df7591a02e2b940f53d49"},
       {"path": "lib/trader/observability/fhv-prelaunch-fixture-e2e.ts","sha256": "0bd9780c216f312481e5ee14f9f37080bd87035e517bcd7481c104a3de4bc2b2"},
       {"path": "lib/trader/paper/build-worker-deps.ts","sha256": "bfd388a31bfcfb59b5247fae2e48e1bf4d2fe3289eab03bacf45e0c6f94e03bd"},
-      {"path": "lib/trader/paper/paper-cycle-runner.ts","sha256": "59260969941a4e191dec894c0cf6b74bf98243295d3bdb6fe11157dc516790ac"},
+      {"path": "lib/trader/paper/paper-cycle-runner.ts","sha256": "0f1b8e2fc66f21c1fd5fd573a364e5a6f202c84fa0b8a5e47d1cfa569aea740c"},
       {"path": "lib/trader/paper/paper-cycle.types.ts","sha256": "739aa126f1e0f2f8bdf6c83eaeb36950c079ecd3ec65e93c44a1273bbb559822"},
       {"path": "lib/trader/positions/sync-handler.ts","sha256": "94a58646ffaade83b2b66c4a55f46724bfba67182ed1078679682a7a2e186c2e"},
       {"path": "lib/trader/positions/types.ts","sha256": "8ec00886cc56e1bae84f25325d5fbe56cbf9051e89f767cfd486d076624d02f7"},

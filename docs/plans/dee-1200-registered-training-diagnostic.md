@@ -12,7 +12,7 @@ state:
   status: in-progress
   completedWorkPackages: [WP-1]
   remainingWorkPackages: [WP-2]
-  nextAction: "Complete the independent review of the rebased source and publish the bounded child for exact-head CI; keep the parent DEE-1159 open for the broader qualification path."
+  nextAction: "Fix the PR732 evaluator-selection/actionability regression, repeat focused/native checks and independent review, then require every applicable exact-head CI check; keep parent DEE-1159 open."
 provenance:
   createdFrom: "2026-10-01 bounded DEE-1159 engineering decomposition"
   supersedes: null
@@ -42,7 +42,7 @@ The diagnostic request boundary canonicalizes the PostgreSQL UUID spelling befor
 
 The bounded child also extracts the diagnostic's unchanged signal → sizing/D20/Risk → D5 order/fill → accounting loop into `research-modeled-stage-kernel-v1.ts`. The DEVELOPMENT owner retains its strict public request, registered source/policy checks, locked serializable transaction, complete ledger verification and atomic result insert. The internal kernel receives only that owner's executor, verified source, parsed identity and resolved policy/model; it is not a public arbitrary-bars, callback, stage-access or authority API. The current public reader remains DEVELOPMENT-only. A strict-request native case proves that caller-supplied bars, cycles, blind stage, scores, result, repository and policy are refused before any DB query. Same-executable validation, walk-forward, blind and full Guardian qualification remain parent DEE-1159 work.
 
-Independent review caught and corrected a UUID-spelling difference introduced by extraction. The final loop retains the normalized identity from the owner. The fresh combined pre-rebase proof (`dee1200-kernel-combined-native/receipt.json`, captured at `83f2e2a2`) passed all 89 assertions across eight exact files, with zero failures/skips, on PostgreSQL 16.14; its source pins were unchanged during that run. The final commit binding to `ebec2e22` records 534 of 536 source pins identical, with only the two plan documents differing. The later `dee1200-final-rebase-native-final/receipt.json` is a distinct historical 88-assertion run. This receipt is historical evidence bound to its captured pre-rebase source, not a claim that the current `31c78cba` base was natively rerun. The earlier 88-assertion run remains historical; current-base native proof, independent review, and published-head CI are separate evidence.
+Independent review caught and corrected a UUID-spelling difference introduced by extraction. The final loop retains the normalized identity from the owner. The fresh combined pre-rebase proof (`dee1200-kernel-combined-native/receipt.json`, captured at `83f2e2a2`) passed all 89 assertions across eight exact files, with zero failures/skips, on PostgreSQL 16.14; its source pins were unchanged during that run. The final commit binding to `ebec2e22` records 534 of 536 source pins identical, with only the two plan documents differing. The earlier `dee1200-final-rebase-native-final/receipt.json` is a distinct historical 88-assertion run. This receipt is historical evidence bound to its captured pre-rebase source, not a claim that the current `31c78cba` base was natively rerun. The earlier 88-assertion run remains historical; current-base native proof, independent review, and published-head CI are separate evidence.
 
 ## WP-2 — required isolated PostgreSQL CI gate
 
@@ -58,3 +58,10 @@ The independent CI review found that the scoped-ledger suite's existing local-on
 - The three staged DDL payloads are applied only to the disposable CI test database; the canonical migration journal is untouched.
 - Existing registered diagnostic behavior and assertions are unchanged; no live capability, holdout authority, financial policy, or claim of scientific qualification is added.
 - The UUID normalization counterexample, corrected regression and rebased eight-suite native run are source-bound in the DEE-1200 readiness receipt. Independent review of the rebased changes and exact published-head CI remain pending.
+
+
+## PR732 integration correction — evaluator selection and actionability
+
+The first published head `f233a585` failed the PostgreSQL 17 historical regression guard: the real one-bar poll caller supplied `activeStrategyIds:["__htr-blocked__"]` to prevent dispatch, but the paper runner reused that value as an evaluator selection. New strict selection validation then rejected it before Forecast persistence could run. Two focused fixture/poll cases reproduced the same failure (2 failed / 2 passed). The correction forwards only explicit `strategySignalIds` to evaluation and retains `activeStrategyIds` solely as its documented post-evaluation dispatch filter. Unknown explicitly selected evaluators still refuse before execution. The PIT-context unit fixture now selects the real mean-reversion evaluator while retaining its action-blocking sentinel. Default evaluation may contain additional diagnostic signals when only active IDs are supplied, but inactive signals still cannot dispatch. No registered research kernel, financial policy or permission is changed.
+
+This production-file correction supersedes the earlier byte-identical rebase statement for `paper-cycle-runner.ts` only. Prior 89-case native evidence remains historical; corrected focused tests, fresh PostgreSQL 17 original regression, independent delta review and new exact-head CI are required before merge. The initial failed CI and focused RED are retained.
