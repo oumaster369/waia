@@ -36,6 +36,7 @@ export const EXECUTION_V2_LIVE_GATE_REASONS = [
   "CREDENTIAL_REQUIRED",
   "CREDENTIAL_NOT_TRADE_SCOPED",
   "LIVE_NOTIONAL_CAP_EXCEEDED",
+  "SIGNER_BINDING_UNAVAILABLE",
 ] as const;
 
 export type ExecutionV2LiveGateReason = (typeof EXECUTION_V2_LIVE_GATE_REASONS)[number];
@@ -155,7 +156,10 @@ export function evaluateExecutionV2LiveGates(
     return refuse("LIVE_NOTIONAL_CAP_EXCEEDED");
   }
 
-  return Object.freeze({ ok: true });
+  // Stored permission metadata cannot bind the connector's captured key to
+  // this credential revision and Risk account. No qualified issuer exists yet;
+  // never infer that authority from strings or a caller-provided approval flag.
+  return refuse("SIGNER_BINDING_UNAVAILABLE");
 }
 
 export function parseStoredPermissionMetadata(raw: string | null): Record<string, unknown> | null {

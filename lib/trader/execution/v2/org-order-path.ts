@@ -67,8 +67,10 @@ const UNQUALIFIED_DECISION_DIGEST = createHash("sha256")
   .digest("hex");
 
 /**
- * Pre-bind live gate. Bind repeats the same read inside its transaction, so a
- * hook that returns without checking cannot admit a live order.
+ * Preliminary live metadata check, not independent execution authorization.
+ * Missing signer authority is deferred only to the mandatory direct bind, which
+ * first preserves intrinsic kill/expiry terminalization and then refuses before
+ * any execution effects. Concrete credential faults still commit their kill here.
  */
 export function createAssertExecutionV2LiveAuthorized(
   db: WaiaPostgresDb,
@@ -88,6 +90,7 @@ export function createAssertExecutionV2LiveAuthorized(
       }
       return recordExecutionV2LiveGateVerdictPostgres(tx, scoped, request, env);
     });
+    if (!verdict.ok && verdict.reason === "SIGNER_BINDING_UNAVAILABLE") return;
     if (!verdict.ok) {
       await emitCommittedExecutionV2LiveGateTelemetry(scoped.organizationId, verdict);
       throw new ExecutionV2AuthorityRefusedError(verdict.reason);

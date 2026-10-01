@@ -64,8 +64,8 @@ describe("Execution V2 pre-POST recheck (DEE-1151 P1-1)", () => {
     expect(evaluatePrePostRecheck({ ...clear(), executionMode: "mock" })).toBeNull();
   });
 
-  it("allows live only when Org0, EFFECTIVE promotion, and trade scope all pass", () => {
-    expect(evaluatePrePostRecheck(live())).toBeNull();
+  it("refuses live metadata without exact signer authority", () => {
+    expect(evaluatePrePostRecheck(live())).toBe("SIGNER_BINDING_UNAVAILABLE");
   });
 
   it.each<[string, PrePostRecheckFacts, string]>([
