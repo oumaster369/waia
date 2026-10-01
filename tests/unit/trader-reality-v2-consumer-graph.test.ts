@@ -2,10 +2,12 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import ts from "typescript";
 
 import {
+  assertPerFilePinInventorySchema,
+  assertPerFileContentPins,
   assertConnectorReferenceClosure,
   detectConnectorMethodReferencesInSource,
 } from "@/scripts/trader/validate-reality-v2-consumer-graph";
@@ -50,8 +52,7 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         // DEE-1151 keeps that read on the live connector and does not add placeOrder.
         connectorReferences: 26,
         sourceContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
-        consumerContentDigestHex:
-          "8b27d243d9451508d2db5daf21b7592b2f230cd79f58a6a0f2974e6462d8afe0",
+        consumerContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
       }),
     );
   });
@@ -379,5 +380,71 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
       "HTX_SPOT_BALANCE_REST",
       "HTX_SPOT_ACCOUNT_REST",
     ]);
+  });
+});
+
+describe("Reality V2 per-file source/consumer content pins (DEE-1157)", () => {
+  const validPins = [
+    { path: "lib/a.ts", sha256: "8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8" },
+    { path: "lib/b.ts", sha256: "f44e64e75f3948e9f73f8dfa94721c4ce8cbb4f265c4790c702b2d41cfbf2753" },
+  ];
+  const fixture = () => {
+    const files = new Map([
+      ["lib/a.ts", Buffer.from("alpha")],
+      ["lib/b.ts", Buffer.from("beta")],
+      ["lib/c.ts", Buffer.from("gamma")],
+    ]);
+    return { files, read: vi.fn((path: string) => files.get(path) ?? Buffer.from("missing")) };
+  };
+
+  it("accepts exact path-set pins and rejects changed content per file", () => {
+    const { files, read } = fixture();
+    expect(() => assertPerFileContentPins(["lib/a.ts", "lib/b.ts"], validPins, read)).not.toThrow();
+    read.mockClear();
+    files.set("lib/a.ts", Buffer.from("changed"));
+    expect(() => assertPerFileContentPins(["lib/a.ts", "lib/b.ts"], validPins, read)).toThrow(/pin mismatch: lib\/a.ts/);
+    expect(read).toHaveBeenCalledWith("lib/a.ts");
+  });
+
+  it.each([
+    { label: "missing pin", paths: ["lib/a.ts", "lib/b.ts"], entries: [validPins[0]], message: /missing pins for discovered files=lib\/b\.ts/ },
+    { label: "missing discovered file", paths: ["lib/a.ts"], entries: validPins, message: /stale pins for undiscovered files=lib\/b\.ts/ },
+    { label: "extra discovered caller", paths: ["lib/a.ts", "lib/b.ts", "lib/c.ts"], entries: validPins, message: /missing pins for discovered files=lib\/c\.ts/ },
+    { label: "stale extra pin", paths: ["lib/a.ts", "lib/b.ts"], entries: [...validPins, { path: "lib/c.ts", sha256: "0".repeat(64) }], message: /stale pins for undiscovered files=lib\/c\.ts/ },
+    { label: "same-count replacement", paths: ["lib/a.ts", "lib/c.ts"], entries: validPins, message: /missing pins for discovered files=lib\/c\.ts; stale pins for undiscovered files=lib\/b\.ts/ },
+    { label: "duplicate pin", paths: ["lib/a.ts", "lib/b.ts"], entries: [validPins[0], validPins[0]], message: /duplicate paths/ },
+    { label: "malformed digest", paths: ["lib/a.ts", "lib/b.ts"], entries: [validPins[0], { path: "lib/b.ts", sha256: "A".repeat(64) }], message: /malformed at entry 1/ },
+    { label: "malformed path", paths: ["lib/a.ts", "lib/b.ts"], entries: [validPins[0], { path: "../b.ts", sha256: validPins[1]!.sha256 }], message: /malformed at entry 1/ },
+    { label: "non-string path", paths: ["lib/a.ts", "lib/b.ts"], entries: [validPins[0], { path: 7, sha256: validPins[1]!.sha256 }], message: /malformed at entry 1/ },
+    { label: "non-string digest", paths: ["lib/a.ts", "lib/b.ts"], entries: [validPins[0], { path: "lib/b.ts", sha256: 7 }], message: /malformed at entry 1/ },
+    { label: "malformed entry", paths: ["lib/a.ts", "lib/b.ts"], entries: [validPins[0], null], message: /malformed at entry 1/ },
+  ])("rejects $label before reading files", ({ paths, entries, message }) => {
+    const { read } = fixture();
+    expect(() => assertPerFileContentPins(paths, entries, read)).toThrow(message);
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("requires v2 and rejects v1 aggregate-only or missing per-file pins", () => {
+    expect(() => assertPerFilePinInventorySchema({
+      schemaVersion: "reality-v2-source-consumer-inventory/v1",
+      sourceDiscovery: { sortedContentDigestHex: "a".repeat(64) },
+      consumerDiscovery: { sortedContentDigestHex: "b".repeat(64) },
+    })).toThrow(/expected v2 per-file pins/);
+    expect(() => assertPerFilePinInventorySchema({
+      schemaVersion: "reality-v2-source-consumer-inventory/v2",
+      sourceDiscovery: {},
+      consumerDiscovery: { contentPins: [] },
+    })).toThrow(/sourceDiscovery\.contentPins must be an array/);
+    expect(() => assertPerFilePinInventorySchema({
+      schemaVersion: "reality-v2-source-consumer-inventory/v2",
+      sourceDiscovery: { contentPins: [] },
+      consumerDiscovery: {},
+    })).toThrow(/consumerDiscovery\.contentPins must be an array/);
+  });
+
+  it("rejects non-array content pin collections without reading files", () => {
+    const { read } = fixture();
+    expect(() => assertPerFileContentPins(["lib/a.ts"], { path: "lib/a.ts" }, read)).toThrow(/contentPins must be an array/);
+    expect(read).not.toHaveBeenCalled();
   });
 });

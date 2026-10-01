@@ -13,6 +13,7 @@ type ConnectorReferenceCheck = {
   disposition: string;
 };
 type Inventory = {
+  schemaVersion: "reality-v2-source-consumer-inventory/v2";
   canonicalSourceKinds: string[];
   admittedBoundaryFiles: string[];
   sourceDiscovery: {
@@ -21,7 +22,7 @@ type Inventory = {
     productionExtensions: string[];
     expectedFileCount: number;
     sortedPathDigestHex: string;
-    sortedContentDigestHex: string;
+    contentPins: Array<{ path: string; sha256: string }>;
   };
   sourceRules: Rule[];
   consumerDiscovery: {
@@ -32,7 +33,7 @@ type Inventory = {
     connectorMethods: string[];
     expectedFileCount: number;
     sortedPathDigestHex: string;
-    sortedContentDigestHex: string;
+    contentPins: Array<{ path: string; sha256: string }>;
   };
   consumerRules: Rule[];
   explicitCompatibilityChecks: ConnectorReferenceCheck[];
@@ -69,6 +70,65 @@ function contentDigest(paths: readonly string[]): string {
     hash.update("\n", "utf8");
   }
   return hash.digest("hex");
+}
+
+export function assertPerFilePinInventorySchema(inventoryValue: unknown): void {
+  if (!inventoryValue || typeof inventoryValue !== "object" || Array.isArray(inventoryValue)) {
+    throw new Error("Reality V2 source/consumer inventory must be an object");
+  }
+  const inventory = inventoryValue as Record<string, unknown>;
+  if (inventory.schemaVersion !== "reality-v2-source-consumer-inventory/v2") {
+    throw new Error("unsupported Reality V2 source/consumer inventory schema; expected v2 per-file pins");
+  }
+  for (const sectionName of ["sourceDiscovery", "consumerDiscovery"] as const) {
+    const section = inventory[sectionName];
+    if (!section || typeof section !== "object" || Array.isArray(section) ||
+      !Array.isArray((section as Record<string, unknown>).contentPins)) {
+      throw new Error(`${sectionName}.contentPins must be an array; legacy aggregate content pins are unsupported`);
+    }
+  }
+}
+
+export function assertPerFileContentPins(
+  discoveredPaths: readonly string[],
+  pinsValue: unknown,
+  readContent: (path: string) => Uint8Array,
+  label = "content",
+): void {
+  if (!Array.isArray(pinsValue)) throw new Error(`${label} contentPins must be an array`);
+  const pins: Array<{ path: string; sha256: string }> = [];
+  for (const [index, entry] of pinsValue.entries()) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(`${label} content pin is malformed at entry ${index}`);
+    }
+    const record = entry as Record<string, unknown>;
+    const path = record.path;
+    const sha256 = record.sha256;
+    if (typeof path !== "string" || path.length === 0 || path.startsWith("/") ||
+      path.split("/").some((segment) => segment === "" || segment === "." || segment === "..") ||
+      typeof sha256 !== "string" || !/^[0-9a-f]{64}$/.test(sha256)) {
+      throw new Error(`${label} content pin is malformed at entry ${index}`);
+    }
+    pins.push({ path, sha256 });
+  }
+  const discovered = [...discoveredPaths].sort();
+  const pinned = pins.map((pin) => pin.path);
+  if (new Set(discovered).size !== discovered.length || new Set(pinned).size !== pinned.length) {
+    throw new Error(`${label} content pins contain duplicate paths`);
+  }
+  const discoveredSet = new Set(discovered);
+  const pinnedSet = new Set(pinned);
+  const missingPins = discovered.filter((path) => !pinnedSet.has(path));
+  const stalePins = pinned.filter((path) => !discoveredSet.has(path));
+  if (missingPins.length || stalePins.length) {
+    throw new Error(`${label} content pin path set mismatch: ` +
+      `missing pins for discovered files=${missingPins.join(",") || "none"}; ` +
+      `stale pins for undiscovered files=${stalePins.join(",") || "none"}`);
+  }
+  for (const pin of pins) {
+    const actual = createHash("sha256").update(readContent(pin.path)).digest("hex");
+    if (actual !== pin.sha256) throw new Error(`${label} content pin mismatch: ${pin.path}`);
+  }
 }
 
 function assertRuleClosure(paths: readonly string[], rules: readonly Rule[], label: string): void {
@@ -163,7 +223,9 @@ export function assertConnectorReferenceClosure(
 }
 
 function validate(): void {
-  const inventory = JSON.parse(readFileSync(inventoryPath, "utf8")) as Inventory;
+  const inventoryValue: unknown = JSON.parse(readFileSync(inventoryPath, "utf8"));
+  assertPerFilePinInventorySchema(inventoryValue);
+  const inventory = inventoryValue as Inventory;
   const sourceExtensions = new Set(inventory.sourceDiscovery.productionExtensions);
   const consumerExtensions = new Set(inventory.consumerDiscovery.productionExtensions);
   const sourceFiles = [...new Set([
@@ -172,13 +234,14 @@ function validate(): void {
   ])].filter((path) => sourceExtensions.has(extname(path))).sort();
   assertRuleClosure(sourceFiles, inventory.sourceRules, "source");
   if (sourceFiles.length !== inventory.sourceDiscovery.expectedFileCount ||
-    digest(sourceFiles) !== inventory.sourceDiscovery.sortedPathDigestHex ||
-    contentDigest(sourceFiles) !== inventory.sourceDiscovery.sortedContentDigestHex) {
+    digest(sourceFiles) !== inventory.sourceDiscovery.sortedPathDigestHex) {
     throw new Error(
       `source inventory drift: count=${sourceFiles.length} pathDigest=${digest(sourceFiles)} ` +
       `contentDigest=${contentDigest(sourceFiles)}`,
     );
   }
+  assertPerFileContentPins(sourceFiles, inventory.sourceDiscovery.contentPins,
+    (path) => readFileSync(join(root, path)), "source");
 
   const productionFiles = [...new Set(inventory.consumerDiscovery.roots.flatMap((path) =>
     walk(join(root, path))))].filter((path) => consumerExtensions.has(extname(path))).sort();
@@ -201,13 +264,14 @@ function validate(): void {
   ])].sort();
   assertRuleClosure(consumerFiles, inventory.consumerRules, "consumer");
   if (consumerFiles.length !== inventory.consumerDiscovery.expectedFileCount ||
-    digest(consumerFiles) !== inventory.consumerDiscovery.sortedPathDigestHex ||
-    contentDigest(consumerFiles) !== inventory.consumerDiscovery.sortedContentDigestHex) {
+    digest(consumerFiles) !== inventory.consumerDiscovery.sortedPathDigestHex) {
     throw new Error(
       `consumer inventory drift: count=${consumerFiles.length} pathDigest=${digest(consumerFiles)} ` +
       `contentDigest=${contentDigest(consumerFiles)}`,
     );
   }
+  assertPerFileContentPins(consumerFiles, inventory.consumerDiscovery.contentPins,
+    (path) => readFileSync(join(root, path)), "consumer");
 
   for (const file of inventory.admittedBoundaryFiles) {
     if (!existsSync(join(root, file))) throw new Error(`missing admitted Reality boundary: ${file}`);
