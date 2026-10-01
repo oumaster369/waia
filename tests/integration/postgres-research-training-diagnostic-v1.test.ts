@@ -124,15 +124,44 @@ describe.skipIf(!enabled || !url)("DEE-1159 registered training diagnostic Postg
     return { orgId, context, bars, trainBars, experiment, attempt };
   }
 
-  const run = (f: Awaited<ReturnType<typeof fixture>>, trialIndex: number) =>
+  const run = (f: Awaited<ReturnType<typeof fixture>>, trialIndex: number,
+    attemptId = f.attempt.id) =>
     runRegisteredResearchTrainingDiagnosticPostgresV1(db, f.context,
-      { attemptId: f.attempt.id, trialIndex, limits: LIMITS });
+      { attemptId, trialIndex, limits: LIMITS });
 
   beforeAll(() => {
     ownerSql = postgres(url!, { max: 8, prepare: false });
     db = drizzle(ownerSql, { schema: pgSchema }) as unknown as WaiaPostgresDb;
   });
   afterAll(async () => { await ownerSql?.end({ timeout: 5 }); });
+
+  it("canonicalizes uppercase UUID attempt IDs across the initial commit and exact retries", async () => {
+    const f = await fixture({ label: "uppercase-attempt-id", trials: [4],
+      closes: [100, 100, 100, 100, 90, 100, 100, 100] });
+    const uppercaseAttemptId = f.attempt.id.toUpperCase();
+    const first = await run(f, 0, uppercaseAttemptId);
+    const uppercaseRetry = await run(f, 0, uppercaseAttemptId);
+    const lowercaseRetry = await run(f, 0, f.attempt.id.toLowerCase());
+
+    expect(first).toEqual(uppercaseRetry);
+    expect(first).toEqual(lowercaseRetry);
+    expect(first.attemptId).toBe(f.attempt.id.toLowerCase());
+    const [stored] = await ownerSql`select attempt_id::text as attempt_id,trace_canonical_json
+      from public.trader_research_training_diagnostics_v1
+      where organization_id=${f.orgId}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=0`;
+    expect(stored!.attempt_id).toBe(f.attempt.id.toLowerCase());
+    expect(JSON.parse(stored!.trace_canonical_json).attemptId).toBe(f.attempt.id.toLowerCase());
+    const [counts] = await ownerSql`select
+      (select count(*)::int from public.trader_research_training_diagnostics_v1
+        where organization_id=${f.orgId}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=0) as results,
+      (select count(*)::int from public.trader_orders
+        where organization_id=${f.orgId}::uuid and historical_run_id=${first.stageRunId}) as orders,
+      (select count(*)::int from public.trader_fills fill join public.trader_orders o on o.id=fill.order_id
+        where o.organization_id=${f.orgId}::uuid and o.historical_run_id=${first.stageRunId}) as fills`;
+    expect(counts!.results).toBe(1);
+    expect(counts!.orders).toBe(Number(first.orderCount));
+    expect(counts!.fills).toBe(Number(first.fillCount));
+  }, 120_000);
 
   it("executes two declared lookbacks with separate actual D5 decisions, fills, accounting and exact retries", async () => {
     const f = await fixture({ label: "different-lookbacks", closes: [100, 100, 100, 100, 90, 100, 100, 100, 90, 100, 100, 100] });

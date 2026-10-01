@@ -138,7 +138,9 @@ export async function runRegisteredResearchTrainingDiagnosticPostgresV1(
 ) {
   assertResearchRootPostgresDbV1(db);
   const organizationId = requireOrgContext(context.organizationId).organizationId.toLowerCase();
-  const request = REQUEST.parse(supplied);
+  const parsedRequest = REQUEST.parse(supplied);
+  const request = Object.freeze({ ...parsedRequest,
+    attemptId: parsedRequest.attemptId.toLowerCase() });
   const captured = Object.freeze({ organizationId });
   const source = await loadRegisteredResearchTrainingExecutionInputPostgresV1(db, captured, request);
   const policy = resolveResearchTrainingPolicyV1(source.experiment.spec);

@@ -280,8 +280,22 @@ describe.skipIf(!enabled || !url)("DEE-1159 Postgres research attempt registry v
       DELETE FROM trader_research_attempts_v1
       WHERE organization_id = ${organizationA}::uuid AND command_id = ${commandId}
     `).rejects.toThrow("append-only discovery admission store");
-    await expect(ownerSql.begin(async tx => { await tx`TRUNCATE TABLE trader_research_attempts_v1`; }))
-      .rejects.toThrow("append-only discovery admission store");
+    const attemptStoreState = async () => {
+      const [state] = await witnessSql<{ rows: number; digest: string }[]>`
+        SELECT count(*)::int AS rows,
+          md5(coalesce(string_agg(row_to_json(attempt_row)::text, E'\\n' ORDER BY attempt_row.id), '')) AS digest
+        FROM public.trader_research_attempts_v1 AS attempt_row
+      `;
+      return state;
+    };
+    const beforeTruncate = await attemptStoreState();
+    await expect(ownerSql`TRUNCATE TABLE trader_research_attempts_v1`)
+      .rejects.toThrow("cannot truncate a table referenced in a foreign key constraint");
+    expect(await attemptStoreState()).toEqual(beforeTruncate);
+    await expect(ownerSql.begin(async tx => {
+      await tx`TRUNCATE TABLE trader_research_attempts_v1 CASCADE`;
+    })).rejects.toThrow("append-only discovery admission store");
+    expect(await attemptStoreState()).toEqual(beforeTruncate);
 
     for (const role of ["authenticated", "anon"] as const) {
       await expect(ownerSql.begin(async tx => {
