@@ -157,6 +157,24 @@ describe("trader wp15 knowledge state", () => {
     expect(classifyKnowledgeEdgeState(edge, WP15_AS_OF)).toBe("RESOLVED_CORRECT");
   });
 
+  it.each(["validated_by_research_pipeline", "observed_by_research_pipeline"])(
+    "keeps coverage-only %s observational without rewriting stored claims", (relationKind) => {
+      const edge: KnowledgeEdge = {
+        id: "coverage-only", organizationId: "org-1", fromRef: "dataset:legacy", toRef: "strategy:test",
+        relationKind, confidence: "0.7500", strength: "0.5000", verified: true,
+        regimeScope: "trend|range", failureCasesJson: "[]", hypothesisId: null,
+        createdAt: new Date("2024-01-01T00:00:00.000Z"), updatedAt: new Date("2024-01-01T00:00:00.000Z"),
+      };
+      const original = structuredClone(edge);
+      expect(classifyKnowledgeEdgeState(edge, WP15_AS_OF)).toBe("OBSERVATION_ONLY");
+      expect(isVerifiedKnowledgeState(classifyKnowledgeEdgeState(edge, WP15_AS_OF))).toBe(false);
+      expect(classifyKnowledgeEdgeState({ ...edge, lifecycleState: "RETIRED" }, WP15_AS_OF)).toBe("INELIGIBLE");
+      expect(classifyKnowledgeEdgeState(edge, new Date("2023-12-31T00:00:00.000Z"))).toBe("INELIGIBLE");
+      expect(classifyKnowledgeEdgeState(edge, new Date("2025-01-01T00:00:00.000Z"))).toBe("STALE");
+      expect(edge).toEqual(original);
+    },
+  );
+
   it.each([true, false])("retirement restricts verified=%s before staleness, preserving ACTIVE/legacy", (verified) => {
     const edge: KnowledgeEdge = {
       id: "retired", organizationId: "org-1", fromRef: "a", toRef: "b", relationKind: "supports",

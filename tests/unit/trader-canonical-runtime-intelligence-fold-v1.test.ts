@@ -340,6 +340,19 @@ describe("DEE-629 canonical PIT fold", () => {
     const valid = deps([a], [sealedEvidence], [edge], [prediction], [observation], [trial]);
     expect((await foldCanonicalRuntimeIntelligenceStateV1(input, valid))
       .hypotheses[0]?.ordinalJudgment).toBe("SUPPORTED");
+    // A matching seal authenticates the row, not a coverage-only assertion of skill.
+    for (const relationKind of ["validated_by_research_pipeline", "observed_by_research_pipeline"]) {
+      const coverageEdge = { ...edge, relationKind, verified: true };
+      const coverageBody = { ...sealedBody, edgeSealDigestHex: sealHistoricalKnowledgeEdgeV1(coverageEdge) };
+      await expect(foldCanonicalRuntimeIntelligenceStateV1({
+        ...input,
+        sealedHistoricalKnowledge: {
+          ...coverageBody,
+          snapshotContentDigestHex: computeCanonicalHistoricalSealedKnowledgeSnapshotDigestV1(coverageBody),
+        },
+      }, deps([a], [sealedEvidence], [coverageEdge], [prediction], [observation], [trial])))
+        .rejects.toThrow(/sealed knowledge edge authority mismatch/);
+    }
     const active = { ...edge, lifecycleState: "ACTIVE" as const };
     expect(await foldCanonicalRuntimeIntelligenceStateV1(input,
       deps([a], [sealedEvidence], [active], [prediction], [observation], [trial])))

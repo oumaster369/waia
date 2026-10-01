@@ -455,7 +455,7 @@
       {"path": "scripts/trader/m9-v2-research-campaign.ts","sha256": "321fc2502b76a1a24887e00464b03f19039b93b27ecde03ee9df1a7d1935f7dc"},
       {"path": "scripts/trader/paper-bar-close-loop-legacy.ts","sha256": "2794a1b58e3b3826cc785e5d697a2c76be22e2d57e7f2617aa36b91433a08a00"},
       {"path": "scripts/trader/reality-execution-report-catch-up.ts","sha256": "22386d11ead46b5e047f22864756194939ab061828b4ee57bdf435c6726c70a9"},
-      {"path": "scripts/trader/research-pipeline-cli.ts","sha256": "52acad3414e3dfbe0736f687f8f2f007381728596020df22463a67f982039eb8"},
+      {"path": "scripts/trader/research-pipeline-cli.ts","sha256": "3f6aae6bd0dc579eb48f536a667234d79dd6993f3efdaa0f728e3873d8550558"},
       {"path": "scripts/trader/ri-evidence-campaign.ts","sha256": "91760e9fa96c8958d942674be054fa210bada88d32943ee499890a7204ee0039"}
     ]
   },

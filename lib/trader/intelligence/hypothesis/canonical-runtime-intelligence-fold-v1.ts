@@ -7,7 +7,7 @@ import {
   type RuntimeKnowledgeHypothesisV1,
   type RuntimeKnowledgeAuthorityV1,
 } from "@/lib/trader/intelligence/hypothesis/runtime-knowledge-authority-v1";
-import { classifyKnowledgeEdgeState } from "@/lib/trader/knowledge/mkb-knowledge-state";
+import { classifyKnowledgeEdgeState, isResearchPipelineCoverageEdge } from "@/lib/trader/knowledge/mkb-knowledge-state";
 import type { MkbReadModelSource } from "@/lib/trader/knowledge/mkb-read-model-source";
 import type { HypothesisDefinition, MiHypothesis } from "@/lib/trader/mi/hypothesis.types";
 import { MI_HYPOTHESIS_SCHEMA_VERSION } from "@/lib/trader/mi/hypothesis.types";
@@ -340,6 +340,7 @@ function assertSealedKnowledgeRows(
       edge.fromRef !== `market_prediction:${sealed.predictionId}` ||
       edge.createdAt.getTime() > cutoff.getTime() ||
       edge.updatedAt.getTime() > cutoff.getTime() || !edge.verified ||
+      isResearchPipelineCoverageEdge(edge) ||
       edge.lifecycleState === "RETIRED" ||
       sealHistoricalKnowledgeEdgeV1(edge) !== sealed.edgeSealDigestHex) {
     throw new Error("[canonical-runtime-fold] sealed knowledge edge authority mismatch");

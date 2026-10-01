@@ -90,14 +90,19 @@ export function buildProductionKnowledgeAsset(
   const body = input.evidenceDocument.evidenceBody;
   const envelope = input.evidenceDocument.envelope;
   const sealedAt = resolveProductionKnowledgeAssetSealedAt(input);
-  const creationReason =
-    input.creationReason ??
-    (body.regimeCoverage.satisfiesRequirement
-      ? "research_pipeline_blind_validated"
-      : "research_pipeline_validation_failed");
-  const lifecycleState: PkaLifecycleState =
-    input.lifecycleState ??
-    (creationReason === "research_pipeline_blind_validated" ? "maturation" : "creation");
+  // This builder only seals research-pipeline evidence. Until a durable
+  // qualification record is part of this contract, coverage cannot authorize
+  // blind-validation, confidence, or maturation claims. Keep legacy override
+  // fields accepted for caller compatibility, but never trust them as authority.
+  void input.creationReason;
+  void input.lifecycleState;
+  void input.edgeConfidence;
+  void input.edgeStrength;
+  void input.edgeVerified;
+  const creationReason: PkaCreationReason = body.regimeCoverage.satisfiesRequirement
+    ? "research_pipeline_coverage_only"
+    : "research_pipeline_validation_failed";
+  const lifecycleState: PkaLifecycleState = "creation";
 
   const knowledgeDomain: KnowledgeDomain = {
     instrument: input.symbol,
@@ -152,9 +157,9 @@ export function buildProductionKnowledgeAsset(
   };
 
   const confidenceMetadata: ConfidenceMetadata = {
-    edgeConfidence: input.edgeConfidence,
-    edgeStrength: input.edgeStrength,
-    edgeVerified: input.edgeVerified,
+    edgeConfidence: "0.0000",
+    edgeStrength: "0.0000",
+    edgeVerified: false,
   };
 
   const evolutionMetadata: EvolutionMetadata = {

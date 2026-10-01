@@ -10,6 +10,7 @@ export type KnowledgeClass = (typeof KNOWLEDGE_CLASSES)[number];
 export const PKA_CREATION_REASONS = [
   "research_pipeline_blind_validated",
   "research_pipeline_validation_failed",
+  "research_pipeline_coverage_only",
 ] as const;
 export type PkaCreationReason = (typeof PKA_CREATION_REASONS)[number];
 
