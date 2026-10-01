@@ -2,7 +2,7 @@
 integrationIssue: DEE-1159
 integrationTitle: "AI-TRADER: bind fitted research candidates to actual execution evidence"
 parentIssue: DEE-1152
-branch: dee-1159-shared-modeled-stage
+branch: dee-1159-research-executable-identity
 riskTier: T3
 prPolicy: one-integration-pr
 executionSurfaces: [local, isolated-postgres, github-pr-ci]
@@ -90,7 +90,7 @@ Fresh cumulative synthetic PostgreSQL 16.14 evidence `dee1159-combined-pg16-v1` 
 
 ## Behavior-preserving stage-kernel extraction
 
-After the bounded DEE-1200 diagnostic, extract only its modeled D5/accounting loop into a server-only internal kernel. The existing public entry retains root validation, strict request parsing, registered DEVELOPMENT loading, resolved policy/model checks, owner transaction and attempt lock, exact retry/material-ledger verification, final trace and atomic result insertion. The internal kernel receives only values assembled by that owner and its same transaction; it supplies no new public stage, payload, scorer, repository, clock or authority input. Preserve absolute source indices, advance-before-signal ordering, sizing, D20 signal admission, all actual effects and the current unqualified trace semantics. Return frozen outcome values rather than live exchange/repository ports. The seven native diagnostic cases and a new unknown-public-input-before-read refusal case must pass on a fresh isolated database; this extraction alone does not authorize validation, blind access, selection or qualification.
+Within the bounded DEE-1200 diagnostic child, the modeled D5/accounting loop is extracted into a server-only internal kernel. The combined synthetic PostgreSQL 16.14 proof passes 89 assertions across eight files with zero failures/skips; the nine-case diagnostic file includes UUID normalization and strict public-input refusals. The existing public entry retains root validation, strict request parsing, registered DEVELOPMENT loading, resolved policy/model checks, owner transaction and attempt lock, exact retry/material-ledger verification, final trace and atomic result insertion. The internal kernel receives only values assembled by that owner and its same transaction; it supplies no new public stage, payload, scorer, repository, clock or authority input. Preserve absolute source indices, advance-before-signal ordering, sizing, D20 signal admission, all actual effects and the current unqualified trace semantics. Return frozen outcome values rather than live exchange/repository ports. The diagnostic cases and the unknown-public-input-before-read refusal case pass on a fresh isolated database; this extraction alone does not authorize validation, blind access, selection or qualification.
 
 ## WP-3 — evidence and callers
 
