@@ -1,3 +1,4 @@
+import { buildHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
 // DEE-1135 observation-only PG17 composition. No active profile, basis, allowance or order.
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -136,7 +137,7 @@ async function fixture(): Promise<Fixture> {
     api_key_masked, encrypted_payload, payload_key_version, wrapped_dek_key_version, wrapped_dek_key,
     permission_metadata, status) VALUES (${credentialId}::uuid, ${organizationId}::uuid, 'htx', ${exchangeAccountId},
     'synthetic****', ${envelope.encryptedPayload}, ${envelope.payloadKeyVersion}, ${envelope.wrappedDekKeyVersion},
-    ${envelope.wrappedDekKey}, '{"scopes":["read"]}', 'active')`;
+    ${envelope.wrappedDekKey}, ${JSON.stringify(buildHtxPermissionMetadata({ exchangeAccountId, scopes: ["read"] }))}, 'active')`;
   await owner.sql`INSERT INTO public.trader_account_collection_state
     (organization_id, credential_id, exchange_account_id, configuration_revision, symbols)
     VALUES (${organizationId}::uuid, ${credentialId}::uuid, ${exchangeAccountId}, ${config.revision}, '["BTCUSDT"]')`;

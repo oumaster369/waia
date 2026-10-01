@@ -10,6 +10,8 @@ import { probeObservationCredentialPool } from "@/lib/trader/account-observation
 import { createObservationCredentialReader } from "@/lib/trader/account-observation/credential-read-boundary";
 import { encryptCredentialPayload } from "@/lib/trader/credentials/envelope-crypto";
 import { SecretsStoreMasterKeyProvider } from "@/lib/trader/security/secrets-store-master-key-provider";
+import { buildHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
+import { requireHtxStoredPermissionMetadata } from "@/lib/trader/security/htx-secure-credential-resolver";
 import { runAccountObservationCollector } from "@/scripts/trader/account-observation-collector-host";
 import {
   ACCOUNT_OBSERVATION_LOGIN_PLAN,
@@ -146,7 +148,7 @@ describe.skipIf(!enabled)(
         status?: string;
         configurationRevision?: string;
         symbols?: readonly string[];
-        permissionMetadata?: string;
+        permissionMetadata?: string | ((exchangeAccountId: string) => string);
       } = {},
     ) {
       const organizationId = randomUUID();
@@ -156,6 +158,11 @@ describe.skipIf(!enabled)(
         apiKey: "synthetic-observation-key",
         apiSecret: "synthetic-observation-secret",
       });
+      const permissionMetadata = typeof options.permissionMetadata === "function"
+        ? options.permissionMetadata(exchangeAccountId)
+        : options.permissionMetadata ?? JSON.stringify(buildHtxPermissionMetadata({
+          exchangeAccountId, scopes: ["read"],
+        }));
       await admin`INSERT INTO public.organizations VALUES (${organizationId})`;
       await admin`INSERT INTO public.exchange_credentials (id, organization_id, venue,
         exchange_account_id, api_key_masked, encrypted_payload, payload_key_version,
@@ -163,7 +170,7 @@ describe.skipIf(!enabled)(
         VALUES (${credentialId}, ${organizationId}, 'htx', ${exchangeAccountId}, 'mask****',
           ${envelope.encryptedPayload}, ${envelope.payloadKeyVersion},
           ${envelope.wrappedDekKeyVersion}, ${envelope.wrappedDekKey},
-          ${options.permissionMetadata ?? '{"scopes":["read"]}'},
+          ${permissionMetadata},
           ${options.status ?? "active"})`;
       if (options.assigned !== false) {
         await admin`INSERT INTO public.trader_account_collection_state
@@ -343,30 +350,71 @@ describe.skipIf(!enabled)(
       });
     });
 
-    it("classifies only nonempty all-read scopes at the generated-column and decrypt boundaries", async () => {
+    it("classifies the canonical HTX read-only policy at the generated-column and decrypt boundaries", async () => {
       const assignment = await seed();
       const reader = await credentialReader([assignment]);
+      const canonical = buildHtxPermissionMetadata({
+        exchangeAccountId: assignment.exchangeAccountId, scopes: ["read"],
+      });
+      const withField = (field: string, value: unknown) => JSON.stringify({ ...canonical, [field]: value });
       const cases = [
-        { name: "read", metadata: '{"scopes":["read"]}', allowed: true },
-        { name: "duplicate read", metadata: '{"scopes":["read","read"]}', allowed: true },
-        { name: "trade", metadata: '{"scopes":["read","trade"]}', allowed: false },
-        { name: "withdraw", metadata: '{"scopes":["read","withdraw"]}', allowed: false },
-        { name: "unknown", metadata: '{"scopes":["read","future-scope"]}', allowed: false },
-        { name: "empty array", metadata: '{"scopes":[]}', allowed: false },
-        { name: "missing scopes", metadata: "{}", allowed: false },
-        { name: "null scopes", metadata: '{"scopes":null}', allowed: false },
-        { name: "string scopes", metadata: '{"scopes":"read"}', allowed: false },
-        { name: "object scopes", metadata: '{"scopes":{}}', allowed: false },
-        { name: "non-string member", metadata: '{"scopes":["read",7]}', allowed: false },
-        { name: "mixed null and read", metadata: '{"scopes":["read",null]}', allowed: false },
+        { name: "canonical read", metadata: JSON.stringify(canonical), allowed: true },
+        { name: "duplicate read", metadata: withField("scopes", ["read", "read"]), allowed: true },
+        { name: "valid account label", metadata: withField("accountLabel", "primary"), allowed: true },
+        { name: "trade scope", metadata: withField("scopes", ["read", "trade"]), allowed: false },
+        { name: "withdraw scope", metadata: withField("scopes", ["read", "withdraw"]), allowed: false },
+        { name: "unknown scope", metadata: withField("scopes", ["read", "future-scope"]), allowed: false },
+        { name: "empty scopes", metadata: withField("scopes", []), allowed: false },
+        { name: "scopes-only legacy metadata", metadata: '{"scopes":["read"]}', allowed: false },
+        { name: "missing scopes", metadata: withField("scopes", undefined), allowed: false },
+        { name: "null scopes", metadata: withField("scopes", null), allowed: false },
+        { name: "string scopes", metadata: withField("scopes", "read"), allowed: false },
+        { name: "object scopes", metadata: withField("scopes", {}), allowed: false },
+        { name: "non-string member", metadata: withField("scopes", ["read", 7]), allowed: false },
+        { name: "mixed null member", metadata: withField("scopes", ["read", null]), allowed: false },
+        { name: "wrong version", metadata: withField("version", 2), allowed: false },
+        { name: "string version", metadata: withField("version", "1"), allowed: false },
+        { name: "wrong market", metadata: withField("marketType", "futures"), allowed: false },
+        { name: "non-string market", metadata: withField("marketType", 1), allowed: false },
+        { name: "foreign account metadata", metadata: withField("exchangeAccountId", "foreign-account"), allowed: false },
+        { name: "non-string account metadata", metadata: withField("exchangeAccountId", 123), allowed: false },
+        { name: "withdraw not forbidden", metadata: withField("withdrawForbidden", false), allowed: false },
+        { name: "withdraw flag wrong type", metadata: withField("withdrawForbidden", "true"), allowed: false },
+        { name: "transfer not forbidden", metadata: withField("transferForbidden", false), allowed: false },
+        { name: "transfer flag wrong type", metadata: withField("transferForbidden", "true"), allowed: false },
+        { name: "warnings not array", metadata: withField("warnings", "none"), allowed: false },
+        { name: "non-string warning", metadata: withField("warnings", [1]), allowed: false },
+        { name: "null label", metadata: withField("accountLabel", null), allowed: false },
+        { name: "numeric label", metadata: withField("accountLabel", 1), allowed: false },
+        { name: "wrong row venue", metadata: JSON.stringify(canonical), venue: "binance", allowed: false },
         { name: "empty metadata", metadata: "", allowed: false },
         { name: "malformed metadata", metadata: "{", allowed: false },
         { name: "SQL null metadata", metadata: null, allowed: false },
       ] as const;
 
       for (const candidate of cases) {
-        await admin`UPDATE public.exchange_credentials SET permission_metadata=${candidate.metadata}
+        const candidateVenue = "venue" in candidate ? candidate.venue : "htx";
+        await admin`UPDATE public.exchange_credentials SET permission_metadata=${candidate.metadata},
+          venue=${candidateVenue}
           WHERE id=${assignment.credentialId}`;
+        let oracleAllowed = false;
+        try {
+          const raw: unknown = candidate.metadata === null ? null : JSON.parse(candidate.metadata);
+          const parsed = typeof raw === "object" && raw !== null && !Array.isArray(raw)
+            ? raw as Record<string, unknown> : null;
+          const verified = requireHtxStoredPermissionMetadata({
+            purpose: "read", venue: candidateVenue,
+            exchangeAccountId: assignment.exchangeAccountId, permissionMetadata: parsed,
+          });
+          oracleAllowed = verified.scopes.length > 0 && verified.scopes.every((scope) => scope === "read");
+        } catch {
+          oracleAllowed = false;
+        }
+        expect(oracleAllowed, `${candidate.name} independent HTX read oracle`).toBe(candidate.allowed);
+
+        const [generated] = await admin<{ observation_read_only: boolean }[]>`
+          SELECT observation_read_only FROM public.exchange_credentials WHERE id=${assignment.credentialId}`;
+        expect(generated?.observation_read_only, candidate.name).toBe(candidate.allowed);
         const credential = open("credential");
         const role = ACCOUNT_OBSERVATION_LOGIN_PLAN.find((entry) => entry.purpose === "credential")!
           .parentRole;
@@ -395,10 +443,42 @@ describe.skipIf(!enabled)(
           );
         }
       }
+
+      await admin`UPDATE public.exchange_credentials SET permission_metadata=${JSON.stringify(canonical)},
+        venue='htx' WHERE id=${assignment.credentialId}`;
+      const wrongExpectedAccount = `${Number(assignment.exchangeAccountId) + 1}`;
+      const [accountMismatch] = await admin<{ allowed: boolean }[]>`
+        SELECT public.exchange_credential_observation_read_only(permission_metadata, venue,
+          ${wrongExpectedAccount}) AS allowed
+        FROM public.exchange_credentials WHERE id=${assignment.credentialId}`;
+      expect(accountMismatch?.allowed).toBe(false);
+      expect(() => requireHtxStoredPermissionMetadata({ purpose: "read", venue: "htx",
+        exchangeAccountId: wrongExpectedAccount, permissionMetadata: canonical })).toThrow();
+    });
+
+    it("matches canonical account whitespace rejection before read-only admission", async () => {
+      const valid = buildHtxPermissionMetadata({ exchangeAccountId: "73737331", scopes: ["read"] });
+      const whitespace = [9, 10, 11, 12, 13, 32, 0x00a0, 0x1680,
+        ...Array.from({ length: 11 }, (_, index) => 0x2000 + index),
+        0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff];
+      for (const code of whitespace) {
+        const char = String.fromCodePoint(code);
+        for (const account of [char, `${char}73737331`, `73737331${char}`]) {
+          const metadata = { ...valid, exchangeAccountId: account };
+          const [row] = await admin<{ allowed: boolean }[]>`
+            SELECT public.exchange_credential_observation_read_only(
+              ${JSON.stringify(metadata)}, 'htx', ${account}) AS allowed`;
+          expect(row?.allowed, `U+${code.toString(16)}`).toBe(false);
+          expect(() => requireHtxStoredPermissionMetadata({ purpose: "read", venue: "htx",
+            exchangeAccountId: account, permissionMetadata: metadata })).toThrow();
+        }
+      }
     });
 
     it("refuses a trade-scoped credential before plaintext is returned", async () => {
-      const assignment = await seed({ permissionMetadata: '{"scopes":["read","trade"]}' });
+      const assignment = await seed({ permissionMetadata: (exchangeAccountId) => JSON.stringify(
+        buildHtxPermissionMetadata({ exchangeAccountId, scopes: ["read", "trade"] }),
+      ) });
       const reader = await credentialReader([assignment]);
       await expect(
         reader.getDecryptedCredentials(
