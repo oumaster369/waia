@@ -19,6 +19,7 @@ export const ACCOUNT_OBSERVATION_CREDENTIAL_COLUMNS = Object.freeze([
   "organization_id",
   "exchange_account_id",
   "status",
+  "observation_read_only",
   "encrypted_payload",
   "payload_key_version",
   "wrapped_dek_key_version",
@@ -31,7 +32,8 @@ export type ObservationCredentialRefusal =
   | "MASTER_KEY_NOT_READY"
   | "READ_FAILED"
   | "NOT_FOUND"
-  | "IDENTITY_MISMATCH";
+  | "IDENTITY_MISMATCH"
+  | "NOT_READ_ONLY";
 
 /** Fixed codes only: no SQL text, row content, ciphertext or key material is ever attached. */
 export class ObservationCredentialReadFailure extends Error {
@@ -62,6 +64,7 @@ type CredentialProjection = {
   organization_id: string;
   exchange_account_id: string;
   status: string;
+  observation_read_only: boolean;
   encrypted_payload: string | null;
   payload_key_version: string | null;
   wrapped_dek_key_version: string | null;
@@ -221,6 +224,8 @@ export function createObservationCredentialReader(
         refuse("IDENTITY_MISMATCH");
       }
       if (row.status !== "active") refuse("NOT_FOUND");
+      // Trade, unknown, and unparsable scopes are false. Decrypt only a read-only row.
+      if (row.observation_read_only !== true) refuse("NOT_READ_ONLY");
 
       try {
         return await decryptCredentialPayload(provider, {

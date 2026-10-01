@@ -1,3 +1,4 @@
+import { buildHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
 // DEE-1135 observation-only PG17 composition. No active profile, basis, allowance or order.
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -136,7 +137,7 @@ async function fixture(): Promise<Fixture> {
     api_key_masked, encrypted_payload, payload_key_version, wrapped_dek_key_version, wrapped_dek_key,
     permission_metadata, status) VALUES (${credentialId}::uuid, ${organizationId}::uuid, 'htx', ${exchangeAccountId},
     'synthetic****', ${envelope.encryptedPayload}, ${envelope.payloadKeyVersion}, ${envelope.wrappedDekKeyVersion},
-    ${envelope.wrappedDekKey}, '{"read":true}', 'active')`;
+    ${envelope.wrappedDekKey}, ${JSON.stringify(buildHtxPermissionMetadata({ exchangeAccountId, scopes: ["read"] }))}, 'active')`;
   await owner.sql`INSERT INTO public.trader_account_collection_state
     (organization_id, credential_id, exchange_account_id, configuration_revision, symbols)
     VALUES (${organizationId}::uuid, ${credentialId}::uuid, ${exchangeAccountId}, ${config.revision}, '["BTCUSDT"]')`;
@@ -247,7 +248,7 @@ async function direct(f: Fixture, fetchImpl: typeof fetch) {
     if (statement.includes("SELECT c.observation_revision")) f.markers.push("actual-binding-query");
   });
   const credential = await connect(runtimeUrl("credential"), "direct-credential", true, statement => {
-    if (statement.includes("SELECT id, organization_id, exchange_account_id, status, encrypted_payload")) f.markers.push("actual-credential-query");
+    if (statement.includes("SELECT id, organization_id, exchange_account_id, status, observation_read_only, encrypted_payload")) f.markers.push("actual-credential-query");
   });
   const session = createProtectedHtxAccountAcquisitionSessionV1({ readerSql: reader.sql, credentialSql: credential.sql,
     masterKeyProvider: f.provider, assignment: f.assignment, spec: f.job.spec,
@@ -333,8 +334,8 @@ describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational
       const folder = "db/migrations_postgres";
       const journal = JSON.parse(readFileSync(`${folder}/meta/_journal.json`, "utf8")) as {
         entries: { idx: number; tag: string; when: number }[] };
-      expect(journal.entries).toHaveLength(229);
-      expect(journal.entries.at(-1)).toMatchObject({ idx: 228, tag: "0228_trader_discovery_loop_postgres_v1_rls", when: 1780000000228 });
+      expect(journal.entries).toHaveLength(230);
+      expect(journal.entries.at(-1)).toMatchObject({ idx: 229, tag: "0229_trader_observation_read_only_credential_v1", when: 1780000000229 });
       await migrate(db(), { migrationsFolder: folder });
       const actual = await owner.sql`SELECT hash,created_at::text AS when FROM drizzle.__drizzle_migrations ORDER BY created_at`;
       expect(actual).toEqual(journal.entries.map(entry => ({ hash: hash(readFileSync(`${folder}/${entry.tag}.sql`)), when: String(entry.when) })));
@@ -442,7 +443,7 @@ describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational
       expect(opened.reader.statements).toContain("SET LOCAL ROLE waia_account_observation_reader");
       expect(opened.credential.statements).toContain("SET LOCAL ROLE waia_account_observation_credential");
       expect(opened.reader.statements.some(statement => statement.includes("SELECT state.symbols"))).toBe(true);
-      expect(opened.credential.statements.some(statement => statement.includes("SELECT id, organization_id, exchange_account_id, status, encrypted_payload"))).toBe(true);
+      expect(opened.credential.statements.some(statement => statement.includes("SELECT id, organization_id, exchange_account_id, status, observation_read_only, encrypted_payload"))).toBe(true);
       receipt("protected-session", { binding: transport.binding, readerPid: opened.reader.pid, credentialPid: opened.credential.pid,
         paths: io.paths, markers: f.markers, statements: { reader: opened.reader.statements, credential: opened.credential.statements }, keyCalls: f.keyCalls });
       expect((await snapshot(f)).journal).toHaveLength(0);

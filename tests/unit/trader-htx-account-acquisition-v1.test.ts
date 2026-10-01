@@ -316,7 +316,7 @@ async function protectedAcquisitionFixture() {
         credential_revision: state.revision, configuration_revision: config.revision }] : [];
       if (text.includes("encrypted_payload") && !text.includes("AS supported")) return [{
         id: binding.credentialId, organization_id: binding.organizationId, exchange_account_id: binding.exchangeAccountId,
-        status: state.rowStatus, encrypted_payload: encrypted.encryptedPayload, payload_key_version: encrypted.payloadKeyVersion,
+        status: state.rowStatus, observation_read_only: true, encrypted_payload: encrypted.encryptedPayload, payload_key_version: encrypted.payloadKeyVersion,
         wrapped_dek_key_version: encrypted.wrappedDekKeyVersion, wrapped_dek_key: encrypted.wrappedDekKey }];
       return [];
     };
