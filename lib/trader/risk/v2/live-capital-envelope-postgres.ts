@@ -177,8 +177,19 @@ async function loadCurrent(
   return rows[0] ?? null;
 }
 
+/** 64-bit lock id. A hashtext collision only serialized two accounts; the row
+ * predicates stay organization_id and account_id. The prefix keeps this lock
+ * out of other advisory namespaces. */
+export function liveCapitalEnvelopeAdvisoryLockKeyV1(
+  organizationId: string,
+  accountId: string,
+): string {
+  return `live-capital-envelope:1145:${organizationId}:${accountId}`;
+}
+
 async function lockScope(tx: Sql, organizationId: string, accountId: string): Promise<void> {
-  await tx`select pg_advisory_xact_lock(1145, hashtext(${`${organizationId}:${accountId}`}))`;
+  const key = liveCapitalEnvelopeAdvisoryLockKeyV1(organizationId, accountId);
+  await tx`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
 }
 
 function requireCommand(
