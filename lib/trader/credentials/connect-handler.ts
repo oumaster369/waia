@@ -216,8 +216,8 @@ function isRetryableConnectValidation(result: ConnectValidation): boolean {
   return !result.valid && result.errorCode === "VALIDATION_FAILED";
 }
 
-async function validateHtxConnectCredentials(
-  deps: ConnectHandlerDeps,
+export async function validateHtxConnectCredentials(
+  deps: Pick<ConnectHandlerDeps, "createConnector">,
   body: HtxConnectRequestBody,
 ): Promise<{ connector: HtxExchangeConnector; validation: ConnectValidation }> {
   const fetchImpl = createConnectHtxFetch(HTX_CONNECT_FETCH_TIMEOUT_MS);

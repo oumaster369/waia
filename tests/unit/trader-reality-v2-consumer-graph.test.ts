@@ -46,12 +46,13 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         // changes the existing connect-handler consumer body.
         // DEE-1151 stops retrying HTX POST, which changes the existing connector bodies.
         // DEE-1153 adds one observation-only HTX derivatives account-info transport.
-        consumers: 151,
-        consumerDigestHex: "9bc24c8e3bcb1d438d4cde8f8f1eea78e6f13a4756eda57b2f547631317f5895",
+        // DEE-1196 adds one fixed Org0 read-only credential account-info probe.
+        consumers: 152,
+        consumerDigestHex: "f448e75259e17a6ab7abc961e62e4fd2919c8888e26a662f04a9cf234b2863c8",
         // DEE-1099 adds one read of freshly validated account permissions,
         // not a financial observation or a venue effect.
         // DEE-1151 keeps that read on the live connector and does not add placeOrder.
-        connectorReferences: 26,
+        connectorReferences: 27,
         sourceContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
         consumerContentDigestHex: expect.stringMatching(/^[0-9a-f]{64}$/),
       }),

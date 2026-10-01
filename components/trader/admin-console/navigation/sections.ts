@@ -6,6 +6,7 @@ import {
   CircleAlert,
   Layers3,
   LayoutDashboard,
+  KeyRound,
   Server,
   WalletCards,
 } from "lucide-react";
@@ -22,6 +23,14 @@ export const ADMIN_SECTIONS = [
       ["market", "Рынок и новости"],
       ["algorithm", "Работа алгоритма"],
     ],
+  },
+  {
+    id: "org0-connect",
+    href: "/admin/org0-connect",
+    title: "Подключение Org0",
+    description: "Отдельный ключ только для чтения для назначенного счёта HTX 73737331",
+    icon: KeyRound,
+    tabs: [["connect", "HTX 73737331"]],
   },
   {
     id: "accounts",

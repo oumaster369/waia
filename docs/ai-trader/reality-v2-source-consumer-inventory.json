@@ -304,8 +304,8 @@
       "getTradeHistory",
       "placeOrder"
     ],
-    "expectedFileCount": 151,
-    "sortedPathDigestHex": "9bc24c8e3bcb1d438d4cde8f8f1eea78e6f13a4756eda57b2f547631317f5895",
+    "expectedFileCount": 152,
+    "sortedPathDigestHex": "f448e75259e17a6ab7abc961e62e4fd2919c8888e26a662f04a9cf234b2863c8",
     "contentPins": [
       {"path": "lib/trader/account-observation/credential-read-boundary.ts","sha256": "1c302306d59844713198f16cf6b0056eebd03652fd5c24b44deb12a120c541ad"},
       {"path": "lib/trader/account-observation/credential-store.ts","sha256": "77fcab86d72f5636c48f2a4d957f819bd525531013dc39700c8678d3c655ae70"},
@@ -349,9 +349,10 @@
       {"path": "lib/trader/connectors/rss/rss-feed-client.ts","sha256": "e58c5185062502ae1a2c434edcc22a092bce41532cf344911009d4d3b8722152"},
       {"path": "lib/trader/connectors/sec-edgar/sec-edgar-client.ts","sha256": "0faae6e3e5643f19bfc175e5625e390103cbf35a05fe8a632b5303a4a9ee3e24"},
       {"path": "lib/trader/connectors/trongrid-intelligence/trongrid-intelligence-client.ts","sha256": "f38a6c19ac367cc63aa7eda7dbcd8795140111989a0e832a24788f99c801fbdd"},
-      {"path": "lib/trader/credentials/connect-handler.ts","sha256": "2550296525ac54f7ae0651636a819a696da6b0095f1312f7165c6aab78a08a7a"},
+      {"path": "lib/trader/credentials/connect-handler.ts","sha256": "88f18642e5505120f65e7e9cbc81c0c549a1c07df48df6d45863879e99c7a75c"},
       {"path": "lib/trader/credentials/credential-service.ts","sha256": "641dc4cf8289516989286529edf317d648629eee287fd4a7e26466b0281b3270"},
       {"path": "lib/trader/credentials/envelope-crypto.ts","sha256": "2ec82a65d30aac64fa3ef09d442a9710775d74b1c42488451895e582991cf271"},
+      {"path": "lib/trader/credentials/org0-readonly-connect-handler.ts","sha256": "1d6ae99ef00261247131c073073ce71b6ea1fc6b3a978b25e6334e14f2b082c0"},
       {"path": "lib/trader/credentials/types.ts","sha256": "7fe77ed605856ade8599d85ca5874311c1c8ed18484a758fe28bacba62ac2d31"},
       {"path": "lib/trader/execution/connector-status-map.ts","sha256": "27089d9a417a9fecfb3a16e4a8fba13a2911bca2d1d4fec7b5cacb2d68a1a0c7"},
       {"path": "lib/trader/execution/execution-service.ts","sha256": "bc22ab2b58896520f0e85054fe9d900d44102494da09f809c39b8bf2a8bfd260"},
@@ -508,8 +509,14 @@
       "disposition": "COMPATIBLE_UNCHANGED"
     },
     {
+      "id": "ORG0_READONLY_CONNECT_ACCOUNT_PROBE",
+      "pathPattern": "^lib/trader/credentials/org0-readonly-connect-handler\\.ts$",
+      "disposition": "EXCLUDED_ACCOUNT_COMPATIBILITY_PROBE_NO_REALITY_INGRESS",
+      "reason": "DEE-1196 fixed Org0 nominated HTX account metadata validation and read-only credential storage. The single getAccountInfo call verifies spot account and read-only scope; no Reality source admission, order, capital or live authority is granted."
+    },
+    {
       "id": "CURRENT_OPERATIONAL_CONSUMERS",
-      "pathPattern": "^lib/trader/(credentials|balances|trade-history|positions|execution|live|security|symbols)/",
+      "pathPattern": "^lib/trader/(?:credentials/(?!org0-readonly-connect-handler\\.ts$)|(?:balances|trade-history|positions|execution|live|security|symbols)/)",
       "disposition": "COMPATIBLE_EXISTING_BEHAVIOR_PRESERVED"
     },
     {
@@ -598,6 +605,12 @@
       "method": "getAccountInfo",
       "occurrences": 1,
       "disposition": "existing account compatibility probe; EXCLUDED_FAIL_UNCERTAIN without admitted raw-capture lineage"
+    },
+    {
+      "file": "lib/trader/credentials/org0-readonly-connect-handler.ts",
+      "method": "getAccountInfo",
+      "occurrences": 1,
+      "disposition": "fixed Org0 HTX spot account and read-only permission probe; no canonical Reality ingress or order/capital authority"
     },
     {
       "file": "lib/trader/execution/execution-service.ts",
