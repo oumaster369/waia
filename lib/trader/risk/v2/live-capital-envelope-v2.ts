@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseDecimal } from "@/lib/trader/risk/numeric";
 import {
   RiskCurrentAccountRefusedV1,
   assertRiskAccountRecordSealV1,
@@ -21,6 +22,11 @@ export const LIVE_CAPITAL_ENVELOPE_STAGES_V2 = [
 export type LiveCapitalEnvelopeStageV2 = (typeof LIVE_CAPITAL_ENVELOPE_STAGES_V2)[number];
 
 const uuid = z.string().uuid();
+/** Envelope notionals only. Zero stays valid for other risk decimals. */
+const positiveEnvelopeNotionalV2 = riskAccountDecimalSchemaV1.refine(
+  (value) => parseDecimal(value) > 0n,
+  "canonical positive scale8 decimal required",
+);
 
 function requirePositiveWindow(
   value: { validFromUtc: string; validUntilUtc: string },
@@ -39,8 +45,8 @@ const liveCapitalEnvelopeCommandObjectV2 = z
     accountId: riskAccountIdentitySchemaV1,
     policyDigest: riskAccountDigestSchemaV1,
     releaseSha: riskAccountDigestSchemaV1,
-    capitalNotional: riskAccountDecimalSchemaV1,
-    lossLimitNotional: riskAccountDecimalSchemaV1,
+    capitalNotional: positiveEnvelopeNotionalV2,
+    lossLimitNotional: positiveEnvelopeNotionalV2,
     validFromUtc: riskAccountTimeSchemaV1,
     validUntilUtc: riskAccountTimeSchemaV1,
   })

@@ -79,6 +79,13 @@ describe("LiveCapitalEnvelopeV2 publication", () => {
     expect(qualified.decision === "PUBLISHED" && qualified.basisDigest).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it("refuses a zero capital or loss limit and does not invent an amount", () => {
+    expect(() => sealLiveCapitalEnvelopeV2({ ...command, capitalNotional: "0" })).toThrow();
+    expect(() => sealLiveCapitalEnvelopeV2({ ...command, lossLimitNotional: "0" })).toThrow();
+    expect(sealLiveCapitalEnvelopeV2(command).capitalNotional).toBe("10");
+    expect(sealLiveCapitalEnvelopeV2(command).lossLimitNotional).toBe("1");
+  });
+
   it("refuses heartbeat, a boolean, an external organization, a stale window, and a changed identity", () => {
     const sealDirty = (extra: Record<string, string | boolean>) =>
       sealLiveCapitalEnvelopeV2(Object.assign({}, command, extra));
