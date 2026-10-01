@@ -48,6 +48,7 @@ import {
 import { HtxPlacementRejectedError } from "@/lib/trader/connectors/htx/classify-htx-placement";
 import {
   dispatchAndRecordExecutionAttemptV2,
+  markExecutionAttemptReconciliationRequiredV2Postgres,
   recordProtectiveCancelAcknowledgementV2Postgres,
   requestProtectiveCancelV2Postgres,
   resolveReconciliationRequiredV2Postgres,
@@ -2683,6 +2684,70 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     expect(found.status).toBe("VENUE_ACCEPTED");
     expect(await pendingNotional(input.allowance.accountId)).toBe(held);
   });
+
+  it("DEE-1151 timestamps a recovery report after waiting for the attempt lock", async () => {
+    const input = await admittedBindInput({ validForMs: 60_000 });
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    const before = await lockProofState(input);
+    const trace: LockTrace = [{ kind: "before", state: before }];
+    const recovery = lockClient("recovery-clock", orgA, trace);
+    const holder = lockClient("recovery-attempt-holder", orgA, trace,
+      { resource: "attempt", identity: bound.attempt.executionAttemptId });
+    const operations: Promise<unknown>[] = [];
+    let proof!: Awaited<ReturnType<typeof finishLockProof>>;
+    let boundary = "";
+    try {
+      operations.push(nativeSettled(holder.db.transaction(async (tx) => {
+        await tx.select().from(pgSchema.traderExecutionAttemptsV2).where(and(
+          eq(pgSchema.traderExecutionAttemptsV2.organizationId, orgA),
+          eq(pgSchema.traderExecutionAttemptsV2.id, bound.attempt.executionAttemptId),
+        )).for("update");
+      })));
+      await expect.poll(() => holder.paused, { timeout: 5_000 }).toBe(true);
+      operations.push(nativeSettled(markExecutionAttemptReconciliationRequiredV2Postgres(
+        recovery.db,
+        { organizationId: orgA },
+        bound.attempt.executionAttemptId,
+        "LOCK_WAIT_CLOCK_PROOF",
+      )));
+      await observeLockWait(holder, recovery, "attempt", trace);
+      const [deadline] = await holder.tx!.execute<{ at: Date }>(sqlQuery`
+        SELECT clock_timestamp() + interval '50 milliseconds' AS at`);
+      boundary = deadline!.at.toISOString();
+      trace.push({ kind: "recovery-report-time-boundary", at: boundary });
+      await waitPastDeadline(holder, boundary, trace);
+    } catch (error) {
+      trace.push({ kind: "harness-failure", causes: nativeErrorCauses(error) });
+      throw error;
+    } finally {
+      proof = await finishLockProof("recovery-report/attempt-wait-clock", input, trace,
+        [recovery, holder], operations);
+    }
+
+    expect(proof.outcomes).toMatchObject([{ ok: true }, { ok: true }]);
+    expect(proof.state!.reports).toHaveLength(before.reports!.length + 1);
+    const report = proof.state!.reports!.at(-1)!;
+    expect(report.type).toBe("RECONCILIATION_REQUIRED");
+    expect(report.sequence).toBe(String(before.reports!.length + 1));
+    expect(report.previous).toBe(before.reports!.at(-1)?.digest ?? null);
+    expect(report.digest).toMatch(/^[0-9a-f]{64}$/);
+    const [persisted] = await sql<{ observed_at: Date }[]>`
+      SELECT observed_at FROM trader_execution_reports_v2
+      WHERE organization_id = ${orgA}::uuid
+        AND execution_attempt_id = ${bound.attempt.executionAttemptId}::uuid
+      ORDER BY report_sequence DESC LIMIT 1`;
+    expect(persisted).toBeDefined();
+    expect(persisted!.observed_at.getTime()).toBeGreaterThanOrEqual(new Date(boundary).getTime());
+    expect({ ...proof.state!.counts, reports: before.counts!.reports }).toEqual(before.counts);
+    expect(proof.state!.allowance).toEqual(before.allowance);
+    expect(proof.state!.events).toEqual(before.events);
+    expect(proof.state!.account).toEqual(before.account);
+    expect(proof.state!.reports!.slice(0, -1)).toEqual(before.reports);
+    const attempt = await readExecutionAttemptV2Postgres(
+      db, { organizationId: orgA }, bound.attempt.executionAttemptId,
+    );
+    expect(attempt?.lifecycleState).toBe("RECONCILIATION_REQUIRED");
+  }, 30_000);
 
   it("DEE-1151 does not post after SUBMIT_STARTED when a kill switch is tripped", async () => {
     const input = await admittedBindInput();
