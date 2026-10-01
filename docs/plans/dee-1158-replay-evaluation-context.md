@@ -1,3 +1,27 @@
+---
+integrationIssue: DEE-1158
+integrationTitle: "AI-TRADER: preserve historical evaluation context in cursor replay"
+branch: dee-1158-replay-evaluation-context
+riskTier: T3
+prPolicy: one-integration-pr
+executionSurfaces: [local, postgres-ci, github-pr-ci]
+requiredValidation: [lint, typecheck, build, targeted-replay-unit, checkpoint-resume, stream-only-replay, postgres-integration, exact-head-ci]
+approvalGates: [independent-review, exact-head-ci, human-merge]
+state:
+  status: in-progress
+  currentWorkPackage: integration-readiness
+  completedWorkPackages: [implementation, focused-local-readiness]
+  remainingWorkPackages: [independent-review, exact-head-ci, merge]
+  prNumber: null
+  prUrl: null
+  blockedReason: null
+  nextAction: "Complete independent review and exact-head CI before integration."
+provenance:
+  createdFrom: user-authorized-ai-trader-audit-2026-10-01
+  authoritativeBase: 9e7a11d9188fa0a5a6c786ada747db3b341d2dac
+  supersedes: null
+---
+
 # DEE-1158 — historical evaluation context
 
 ## Problem and boundary
@@ -49,3 +73,7 @@ Root owns production changes; the delegated author owns only the new regression
 file. Independent review, lint/typecheck/build, affected replay/resume tests and
 exact-head CI precede merge. Full unit suite runs in CI. Rollback is a revert PR;
 no production activation or real order is part of this package.
+
+## Acceptance
+
+Accept only when real historical replay passes the cursor-delta, expanding-source, resume/PIT, symbol-and-interval isolation, chronology/future-bar, duplicate-prefix and immutability regressions; the unchanged source snapshot remains available to Position Guardian; focused checkpoint/resume and STREAM_ONLY behavior pass; local lint, typecheck and build pass; and exact-head CI plus independent review are green. Do not treat improved regime coverage or backtest metrics as strategy qualification. The existing STREAM_ONLY retention cap and FULL-history scaling limitation remain explicit.
