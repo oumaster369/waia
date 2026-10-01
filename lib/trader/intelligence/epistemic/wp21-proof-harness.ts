@@ -116,6 +116,22 @@ export function runMeasuredFlagOffRunnerInWorktree(input: {
   return JSON.parse(readFileSync(input.outputPath, "utf8")) as Wp21MeasuredProofOutput;
 }
 
+function gitFetchFailureDetail(error: unknown): string {
+  if (!(error instanceof Error)) return "";
+  const stderr =
+    "stderr" in error && (error as { stderr?: unknown }).stderr != null
+      ? String((error as { stderr?: unknown }).stderr)
+      : "";
+  return `${error.message}\n${stderr}`;
+}
+
+/** A dropped origin connection is retried. A missing object is not. */
+function isTransientGitFetchFailure(error: unknown): boolean {
+  return /unable to access|couldn't connect|connection timed out|failed to connect|rpc failed|early eof|could not resolve host|connection reset|recv failure/i.test(
+    gitFetchFailureDetail(error),
+  );
+}
+
 function ensureGitCommitAvailable(repoRoot: string, sha: string): void {
   try {
     execSync(`git cat-file -e ${sha}^{commit}`, { cwd: repoRoot, stdio: "pipe" });
@@ -124,14 +140,23 @@ function ensureGitCommitAvailable(repoRoot: string, sha: string): void {
     // Shallow CI checkouts may not include historical parent commits until fetched.
   }
 
-  execSync(`git fetch --no-tags --depth=1 origin ${sha}`, {
-    cwd: repoRoot,
-    stdio: "pipe",
-    env: {
-      ...process.env,
-      GIT_TERMINAL_PROMPT: "0",
-    },
-  });
+  const attempts = 3;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      execSync(`git fetch --no-tags --depth=1 origin ${sha}`, {
+        cwd: repoRoot,
+        stdio: "pipe",
+        env: {
+          ...process.env,
+          GIT_TERMINAL_PROMPT: "0",
+        },
+      });
+      break;
+    } catch (error) {
+      if (!isTransientGitFetchFailure(error) || attempt === attempts) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_000);
+    }
+  }
 
   execSync(`git cat-file -e ${sha}^{commit}`, { cwd: repoRoot, stdio: "pipe" });
 }
