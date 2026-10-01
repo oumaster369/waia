@@ -13,6 +13,7 @@ import {
   buildAttention,
   consecutiveFailedJobStreak,
   splitStaleAccounts,
+  UNRESOLVED_EXECUTION_ATTEMPT_LIFECYCLE_STATES,
 } from "@/lib/trader/admin-console/attention";
 import { invoiceDueAt } from "@/lib/trader/admin-console/billing/invoice-display-status";
 import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
@@ -78,6 +79,36 @@ export async function handleAdminConsoleAttentionGet(
         if (page.capped) missing.push("ATTENTION_LIST_CAPPED");
         return page.ids;
       };
+      const unresolvedStates = sql.join(
+        UNRESOLVED_EXECUTION_ATTEMPT_LIFECYCLE_STATES.map((state) => sql`${state}`),
+        sql`, `,
+      );
+      const unresolvedExecutionAttemptIds = await take(
+        tx.execute(sql`
+        SELECT a.id::text AS id
+        FROM trader_execution_attempts_v2 a
+        JOIN trader_orders o
+          ON o.id = a.order_id
+         AND o.organization_id = a.organization_id
+        WHERE (
+            a.lifecycle_state IN (${unresolvedStates})
+            OR EXISTS (
+              SELECT 1
+              FROM trader_execution_reports_v2 r
+              WHERE r.organization_id = a.organization_id
+                AND r.execution_attempt_id = a.id
+                AND r.report_type = 'CONNECTOR_UNCERTAIN'
+                AND a.lifecycle_state NOT IN (
+                  'VENUE_ACCEPTED', 'VENUE_REJECTED', 'FILLED', 'CANCELLED'
+                )
+            )
+          )
+          AND ${orderVisibleInMode(parsed.query.mode, true)}
+          AND ${orderScopeFilter(parsed.query, "o")}
+        ORDER BY a.id
+        LIMIT ${LIST_CAP + 1}
+      `),
+      );
       const reconciliationRequiredOrderIds = await take(
         tx.execute(sql`
         SELECT o.id::text AS id
@@ -391,6 +422,7 @@ export async function handleAdminConsoleAttentionGet(
         items: buildAttention({
           reconciliationRequiredOrderIds,
           sentWithoutReportOrderIds,
+          unresolvedExecutionAttemptIds,
           runtimeHalted: halted.length > 0,
           killed: killed.length > 0,
           lotsMissingGuardian,

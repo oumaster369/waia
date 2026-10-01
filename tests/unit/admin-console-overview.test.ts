@@ -12,6 +12,7 @@ import {
 const emptyAttention = {
   reconciliationRequiredOrderIds: [],
   sentWithoutReportOrderIds: [],
+  unresolvedExecutionAttemptIds: [],
   runtimeHalted: false,
   killed: false,
   lotsMissingGuardian: [],
@@ -141,6 +142,22 @@ describe("account dedupe, mode, attention, overview, and order trace", () => {
     });
     expect(items.map((item) => item.severity)).toEqual(["critical", "high", "low"]);
     expect(items.some((item) => item.reason === "NO_TRADE")).toBe(false);
+  });
+
+  it("keys an unresolved Execution V2 attempt separately from the order row", () => {
+    const items = buildAttention({
+      ...emptyAttention,
+      reconciliationRequiredOrderIds: [],
+      unresolvedExecutionAttemptIds: ["attempt-1", "attempt-1"],
+    });
+    expect(items).toEqual([
+      {
+        severity: "critical",
+        reason: "UNRESOLVED_EXECUTION_ATTEMPT",
+        entityIds: ["attempt-1"],
+        href: "/admin/orders",
+      },
+    ]);
   });
 
   it("sums only current included rows and reports coverage", () => {
