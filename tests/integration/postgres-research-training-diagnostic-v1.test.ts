@@ -1,6 +1,6 @@
 /** Synthetic PostgreSQL proof for the non-qualifying DEE-1159 training diagnostic. */
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
@@ -15,8 +15,12 @@ import { resolveFhvCanonicalPartitionInterval } from "@/lib/trader/market-data/f
 import { computeBarSetDigest } from "@/lib/trader/market-data/research-dataset";
 import { qualifyHtxKlineVolumeAuthority } from "@/lib/trader/market-data/volume-qualification/htx-volume-qualification";
 import type { Bar } from "@/lib/trader/intelligence/types";
-import { computeStableJsonDigest } from "@/lib/trader/research/digest";
-import { registerResearchAttemptPostgresV1 } from "@/lib/trader/research/research-attempt-registry-postgres-v1";
+import { canonicalJsonString, computeStableJsonDigest } from "@/lib/trader/research/digest";
+import { resolveCurrentResearchExecutableIdentityV1 } from "@/lib/trader/research/research-executable-runtime-identity-v1";
+import {
+  loadResearchTrainingLedgerScopePostgresV1,
+  registerResearchAttemptPostgresV1,
+} from "@/lib/trader/research/research-attempt-registry-postgres-v1";
 import { registerResearchExperimentPostgresV1 } from "@/lib/trader/research/research-experiment-registry-postgres-v1";
 import { deriveCurrentResearchTrainingPolicyV1 } from "@/lib/trader/research/research-training-policy-v1";
 import { runRegisteredResearchTrainingDiagnosticPostgresV1 } from "@/lib/trader/research/research-training-diagnostic-postgres-v1";
@@ -26,10 +30,27 @@ const enabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 const LIMITS = Object.freeze({ maxBars: 64, maxBytes: 2_000_000 });
 const BAR_MS = 60_000;
+const FIXTURE_RELEASE_SHA = "c".repeat(40);
 
 describe.skipIf(!enabled || !url)("DEE-1159 registered training diagnostic PostgreSQL", () => {
   let ownerSql: postgres.Sql;
   let db: WaiaPostgresDb;
+  const priorWaiaReleaseSha = process.env.WAIA_RELEASE_SHA;
+  const priorVercelReleaseSha = process.env.VERCEL_GIT_COMMIT_SHA;
+
+  function restoreReleaseEnvironment() {
+    if (priorWaiaReleaseSha === undefined) delete process.env.WAIA_RELEASE_SHA;
+    else process.env.WAIA_RELEASE_SHA = priorWaiaReleaseSha;
+    if (priorVercelReleaseSha === undefined) delete process.env.VERCEL_GIT_COMMIT_SHA;
+    else process.env.VERCEL_GIT_COMMIT_SHA = priorVercelReleaseSha;
+  }
+
+  function setReleaseEnvironment(waia: string | undefined, vercel: string | undefined) {
+    if (waia === undefined) delete process.env.WAIA_RELEASE_SHA;
+    else process.env.WAIA_RELEASE_SHA = waia;
+    if (vercel === undefined) delete process.env.VERCEL_GIT_COMMIT_SHA;
+    else process.env.VERCEL_GIT_COMMIT_SHA = vercel;
+  }
 
   function makeBars(closes: readonly number[], volume = 10): Bar[] {
     const start = Date.parse(resolveFhvCanonicalPartitionInterval("development").startUtc);
@@ -46,6 +67,7 @@ describe.skipIf(!enabled || !url)("DEE-1159 registered training diagnostic Postg
   async function fixture(input: Readonly<{
     closes: readonly number[]; volume?: number; quantity?: string; label: string;
     trials?: readonly number[]; trainFromIndex?: number;
+    executableSourceSha256?: string;
   }>) {
     const userId = randomUUID();
     await ownerSql`insert into auth.users (id) values (${userId}::uuid) on conflict (id) do nothing`;
@@ -91,6 +113,8 @@ describe.skipIf(!enabled || !url)("DEE-1159 registered training diagnostic Postg
         'waia.trader.historical_dataset_authority.v2')`;
     }
     const proposal = buildResearchExperimentProposalV1(orgId, input.label);
+    proposal.executable.sourceSha256 = input.executableSourceSha256 ??
+      resolveCurrentResearchExecutableIdentityV1().sourceSha256;
     const policy = deriveCurrentResearchTrainingPolicyV1();
     proposal.orderedTrials = (input.trials ?? [4, 8]).map(lookbackBars => ({
       lookbackBars, buyZscore: "-1.5", sellZscore: "0" }));
@@ -125,15 +149,36 @@ describe.skipIf(!enabled || !url)("DEE-1159 registered training diagnostic Postg
   }
 
   const run = (f: Awaited<ReturnType<typeof fixture>>, trialIndex: number,
-    attemptId = f.attempt.id) =>
-    runRegisteredResearchTrainingDiagnosticPostgresV1(db, f.context,
+    attemptId = f.attempt.id, targetDb: WaiaPostgresDb = db) =>
+    runRegisteredResearchTrainingDiagnosticPostgresV1(targetDb, f.context,
       { attemptId, trialIndex, limits: LIMITS });
 
+  async function stageWriteCounts(f: Awaited<ReturnType<typeof fixture>>) {
+    const scope = await loadResearchTrainingLedgerScopePostgresV1(db, f.context,
+      { attemptId: f.attempt.id, trialIndex: 0 });
+    const runId = scope.ledgerScope.historicalRunId;
+    const rows = await ownerSql`select
+      (select count(*)::int from public.trader_research_training_diagnostics_v1
+        where organization_id=${f.orgId}::uuid and attempt_id=${f.attempt.id}::uuid) as diagnostics,
+      (select count(*)::int from public.trader_orders
+        where organization_id=${f.orgId}::uuid and historical_run_id=${runId}) as orders,
+      (select count(*)::int from public.trader_fills fill join public.trader_orders o on o.id=fill.order_id
+        where o.organization_id=${f.orgId}::uuid and o.historical_run_id=${runId}) as fills,
+      (select count(*)::int from public.trader_accounting_frontier
+        where organization_id=${f.orgId}::uuid and run_id=${runId}) as frontiers`;
+    return [rows[0]!.diagnostics, rows[0]!.orders, rows[0]!.fills, rows[0]!.frontiers];
+  }
+
   beforeAll(() => {
+    setReleaseEnvironment(FIXTURE_RELEASE_SHA, FIXTURE_RELEASE_SHA);
     ownerSql = postgres(url!, { max: 8, prepare: false });
     db = drizzle(ownerSql, { schema: pgSchema }) as unknown as WaiaPostgresDb;
   });
-  afterAll(async () => { await ownerSql?.end({ timeout: 5 }); });
+  afterAll(async () => {
+    try { await ownerSql?.end({ timeout: 5 }); }
+    finally { restoreReleaseEnvironment(); }
+  });
+  afterEach(() => setReleaseEnvironment(FIXTURE_RELEASE_SHA, FIXTURE_RELEASE_SHA));
 
   it("canonicalizes uppercase UUID attempt IDs across the initial commit and exact retries", async () => {
     const f = await fixture({ label: "uppercase-attempt-id", trials: [4],
@@ -142,15 +187,22 @@ describe.skipIf(!enabled || !url)("DEE-1159 registered training diagnostic Postg
     const first = await run(f, 0, uppercaseAttemptId);
     const uppercaseRetry = await run(f, 0, uppercaseAttemptId);
     const lowercaseRetry = await run(f, 0, f.attempt.id.toLowerCase());
+    const expectedExecutableIdentity = resolveCurrentResearchExecutableIdentityV1();
+    const observedExecutableIdentity = first.observedExecutableIdentity as ReturnType<
+      typeof resolveCurrentResearchExecutableIdentityV1>;
 
     expect(first).toEqual(uppercaseRetry);
     expect(first).toEqual(lowercaseRetry);
     expect(first.attemptId).toBe(f.attempt.id.toLowerCase());
+    expect(observedExecutableIdentity).toEqual(expectedExecutableIdentity);
+    expect(observedExecutableIdentity.sourceSha256).toBe(f.experiment.spec.executable.sourceSha256);
     const [stored] = await ownerSql`select attempt_id::text as attempt_id,trace_canonical_json
       from public.trader_research_training_diagnostics_v1
       where organization_id=${f.orgId}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=0`;
     expect(stored!.attempt_id).toBe(f.attempt.id.toLowerCase());
-    expect(JSON.parse(stored!.trace_canonical_json).attemptId).toBe(f.attempt.id.toLowerCase());
+    expect(JSON.parse(stored!.trace_canonical_json)).toMatchObject({
+      attemptId: f.attempt.id.toLowerCase(), observedExecutableIdentity: expectedExecutableIdentity,
+    });
     const [counts] = await ownerSql`select
       (select count(*)::int from public.trader_research_training_diagnostics_v1
         where organization_id=${f.orgId}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=0) as results,
@@ -191,6 +243,142 @@ describe.skipIf(!enabled || !url)("DEE-1159 registered training diagnostic Postg
     } finally {
       await monitoredSql.end({ timeout: 5 });
     }
+  }, 120_000);
+
+  it("rejects a preregistered executable mismatch after metadata preflight but before payload or stage writes", async () => {
+    const f = await fixture({ label: "registered-executable-mismatch",
+      executableSourceSha256: "f".repeat(64), trials: [4],
+      closes: [100, 100, 100, 100, 90, 100, 100, 100] });
+    const queryTexts: string[] = [];
+    const monitoredSql = postgres(url!, { max: 1, prepare: false,
+      debug: (_connection, query) => { queryTexts.push(query); } });
+    const monitoredDb = drizzle(monitoredSql, { schema: pgSchema }) as unknown as WaiaPostgresDb;
+    try {
+      await expect(run(f, 0, f.attempt.id, monitoredDb))
+        .rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:EXECUTABLE_IDENTITY_MISMATCH");
+      expect(queryTexts.some(query => query.includes("trader_research_attempts_v1"))).toBe(true);
+      expect(queryTexts.some(query => query.includes("trader_research_experiments_v1"))).toBe(true);
+      expect(queryTexts.some(query => query.includes("trader_historical_dataset_authority_v2"))).toBe(false);
+      expect(queryTexts.some(query => /insert\s+into\s+public\.trader_(orders|fills|accounting_frontier|research_training_diagnostics_v1)/i.test(query))).toBe(false);
+      expect(await stageWriteCounts(f)).toEqual([0, 0, 0, 0]);
+    } finally {
+      await monitoredSql.end({ timeout: 5 });
+    }
+  }, 120_000);
+
+  it("refuses missing and conflicting trusted release assertions before any database read", async () => {
+    const f = await fixture({ label: "runtime-release-preflight", trials: [4],
+      closes: [100, 100, 100, 100, 90, 100, 100, 100] });
+    const queryTexts: string[] = [];
+    const monitoredSql = postgres(url!, { max: 1, prepare: false,
+      debug: (_connection, query) => { queryTexts.push(query); } });
+    const monitoredDb = drizzle(monitoredSql, { schema: pgSchema }) as unknown as WaiaPostgresDb;
+    try {
+      setReleaseEnvironment(undefined, undefined);
+      await expect(run(f, 0, f.attempt.id, monitoredDb))
+        .rejects.toThrow("RESEARCH_EXECUTABLE_RELEASE_SHA_MISSING_OR_INVALID");
+      expect(queryTexts).toEqual([]);
+
+      setReleaseEnvironment("a".repeat(40), "b".repeat(40));
+      await expect(run(f, 0, f.attempt.id, monitoredDb))
+        .rejects.toThrow("RESEARCH_EXECUTABLE_RELEASE_SHA_CONFLICT");
+      expect(queryTexts).toEqual([]);
+      expect(await stageWriteCounts(f)).toEqual([0, 0, 0, 0]);
+    } finally {
+      setReleaseEnvironment(FIXTURE_RELEASE_SHA, FIXTURE_RELEASE_SHA);
+      await monitoredSql.end({ timeout: 5 });
+    }
+  }, 120_000);
+
+  it("rejects a changed observed release before source payload projection and leaves the attempt unscored", async () => {
+    const f = await fixture({ label: "runtime-release-changed", trials: [4],
+      closes: [100, 100, 100, 100, 90, 100, 100, 100] });
+    const queryTexts: string[] = [];
+    const monitoredSql = postgres(url!, { max: 1, prepare: false,
+      debug: (_connection, query) => { queryTexts.push(query); } });
+    const monitoredDb = drizzle(monitoredSql, { schema: pgSchema }) as unknown as WaiaPostgresDb;
+    try {
+      setReleaseEnvironment("d".repeat(40), "d".repeat(40));
+      await expect(run(f, 0, f.attempt.id, monitoredDb))
+        .rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:EXECUTABLE_IDENTITY_MISMATCH");
+      expect(queryTexts.some(query => query.includes("trader_research_attempts_v1"))).toBe(true);
+      expect(queryTexts.some(query => query.includes("trader_research_experiments_v1"))).toBe(true);
+      expect(queryTexts.some(query => query.includes("trader_historical_dataset_authority_v2"))).toBe(false);
+      expect(queryTexts.some(query => /insert\s+into\s+public\.trader_(orders|fills|accounting_frontier|research_training_diagnostics_v1)/i.test(query))).toBe(false);
+      expect(await stageWriteCounts(f)).toEqual([0, 0, 0, 0]);
+    } finally {
+      setReleaseEnvironment(FIXTURE_RELEASE_SHA, FIXTURE_RELEASE_SHA);
+      await monitoredSql.end({ timeout: 5 });
+    }
+  }, 120_000);
+
+  it("refuses an exact retry after the observed deployment release changes without changing committed rows", async () => {
+    const f = await fixture({ label: "runtime-release-changed-after-commit", trials: [4],
+      closes: [100, 100, 100, 100, 90, 100, 100, 100] });
+    const committed = await run(f, 0);
+    expect(committed.observedExecutableIdentity).toEqual(resolveCurrentResearchExecutableIdentityV1());
+    const before = await stageWriteCounts(f);
+    expect(before[0]).toBe(1);
+
+    const queryTexts: string[] = [];
+    const monitoredSql = postgres(url!, { max: 1, prepare: false,
+      debug: (_connection, query) => { queryTexts.push(query); } });
+    const monitoredDb = drizzle(monitoredSql, { schema: pgSchema }) as unknown as WaiaPostgresDb;
+    try {
+      setReleaseEnvironment("e".repeat(40), "e".repeat(40));
+      await expect(run(f, 0, f.attempt.id, monitoredDb))
+        .rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:EXECUTABLE_IDENTITY_MISMATCH");
+      expect(queryTexts.some(query => query.includes("trader_historical_dataset_authority_v2"))).toBe(false);
+      expect(queryTexts.some(query => /insert\s+into\s+public\.trader_(orders|fills|accounting_frontier|research_training_diagnostics_v1)/i.test(query))).toBe(false);
+      expect(await stageWriteCounts(f)).toEqual(before);
+    } finally {
+      setReleaseEnvironment(FIXTURE_RELEASE_SHA, FIXTURE_RELEASE_SHA);
+      await monitoredSql.end({ timeout: 5 });
+    }
+  }, 120_000);
+
+  it("does not adopt an append-only legacy trace that lacks the observed executable descriptor", async () => {
+    const f = await fixture({ label: "legacy-trace-without-executable", trials: [4],
+      closes: [100, 100, 100, 100, 90, 100, 100, 100] });
+    const scope = await loadResearchTrainingLedgerScopePostgresV1(db, f.context,
+      { attemptId: f.attempt.id, trialIndex: 0 });
+    const policy = deriveCurrentResearchTrainingPolicyV1();
+    const legacyTrace = {
+      authority: "TRAINING_ENGINEERING_TRACE_ONLY",
+      capitalEligible: false,
+      scientificQualified: false,
+      organizationId: f.orgId,
+      attemptId: f.attempt.id,
+      trialIndex: 0,
+      stageRunId: scope.ledgerScope.historicalRunId,
+      scopeDigestHex: scope.contentDigest,
+      policyDigestHex: policy.guardianResolvedPolicySha256,
+      decisions: [], orders: [], openPositions: [],
+      equity: "100000.00", netUnrealizedPnl: "0.00",
+      strategyGuardianQualification: "UNQUALIFIED",
+      accountGuardianQualification: "UNQUALIFIED",
+      appliedProtectionScope: "ACCOUNT_D20_SIGNAL_ADMISSION_ONLY",
+      orderCount: 0, fillCount: 0, accountingSequence: 0,
+      finalAccountingDigestHex: "0".repeat(64), ledgerDigestHex: "0".repeat(64),
+    };
+    const traceCanonicalJson = canonicalJsonString(legacyTrace);
+    await ownerSql`insert into public.trader_research_training_diagnostics_v1 (
+      organization_id,attempt_id,trial_index,stage_run_id,experiment_spec_sha256,
+      scope_digest_hex,policy_digest_hex,trace_canonical_json,trace_sha256
+    ) values (${f.orgId}::uuid,${f.attempt.id}::uuid,0,
+      ${scope.ledgerScope.historicalRunId}::uuid,${f.experiment.specSha256},
+      ${scope.contentDigest},${policy.guardianResolvedPolicySha256},${traceCanonicalJson},
+      ${computeStableJsonDigest(legacyTrace)})`;
+
+    await expect(run(f, 0)).rejects.toThrow(/COMMITTED_TRACE_INVALID/);
+    const [counts] = await ownerSql`select
+      (select count(*)::int from public.trader_research_training_diagnostics_v1
+        where organization_id=${f.orgId}::uuid and attempt_id=${f.attempt.id}::uuid) as diagnostics,
+      (select count(*)::int from public.trader_orders where organization_id=${f.orgId}::uuid
+        and historical_run_id=${scope.ledgerScope.historicalRunId}) as orders,
+      (select count(*)::int from public.trader_accounting_frontier where organization_id=${f.orgId}::uuid
+        and run_id=${scope.ledgerScope.historicalRunId}) as frontiers`;
+    expect([counts!.diagnostics, counts!.orders, counts!.frontiers]).toEqual([1, 0, 0]);
   }, 120_000);
 
   it("executes two declared lookbacks with separate actual D5 decisions, fills, accounting and exact retries", async () => {
