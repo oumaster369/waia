@@ -16,6 +16,7 @@ import {
 import { DevMasterKeyProvider } from "@/lib/trader/security/dev-master-key-provider";
 import { createMasterKeyProvider } from "@/lib/trader/security/create-master-key-provider";
 import { credentialPayloadAad, dekWrapAad } from "@/lib/trader/security/index";
+import { CredentialPayloadInvalidError } from "@/lib/trader/credentials/errors";
 import { MasterKeyNotReadyError } from "@/lib/trader/security/errors";
 import { traderAuditActions, traderEntityTypes } from "@/lib/trader/types";
 import { migrateDatabaseFromEnv } from "@/tests/helpers/migrate-test-db";
@@ -376,8 +377,10 @@ describe("trader credential service (DEE-234)", () => {
     } finally {
       uuidSpy.mockRestore();
     }
-    expect((await service.listCredentialMetadata({ organizationId })).find((row) => row.id === stored.id)?.status)
-      .toBe("active");
+    expect(
+      (await service.listCredentialMetadata({ organizationId })).find((row) => row.id === stored.id)
+        ?.status,
+    ).toBe("active");
   });
 
   it("rolls back SQLite revoke when audit append fails", async () => {
@@ -397,11 +400,13 @@ describe("trader credential service (DEE-234)", () => {
       },
     });
 
-    await expect(
-      failing.revokeCredentials({ organizationId }, stored.id),
-    ).rejects.toThrow("synthetic audit failure");
-    expect((await ready.listCredentialMetadata({ organizationId })).find((row) => row.id === stored.id)?.status)
-      .toBe("active");
+    await expect(failing.revokeCredentials({ organizationId }, stored.id)).rejects.toThrow(
+      "synthetic audit failure",
+    );
+    expect(
+      (await ready.listCredentialMetadata({ organizationId })).find((row) => row.id === stored.id)
+        ?.status,
+    ).toBe("active");
   });
 
   it("storeCredentials throws MasterKeyNotReadyError when provider is not production-ready", async () => {
@@ -441,5 +446,35 @@ describe("trader credential service (DEE-234)", () => {
     await expect(
       notReadyService.getDecryptedCredentials({ organizationId }, stored.id),
     ).rejects.toBeInstanceOf(MasterKeyNotReadyError);
+  });
+
+  it("refuses a trade scope unless the caller reports org live as enabled", async () => {
+    const service = await createService();
+    const credentials = { apiKey: "TRADE-SCOPE-KEY", apiSecret: "TRADE-SCOPE-SECRET" };
+    const permissionMetadata = { scopes: ["read", "trade"] };
+    await expect(
+      service.storeCredentials(
+        { organizationId },
+        {
+          venue: "htx",
+          exchangeAccountId: "trade-scope-acct",
+          credentials,
+          permissionMetadata,
+        },
+      ),
+    ).rejects.toBeInstanceOf(CredentialPayloadInvalidError);
+    const stored = await service.storeCredentials(
+      { organizationId },
+      {
+        venue: "htx",
+        exchangeAccountId: "trade-scope-acct",
+        credentials,
+        permissionMetadata,
+        orgLiveEnabled: true,
+      },
+    );
+    expect(stored.status).toBe("active");
+    expect(stored.permissionMetadata).toMatchObject({ scopes: ["read", "trade"] });
+    expect(stored).not.toHaveProperty("apiSecret");
   });
 });
