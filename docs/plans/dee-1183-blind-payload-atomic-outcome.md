@@ -10,14 +10,14 @@ approvalGates: [root-review-before-commit, independent-review, required-ci, no-r
 state:
   status: in-progress
   currentWorkPackage: WP-4
-  completedWorkPackages: [reviewed-scope, canonical-plan, source-extraction, focused-regressions, exact-native-proof, static-validation]
-  remainingWorkPackages: [independent-review, required-ci]
+  completedWorkPackages: [reviewed-scope, canonical-plan, source-extraction, focused-regressions, exact-native-proof, static-validation, rebase-current-main, exact-rebased-local-readiness, root-final-review]
+  remainingWorkPackages: [required-ci]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: null
+  lastValidatedGitSha: 8acb1cb3bed2f42ad4e7c6b8986ff141c65f51ac
+  lastValidationAt: "2026-10-01T19:10:54Z"
   blockedReason: null
-  nextAction: "Obtain root and independent review of the exact extracted source snapshot before creating a commit; then run required current-head PR CI."
+  nextAction: "Publish the reviewed patch and wait for all required and applicable current-head PR CI."
 provenance:
   createdFrom: "DEE-1183 plus focused independent source audit on 2026-10-01"
   gapRegistry: null
@@ -73,7 +73,7 @@ Focused tests and graph evidence:
 - `docs/ai-trader/reality-v2-source-consumer-inventory.json`
 - This plan.
 
-No schema or migration files are in scope. The source will be extracted from the reviewed DEE-1159 snapshot at `dfeb61244466d9e762f5c5c97b5ec07ff82b61ff`, then compared against this branch's `origin/main` base. Only the files listed above may be brought across; the prepared branch's registries, training reader, research kernels, and scoped ledger stay out.
+No schema or migration files are in scope. The source was extracted from the reviewed DEE-1159 snapshot at `dfeb61244466d9e762f5c5c97b5ec07ff82b61ff`, then rebased from `2589bb3a` onto the current `origin/main` commit `42810ef804150dab0b1f9c01cb38b5bd8bac3659`. Only the files listed above were brought across; the prepared branch's registries, training reader, research kernels, and scoped ledger stay out. All 13 functional/test files are byte-identical between the pre-rebase commit `ecc710f7` and current head `8acb1cb3`; the inventory diff includes the merged DEE-1161 main changes and this child’s four content pins.
 
 ## Work packages
 
@@ -93,7 +93,7 @@ No schema or migration files are in scope. The source will be extracted from the
 
 ## Validation
 
-On 2026-10-01, the child branch passed 52 focused unit tests, the three native synthetic PostgreSQL suites (29 passed, 0 failed, 0 skipped), lint, typecheck, build, canonical validation, and consumer-graph validation. Exact native source hashes and execution receipts are retained in the external Oct01 audit folder under `dee1183-blind-boundary-native`; local command logs and exit receipts are under `dee1183-local-readiness`. The worktree remains uncommitted, so the recorded base HEAD alone does not identify the validated patch; use the source manifest alongside the base SHA in those receipts.
+On 2026-10-01, the pre-rebase child branch passed 52 focused unit tests, the three native synthetic PostgreSQL suites (29 passed, 0 failed, 0 skipped) on the pre-rebase source, lint, typecheck, build, canonical validation, and consumer-graph validation. After rebasing onto `42810ef8`, all 13 native-covered functional/test files remained byte-identical; rebased focused checks passed again (53 units, lint, typecheck, build, canon, graph). Exact native source hashes and execution receipts are retained in the external Oct01 audit folder under `dee1183-blind-boundary-native`; rebased source-equivalence and command receipts are under `dee1183-rebased-*`. Root re-reviewed the rebased functional diff and exact native source equivalence with no new actionable finding. Only this plan changed after the rebased validation; the final commit binding records the unchanged functional files. Required PR CI has not run yet.
 
 Expected local checks:
 
