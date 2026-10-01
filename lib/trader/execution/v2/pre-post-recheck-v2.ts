@@ -8,7 +8,7 @@ import * as pgSchema from "@/db/schema.postgres";
 import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import {
   CredentialGateKillWriteFailedError,
-  emitCredentialGateKillTelemetry,
+  type CredentialKillSwitchWrite,
   isCredentialGateKillReason,
   writeOrganizationCredentialKillSwitchPostgres,
 } from "@/lib/trader/execution/v2/credential-gate-kill";
@@ -24,6 +24,7 @@ import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import type { ExecutionAttemptV2 } from "./contracts";
 import {
   evaluateExecutionV2LiveGates,
+  emitCommittedExecutionV2LiveGateTelemetry,
   loadExecutionV2LiveGateFactsPostgres,
   type ExecutionV2LiveGateFacts,
 } from "./live-gates";
@@ -58,14 +59,14 @@ export async function prePostNetworkRefusalV2(
   context: OrgContext,
   attempt: ExecutionAttemptV2,
 ): Promise<string | null> {
-  return runWaiaPostgresTransaction(db, async (tx) => {
+  const outcome = await runWaiaPostgresTransaction(db, async (tx) => {
     await tx.execute(sql`select set_config('lock_timeout', '5s', true)`);
     const state = await readRiskAccountStateV2Postgres(tx, context, attempt.accountId, true);
-    if (!state) return "RISK_ACCOUNT_STATE_MISSING";
+    if (!state) return { reason: "RISK_ACCOUNT_STATE_MISSING", killSwitchWrite: null };
     let envelopeReason: string | null = null;
     try {
       const plan = await readExecutionPlanV2Postgres(tx, context, attempt.executionPlanId);
-      if (!plan) return "PRE_POST_RECHECK_FAILED";
+      if (!plan) return { reason: "PRE_POST_RECHECK_FAILED", killSwitchWrite: null };
       const effective = await requireLiveCapitalOrderLimitV2(
         tx,
         context.organizationId,
@@ -113,24 +114,25 @@ export async function prePostNetworkRefusalV2(
       executionMode,
       liveGates,
     });
+    let killSwitchWrite: Exclude<CredentialKillSwitchWrite, "NOT_ATTEMPTED"> | null = null;
     if (reason && isCredentialGateKillReason(reason)) {
       try {
-        const killSwitchWrite = await writeOrganizationCredentialKillSwitchPostgres(
+        killSwitchWrite = await writeOrganizationCredentialKillSwitchPostgres(
           tx,
           context.organizationId,
           reason,
           { joinCurrentTransaction: true },
         );
-        await emitCredentialGateKillTelemetry({
-          organizationId: context.organizationId,
-          outcome: reason,
-          errorClass: "ExecutionV2LiveGateRefusedError",
-          killSwitchWrite,
-        });
       } catch (error) {
         throw new CredentialGateKillWriteFailedError(reason, { cause: error });
       }
     }
-    return reason;
+    return { reason, killSwitchWrite };
   });
+  if (outcome.reason && isCredentialGateKillReason(outcome.reason) && outcome.killSwitchWrite) {
+    await emitCommittedExecutionV2LiveGateTelemetry(context.organizationId, {
+      ok: false, reason: outcome.reason, credentialKillWrite: outcome.killSwitchWrite,
+    });
+  }
+  return outcome.reason;
 }

@@ -69,6 +69,7 @@ import { createPostgresKillSwitchService } from "@/lib/trader/risk/kill-switch";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import { createPostgresExecutionV2Service } from "@/lib/trader/execution/v2/connector-dispatch";
 import { createAssertExecutionV2LiveAuthorized, createOrgScopedExecutionV2OrderPath } from "@/lib/trader/execution/v2/org-order-path";
+import { prePostNetworkRefusalV2 } from "@/lib/trader/execution/v2/pre-post-recheck-v2";
 import { EXECUTION_V2_LIVE_GATE_REASONS } from "@/lib/trader/execution/v2/live-gates";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { buildHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
@@ -680,6 +681,134 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     return { account: state ?? null, allowance, events, reports, counts };
   }
 
+  async function credentialRefusalLiveInput(identityBase: number, accountId: string) {
+    const input = await admittedBindInput({ accountId, identityBase });
+    const credentialId = uuid(identityBase + 10);
+    const promotionId = uuid(identityBase + 11);
+    const strategyId = `dee1154-${accountId}`;
+    const strategyVersion = "native-v1";
+    const permissionMetadata = buildHtxPermissionMetadata({
+      exchangeAccountId: input.allowance.accountId,
+      scopes: ["read"],
+    });
+    const originalOrg0 = process.env.WAIA_TRADER_ORG0_ORGANIZATION_ID;
+    await sql`INSERT INTO trader_org_live_enable (organization_id, state, max_notional_cap)
+      VALUES (${orgA}::uuid, 'ENABLED', '25')`;
+    await sql`INSERT INTO trader_strategy_promotion_records (
+      id, organization_id, strategy_id, strategy_version, git_commit_sha,
+      target_deployment_state, hypothesis, intended_regime, cost_model_json,
+      failure_modes_json, reason_code_distribution_json, paper_trading_evidence_json,
+      evidence_content_digest, confidence_attestation_json, record_content_digest,
+      schema_version, state, effective_at, state_version
+    ) VALUES (
+      ${promotionId}::uuid, ${orgA}::uuid, ${strategyId}, ${strategyVersion}, ${"b".repeat(40)},
+      'LIVE_LIMITED', 'Synthetic DEE-1154 test fixture', 'RANGE', '{}'::jsonb,
+      '[]'::jsonb, '{}'::jsonb, '{}'::jsonb, ${hex64("dee1154-evidence")},
+      '{}'::jsonb, ${hex64("dee1154-promotion")}, 'dee1154-native-fixture/v1',
+      'EFFECTIVE', clock_timestamp(), 1
+    )`;
+    await sql`INSERT INTO exchange_credentials (
+      id, organization_id, venue, exchange_account_id, permission_metadata, status
+    ) VALUES (
+      ${credentialId}::uuid, ${orgA}::uuid, 'htx', ${input.allowance.accountId},
+      ${JSON.stringify(permissionMetadata)}, 'active'
+    )`;
+    process.env.WAIA_TRADER_ORG0_ORGANIZATION_ID = orgA;
+    const liveInput: BindExecutionAuthorityV2Input = {
+      ...input,
+      executionMode: "live",
+      credentialId,
+      strategyId,
+      strategyVersion,
+    };
+    return {
+      input: liveInput,
+      cleanup: async () => {
+        const switches = await sql<{ id: string }[]>`
+          SELECT id::text FROM trader_kill_switches
+          WHERE organization_id = ${orgA}::uuid AND origin = 'automatic'
+            AND reason = 'CREDENTIAL_NOT_TRADE_SCOPED'`;
+        for (const { id } of switches) {
+          const audits = await sql<{ id: string }[]>`
+            SELECT id::text FROM audit_logs
+            WHERE entity_type = 'trader.kill_switch' AND entity_id = ${id}`;
+          if (audits.length > 0) {
+            await sql.unsafe("ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_block_delete");
+            try {
+              for (const audit of audits) await sql`DELETE FROM audit_logs WHERE id = ${audit.id}::uuid`;
+            } finally {
+              await sql.unsafe("ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_block_delete");
+            }
+          }
+          await sql`DELETE FROM trader_kill_switches WHERE id = ${id}::uuid`;
+        }
+        await sql`DELETE FROM exchange_credentials WHERE id = ${credentialId}::uuid`;
+        await sql`DELETE FROM trader_strategy_promotion_records WHERE id = ${promotionId}::uuid`;
+        await sql`DELETE FROM trader_org_live_enable WHERE organization_id = ${orgA}::uuid`;
+        if (originalOrg0 === undefined) delete process.env.WAIA_TRADER_ORG0_ORGANIZATION_ID;
+        else process.env.WAIA_TRADER_ORG0_ORGANIZATION_ID = originalOrg0;
+      },
+    };
+  }
+
+  function transactionProbe(options: { failAfterCallback?: boolean } = {}) {
+    const frames: { callbackReturned: boolean; commitConfirmed: boolean }[] = [];
+    const probeDb = new Proxy(db, {
+      get(target, property) {
+        const value = Reflect.get(target, property, target);
+        if (property === "transaction") {
+          const original = value as WaiaPostgresDb["transaction"];
+          return (async (...args: Parameters<WaiaPostgresDb["transaction"]>) => {
+            const [callback, config] = args;
+            const frame = { callbackReturned: false, commitConfirmed: false };
+            frames.push(frame);
+            const result = await Reflect.apply(original, target, [async (tx: LockTx) => {
+              const callbackValue = await callback(tx);
+              frame.callbackReturned = true;
+              if (options.failAfterCallback) throw new Error("DEE1154_INJECTED_POST_CALLBACK_ROLLBACK");
+              return callbackValue;
+            }, config]);
+            frame.commitConfirmed = true;
+            return result;
+          }) as WaiaPostgresDb["transaction"];
+        }
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    }) as WaiaPostgresDb;
+    const telemetry: { payload: Record<string, unknown>; callbackReturned: boolean; commitConfirmed: boolean }[] = [];
+    const infoSpy = vi.spyOn(console, "info").mockImplementation((line) => {
+      try {
+        const payload = JSON.parse(String(line)) as Record<string, unknown>;
+        if (payload.event === "waia_trader_event" && "kill_switch_write" in payload) {
+          const frame = frames.at(-1);
+          telemetry.push({ payload, callbackReturned: frame?.callbackReturned === true,
+            commitConfirmed: frame?.commitConfirmed === true });
+        }
+      } catch {
+        // Ignore unrelated console output; only structured kill-switch events are observed.
+      }
+    });
+    return { db: probeDb, frames, telemetry, restore: () => infoSpy.mockRestore() };
+  }
+
+  async function credentialKillState(input: BindExecutionAuthorityV2Input) {
+    const proof = await lockProofState(input);
+    const [projection] = await sql<{ kill_state: string }[]>`
+      SELECT kill_state FROM trader_risk_account_state_v2
+      WHERE organization_id = ${orgA}::uuid AND account_id = ${input.allowance.accountId}`;
+    const switches = await sql<{
+      id: string; state: string; enforcement_mode: string; origin: string; reason: string;
+    }[]>`
+      SELECT id::text, state, enforcement_mode, origin, reason FROM trader_kill_switches
+      WHERE organization_id = ${orgA}::uuid AND scope_type = 'organization'
+        AND switch_type = 'EMERGENCY_STOP' AND state IN ('ACTIVE', 'CLEARING')`;
+    const audits = switches.length === 0 ? [] : await sql<{ action: string; entity_id: string }[]>`
+      SELECT action, entity_id FROM audit_logs
+      WHERE organization_id = ${orgA}::uuid AND entity_type = 'trader.kill_switch'
+        AND entity_id = ${switches[0]!.id}`;
+    return { proof, riskKillState: projection?.kill_state ?? null, switches, audits };
+  }
+
   function expectRiskChain(state: Awaited<ReturnType<typeof lockProofState>>, types: string[], r: string, p: string) {
     expect(state.events.map((event) => event.type)).toEqual(types);
     state.events.forEach((event, index) => {
@@ -906,6 +1035,236 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
         await sql.unsafe("ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_block_delete");
       }
       await sql`DELETE FROM trader_kill_switches WHERE id = ${trip.row.id}::uuid`;
+    }
+  }, 30_000);
+
+  it("DEE-1154 commits credential-refusal kill state before public pre-bind refusal telemetry", async () => {
+    const fixture = await credentialRefusalLiveInput(669_300, "credential-readonly-prebind");
+    const other = await admittedBindInput({ organizationId: orgB,
+      accountId: "credential-kill-other-org", identityBase: 669_350 });
+    const otherBefore = await lockProofState(other, orgB);
+    expectIssuedBeforeBind(await lockProofState(fixture.input));
+    const probe = transactionProbe();
+    let receipt: Record<string, unknown> | null = null;
+    try {
+      const authorize = createAssertExecutionV2LiveAuthorized(probe.db);
+      const first = await nativeSettled(authorize({ organizationId: orgA }, fixture.input));
+      expect(first).toMatchObject({ ok: false,
+        error: expect.objectContaining({ reason: "CREDENTIAL_NOT_TRADE_SCOPED" }) });
+      const retry = await nativeSettled(authorize({ organizationId: orgA }, fixture.input));
+      expect(retry).toMatchObject({ ok: false,
+        error: expect.objectContaining({ reason: "CREDENTIAL_NOT_TRADE_SCOPED" }) });
+      const state = await credentialKillState(fixture.input);
+      const otherAfter = await lockProofState(other, orgB);
+      receipt = { test: "credential-prebind-refusal", first, retry, durableState: state,
+        otherOrganizationUnchanged: JSON.stringify(otherAfter) === JSON.stringify(otherBefore),
+        telemetry: probe.telemetry, transactions: probe.frames };
+
+      expect(probe.telemetry).toHaveLength(2);
+      expect(probe.telemetry[0]).toMatchObject({
+        payload: { outcome: "CREDENTIAL_NOT_TRADE_SCOPED", kill_state_telemetry: "TRIPPED",
+          kill_switch_write: "WRITTEN" }, callbackReturned: true, commitConfirmed: true,
+      });
+      expect(probe.telemetry[1]).toMatchObject({ payload: { kill_switch_write: "ALREADY_ACTIVE" },
+        callbackReturned: true, commitConfirmed: true });
+
+      expect(state.riskKillState).toBe("TRIPPED");
+      expect(state.switches).toHaveLength(1);
+      expect(state.switches[0]).toMatchObject({ state: "ACTIVE", enforcement_mode: "STOP_ACCOUNT",
+        origin: "automatic", reason: "CREDENTIAL_NOT_TRADE_SCOPED" });
+      expect(state.audits).toEqual([{ action: "trader.kill_switch.tripped", entity_id: state.switches[0]!.id }]);
+      expectIssuedBeforeBind(state.proof);
+      expect(otherAfter).toEqual(otherBefore);
+      expect(probe.telemetry.map((event) => event.payload.kill_switch_write)).toEqual([
+        "WRITTEN", "ALREADY_ACTIVE",
+      ]);
+    } finally {
+      probe.restore();
+      if (receipt) process.stdout.write(`[DEE1154_NATIVE] ${JSON.stringify(receipt)}\n`);
+      await fixture.cleanup();
+    }
+  }, 30_000);
+
+  it("DEE-1154 commits credential-refusal kill state from a direct live bind before refusal", async () => {
+    const fixture = await credentialRefusalLiveInput(669_400, "credential-readonly-bind");
+    const before = await lockProofState(fixture.input);
+    const probe = transactionProbe();
+    let receipt: Record<string, unknown> | null = null;
+    try {
+      const first = await nativeSettled(
+        bindExecutionAuthorityV2Postgres(probe.db, { organizationId: orgA }, fixture.input),
+      );
+      expect(first).toMatchObject({ ok: false,
+        error: expect.objectContaining({ reason: "CREDENTIAL_NOT_TRADE_SCOPED" }) });
+      const retry = await nativeSettled(
+        bindExecutionAuthorityV2Postgres(probe.db, { organizationId: orgA }, fixture.input),
+      );
+      expect(retry).toMatchObject({ ok: false,
+        error: expect.objectContaining({ reason: "CREDENTIAL_NOT_TRADE_SCOPED" }) });
+
+      const state = await credentialKillState(fixture.input);
+      receipt = { test: "credential-direct-bind-refusal", first, retry, durableState: state,
+        before, telemetry: probe.telemetry, transactions: probe.frames };
+      expect(probe.telemetry).toHaveLength(2);
+      expect(probe.telemetry[0]).toMatchObject({
+        payload: { outcome: "CREDENTIAL_NOT_TRADE_SCOPED", kill_state_telemetry: "TRIPPED",
+          kill_switch_write: "WRITTEN" }, callbackReturned: true, commitConfirmed: true,
+      });
+      expect(probe.telemetry[1]).toMatchObject({ payload: { kill_switch_write: "ALREADY_ACTIVE" },
+        callbackReturned: true, commitConfirmed: true });
+
+      expect(state.riskKillState).toBe("TRIPPED");
+      expect(state.switches).toHaveLength(1);
+      expect(state.switches[0]).toMatchObject({ state: "ACTIVE", enforcement_mode: "STOP_ACCOUNT",
+        origin: "automatic", reason: "CREDENTIAL_NOT_TRADE_SCOPED" });
+      expect(state.audits).toEqual([{ action: "trader.kill_switch.tripped", entity_id: state.switches[0]!.id }]);
+      expect(state.proof.allowance[0]).toMatchObject({ lifecycle_state: "ISSUED", bound_order_id: null });
+      expect(state.proof).toMatchObject({ counts: before.counts, events: before.events,
+        reports: before.reports, account: before.account });
+      expect(state.proof.counts).toEqual({ policies: 0, plans: 0, orders: 0, attempts: 0, reports: 0, events: 1 });
+      expect(probe.telemetry.map((event) => event.payload.kill_switch_write)).toEqual([
+        "WRITTEN", "ALREADY_ACTIVE",
+      ]);
+    } finally {
+      probe.restore();
+      if (receipt) process.stdout.write(`[DEE1154_NATIVE] ${JSON.stringify(receipt)}\n`);
+      await fixture.cleanup();
+    }
+  }, 30_000);
+
+  it("DEE-1154 leaves no kill evidence or WRITTEN telemetry on rollback after callback", async () => {
+    const fixture = await credentialRefusalLiveInput(669_500, "credential-readonly-rollback");
+    const before = await lockProofState(fixture.input);
+    const probe = transactionProbe({ failAfterCallback: true });
+    try {
+      const outcome = await nativeSettled(createAssertExecutionV2LiveAuthorized(probe.db)(
+        { organizationId: orgA }, fixture.input,
+      ));
+      expect(outcome.ok).toBe(false);
+      expect(probe.frames.at(-1)).toMatchObject({ callbackReturned: true, commitConfirmed: false });
+      const state = await credentialKillState(fixture.input);
+      expect(state.riskKillState).toBe("CLEAR");
+      expect(state.switches).toEqual([]);
+      expect(state.audits).toEqual([]);
+      expect(state.proof).toEqual(before);
+      expect(probe.telemetry.filter((event) => event.payload.kill_switch_write === "WRITTEN")).toEqual([]);
+    } finally {
+      probe.restore();
+      await fixture.cleanup();
+    }
+  }, 30_000);
+
+  it("DEE-1154 preserves credential refusal and rolls back when the kill-switch insert fails", async () => {
+    const fixture = await credentialRefusalLiveInput(669_600, "credential-readonly-write-failure");
+    const before = await lockProofState(fixture.input);
+    const probe = transactionProbe();
+    const trigger = "test_dee1154_reject_credential_kill";
+    try {
+      await sql.unsafe(`CREATE FUNCTION public.${trigger}() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.organization_id = '${orgA}'::uuid AND NEW.reason = 'CREDENTIAL_NOT_TRADE_SCOPED' THEN
+            RAISE EXCEPTION 'DEE1154_SYNTHETIC_KILL_WRITE_FAILURE';
+          END IF;
+          RETURN NEW;
+        END $$;
+        CREATE TRIGGER ${trigger} BEFORE INSERT ON public.trader_kill_switches
+        FOR EACH ROW EXECUTE FUNCTION public.${trigger}()`);
+      const outcome = await nativeSettled(createAssertExecutionV2LiveAuthorized(probe.db)(
+        { organizationId: orgA }, fixture.input,
+      ));
+      const state = await credentialKillState(fixture.input);
+      expect(outcome).toMatchObject({ ok: false, error: {
+        name: "CredentialGateKillWriteFailedError", reason: "CREDENTIAL_NOT_TRADE_SCOPED",
+      } });
+      expect(state.riskKillState).toBe("CLEAR");
+      expect(state.switches).toEqual([]);
+      expect(state.audits).toEqual([]);
+      expect(state.proof).toEqual(before);
+      expect(probe.telemetry.filter((event) => event.payload.kill_switch_write === "WRITTEN")).toEqual([]);
+    } finally {
+      await sql.unsafe(`DROP TRIGGER IF EXISTS ${trigger} ON public.trader_kill_switches;
+        DROP FUNCTION IF EXISTS public.${trigger}()`);
+      probe.restore();
+      await fixture.cleanup();
+    }
+  }, 30_000);
+
+  it.each([false, true])("DEE-1154 publishes pre-POST credential-kill telemetry only after commit (rollback=%s)", async (rollback) => {
+    const fixture = await credentialRefusalLiveInput(669_800, "credential-prepost-commit");
+    let probe: ReturnType<typeof transactionProbe> | undefined;
+    try {
+      const policy = (scopes: string[]) => JSON.stringify(buildHtxPermissionMetadata({
+        exchangeAccountId: fixture.input.allowance.accountId, scopes,
+      }));
+      await sql`UPDATE exchange_credentials SET permission_metadata = ${policy(["read", "trade"])}
+        WHERE id = ${fixture.input.credentialId}::uuid AND organization_id = ${orgA}::uuid`;
+      const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, fixture.input);
+      const before = await lockProofState(fixture.input);
+      expect(before.allowance[0]).toMatchObject({ lifecycle_state: "CONSUMED" });
+      // Lose trade scope after bind, before the final network admission check.
+      await sql`UPDATE exchange_credentials SET permission_metadata = ${policy(["read"])}
+        WHERE id = ${fixture.input.credentialId}::uuid AND organization_id = ${orgA}::uuid`;
+      probe = transactionProbe({ failAfterCallback: rollback });
+      const outcome = await nativeSettled(prePostNetworkRefusalV2(
+        probe.db, { organizationId: orgA }, bound.attempt,
+      ));
+      const state = await credentialKillState(fixture.input);
+      expect(state.proof).toEqual(before);
+      if (rollback) {
+        expect(outcome.ok).toBe(false);
+        expect(probe.frames.at(-1)).toMatchObject({ callbackReturned: true, commitConfirmed: false });
+        expect(state.riskKillState).toBe("CLEAR");
+        expect(state.switches).toEqual([]);
+        expect(probe.telemetry).toEqual([]);
+      } else {
+        expect(outcome).toMatchObject({ ok: true, value: "CREDENTIAL_NOT_TRADE_SCOPED" });
+        expect(state.riskKillState).toBe("TRIPPED");
+        expect(state.switches).toHaveLength(1);
+        expect(state.audits).toEqual([{ action: "trader.kill_switch.tripped", entity_id: state.switches[0]!.id }]);
+        expect(probe.telemetry).toEqual([expect.objectContaining({
+          payload: expect.objectContaining({ kill_switch_write: "WRITTEN" }),
+          callbackReturned: true, commitConfirmed: true,
+        })]);
+      }
+    } finally {
+      probe?.restore();
+      // This isolated test persisted an immutable order referencing the fixture credential.
+      await clearOrganization(sql, orgA);
+      await fixture.cleanup();
+    }
+  }, 30_000);
+
+  it("DEE-1154 converges concurrent pre-bind and direct-bind credential refusals to one kill audit", async () => {
+    const fixture = await credentialRefusalLiveInput(669_700, "credential-readonly-concurrent");
+    const before = await lockProofState(fixture.input);
+    const probe = transactionProbe();
+    try {
+      const authorize = createAssertExecutionV2LiveAuthorized(probe.db);
+      const results = await Promise.all([
+        nativeSettled(authorize({ organizationId: orgA }, fixture.input)),
+        nativeSettled(bindExecutionAuthorityV2Postgres(
+          probe.db, { organizationId: orgA }, fixture.input,
+        )),
+      ]);
+      const state = await credentialKillState(fixture.input);
+      results.forEach((result) => expect(result).toMatchObject({ ok: false,
+        error: expect.objectContaining({ reason: "CREDENTIAL_NOT_TRADE_SCOPED" }) }));
+      expect(state.riskKillState).toBe("TRIPPED");
+      expect(state.switches).toHaveLength(1);
+      expect(state.switches[0]).toMatchObject({ state: "ACTIVE", enforcement_mode: "STOP_ACCOUNT",
+        origin: "automatic", reason: "CREDENTIAL_NOT_TRADE_SCOPED" });
+      expect(state.audits).toEqual([{ action: "trader.kill_switch.tripped", entity_id: state.switches[0]!.id }]);
+      expect(state.proof.allowance[0]).toMatchObject({ lifecycle_state: "ISSUED", bound_order_id: null });
+      expect(state.proof).toMatchObject({ counts: before.counts, events: before.events,
+        reports: before.reports, account: before.account });
+      expect(state.proof.counts).toEqual({ policies: 0, plans: 0, orders: 0, attempts: 0, reports: 0, events: 1 });
+      expect(probe.telemetry).toHaveLength(2);
+      expect(probe.telemetry.map((event) => event.payload.kill_switch_write).sort()).toEqual([
+        "ALREADY_ACTIVE", "WRITTEN",
+      ]);
+    } finally {
+      probe.restore();
+      await fixture.cleanup();
     }
   }, 30_000);
 

@@ -9,7 +9,9 @@ import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { compareDecimal } from "@/lib/trader/risk/numeric";
 import { HtxConnectorValidationError } from "@/lib/trader/connectors/htx/errors";
 import {
+  CredentialGateKillWriteFailedError,
   emitCredentialGateKillTelemetry,
+  type CredentialKillSwitchWrite,
   isCredentialGateKillReason,
   writeOrganizationCredentialKillSwitchPostgres,
 } from "@/lib/trader/execution/v2/credential-gate-kill";
@@ -288,31 +290,58 @@ export async function loadExecutionV2LiveGateFactsPostgres(
   });
 }
 
-/** Authoritative live-gate read. A missing gate throws. Does not decrypt. */
-export async function assertExecutionV2LiveGatesPostgres(
+export type RecordedExecutionV2LiveGateVerdict =
+  | Readonly<{ ok: true }>
+  | Readonly<{
+      ok: false;
+      reason: ExecutionV2LiveGateReason;
+      credentialKillWrite: Exclude<CredentialKillSwitchWrite, "NOT_ATTEMPTED"> | null;
+    }>;
+
+/**
+ * Runs inside the transaction owned by pre-bind or bind. A credential refusal
+ * returns normally so its kill switch and audit can commit. The owning caller
+ * must refuse outside that transaction; a write failure still rolls it back.
+ */
+export async function recordExecutionV2LiveGateVerdictPostgres(
   executor: LiveGateExecutor,
   context: OrgContext,
   request: ExecutionV2LiveGateRequest,
   env?: Record<string, unknown>,
-): Promise<void> {
+): Promise<RecordedExecutionV2LiveGateVerdict> {
   const scoped = requireOrgContext(context.organizationId);
   const verdict = evaluateExecutionV2LiveGates(
-    await loadExecutionV2LiveGateFactsPostgres(executor, context, request, env),
+    await loadExecutionV2LiveGateFactsPostgres(executor, scoped, request, env),
   );
-  if (verdict.ok) return;
+  if (verdict.ok) return verdict;
+  let credentialKillWrite: Exclude<CredentialKillSwitchWrite, "NOT_ATTEMPTED"> | null = null;
   if (isCredentialGateKillReason(verdict.reason)) {
-    const killSwitchWrite = await writeOrganizationCredentialKillSwitchPostgres(
-      executor,
-      scoped.organizationId,
-      verdict.reason,
-      { joinCurrentTransaction: true },
-    );
+    try {
+      credentialKillWrite = await writeOrganizationCredentialKillSwitchPostgres(
+        executor, scoped.organizationId, verdict.reason, { joinCurrentTransaction: true },
+      );
+    } catch (error) {
+      throw new CredentialGateKillWriteFailedError(verdict.reason, { cause: error });
+    }
+  }
+  return { ...verdict, credentialKillWrite };
+}
+
+/** Called only after the owning root transaction resolves successfully. */
+export async function emitCommittedExecutionV2LiveGateTelemetry(
+  organizationId: string,
+  verdict: RecordedExecutionV2LiveGateVerdict,
+): Promise<void> {
+  if (verdict.ok || !verdict.credentialKillWrite) return;
+  try {
     await emitCredentialGateKillTelemetry({
-      organizationId: scoped.organizationId,
+      organizationId,
       outcome: verdict.reason,
       errorClass: "ExecutionV2LiveGateRefusedError",
-      killSwitchWrite,
+      killSwitchWrite: verdict.credentialKillWrite,
     });
+  } catch {
+    // The durable audit is already committed. A telemetry sink failure must not
+    // replace the credential refusal or allow the caller to continue to POST.
   }
-  throw new ExecutionV2LiveGateRefusedError(verdict.reason);
 }

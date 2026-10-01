@@ -204,9 +204,9 @@ describe("Execution V2 live gates (DEE-1151 P0-4)", () => {
       "utf8",
     );
     expect(authority).toContain('input.executionMode === "live"');
-    expect(authority).toContain("assertExecutionV2LiveGatesPostgres");
+    expect(authority).toContain("recordExecutionV2LiveGateVerdictPostgres");
     expect(live).toContain("createAssertExecutionV2LiveAuthorized");
-    expect(paper).not.toContain("assertExecutionV2LiveGatesPostgres");
+    expect(paper).not.toContain("recordExecutionV2LiveGateVerdictPostgres");
     expect(paper).not.toContain("createAssertExecutionV2LiveAuthorized");
     expect(gates).not.toContain("encryptedPayload");
     expect(gates).not.toContain("getDecryptedCredentials");
