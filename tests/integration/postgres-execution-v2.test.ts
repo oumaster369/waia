@@ -70,6 +70,7 @@ import { createPostgresExecutionV2Service } from "@/lib/trader/execution/v2/conn
 import { createAssertExecutionV2LiveAuthorized, createOrgScopedExecutionV2OrderPath } from "@/lib/trader/execution/v2/org-order-path";
 import { EXECUTION_V2_LIVE_GATE_REASONS } from "@/lib/trader/execution/v2/live-gates";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
+import { buildHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
 import {
   deleteLiveCapitalEnvelopeRows,
   publishMirroredLiveCapitalEnvelopeV2,
@@ -115,13 +116,13 @@ function account(accountId: string) {
   };
 }
 
-function admission(accountId: string): AdmitRiskAllowanceV2Input {
+function admission(accountId: string, identityBase = 667_101): AdmitRiskAllowanceV2Input {
   return {
     accountId,
-    riskVerdictId: uuid(667_101),
-    riskAllowanceId: uuid(667_102),
-    issuanceEventId: uuid(667_103),
-    nonce: uuid(667_104),
+    riskVerdictId: uuid(identityBase),
+    riskAllowanceId: uuid(identityBase + 1),
+    issuanceEventId: uuid(identityBase + 2),
+    nonce: uuid(identityBase + 3),
     validForMs: 30_000,
     verdict: {
       venue: "HTX",
@@ -544,16 +545,25 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
   }
 
   async function admittedBindInput(
-    options: { reduction?: boolean; validForMs?: number; symbol?: string; baseAsset?: string } = {},
+    options: {
+      reduction?: boolean;
+      validForMs?: number;
+      symbol?: string;
+      baseAsset?: string;
+      organizationId?: string;
+      accountId?: string;
+      identityBase?: number;
+    } = {},
   ): Promise<BindExecutionAuthorityV2Input> {
-    const accountId = "atomic-bind";
+    const organizationId = options.organizationId ?? orgA;
+    const accountId = options.accountId ?? "atomic-bind";
     const state = account(accountId);
     if (options.reduction) state.reconciledInstrumentExposures[0]!.baseQuantity = "0.002";
-    await initializeRiskAccountStateV2Postgres(db, { organizationId: orgA }, state);
-    const request = admission(accountId);
+    await initializeRiskAccountStateV2Postgres(db, { organizationId }, state);
+    const request = admission(accountId, options.identityBase);
     const admitted = await admitRiskAllowanceV2Postgres(
       db,
-      { organizationId: orgA },
+      { organizationId },
       {
         ...request,
         validForMs: options.validForMs ?? request.validForMs,
@@ -573,8 +583,8 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     const opensAtUtc = new Date(now - 60_000).toISOString();
     const closesAtUtc = new Date(now + 60_000).toISOString();
     const policy = createExecutionPolicyBindingV2({
-      executionPolicyId: uuid(667_501),
-      organizationId: orgA,
+      executionPolicyId: uuid((options.identityBase ?? 667_101) + 400),
+      organizationId,
       policyVersion: "htx-atomic-bind-v1",
       decisionId: allowance.decision.decisionId,
       decisionContentDigestHex: allowance.decision.contentDigestHex,
@@ -680,6 +690,15 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     expect(state.account).toEqual({ r, p, next: String(types.length + 1), head: state.events.at(-1)!.digest });
   }
 
+  function expectIssuedBeforeBind(state: Awaited<ReturnType<typeof lockProofState>>) {
+    expect(state.allowance[0]).toMatchObject({ lifecycle_state: "ISSUED", bound_order_id: null });
+    expectRiskChain(state, ["ALLOWANCE_ISSUED"], "25.00000000", "0.00000000");
+    expect(state.counts).toEqual({
+      policies: 0, plans: 0, orders: 0, attempts: 0, reports: 0, events: 1,
+    });
+    expect(state.reports).toEqual([]);
+  }
+
   async function finishLockProof(test: string, input: BindExecutionAuthorityV2Input, trace: LockTrace,
     clients: ReturnType<typeof lockClient>[], operations: Promise<unknown>[]) {
     clients.forEach((client) => client.release());
@@ -743,6 +762,280 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     expectRiskChain(proof.state, ["ALLOWANCE_ISSUED", "ALLOWANCE_REVOKED"], "0.00000000", "0.00000000");
     expect(proof.state.counts).toEqual({ policies: 0, plans: 0, orders: 0, attempts: 0, reports: 0, events: 2 });
     expect(proof.state.reports).toEqual([]);
+  }, 30_000);
+
+  it("DEE-1151 terminalizes public Execution V2 binds under an organization kill switch once", async () => {
+    const input = await admittedBindInput({ accountId: "org-kill-bind" });
+    const otherOrganization = await admittedBindInput({
+      organizationId: orgB,
+      accountId: "other-org-kill-bind",
+      identityBase: 668_101,
+    });
+    const service = createPostgresKillSwitchService(db);
+    await service.trip(
+      { actorType: "service", actorId: null },
+      requireOrgContext(orgA),
+      { scopeType: "organization", organizationId: orgA },
+      { scopeType: "organization", scopeRef: null, switchType: "EMERGENCY_STOP" },
+      { enforcementMode: "REJECT", origin: "manual", reason: "dee-1151 native org bind" },
+    );
+    try {
+      expectIssuedBeforeBind(await lockProofState(input));
+      const first = await nativeSettled(
+        bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input),
+      );
+      expect(first).toMatchObject({
+        ok: false,
+        error: expect.objectContaining({ reason: "KILL_SWITCH_TRIPPED" }),
+      });
+
+      const refused = await lockProofState(input);
+      expect(refused.allowance[0]).toMatchObject({
+        lifecycle_state: "REVOKED",
+        bound_order_id: null,
+      });
+      expectRiskChain(refused, ["ALLOWANCE_ISSUED", "ALLOWANCE_REVOKED"], "0.00000000", "0.00000000");
+      expect(refused.counts).toEqual({
+        policies: 0, plans: 0, orders: 0, attempts: 0, reports: 0, events: 2,
+      });
+      expect(refused.reports).toEqual([]);
+      const [revocation] = await sql<{
+        from_state: string | null;
+        to_state: string | null;
+        reason_code: string | null;
+        event_payload: Record<string, unknown>;
+        previous_event_digest: string | null;
+        content_digest: string;
+      }[]>`
+        SELECT from_state, to_state, reason_code, event_payload,
+          previous_event_digest, content_digest
+        FROM trader_risk_enforcement_events_v2
+        WHERE organization_id = ${orgA}::uuid
+          AND account_id = ${input.allowance.accountId}
+          AND event_type = 'ALLOWANCE_REVOKED'
+      `;
+      expect(revocation).toMatchObject({
+        from_state: "ISSUED",
+        to_state: "REVOKED",
+        reason_code: "KILL_SWITCH_TRIPPED",
+        event_payload: {
+          refusalReason: "KILL_SWITCH_TRIPPED",
+          reservationReleased: "25.00000000",
+        },
+        previous_event_digest: refused.events[0]!.digest,
+        content_digest: refused.events[1]!.digest,
+      });
+
+      const retry = await nativeSettled(
+        bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input),
+      );
+      expect(retry).toMatchObject({
+        ok: false,
+        error: expect.objectContaining({ reason: "KILL_SWITCH_TRIPPED" }),
+      });
+      expect(await lockProofState(input)).toEqual(refused);
+
+      const unaffected = await bindExecutionAuthorityV2Postgres(
+        db,
+        { organizationId: orgB },
+        otherOrganization,
+      );
+      expect(unaffected.order.organizationId).toBe(orgB);
+      expect(unaffected.consumedNow).toBe(true);
+    } finally {
+      await sql`DELETE FROM trader_kill_switches WHERE organization_id = ${orgA}::uuid`;
+    }
+  }, 30_000);
+
+  it("DEE-1151 terminalizes ISSUED binds under a platform kill switch across organizations", async () => {
+    const inputA = await admittedBindInput({ accountId: "platform-kill-bind-a" });
+    const inputB = await admittedBindInput({
+      organizationId: orgB,
+      accountId: "platform-kill-bind-b",
+      identityBase: 668_101,
+    });
+    const [activePlatformSwitches] = await sql<{ count: number }[]>`
+      SELECT count(*)::int AS count FROM trader_kill_switches
+      WHERE organization_id IS NULL AND state IN ('ACTIVE', 'CLEARING')
+    `;
+    expect(activePlatformSwitches!.count).toBe(0);
+    const platformProjectionTargets = await sql<{
+      organization_id: string;
+      account_id: string;
+    }[]>`
+      SELECT organization_id::text, account_id FROM trader_risk_account_state_v2
+      ORDER BY organization_id, account_id
+    `;
+    expect(platformProjectionTargets).toEqual([
+      { organization_id: orgA, account_id: inputA.allowance.accountId },
+      { organization_id: orgB, account_id: inputB.allowance.accountId },
+    ]);
+    const service = createPostgresKillSwitchService(db);
+    const trip = await service.trip(
+      { actorType: "service", actorId: null },
+      null,
+      { scopeType: "platform" },
+      { scopeType: "platform", scopeRef: null, switchType: "EMERGENCY_STOP" },
+      { enforcementMode: "REJECT", origin: "manual", reason: "dee-1151 native platform bind" },
+    );
+    try {
+      expectIssuedBeforeBind(await lockProofState(inputA, orgA));
+      expectIssuedBeforeBind(await lockProofState(inputB, orgB));
+      for (const [organizationId, input] of [[orgA, inputA], [orgB, inputB]] as const) {
+        const refusal = await nativeSettled(
+          bindExecutionAuthorityV2Postgres(db, { organizationId }, input),
+        );
+        expect(refusal).toMatchObject({
+          ok: false,
+          error: expect.objectContaining({ reason: "KILL_SWITCH_TRIPPED" }),
+        });
+        const state = await lockProofState(input, organizationId);
+        expect(state.allowance[0]).toMatchObject({ lifecycle_state: "REVOKED", bound_order_id: null });
+        expectRiskChain(state, ["ALLOWANCE_ISSUED", "ALLOWANCE_REVOKED"], "0.00000000", "0.00000000");
+        expect(state.counts).toEqual({
+          policies: 0, plans: 0, orders: 0, attempts: 0, reports: 0, events: 2,
+        });
+        expect(state.reports).toEqual([]);
+      }
+    } finally {
+      await sql.unsafe("ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_block_delete");
+      try {
+        await sql`DELETE FROM audit_logs WHERE id = ${trip.auditId}::uuid`;
+      } finally {
+        await sql.unsafe("ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_block_delete");
+      }
+      await sql`DELETE FROM trader_kill_switches WHERE id = ${trip.row.id}::uuid`;
+    }
+  }, 30_000);
+
+  it("DEE-1151 leaves consumed allowance history unchanged when bind sees a kill switch", async () => {
+    const input = await admittedBindInput({ accountId: "consumed-kill-bind" });
+    const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input);
+    const before = await lockProofState(input);
+    const [orderBefore] = await sql<{ row: Record<string, unknown> }[]>`
+      SELECT to_jsonb(order_row) AS row FROM trader_orders AS order_row
+      WHERE organization_id = ${orgA}::uuid AND id = ${bound.order.id}::uuid
+    `;
+    expect(orderBefore).toBeDefined();
+    expectRiskChain(before, ["ALLOWANCE_ISSUED", "ALLOWANCE_CONSUMED"], "0.00000000", "25.00000000");
+    const service = createPostgresKillSwitchService(db);
+    await service.trip(
+      { actorType: "service", actorId: null },
+      requireOrgContext(orgA),
+      { scopeType: "organization", organizationId: orgA },
+      { scopeType: "organization", scopeRef: null, switchType: "EMERGENCY_STOP" },
+      { enforcementMode: "REJECT", origin: "manual", reason: "dee-1151 native consumed bind" },
+    );
+    try {
+      const retry = await nativeSettled(
+        bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, input),
+      );
+      expect(retry).toMatchObject({
+        ok: false,
+        error: expect.objectContaining({ reason: "KILL_SWITCH_TRIPPED" }),
+      });
+      const after = await lockProofState(input);
+      expect(after.allowance).toEqual(before.allowance);
+      expect(after.events).toEqual(before.events);
+      expect(after.reports).toEqual(before.reports);
+      expect(after.counts).toEqual(before.counts);
+      expect(after.account).toEqual(before.account);
+      const [orderAfter] = await sql<{ row: Record<string, unknown> }[]>`
+        SELECT to_jsonb(order_row) AS row FROM trader_orders AS order_row
+        WHERE organization_id = ${orgA}::uuid AND id = ${bound.order.id}::uuid
+      `;
+      expect(orderAfter).toEqual(orderBefore);
+      expect(await readExecutionAttemptV2Postgres(db, { organizationId: orgA }, bound.attempt.executionAttemptId))
+        .toEqual(bound.attempt);
+    } finally {
+      await sql`DELETE FROM trader_kill_switches WHERE organization_id = ${orgA}::uuid`;
+    }
+  }, 30_000);
+
+  it("DEE-1151 terminalizes a live bind under a kill switch after valid live gates pass", async () => {
+    const input = await admittedBindInput({ accountId: "live-kill-bind" });
+    const credentialId = uuid(669_901);
+    const promotionId = uuid(669_902);
+    const strategyId = "dee1151-live-gate-fixture";
+    const strategyVersion = "native-v1";
+    const permissionMetadata = buildHtxPermissionMetadata({
+      exchangeAccountId: input.allowance.accountId,
+      scopes: ["read", "trade"],
+    });
+    const originalOrg0 = process.env.WAIA_TRADER_ORG0_ORGANIZATION_ID;
+    let killSwitchId: string | null = null;
+    try {
+      // These are test-only gate facts. The credential row contains permission
+      // metadata only: no API key, encrypted payload, or exchange call exists.
+      process.env.WAIA_TRADER_ORG0_ORGANIZATION_ID = orgA;
+      await sql`
+        INSERT INTO trader_org_live_enable (organization_id, state, max_notional_cap)
+        VALUES (${orgA}::uuid, 'ENABLED', '25')
+      `;
+      await sql`
+        INSERT INTO trader_strategy_promotion_records (
+          id, organization_id, strategy_id, strategy_version, git_commit_sha,
+          target_deployment_state, hypothesis, intended_regime, cost_model_json,
+          failure_modes_json, reason_code_distribution_json, paper_trading_evidence_json,
+          evidence_content_digest, confidence_attestation_json, record_content_digest,
+          schema_version, state, effective_at, state_version
+        ) VALUES (
+          ${promotionId}::uuid, ${orgA}::uuid, ${strategyId}, ${strategyVersion}, ${"a".repeat(40)},
+          'LIVE_LIMITED', 'Synthetic native gate fixture', 'RANGE', '{}'::jsonb,
+          '[]'::jsonb, '{}'::jsonb, '{}'::jsonb, ${hex64("live-gate-evidence")},
+          '{}'::jsonb, ${hex64("live-gate-record")}, 'dee1151-native-fixture/v1',
+          'EFFECTIVE', clock_timestamp(), 1
+        )
+      `;
+      await sql`
+        INSERT INTO exchange_credentials (
+          id, organization_id, venue, exchange_account_id, permission_metadata, status
+        ) VALUES (
+          ${credentialId}::uuid, ${orgA}::uuid, 'htx', ${input.allowance.accountId},
+          ${JSON.stringify(permissionMetadata)}, 'active'
+        )
+      `;
+      const service = createPostgresKillSwitchService(db);
+      const trip = await service.trip(
+        { actorType: "service", actorId: null },
+        requireOrgContext(orgA),
+        { scopeType: "organization", organizationId: orgA },
+        { scopeType: "organization", scopeRef: null, switchType: "EMERGENCY_STOP" },
+        { enforcementMode: "REJECT", origin: "manual", reason: "dee-1151 native live bind" },
+      );
+      killSwitchId = trip.row.id;
+      expectIssuedBeforeBind(await lockProofState(input));
+      const liveInput: BindExecutionAuthorityV2Input = {
+        ...input,
+        executionMode: "live",
+        credentialId,
+        strategyId,
+        strategyVersion,
+      };
+      const refused = await nativeSettled(
+        bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, liveInput),
+      );
+      expect(refused).toMatchObject({
+        ok: false,
+        error: expect.objectContaining({ reason: "KILL_SWITCH_TRIPPED" }),
+      });
+      const state = await lockProofState(liveInput);
+      expect(state.allowance[0]).toMatchObject({ lifecycle_state: "REVOKED", bound_order_id: null });
+      expectRiskChain(state, ["ALLOWANCE_ISSUED", "ALLOWANCE_REVOKED"], "0.00000000", "0.00000000");
+      expect(state.counts).toEqual({
+        policies: 0, plans: 0, orders: 0, attempts: 0, reports: 0, events: 2,
+      });
+      expect(state.reports).toEqual([]);
+    } finally {
+      if (killSwitchId) {
+        await sql`DELETE FROM trader_kill_switches WHERE id = ${killSwitchId}::uuid`;
+      }
+      await sql`DELETE FROM exchange_credentials WHERE id = ${credentialId}::uuid`;
+      await sql`DELETE FROM trader_strategy_promotion_records WHERE id = ${promotionId}::uuid`;
+      await sql`DELETE FROM trader_org_live_enable WHERE organization_id = ${orgA}::uuid`;
+      if (originalOrg0 === undefined) delete process.env.WAIA_TRADER_ORG0_ORGANIZATION_ID;
+      else process.env.WAIA_TRADER_ORG0_ORGANIZATION_ID = originalOrg0;
+    }
   }, 30_000);
 
   it("DEE-1134 serializes replayed bind behind actual dispatch and submits once", async () => {
