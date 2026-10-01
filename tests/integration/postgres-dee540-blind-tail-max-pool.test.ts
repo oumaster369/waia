@@ -17,6 +17,7 @@ import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
 import {
   createOrderExecutionServiceFromDeps,
+  createPostgresOrderExecutionService,
   createPostgresOrderRepository,
   createPostgresReconciliationService,
 } from "@/lib/trader/execution";
@@ -25,6 +26,8 @@ import { deleteMockExecutionArtifactsForOrgPostgres } from "@/lib/trader/executi
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
 import { createForecastDecisionBundleRepositoryPostgres } from "@/lib/trader/intelligence/forecast-decision/atomic-forecast-decision-bundle-repository-postgres";
 import { HTR_HISTORICAL_INTELLIGENCE_PROFILE_V1 } from "@/lib/trader/intelligence/historical-profile/htr-historical-intelligence-profile-v1";
+import { createLifecycleRecorder } from "@/lib/trader/lifecycle/lifecycle-recorder";
+import { createPostgresLifecycleRepository } from "@/lib/trader/lifecycle/lifecycle-repository-postgres";
 import { createWp21RuntimeDepsPostgres } from "@/lib/trader/intelligence/outcome-resolution/epistemic-closure-runtime";
 import { createIntelligenceCycleBundleRepositoryPostgres } from "@/lib/trader/intelligence/records/atomic-cycle-bundle-repository-postgres";
 import type { Bar } from "@/lib/trader/intelligence/types";
@@ -38,7 +41,11 @@ import {
   type M9CampaignAuthorizationScope,
 } from "@/lib/trader/research/m9-operator-authorization";
 import { computeM9DatasetSealPreviewPostgres } from "@/lib/trader/research/m9-dataset-seal-preview";
-import { runResearchPipelinePostgres } from "@/lib/trader/research/research-orchestrator";
+import {
+  bindBlindWindowToExecutor,
+  runResearchPipelinePostgres,
+  type RunResearchPipelineInput,
+} from "@/lib/trader/research/research-orchestrator";
 import type { ResearchValidationBacktestArtifactSink } from "@/lib/trader/research/research-backtest-runner";
 import { createInMemoryOrderRateStore } from "@/lib/trader/risk/order-rate-store";
 import {
@@ -417,6 +424,111 @@ describe.skipIf(!integrationEnabled || !url)("DEE-540 blind tail on a max:1 pool
     try {
       await withDeadline(work, DEADLINE_MS);
     } finally {
+      await client.end({ timeout: 5 });
+    }
+  }, 20_000);
+
+  it("keeps blind lifecycle reads and writes on the outcome transaction", async () => {
+    const { client, db } = await openPool();
+    const witnessClient = postgres(url!, { max: 1 });
+    const witnessDb = drizzle(witnessClient, { schema: pgSchema });
+    const work = (async () => {
+      const seeded = await seedHoldout(db, "64005", `lifecycle-${crypto.randomUUID()}`);
+      const entityId = `blind-lifecycle-${crypto.randomUUID()}`;
+      const eventId = crypto.randomUUID();
+      const clockMs = Date.UTC(2026, 5, 22, 9, 41, 0);
+      class ReceiverClock {
+        constructor(private currentMs: number) {}
+        nowMs() { return this.currentMs; }
+        setNowMs(ms: number) { this.currentMs = ms; }
+      }
+      const replayDeterminism = {
+        clock: new ReceiverClock(clockMs),
+        resetWindowState: () => undefined,
+        eventId,
+        newId() { return this.eventId; },
+      };
+      const parentRepository = createPostgresLifecycleRepository(witnessDb);
+      const parentRecorder = createLifecycleRecorder({ repository: parentRepository });
+      const parentRead = vi.spyOn(parentRepository, "listLifecycleEvents");
+      const parentWrite = vi.spyOn(parentRecorder, "recordSignalAcceptedLifecycleEvent");
+      const input: RunResearchPipelineInput = {
+        context: seeded.context,
+        datasetName: "unused-lifecycle-binding",
+        symbol: "BTC/USDT",
+        interval: "1m",
+        strategyId: "dee540_max_pool",
+        strategyVersion: "lifecycle",
+        deps: {
+          execution: createPostgresOrderExecutionService(db),
+          reconciliation: createPostgresReconciliationService(db),
+          lifecycleRepository: parentRepository,
+          lifecycleRecorder: parentRecorder,
+          researchReplayDeterminism: replayDeterminism,
+        },
+        createOrderRepository: () => createPostgresOrderRepository(db),
+      };
+      const failure = new Error("rollback blind lifecycle outcome");
+      let insideEvent: { id: string; occurredAt: Date } | undefined;
+      await expect(
+        commitDee540BlindHoldout(db, {
+          blindDigest: seeded.blindDigest,
+          context: seeded.context,
+          candidate: seeded.candidate,
+          datasetId: seeded.datasetId,
+          blindBars: seeded.bars,
+          expectedBlindDigest: seeded.blindDigest,
+          runBacktest: async ({ executor }) => {
+            const bound = bindBlindWindowToExecutor(input, executor);
+            const before = await bound.deps.lifecycleRepository!.listLifecycleEvents(
+              seeded.context,
+              { entityType: "STRATEGY_SIGNAL", entityId },
+            );
+            expect(before).toHaveLength(0);
+            await bound.deps.lifecycleRecorder!.recordSignalAcceptedLifecycleEvent({
+              context: seeded.context,
+              strategySignalId: entityId,
+            });
+            const inside = await bound.deps.lifecycleRepository!.listLifecycleEvents(
+              seeded.context,
+              { entityType: "STRATEGY_SIGNAL", entityId },
+            );
+            expect(inside).toHaveLength(1);
+            insideEvent = inside[0];
+            throw failure;
+          },
+          readRepository: {
+            getBlindValidationResultForCandidate: (context, candidateId) =>
+              getBlindValidationResultForCandidatePostgres(db, context, candidateId),
+          },
+          bindRepository,
+        }),
+      ).rejects.toBe(failure);
+
+      const parentReadCalls = parentRead.mock.calls.length;
+      const parentWriteCalls = parentWrite.mock.calls.length;
+      const outside = await parentRepository.listLifecycleEvents(seeded.context, {
+        entityType: "STRATEGY_SIGNAL",
+        entityId,
+      });
+      console.error(
+        "DEE1159_BLIND_LIFECYCLE_BINDING_PROOF",
+        JSON.stringify({ parentReadCalls, parentWriteCalls, outsideRows: outside.length }),
+      );
+      expect(parentReadCalls).toBe(0);
+      expect(parentWriteCalls).toBe(0);
+      expect(outside).toHaveLength(0);
+      expect(insideEvent?.id).toBe(eventId);
+      expect(insideEvent?.occurredAt.toISOString()).toBe(new Date(clockMs).toISOString());
+      expect(await dee540BarContentConsumed(db, seeded.blindDigest)).toBe(true);
+      parentRead.mockRestore();
+      parentWrite.mockRestore();
+    })();
+    work.catch(() => undefined);
+    try {
+      await withDeadline(work, DEADLINE_MS);
+    } finally {
+      await witnessClient.end({ timeout: 5 });
       await client.end({ timeout: 5 });
     }
   }, 20_000);

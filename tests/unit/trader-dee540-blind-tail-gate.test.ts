@@ -151,8 +151,10 @@ describe("DEE-540 blind tail gate", () => {
     );
     expect(cli.indexOf("resolveResearchPipelineCliBlindTail(flags)")).toBeGreaterThan(-1);
     expect(cli.indexOf("resolveResearchPipelineCliBlindTail(flags)")).toBeLessThan(
-      cli.indexOf("listMarketBarsPostgres("),
+      cli.indexOf("computeM9DatasetSealPreviewPostgres("),
     );
+    expect(cli).not.toContain("listMarketBarsPostgres(");
+    expect(orchestrator).not.toContain("listMarketBarsPostgres(");
     expect(orchestrator.indexOf("assertDee540BlindTailAuthorized(")).toBeLessThan(
       orchestrator.indexOf("commitDee540BlindHoldout("),
     );
@@ -171,7 +173,7 @@ describe("DEE-540 blind tail gate", () => {
     expect(blindCommit.indexOf("consumeDee540BlindTailAuthorization(")).toBeLessThan(
       blindCommit.indexOf("runBacktest("),
     );
-    expect(blindCommit).toContain("executor: tx");
+    expect(blindCommit).toContain("executor: scope");
     expect(blindCommit).not.toContain("WAIA_DEE540_CONSUMPTION_PATH");
     expect(blindCommit).not.toContain("replay");
     expect(orchestrator).not.toContain("walk_forward_validated");

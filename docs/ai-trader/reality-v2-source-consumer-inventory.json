@@ -168,7 +168,7 @@
       {"path": "lib/trader/market-data/htx-kline-mapper.ts","sha256": "f5f5f2998fceeba80fd809d89b7db404bfbc846e7d6a724bdd6b7e6b6d5dfef1"},
       {"path": "lib/trader/market-data/index.ts","sha256": "24cce525d29dec5e8720f392121c80b4fef05afa9bebbf502eed3536763a1b49"},
       {"path": "lib/trader/market-data/ingress/bar-integrity-gate.ts","sha256": "701572775a7d897721872aca4ef78873697f2bddd1c5901b978c71347deb44b5"},
-      {"path": "lib/trader/market-data/market-bars-repository-postgres.ts","sha256": "06c0bd2197f3161026c9c48f97db39b61956b61e55accb974f16d024dee93608"},
+      {"path": "lib/trader/market-data/market-bars-repository-postgres.ts","sha256": "0c1132f22403926c2b2957c65eba052ae13a33fde36214e0aff952d8d3b764b9"},
       {"path": "lib/trader/market-data/market-data-gateway.ts","sha256": "6971095e4dae18409aed1c2073406fdf39e7fe53abd72710fa6aef8ea8455c92"},
       {"path": "lib/trader/market-data/market-snapshot.ts","sha256": "d270be8359866c6a65b9e3864c5a8fabd1d6950c5ed5b045d13b23cc8c227439"},
       {"path": "lib/trader/market-data/mtf/bar-interval-duration.ts","sha256": "e44500a58d050f71307336992e61a69a994a4eb47bd7d43e20e32c03667c652a"},
@@ -453,11 +453,11 @@
       {"path": "scripts/trader/fhv-revision-risk-cli.ts","sha256": "009b97822e9130ecc40ccbf25f3e710533f86caa979f4f4f92a9acd1176e8e4a"},
       {"path": "scripts/trader/htx-kline-backfill.ts","sha256": "b91fab201b5d58de2c0eecb5f098d4c6f9569c57a9a196d1ad3cdfa7e6228ae8"},
       {"path": "scripts/trader/htx-volume-qualification-cli.ts","sha256": "39cc671d8c727e0ab98ab7acbd85874430a5d747919e5b3653b6e3657669e6c7"},
-      {"path": "scripts/trader/m9-v2-research-campaign.ts","sha256": "424b9f833df85e614c5eb085e416fe0726882e4765f8be9d173d72aa936a062e"},
+      {"path": "scripts/trader/m9-v2-research-campaign.ts","sha256": "158752139c7e8a927384c3c1fde9bf7001a26781d07a7f3d0786ce861a605284"},
       {"path": "scripts/trader/paper-bar-close-loop-legacy.ts","sha256": "2794a1b58e3b3826cc785e5d697a2c76be22e2d57e7f2617aa36b91433a08a00"},
       {"path": "scripts/trader/reality-execution-report-catch-up.ts","sha256": "22386d11ead46b5e047f22864756194939ab061828b4ee57bdf435c6726c70a9"},
-      {"path": "scripts/trader/research-pipeline-cli.ts","sha256": "3f6aae6bd0dc579eb48f536a667234d79dd6993f3efdaa0f728e3873d8550558"},
-      {"path": "scripts/trader/ri-evidence-campaign.ts","sha256": "b2cc09fc0f36fb93b45115438938aec30bce39141ad2e5a2ac96864a15137356"}
+      {"path": "scripts/trader/research-pipeline-cli.ts","sha256": "ba527f55369250c02c2945f04dc1eef0b8c7a083e9801c7099d631781156f64c"},
+      {"path": "scripts/trader/ri-evidence-campaign.ts","sha256": "c18e98c5490d8c2dcd1100bda84a9577bae8c4243c345245f294b95c49f46c08"}
     ]
   },
   "consumerRules": [

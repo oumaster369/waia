@@ -136,6 +136,18 @@ function createHarness(options?: {
       transactionCalls += 1;
       const state = { log: [] as LogEntry[], aborted: false, token: null as string | null };
       const tx = {
+        transaction: async <T>(run: (scope: object) => Promise<T>): Promise<T> => {
+          const before = [...state.log];
+          const child = { ...tx };
+          states.set(child, state);
+          try {
+            return await run(child);
+          } catch (error) {
+            state.log.splice(0, state.log.length, ...before);
+            state.aborted = false;
+            throw error;
+          }
+        },
         insert: () => ({
           values: async (row: { blindDigest: string; barContentToken?: string }) => {
             if (state.aborted) throw new Error("current transaction is aborted");
@@ -299,7 +311,7 @@ describe("DEE-540 blind consume commits with the validation outcome", () => {
     expect(source).not.toContain("replay");
     expect(source).toContain("SAVEPOINT ");
     expect(source).toContain("ROLLBACK TO SAVEPOINT ");
-    expect(source).toContain("executor: tx");
+    expect(source).toContain("executor: scope");
     expect(source).toContain("DEE540_BLIND_PARENT_HANDLE_FORBIDDEN");
     expect(source).not.toContain("That remaining edge is left for Linear.");
     const transactions = source.split("ex.transaction");
@@ -334,6 +346,67 @@ describe("DEE-540 blind consume commits with the validation outcome", () => {
       outcome: "error",
       phase: "backtest",
     });
+  });
+
+  it.each([undefined, null, false, 0, ""])("preserves a falsy thrown failure (%s) after persisting its terminal row", async (failure) => {
+    const harness = createHarness();
+    const outcome = commitDee540BlindHoldout(harness.ex as never, baseInput(harness, {
+      runBacktest: async () => { throw failure; },
+    }));
+    await expect(outcome).rejects.toBe(failure);
+    expect(committedConsumes(harness)).toHaveLength(1);
+    expect(committedResults(harness)).toHaveLength(1);
+    expect(JSON.parse((committedResults(harness)[0] as { metricsJson: string }).metricsJson))
+      .toMatchObject({ schemaVersion: DEE540_BLIND_TERMINAL_SCHEMA, outcome: "error", phase: "backtest" });
+  });
+
+  it("keeps a shared parent guarded until both overlapping outcomes finish, then restores it", async () => {
+    const harness = createHarness();
+    const originalTransaction = harness.ex.transaction;
+    const originalSelect = vi.fn(async () => undefined);
+    const parent = Object.assign(harness.ex, { select: originalSelect });
+    let releaseOutcomes!: () => void;
+    const bothOutcomes = new Promise<void>(resolve => { releaseOutcomes = resolve; });
+    let calls = 0;
+    parent.transaction = async callback => {
+      calls += 1;
+      // Both consume transactions commit before the two outcome callbacks are
+      // admitted together, a legal scheduling order for a multi-connection pool.
+      if (calls >= 3) {
+        if (calls === 4) releaseOutcomes();
+        await bothOutcomes;
+      }
+      return originalTransaction(callback);
+    };
+    const guardedTransaction = parent.transaction;
+    let entered = 0;
+    let bothEntered!: () => void;
+    const started = new Promise<void>(resolve => { bothEntered = resolve; });
+    let finishSecond!: () => void;
+    const secondMayFinish = new Promise<void>(resolve => { finishSecond = resolve; });
+    const enter = () => { if (++entered === 2) bothEntered(); };
+    const first = commitDee540BlindHoldout(parent as never, baseInput(harness, {
+      runBacktest: async () => { enter(); await started; return buildMetrics(); },
+    }));
+    const second = commitDee540BlindHoldout(parent as never, baseInput(harness, {
+      bars: buildBars(4, "101"),
+      runBacktest: async () => { enter(); await secondMayFinish; return buildMetrics(); },
+    }));
+    let stayedGuarded = false;
+    try {
+      await started;
+      await first;
+      try { await parent.select(); } catch (error) {
+        stayedGuarded = String(error).includes("DEE540_BLIND_PARENT_HANDLE_FORBIDDEN");
+      }
+    } finally {
+      finishSecond();
+      await Promise.allSettled([first, second]);
+    }
+    expect(stayedGuarded).toBe(true);
+    expect(parent.select).toBe(originalSelect);
+    expect(parent.transaction).toBe(guardedTransaction);
+    expect(originalSelect).not.toHaveBeenCalled();
   });
 
   it("commits nothing when the status read fails before the bars are shown", async () => {

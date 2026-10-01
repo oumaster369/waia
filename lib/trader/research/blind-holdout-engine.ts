@@ -84,10 +84,10 @@ export function computeBlindValidationEvidenceDigest(
  * Refuses the holdout before any strategy call. A throw here has not shown
  * the blind bars to the strategy.
  */
-export async function assertBlindHoldoutNotYetRead(
+export async function assertBlindHoldoutCandidateEligible(
   input: Pick<
     RunBlindHoldoutValidationInput,
-    "context" | "candidate" | "blindBars" | "expectedBlindDigest"
+    "context" | "candidate"
   > & {
     repository: Pick<BlindHoldoutRepository, "getBlindValidationResultForCandidate">;
   },
@@ -110,6 +110,21 @@ export async function assertBlindHoldoutNotYetRead(
     );
   }
 
+}
+
+export async function assertBlindHoldoutNotYetRead(
+  input: Pick<RunBlindHoldoutValidationInput, "context" | "candidate" | "blindBars" | "expectedBlindDigest"> & {
+    repository: Pick<BlindHoldoutRepository, "getBlindValidationResultForCandidate">;
+  },
+): Promise<void> {
+  await assertBlindHoldoutCandidateEligible(input);
+  assertBlindHoldoutPayload(input);
+}
+
+export function assertBlindHoldoutPayload(input: {
+  blindBars: readonly Bar[];
+  expectedBlindDigest?: string;
+}): void {
   if (input.blindBars.length < 1) {
     throw new BlindHoldoutValidationError("blind split must contain at least one bar");
   }
