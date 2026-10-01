@@ -1,7 +1,8 @@
 /**
  * Opt-in profile 9.3.3. Requires an isolated local Postgres:
  * WAIA_PG_INTEGRATION=1, WAIA_ADMIN_CONSOLE_PROFILE=1, DATABASE_URL_POSTGRES on 127.0.0.1.
- * Never reads .env.local. Each mode warms 40 orders before the timed 5000, and WAL starts after that warmup.
+ * Never reads .env.local. A discarded triggers-on pass warms the relation cache, then each
+ * recorded mode warms 40 orders before the timed 5000. WAL starts after that warmup.
  * CI assert is 2x. The tighter plan budgets are reported, not the hard fail.
  */
 
@@ -76,13 +77,13 @@ describe.skipIf(!enabled)("admin console change-log overhead profile 9.3.3", () 
       symbols: ["BTCUSDT"],
     });
 
-    const measure = async (triggersOn: boolean) => {
+    const measure = async (triggersOn: boolean, pass: string) => {
       for (const table of triggerTables) {
         await sql.unsafe(
           `ALTER TABLE public.${table} ${triggersOn ? "ENABLE" : "DISABLE"} TRIGGER trader_admin_change_log_trg`,
         );
       }
-      const label = triggersOn ? "on" : "off";
+      const label = `${pass}-${triggersOn ? "on" : "off"}`;
       for (let index = 0; index < 40; index += 1) {
         const suffix = `warm-${label}-${index}`;
         const created = await createOrderPostgres(db, context, {
@@ -118,7 +119,7 @@ describe.skipIf(!enabled)("admin console change-log overhead profile 9.3.3", () 
       };
       const orderIds: string[] = [];
       for (let index = 0; index < ORDER_N; index += 1) {
-        const suffix = `${triggersOn ? "on" : "off"}-${index}`;
+        const suffix = `${label}-${index}`;
         await time(async () => {
           const created = await createOrderPostgres(db, context, {
             venue: "htx",
@@ -166,7 +167,7 @@ describe.skipIf(!enabled)("admin console change-log overhead profile 9.3.3", () 
             { scopeType: "organization", organizationId: orgId },
             {
               scopeType: "organization",
-              scopeRef: `${triggersOn ? "on" : "off"}-${index}`,
+              scopeRef: `${label}-${index}`,
               switchType: "PAUSE",
             },
             {
@@ -193,8 +194,9 @@ describe.skipIf(!enabled)("admin console change-log overhead profile 9.3.3", () 
     let off = { p95: 0, p99: 0, wal: 0 };
     let on = { p95: 0, p99: 0, wal: 0 };
     try {
-      on = await measure(true);
-      off = await measure(false);
+      await measure(true, "prime");
+      on = await measure(true, "timed");
+      off = await measure(false, "timed");
     } finally {
       for (const table of triggerTables) {
         await sql.unsafe(`ALTER TABLE public.${table} ENABLE TRIGGER trader_admin_change_log_trg`);
