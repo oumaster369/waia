@@ -217,7 +217,7 @@ export function AdminConsoleShell({
             <TraderSignOut locale="ru" />
           </div>
         </header>
-        <ContextControls catalogue={catalogue} />
+        {section.id === "org0-connect" ? null : <ContextControls catalogue={catalogue} />}
         <MarketStrip />
         <StatusBar release={catalogue?.release} />
         <div className="flex items-start">
