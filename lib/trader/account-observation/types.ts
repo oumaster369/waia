@@ -1,5 +1,10 @@
 import type { Balance, Order, Trade } from "@/lib/trader/connectors/types";
 import type { HtxObservationCoverage } from "./coverage";
+import type {
+  HtxDerivativesAccountFamily,
+  HtxDerivativesAccountRow,
+  HtxDerivativesAccountSnapshot,
+} from "./derivatives/types";
 
 export type ObservationBinding = Readonly<{
   organizationId: string; credentialId: string; exchangeAccountId: string;
@@ -30,16 +35,37 @@ export type AccountObservationReader = Readonly<{
   readBalances(signal: AbortSignal): Promise<ReadEnvelope<Balance>>;
   readOpenOrders(signal: AbortSignal): Promise<ReadEnvelope<ObservedOrder>>;
   readTrades(symbol: string, signal: AbortSignal): Promise<ReadEnvelope<ObservedTrade>>;
+  /** Optional unless this exact family list is present in digest-bound config. */
+  readDerivativesAccount?(family: HtxDerivativesAccountFamily, signal: AbortSignal):
+    Promise<Readonly<{ binding: ObservationBinding; snapshot: HtxDerivativesAccountSnapshot }>>;
   dispose(): void;
 }>;
-export type AccountObservation = Readonly<{
-  schemaVersion: "account-observation/v1"; observationId: string;
+export type DerivativesAccountFamilyObservation = Readonly<{
+  family: HtxDerivativesAccountFamily;
+  status: "NOT_CONFIGURED" | "COMPLETE" | "PARTIAL" | "ERROR";
+  accounts: readonly HtxDerivativesAccountRow[] | null;
+  readStartedAtMs: number | null;
+  readCompletedAtMs: number | null;
+  responseGeneratedAtMs: number | null;
+  error: ObservationReadError | null;
+}>;
+export type DerivativesAccountObservation = Readonly<{
+  schemaVersion: "htx-derivatives-observation/v1";
+  families: readonly DerivativesAccountFamilyObservation[];
+}>;
+export type AccountObservationFields = Readonly<{
+  observationId: string;
   binding: ObservationBinding; collectionStartedAtMs: number; collectionCompletedAtMs: number;
   status: "COMPLETE" | "PARTIAL" | "ERROR";
   balances: ObservationComponent<Balance>; openOrders: ObservationComponent<ObservedOrder>;
   trades: readonly Readonly<{ symbol: string; component: ObservationComponent<ObservedTrade> }>[];
   /** Holdings are not strategy positions, marked equity or an entry-cost/PnL claim. */
   holdings: readonly Balance[] | null;
+}>;
+/** Runtime validation enforces that v1 has no `derivatives` and v2 requires it. */
+export type AccountObservation = AccountObservationFields & Readonly<{
+  schemaVersion: "account-observation/v1" | "account-observation/v2";
+  derivatives?: DerivativesAccountObservation;
 }>;
 export type ObservationRepository = Readonly<{
   /** Atomically require active exact credential/config, next-due and unowned/expired lease. */
@@ -60,6 +86,8 @@ export type ObservationClock = Readonly<{
 export type ObservationConfig = Readonly<{
   revision: string; symbols: readonly string[]; pollIntervalMs: number; maxBackoffMs: number;
   readTimeoutMs: number; leaseTtlMs: number;
+  /** Omit to preserve the legacy spot-only digest and v1 observation shape. */
+  htxDerivativesFamilies?: readonly HtxDerivativesAccountFamily[];
   /** Required by the configured HTX composition; generic injected readers may omit it. */
   htxCoverage?: HtxObservationCoverage;
 }>;

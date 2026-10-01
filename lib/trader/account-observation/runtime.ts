@@ -8,6 +8,7 @@ import { createObservationScheduler } from "./scheduler";
 import { observationBindingSchema } from "./validation";
 import { accountObservationClock } from "./clock";
 import { htxObservationCoverageSchema } from "./coverage";
+import { HTX_DERIVATIVES_ACCOUNT_FAMILIES } from "./derivatives/types";
 import type { AccountObservationReader, ObservationBinding, ObservationClock, ObservationConfig } from "./types";
 
 const configurationSchema = z.object({
@@ -17,8 +18,12 @@ const configurationSchema = z.object({
   readTimeoutMs: z.number().int().min(100).max(60000),
   leaseTtlMs: z.number().int().min(1000).max(3600000),
   htxCoverage: htxObservationCoverageSchema.optional(),
+  htxDerivativesFamilies: z.array(z.enum(HTX_DERIVATIVES_ACCOUNT_FAMILIES)).min(1)
+    .max(HTX_DERIVATIVES_ACCOUNT_FAMILIES.length).optional(),
 }).strict().refine(c => new Set(c.symbols).size === c.symbols.length &&
-  c.maxBackoffMs >= c.pollIntervalMs && c.leaseTtlMs > c.readTimeoutMs * (3 + c.symbols.length));
+  new Set(c.htxDerivativesFamilies ?? []).size === (c.htxDerivativesFamilies?.length ?? 0) &&
+  c.maxBackoffMs >= c.pollIntervalMs && c.leaseTtlMs > c.readTimeoutMs *
+    (3 + c.symbols.length + (c.htxDerivativesFamilies?.length ?? 0)));
 
 /** Stable configuration identity. A timing/symbol/HTX coverage change cannot keep the old revision.
  * Hashing configuration is NOT Human authorization or permission to access a credential.
@@ -27,6 +32,7 @@ export function createObservationConfiguration(input: Omit<ObservationConfig, "r
   const config = configurationSchema.parse(input);
   const revision = "sha256:" + createHash("sha256").update(JSON.stringify(config)).digest("hex");
   return Object.freeze({ ...config, symbols: Object.freeze([...config.symbols]),
+    ...(config.htxDerivativesFamilies ? { htxDerivativesFamilies: Object.freeze([...config.htxDerivativesFamilies]) } : {}),
     ...(config.htxCoverage ? { htxCoverage: Object.freeze({ ...config.htxCoverage }) } : {}), revision });
 }
 

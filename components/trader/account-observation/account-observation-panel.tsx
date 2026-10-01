@@ -14,6 +14,7 @@ import {
 } from "@/lib/trader/account-observation/cabinet-view";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import type { AccountObservationView } from "./use-account-observation";
+import { DerivativesAccountSection } from "./derivatives-account-section";
 
 const MAX_VISIBLE_ROWS = 100;
 const time = (value: number | null) =>
@@ -118,7 +119,7 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
         <div>
           <h2 className="text-lg font-semibold">Live account</h2>
           <p className="text-muted-foreground mt-1 text-sm">
-            Read-only HTX spot. This cabinet does not place orders or calculate PnL.
+            Read-only HTX account display. Spot totals are not a valuation; futures PnL is shown as reported by HTX. This cabinet does not place orders.
           </p>
         </div>
         <p
@@ -180,6 +181,11 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
               testId="cabinet-open-orders"
             />
           </div>
+          <DerivativesAccountSection
+            projection={observation.schemaVersion === "account-observation/v2" ? observation.derivatives ?? null : null}
+            stale={view.stale}
+            nowMs={nowMs}
+          />
           {observation.balances.error ? <p>Read error: {observation.balances.error}</p> : null}
           {observation.balances.values === null ? <p>Unavailable — not an observed zero.</p> : null}
           {observation.holdings === null ? <p>Unavailable — not an observed zero.</p> : null}

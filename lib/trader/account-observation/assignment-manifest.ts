@@ -4,6 +4,7 @@ import { z } from "zod";
 import { htxObservationReaderLimitsSchema } from "./coverage";
 import { createObservationConfiguration } from "./runtime";
 import type { ConfiguredHtxObservationAssignment } from "./configured-runtime";
+import { HTX_DERIVATIVES_ACCOUNT_FAMILIES } from "./derivatives/types";
 
 export const ACCOUNT_OBSERVATION_ASSIGNMENT_MANIFEST_SCHEMA =
   "waia.account_observation_assignment_manifest.v1";
@@ -46,6 +47,8 @@ const assignmentSchema = z
     readTimeoutMs: z.number().int().min(100).max(60000),
     leaseTtlMs: z.number().int().min(1000).max(3600000),
     readerLimits: htxObservationReaderLimitsSchema,
+    htxDerivativesFamilies: z.array(z.enum(HTX_DERIVATIVES_ACCOUNT_FAMILIES))
+      .min(1).max(4).refine(items => new Set(items).size === items.length).optional(),
   })
   .strict();
 
@@ -148,6 +151,7 @@ export function parseAccountObservationAssignmentManifest(
         readTimeoutMs: item.readTimeoutMs,
         leaseTtlMs: item.leaseTtlMs,
         htxCoverage: { ...readerLimits, host: body.host },
+        ...(item.htxDerivativesFamilies ? { htxDerivativesFamilies: item.htxDerivativesFamilies } : {}),
       });
     } catch {
       refuse("COVERAGE");

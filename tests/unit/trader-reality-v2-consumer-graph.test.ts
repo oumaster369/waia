@@ -45,8 +45,9 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         // DEE-1151 stores a trade credential only when live is enabled, which
         // changes the existing connect-handler consumer body.
         // DEE-1151 stops retrying HTX POST, which changes the existing connector bodies.
-        consumers: 150,
-        consumerDigestHex: "7162a7765ff1c42a9b6a4446d7e7bfe48b8a18cba7d3fad4312c5f6fa4ce3578",
+        // DEE-1153 adds one observation-only HTX derivatives account-info transport.
+        consumers: 151,
+        consumerDigestHex: "9bc24c8e3bcb1d438d4cde8f8f1eea78e6f13a4756eda57b2f547631317f5895",
         // DEE-1099 adds one read of freshly validated account permissions,
         // not a financial observation or a venue effect.
         // DEE-1151 keeps that read on the live connector and does not add placeOrder.
@@ -162,6 +163,29 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
     );
   });
 
+  it("pins only the closed derivatives account-info transport outside canonical financial authority", () => {
+    const inventory = JSON.parse(readFileSync(INVENTORY, "utf8"));
+    const file = "lib/trader/account-observation/derivatives/htx-account-transport.ts";
+    const rules = inventory.consumerRules.filter((rule: { pathPattern: string }) => new RegExp(rule.pathPattern).test(file));
+    expect(rules).toEqual([expect.objectContaining({ id: "ACCOUNT_OBSERVATION_DERIVATIVES_TRANSPORT",
+      pathPattern: "^lib/trader/account-observation/derivatives/htx-account-transport\\.ts$",
+      disposition: "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY" })]);
+    expect(inventory.admittedBoundaryFiles).not.toContain(file);
+    expect(new RegExp(rules[0].pathPattern).test("lib/trader/account-observation/derivatives/order-transport.ts")).toBe(false);
+    const body = readFileSync(join(ROOT, file), "utf8");
+    expect(detectConnectorMethodReferencesInSource(body, file, ["placeOrder", "cancelOrder", "amendOrder", "submitOrder"]))
+      .toEqual([]);
+    expect(body).not.toMatch(/process\.env|globalThis\.fetch|HtxRestClient|import\s*\(|require\s*\(/);
+    const ast = ts.createSourceFile(file, body, ts.ScriptTarget.Latest, true);
+    const connectorImports = ast.statements.filter(ts.isImportDeclaration)
+      .filter(statement => (statement.moduleSpecifier as ts.StringLiteral).text.includes("/connectors/"));
+    expect(connectorImports).toHaveLength(1);
+    expect((connectorImports[0].moduleSpecifier as ts.StringLiteral).text).toBe("@/lib/trader/connectors/htx/signing");
+    const bindings = connectorImports[0].importClause?.namedBindings;
+    expect(bindings && ts.isNamedImports(bindings) && bindings.elements.map(element => element.name.text))
+      .toEqual(["buildSignedPostQueryString", "formatHtxTimestamp"]);
+  });
+
   it("excludes exactly the three normalized account-observation consumers without Reality or venue-write authority", () => {
     const inventory = JSON.parse(readFileSync(INVENTORY, "utf8")) as {
       consumerRules: { id: string; pathPattern: string; disposition: string }[];
@@ -194,6 +218,30 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
       const ast = ts.createSourceFile(file, body, ts.ScriptTarget.Latest, true);
       for (const statement of ast.statements) {
         if (ts.isImportDeclaration(statement)) {
+          const moduleName = (statement.moduleSpecifier as ts.StringLiteral).text;
+          if (file.endsWith("/service.ts") && ["./derivatives/types", "./validation"].includes(moduleName)) {
+            const bindings = statement.importClause?.namedBindings;
+            expect(statement.importClause?.name).toBeUndefined();
+            expect(bindings && ts.isNamedImports(bindings) && bindings.elements.map(element => ({
+              name: element.name.text, original: element.propertyName?.text, typeOnly: element.isTypeOnly,
+            }))).toEqual(moduleName === "./derivatives/types" ? [
+              { name: "HTX_DERIVATIVES_ACCOUNT_FAMILIES", original: undefined, typeOnly: false },
+              { name: "HtxDerivativesAccountFamily", original: undefined, typeOnly: true },
+              { name: "HtxDerivativesAccountRow", original: undefined, typeOnly: true },
+            ] : [
+              { name: "parseAccountObservation", original: undefined, typeOnly: false },
+              { name: "sameObservationBinding", original: undefined, typeOnly: false },
+            ]);
+            continue;
+          }
+          if (file.endsWith("/types.ts") && moduleName === "./derivatives/types") {
+            expect(statement.importClause?.isTypeOnly).toBe(true);
+            const bindings = statement.importClause?.namedBindings;
+            expect(statement.importClause?.name).toBeUndefined();
+            expect(bindings && ts.isNamedImports(bindings) && bindings.elements.map(element => element.name.text))
+              .toEqual(["HtxDerivativesAccountFamily", "HtxDerivativesAccountRow", "HtxDerivativesAccountSnapshot"]);
+            continue;
+          }
           if (
             file.endsWith("/htx-reader.ts") &&
             (statement.moduleSpecifier as ts.StringLiteral).text === "./service"

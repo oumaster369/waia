@@ -93,7 +93,24 @@ describe("explicit assignments filtered by current read-only DB state", () => {
     expect(list[0]?.binding).toEqual(a.binding);
     expect(ports.isCurrentAssignment).toHaveBeenCalledTimes(1);
   });
-  it("collects enrolled inventory extras before the closed manifest map", async () => {
+  it("never inventories or grants dynamic accounts for a derivatives envelope at the 20-row boundary", async () => {
+    const a = assignment();
+    const { revision: _revision, ...parameters } = a.config;
+    const config = createObservationConfiguration({ ...parameters, htxDerivativesFamilies: ["usdt_cross_shared"] });
+    const configured = { binding: { ...a.binding, configurationRevision: config.revision }, config };
+    const rows = Array.from({ length: 20 }, (_, index) => ({
+      organization_id: a.binding.organizationId, credential_id: a.binding.credentialId,
+      exchange_account_id: String(1000 + index), credential_revision: "1",
+      configuration_revision: config.revision, symbols: ["BTCUSDT"],
+    }));
+    const begin = vi.fn(async (run: (tx: unknown) => Promise<unknown>) => run(
+      Object.assign(async () => rows, { unsafe: async () => undefined })));
+    const source = createPostgresObservationAssignmentSource(sql, [configured], { begin } as unknown as Sql);
+    expect(await source.loadAssignments(signal())).toEqual([configured]);
+    expect(begin).not.toHaveBeenCalled();
+    expect(await source.authorizeOpen({ ...configured.binding, exchangeAccountId: "1000" }, signal())).toBe(false);
+  });
+  it("collects enrolled inventory extras after reserving explicit assignments", async () => {
     const a = assignment();
     const extraOrg = "00000000-0000-4000-8000-000000000003";
     const extraCredential = "00000000-0000-4000-8000-000000000004";
@@ -123,9 +140,29 @@ describe("explicit assignments filtered by current read-only DB state", () => {
     } as never;
     const source = createPostgresObservationAssignmentSource(sql, [a], collectorSql);
     const list = await source.loadAssignments(signal());
-    expect(list.map((item) => item.binding.exchangeAccountId)).toEqual(["456", "123"]);
-    expect(list[0]?.binding.organizationId).toBe(extraOrg);
-    expect(list[0]?.config.revision).toBe(a.config.revision);
+    expect(list.map((item) => item.binding.exchangeAccountId)).toEqual(["123", "456"]);
+    expect(list[1]?.binding.organizationId).toBe(extraOrg);
+    expect(list[1]?.config.revision).toBe(a.config.revision);
+  });
+  it("reserves a later explicit futures account before a full 20-row spot inventory", async () => {
+    const spot = assignment();
+    const { revision: _revision, ...parameters } = spot.config;
+    const config = createObservationConfiguration({ ...parameters, htxDerivativesFamilies: ["usdt_cross_shared"] });
+    const futures = { binding: { ...spot.binding, exchangeAccountId: "456", configurationRevision: config.revision }, config };
+    const rows = Array.from({ length: 20 }, (_, index) => ({
+      organization_id: spot.binding.organizationId, credential_id: spot.binding.credentialId,
+      exchange_account_id: String(1000 + index), credential_revision: "1",
+      configuration_revision: spot.config.revision, symbols: ["BTCUSDT"],
+    }));
+    const begin = vi.fn(async (run: (tx: unknown) => Promise<unknown>) => run(
+      Object.assign(async () => rows, { unsafe: async () => undefined })));
+    const source = createPostgresObservationAssignmentSource(sql, [spot, futures], { begin } as unknown as Sql);
+    const result = await source.loadAssignments(signal());
+    expect(result).toHaveLength(20);
+    expect(result.slice(0, 2)).toEqual([spot, futures]);
+    expect(result.slice(2).every(item => !item.config.htxDerivativesFamilies)).toBe(true);
+    expect(await source.authorizeOpen(futures.binding, signal())).toBe(true);
+    expect(await source.authorizeOpen({ ...spot.binding, exchangeAccountId: "1019" }, signal())).toBe(false);
   });
   it("discards cancelled late results and refuses overlapping loads", async () => {
     let finish!: (value: boolean) => void;

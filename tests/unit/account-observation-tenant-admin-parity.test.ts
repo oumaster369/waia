@@ -7,8 +7,12 @@ import {
 import { handleAccountObservationStream } from "@/lib/trader/account-observation/stream-handler";
 import type {
   AccountObservation,
+  DerivativesAccountFamilyObservation,
   ObservationBinding,
 } from "@/lib/trader/account-observation/types";
+import { parseAccountObservation } from "@/lib/trader/account-observation/validation";
+import { HTX_DERIVATIVES_ACCOUNT_FAMILIES } from "@/lib/trader/account-observation/derivatives/types";
+import type { HtxDerivativesAccountRow } from "@/lib/trader/account-observation/derivatives/types";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { observation } from "./account-observation-stream-fixtures";
 
@@ -119,6 +123,46 @@ describe("DEE-1019 tenant/Admin observation parity, enumeration and secret exclu
     for (const call of vi.mocked(store.readLatest).mock.calls) {
       expect(call[0]).toStrictEqual(sharedBinding);
     }
+  });
+
+  it("round-trips a saved v2 derivatives projection identically through tenant and Admin reads", async () => {
+    const store = sharedStore();
+    const base = storedObservation();
+    const collectionStartedAtMs = base.collectionStartedAtMs - 10;
+    const collectionCompletedAtMs = base.collectionCompletedAtMs + 30;
+    const sharedPool: HtxDerivativesAccountRow = {
+      accountCode: "USDT", collateralAsset: "USDT", marginMode: "cross",
+      marginBalance: "10000.000000000000000000", marginAvailable: "9000.000000000000000000",
+      marginPosition: null, marginFrozen: null, marginStatic: null, realizedPnl: null,
+      unrealizedPnl: null, riskRate: null, liquidationPrice: null, leverage: null,
+    };
+    const families: DerivativesAccountFamilyObservation[] = HTX_DERIVATIVES_ACCOUNT_FAMILIES.map(family =>
+      family === "usdt_cross_shared" ? {
+        family, status: "COMPLETE", accounts: [sharedPool],
+        readStartedAtMs: base.collectionStartedAtMs + 10,
+        readCompletedAtMs: base.collectionStartedAtMs + 20,
+        responseGeneratedAtMs: base.collectionStartedAtMs + 15, error: null,
+      } : {
+        family, status: "NOT_CONFIGURED", accounts: null,
+        readStartedAtMs: null, readCompletedAtMs: null, responseGeneratedAtMs: null, error: null,
+      });
+    const saved = parseAccountObservation({ ...base, collectionStartedAtMs, collectionCompletedAtMs,
+      schemaVersion: "account-observation/v2",
+      derivatives: { schemaVersion: "htx-derivatives-observation/v1", families } });
+    vi.mocked(store.readLatest).mockResolvedValue(saved);
+
+    const tenant = await handleAccountObservationGet(observationRequest(), "tenant", store.deps);
+    const admin = await handleAccountObservationGet(observationRequest(), "admin", store.deps);
+    expect(tenant.status).toBe(200);
+    expect(admin.status).toBe(200);
+    const tenantBody = await tenant.json() as AccountObservation;
+    const adminBody = await admin.json() as AccountObservation;
+    expect(tenantBody.schemaVersion).toBe("account-observation/v2");
+    expect(adminBody).toStrictEqual(tenantBody);
+    expect(tenantBody.derivatives?.families.find(item => item.family === "usdt_cross_shared")?.accounts?.[0]?.marginBalance)
+      .toBe("10000.000000000000000000");
+    expect(tenantBody.derivatives?.families.filter(item => item.status === "NOT_CONFIGURED")).toHaveLength(3);
+    expect(store.readLatest).toHaveBeenCalledTimes(2);
   });
 
   it("resolves the same binding identity from tenant session and Admin selection", async () => {
