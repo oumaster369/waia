@@ -299,16 +299,17 @@ export async function dispatchAndRecordExecutionAttemptV2(
     return { status: "REFUSED_ALREADY_TERMINAL", attempt: null };
   }
   if (dispatched.status === "REFUSED_BEFORE_POST") {
-    if (dispatched.reason === "PRE_POST_RECHECK_UNAVAILABLE") {
+    if (dispatched.reason === "PRE_POST_RECHECK_UNAVAILABLE" ||
+        dispatched.reason === "SIGNER_BINDING_UNAVAILABLE") {
       const attempt = await markExecutionAttemptReconciliationRequiredV2Postgres(
         db,
         context,
         executionAttemptId,
-        "PRE_POST_RECHECK_UNAVAILABLE",
+        dispatched.reason,
         { postSent: false },
       );
       if (!attempt) {
-        throw new Error("[trader] pre-POST unavailability could not be recorded");
+        throw new Error("[trader] pre-POST authority refusal could not be recorded");
       }
       return { status: "RECONCILIATION_REQUIRED", attempt };
     }

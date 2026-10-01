@@ -46,12 +46,12 @@ function admitted(): ExecutionV2LiveGateFacts {
 }
 
 describe("Execution V2 live gates (DEE-1151 P0-4)", () => {
-  it("admits only when every gate is present", () => {
-    expect(evaluateExecutionV2LiveGates(admitted())).toEqual({ ok: true });
+  it("refuses otherwise-complete metadata until exact signer authority exists", () => {
+    expect(evaluateExecutionV2LiveGates(admitted())).toEqual({ ok: false, reason: "SIGNER_BINDING_UNAVAILABLE" });
     expect(
       evaluateExecutionV2LiveGates({ ...admitted(), requestedNotional: "24.99999999" }),
     ).toEqual({
-      ok: true,
+      ok: false, reason: "SIGNER_BINDING_UNAVAILABLE",
     });
   });
 
@@ -183,7 +183,7 @@ describe("Execution V2 live gates (DEE-1151 P0-4)", () => {
       evaluateExecutionV2LiveGates(
         assembleExecutionV2LiveGateFacts({ ...base, effectivePromotions: [row] }),
       ),
-    ).toEqual({ ok: true });
+    ).toEqual({ ok: false, reason: "SIGNER_BINDING_UNAVAILABLE" });
   });
 
   it("keeps the authoritative check inside the live bind transaction", () => {

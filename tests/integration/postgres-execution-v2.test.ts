@@ -681,7 +681,11 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     return { account: state ?? null, allowance, events, reports, counts };
   }
 
-  async function credentialRefusalLiveInput(identityBase: number, accountId: string) {
+  async function credentialRefusalLiveInput(
+    identityBase: number,
+    accountId: string,
+    scopes: readonly string[] = ["read"],
+  ) {
     const input = await admittedBindInput({ accountId, identityBase });
     const credentialId = uuid(identityBase + 10);
     const promotionId = uuid(identityBase + 11);
@@ -689,7 +693,7 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     const strategyVersion = "native-v1";
     const permissionMetadata = buildHtxPermissionMetadata({
       exchangeAccountId: input.allowance.accountId,
-      scopes: ["read"],
+      scopes,
     });
     const originalOrg0 = process.env.WAIA_TRADER_ORG0_ORGANIZATION_ID;
     await sql`INSERT INTO trader_org_live_enable (organization_id, state, max_notional_cap)
@@ -1085,6 +1089,175 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
     }
   }, 30_000);
 
+  it("DEE-1161 public live submit refuses missing signer authority before resolving a connector", async () => {
+    const fixture = await credentialRefusalLiveInput(
+      669_900,
+      "signer-unavailable-public-submit",
+      ["read", "trade"],
+    );
+    let connectorResolutions = 0;
+    try {
+      expectIssuedBeforeBind(await lockProofState(fixture.input));
+      const service = createPostgresExecutionV2Service({
+        db,
+        assertLiveAuthorized: createAssertExecutionV2LiveAuthorized(db),
+        connectorFor: () => {
+          connectorResolutions += 1;
+          throw new Error("synthetic connector must not be resolved");
+        },
+      });
+      const result = await nativeSettled(service.submit({ organizationId: orgA }, fixture.input));
+      expect(result).toMatchObject({
+        ok: false,
+        error: expect.objectContaining({ reason: "SIGNER_BINDING_UNAVAILABLE" }),
+      });
+      expect(connectorResolutions).toBe(0);
+      const state = await lockProofState(fixture.input);
+      expect(state.allowance[0]).toMatchObject({ lifecycle_state: "ISSUED", bound_order_id: null });
+      expect(state.counts).toEqual({
+        policies: 0, plans: 0, orders: 0, attempts: 0, reports: 0, events: 1,
+      });
+      expect(state.reports).toEqual([]);
+      const kills = await sql<{ count: number }[]>`SELECT count(*)::int AS count
+        FROM trader_kill_switches WHERE organization_id = ${orgA}::uuid`;
+      expect(kills[0]?.count).toBe(0);
+    } finally {
+      await fixture.cleanup();
+    }
+  }, 30_000);
+
+  it("DEE-1161 direct live bind refuses missing signer authority without creating execution effects", async () => {
+    const fixture = await credentialRefusalLiveInput(
+      670_050,
+      "signer-unavailable-direct-bind",
+      ["read", "trade"],
+    );
+    try {
+      expectIssuedBeforeBind(await lockProofState(fixture.input));
+      const result = await nativeSettled(
+        bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, fixture.input),
+      );
+      expect(result).toMatchObject({
+        ok: false,
+        error: expect.objectContaining({ reason: "SIGNER_BINDING_UNAVAILABLE" }),
+      });
+      expectIssuedBeforeBind(await lockProofState(fixture.input));
+    } finally {
+      await clearOrganization(sql, orgA);
+      await fixture.cleanup();
+    }
+  }, 30_000);
+
+  it("DEE-1161 public live submit preserves issued-allowance kill terminalization before signer refusal", async () => {
+    const fixture = await credentialRefusalLiveInput(
+      670_000,
+      "signer-unavailable-with-kill",
+      ["read", "trade"],
+    );
+    const switches = createPostgresKillSwitchService(db);
+    try {
+      await switches.trip(
+        { actorType: "service", actorId: null },
+        requireOrgContext(orgA),
+        { scopeType: "organization", organizationId: orgA },
+        { scopeType: "organization", scopeRef: null, switchType: "EMERGENCY_STOP" },
+        { enforcementMode: "REJECT", origin: "manual", reason: "DEE-1161 synthetic kill test" },
+      );
+      let connectorResolutions = 0;
+      const service = createPostgresExecutionV2Service({
+        db,
+        assertLiveAuthorized: createAssertExecutionV2LiveAuthorized(db),
+        connectorFor: () => {
+          connectorResolutions += 1;
+          throw new Error("synthetic connector must not be resolved");
+        },
+      });
+      const result = await nativeSettled(service.submit({ organizationId: orgA }, fixture.input));
+      expect(result).toMatchObject({
+        ok: false,
+        error: expect.objectContaining({ reason: "KILL_SWITCH_TRIPPED" }),
+      });
+      expect(connectorResolutions).toBe(0);
+      const state = await lockProofState(fixture.input);
+      expect(state.allowance[0]).toMatchObject({ lifecycle_state: "REVOKED", bound_order_id: null });
+      expectRiskChain(state, ["ALLOWANCE_ISSUED", "ALLOWANCE_REVOKED"], "0.00000000", "0.00000000");
+      expect(state.counts).toEqual({
+        policies: 0, plans: 0, orders: 0, attempts: 0, reports: 0, events: 2,
+      });
+      expect(state.reports).toEqual([]);
+    } finally {
+      await sql`DELETE FROM trader_kill_switches WHERE organization_id = ${orgA}::uuid`;
+      await fixture.cleanup();
+    }
+  }, 30_000);
+
+  it("DEE-1161 already-bound live attempt records missing signer as reconciliation with no POST", async () => {
+    const fixture = await credentialRefusalLiveInput(
+      670_100,
+      "signer-unavailable-recovery",
+      ["read", "trade"],
+    );
+    const paperInput: BindExecutionAuthorityV2Input = {
+      ...fixture.input,
+      executionMode: "paper",
+    };
+    let posts = 0;
+    try {
+      const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, paperInput);
+      const [order] = await sql<{ id: string }[]>`
+        SELECT id::text FROM trader_orders
+        WHERE organization_id = ${orgA}::uuid AND id = ${bound.order.id}::uuid`;
+      expect(order).toBeDefined();
+      await sql.unsafe("ALTER TABLE trader_orders DISABLE TRIGGER aa_historical_reconciliation_mode");
+      await sql.unsafe("ALTER TABLE trader_orders DISABLE TRIGGER ab_historical_reconciliation_immutable");
+      try {
+        await sql`UPDATE trader_orders SET execution_mode = 'live'
+          WHERE organization_id = ${orgA}::uuid AND id = ${bound.order.id}::uuid`;
+      } finally {
+        await sql.unsafe("ALTER TABLE trader_orders ENABLE TRIGGER ab_historical_reconciliation_immutable");
+        await sql.unsafe("ALTER TABLE trader_orders ENABLE TRIGGER aa_historical_reconciliation_mode");
+      }
+
+      const result = await dispatchAndRecordExecutionAttemptV2(
+        db,
+        { organizationId: orgA },
+        bound.attempt.executionAttemptId,
+        async () => {
+          posts += 1;
+          throw new Error("synthetic POST must not be reached");
+        },
+      );
+      expect(result.status).toBe("RECONCILIATION_REQUIRED");
+      expect(posts).toBe(0);
+      const state = await lockProofState(fixture.input);
+      expect(state.allowance[0]).toMatchObject({ lifecycle_state: "CONSUMED" });
+      expect(state.account).toMatchObject({ r: "0.00000000", p: "25.00000000" });
+      const [latestReport] = await sql<{ type: string; rawObservation: Record<string, unknown> }[]>`
+        SELECT report_type AS type, raw_observation AS "rawObservation"
+        FROM trader_execution_reports_v2
+        WHERE organization_id = ${orgA}::uuid AND account_id = ${fixture.input.allowance.accountId}
+        ORDER BY report_sequence DESC LIMIT 1`;
+      expect(latestReport).toMatchObject({
+        type: "RECONCILIATION_REQUIRED",
+        rawObservation: { cause: "SIGNER_BINDING_UNAVAILABLE", postSent: false },
+      });
+      expect(state.counts).toMatchObject({ orders: 1, attempts: 1 });
+      const retry = await dispatchAndRecordExecutionAttemptV2(
+        db,
+        { organizationId: orgA },
+        bound.attempt.executionAttemptId,
+        async () => {
+          posts += 1;
+          throw new Error("retry POST must not be reached");
+        },
+      );
+      expect(retry.status).toBe("REFUSED_ALREADY_TERMINAL");
+      expect(posts).toBe(0);
+    } finally {
+      await fixture.cleanup();
+    }
+  }, 30_000);
+
   it("DEE-1154 commits credential-refusal kill state from a direct live bind before refusal", async () => {
     const fixture = await credentialRefusalLiveInput(669_400, "credential-readonly-bind");
     const before = await lockProofState(fixture.input);
@@ -1198,7 +1371,20 @@ describe.skipIf(!enabled || !url)("Postgres Execution V2 substrate (DEE-667 / E6
       }));
       await sql`UPDATE exchange_credentials SET permission_metadata = ${policy(["read", "trade"])}
         WHERE id = ${fixture.input.credentialId}::uuid AND organization_id = ${orgA}::uuid`;
-      const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, fixture.input);
+      const paperInput: BindExecutionAuthorityV2Input = {
+        ...fixture.input,
+        executionMode: "paper",
+      };
+      const bound = await bindExecutionAuthorityV2Postgres(db, { organizationId: orgA }, paperInput);
+      await sql.unsafe("ALTER TABLE trader_orders DISABLE TRIGGER aa_historical_reconciliation_mode");
+      await sql.unsafe("ALTER TABLE trader_orders DISABLE TRIGGER ab_historical_reconciliation_immutable");
+      try {
+        await sql`UPDATE trader_orders SET execution_mode = 'live'
+          WHERE organization_id = ${orgA}::uuid AND id = ${bound.order.id}::uuid`;
+      } finally {
+        await sql.unsafe("ALTER TABLE trader_orders ENABLE TRIGGER ab_historical_reconciliation_immutable");
+        await sql.unsafe("ALTER TABLE trader_orders ENABLE TRIGGER aa_historical_reconciliation_mode");
+      }
       const before = await lockProofState(fixture.input);
       expect(before.allowance[0]).toMatchObject({ lifecycle_state: "CONSUMED" });
       // Lose trade scope after bind, before the final network admission check.

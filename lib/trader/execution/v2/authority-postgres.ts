@@ -206,9 +206,11 @@ export async function bindExecutionAuthorityV2Postgres(
     }
     // No execution rows exist yet. Return a gate refusal so its credential kill
     // switch can commit while the allowance remains ISSUED and unconsumed.
-    if (input.executionMode === "live") {
-      const liveGate = await recordExecutionV2LiveGateVerdictPostgres(tx, scoped, input);
-      if (!liveGate.ok) return { status: "REFUSED" as const, reason: liveGate.reason, liveGate };
+    const liveGate = input.executionMode === "live"
+      ? await recordExecutionV2LiveGateVerdictPostgres(tx, scoped, input)
+      : null;
+    if (liveGate && !liveGate.ok && liveGate.reason !== "SIGNER_BINDING_UNAVAILABLE") {
+      return { status: "REFUSED" as const, reason: liveGate.reason, liveGate };
     }
     // Terminalize an allowance that is unfit on its own before policy/plan inserts,
     // then commit that write. A malformed request throws here so the transaction
@@ -222,6 +224,12 @@ export async function bindExecutionAuthorityV2Postgres(
       throw new ExecutionV2AuthorityRefusedError(earlyRefusal.reason);
     }
     if (earlyRefusal) return { status: "REFUSED" as const, reason: earlyRefusal.reason };
+    // The absent signer authority never admits effects. Defer only this reason
+    // until after intrinsic kill/expiry terminalization so the safety refusal
+    // cannot leave an independently invalid allowance ISSUED and reserved.
+    if (liveGate && !liveGate.ok) {
+      return { status: "REFUSED" as const, reason: liveGate.reason, liveGate };
+    }
     // Inserts and the order bind sit in a savepoint. A later intrinsic refusal
     // rolls those rows back and rewrites the terminal state after the savepoint.
     await tx.execute(sql`SAVEPOINT bind_authority_effects`);
