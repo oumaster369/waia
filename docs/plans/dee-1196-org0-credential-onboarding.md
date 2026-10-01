@@ -10,7 +10,7 @@ approvalGates: [user-authorized-technical-fix, independent-security-review, requ
 state:
   status: implementation
   prNumber: null
-  nextAction: "Implement and prove the Org0-only read credential connect path; no live activation."
+  nextAction: "After root review, prepare the PR against main at `5914d9f4dc37b7d78be4c5363b33b12d22d444c6` and run required CI on its exact head; no live activation."
 provenance:
   createdFrom: "2026-10-01 approved DEE-1196 Org0 read-only Admin connect brief"
   supersedes: null
@@ -29,5 +29,6 @@ API: `GET /api/trader/admin/org0-readonly-connect` returns `{target:{organizatio
 ## Acceptance
 
 - Focused tests prove missing session, entitlement, Admin mutate grant, Org0 membership, target config, wrong account, ambiguous account, trade/unknown permission, malformed body, cross-origin and stale replacement all refuse before storage; auth failures perform no HTX request.
-- Synthetic native PostgreSQL proves exact Org0 insert/rotate/audit, encrypted payload and masked response, stale optimistic conflict, cross-org isolation and no enrollment. No production key or venue call is used in tests.
-- Existing personal credential history and endpoints remain unchanged. Local lint, typecheck, build, canonical validation and required CI pass; independent security review precedes publication or merge. This package does not qualify an observation collector, migrate production, or activate live trading.
+- Synthetic native PostgreSQL proves exact Org0 insert/rotate/audit, encrypted payload and masked response, stale optimistic conflict, cross-org isolation and no enrollment. The three native credential cases pass on a fresh local PostgreSQL 16.14 database bootstrapped from the exact canonical journal prefix through 0228 (229 migration hashes/timestamps verified); migrations 0229 and 0230 were not applied. This proves the credential path on the pre-0229 schema, not the new 0229 observation projection. No production key or venue call was used. Receipt: `audit-ai-trader-2026-10-01/dee1196-exact-0228/final-proof.json`.
+- Exact focused unit batch: 48 passed across `trader-org0-readonly-connect`, `trader-reality-v2-consumer-graph`, and `trader-admin-connected-accounts`. The earlier focused Playwright run remains 5 passed; see the external DEE-1196 readiness receipts.
+- Existing personal credential history and endpoints remain unchanged. Independent source review is complete. Required CI for the eventual published PR head is still pending; refresh validation after rebasing onto the post-PR-730 main. This package does not qualify an observation collector, migrate production, or activate live trading.
