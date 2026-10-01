@@ -5,10 +5,10 @@ enforceServerOnly();
 import { createPerRequestPostgresRuntime } from "@/db/postgres-client";
 import { MockExchangeConnector } from "@/lib/trader/connectors/mock-exchange-connector";
 import { createOrgScopedExecutionV2OrderPath } from "@/lib/trader/execution/v2/org-order-path";
+import { createOrdinaryPaperOrderRepositoryPostgres } from "@/lib/trader/execution/ordinary-paper-order-repository-postgres";
 import { buildPreQualificationPaperEnvelope } from "@/lib/trader/paper/pre-qualification-paper-envelope";
 import {
   createPostgresOrderExecutionService,
-  createPostgresOrderRepository,
   createPostgresReconciliationService,
   createPostgresStartupReconciliationRunner,
 } from "@/lib/trader/execution";
@@ -96,7 +96,16 @@ export async function buildPaperLoopDepsFromEnv(
   }
   const runtime = createPerRequestPostgresRuntime();
   const db = runtime.db;
-  const orderRepository = createPostgresOrderRepository(db);
+  const orderRepository = createOrdinaryPaperOrderRepositoryPostgres(
+    db,
+    config.enabled ? config.organizationId : null,
+    "paper",
+  );
+  const mockStartupOrderRepository = createOrdinaryPaperOrderRepositoryPostgres(
+    db,
+    config.enabled ? config.organizationId : null,
+    "mock",
+  );
   const writeAudit = (input: TraderAuditInput) => writeTraderAuditLogPostgres(db, input);
   const connector = new MockExchangeConnector();
   await connector.validateCredentials({ apiKey: "mock", apiSecret: "mock" });
@@ -115,6 +124,7 @@ export async function buildPaperLoopDepsFromEnv(
   const execution = createPostgresOrderExecutionService(db, {
     connectorForMode: () => connector,
     writeAudit,
+    orderRepository,
   });
   const orderPath = createOrgScopedExecutionV2OrderPath({
     db,
@@ -123,9 +133,14 @@ export async function buildPaperLoopDepsFromEnv(
   const reconciliation = createPostgresReconciliationService(db, {
     connectorForMode: () => connector,
     writeAudit,
+    orderRepository,
   });
   const startupReconciliation = createPostgresStartupReconciliationRunner(db, {
-    reconciliationService: reconciliation,
+    reconciliationService: createPostgresReconciliationService(db, {
+      connectorForMode: () => connector,
+      writeAudit,
+      orderRepository: mockStartupOrderRepository,
+    }),
   });
 
   const poll = new HtxBarPollSource({
