@@ -29,23 +29,47 @@ export const POSTGRES_MIGRATE_STATEMENT_TIMEOUT = "120s";
 const POSTGRES_MIGRATE_LOCK_TIMEOUT_MS = "5000";
 const POSTGRES_MIGRATE_STATEMENT_TIMEOUT_MS = "120000";
 
+export function assertPostgresMigrateSessionLockBudget(
+  row:
+    | {
+        lock_timeout_ms?: string | null;
+        statement_timeout_ms?: string | null;
+      }
+    | undefined,
+): void {
+  if (
+    row?.lock_timeout_ms !== POSTGRES_MIGRATE_LOCK_TIMEOUT_MS ||
+    row?.statement_timeout_ms !== POSTGRES_MIGRATE_STATEMENT_TIMEOUT_MS
+  ) {
+    throw new Error(
+      `[waia] session lock budget was not applied before migrate() (lock_timeout=${row?.lock_timeout_ms ?? "missing"}ms statement_timeout=${row?.statement_timeout_ms ?? "missing"}ms)`,
+    );
+  }
+}
+
+/**
+ * Fail closed before drizzle `migrate()`. A missing or zero session budget
+ * throws and does not open the journal. Callers outside this module must use
+ * this function; a direct migrator import in `scripts/`, `app/`, `lib/`, or
+ * `services/` is rejected by the unit contract.
+ */
+export async function migratePostgresConnectionWithSessionLockBudget(
+  sql: postgres.Sql,
+  migrationsFolder: string,
+): Promise<void> {
+  await sql.unsafe(`SET lock_timeout = '${POSTGRES_MIGRATE_LOCK_TIMEOUT}'`);
+  await sql.unsafe(`SET statement_timeout = '${POSTGRES_MIGRATE_STATEMENT_TIMEOUT}'`);
+  const [row] = await sql<{ lock_timeout_ms: string; statement_timeout_ms: string }[]>`
+    select (select setting from pg_settings where name = 'lock_timeout') as lock_timeout_ms,
+           (select setting from pg_settings where name = 'statement_timeout') as statement_timeout_ms`;
+  assertPostgresMigrateSessionLockBudget(row);
+  await migrate(drizzle(sql), { migrationsFolder });
+}
+
 export async function migratePostgresWithSessionLockBudget(databaseUrl: string): Promise<void> {
   const sql = postgres(databaseUrl, { max: 1 });
   try {
-    await sql.unsafe(`SET lock_timeout = '${POSTGRES_MIGRATE_LOCK_TIMEOUT}'`);
-    await sql.unsafe(`SET statement_timeout = '${POSTGRES_MIGRATE_STATEMENT_TIMEOUT}'`);
-    const [row] = await sql<{ lock_timeout_ms: string; statement_timeout_ms: string }[]>`
-      select (select setting from pg_settings where name = 'lock_timeout') as lock_timeout_ms,
-             (select setting from pg_settings where name = 'statement_timeout') as statement_timeout_ms`;
-    if (
-      row?.lock_timeout_ms !== POSTGRES_MIGRATE_LOCK_TIMEOUT_MS ||
-      row?.statement_timeout_ms !== POSTGRES_MIGRATE_STATEMENT_TIMEOUT_MS
-    ) {
-      throw new Error(
-        `[waia] session lock budget was not applied before migrate() (lock_timeout=${row?.lock_timeout_ms ?? "missing"}ms statement_timeout=${row?.statement_timeout_ms ?? "missing"}ms)`,
-      );
-    }
-    await migrate(drizzle(sql), { migrationsFolder: "db/migrations_postgres" });
+    await migratePostgresConnectionWithSessionLockBudget(sql, "db/migrations_postgres");
   } finally {
     await sql.end({ timeout: 5 });
   }
