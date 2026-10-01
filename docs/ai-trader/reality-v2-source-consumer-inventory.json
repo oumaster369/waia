@@ -433,7 +433,7 @@
       {"path": "lib/trader/research/create-in-memory-research-backtest-session.ts","sha256": "c0bacc828a6c2a6ae70c25315bf666826f41836e011981275f676a138374e820"},
       {"path": "lib/trader/research/execopp-qualification/historical-prerun-knowledge-bootstrap-v2.ts","sha256": "692a832a64cb87dc9469e3c97a2581953bcff8212db38ff8a3cc955aa18d8ec9"},
       {"path": "lib/trader/research/research-modeled-stage-kernel-v1.ts","sha256": "35b08d81ff80bfaf1d3aba78df4fa8e2c9d972e436ad54262ffa0c0e620fc224"},
-      {"path": "lib/trader/research/research-training-diagnostic-postgres-v1.ts","sha256": "9241edeb7fc08b55a395c0b361ebbef359202cb59905a4b30a9f4a4fb0d0f8c9"},
+      {"path": "lib/trader/research/research-training-diagnostic-postgres-v1.ts","sha256": "f82a3d72236998a1b8a9db2023a606b8ecbdbbcc788d3ad23ee07573d4221fb4"},
       {"path": "lib/trader/risk/capital-limits-evaluator.ts","sha256": "0329acf0caa0011c918f807e91bc89790414f55b2682ed7ec6262aaf5b1caab6"},
       {"path": "lib/trader/risk/capital-limits.types.ts","sha256": "dd6811e6a8d9922b0e82b42b67195692fb47f406145d4814966f4616dbac9033"},
       {"path": "lib/trader/risk/decision.ts","sha256": "fb01f195a6d2f65190ec6f2aded23227d142b3b2231086c888d18f78c4932a95"},

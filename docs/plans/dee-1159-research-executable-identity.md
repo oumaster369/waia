@@ -2,7 +2,7 @@
 integrationIssue: DEE-1159
 integrationTitle: "AI-TRADER: bind fitted research candidates to actual execution evidence"
 parentIssue: DEE-1152
-branch: dee-1159-research-executable-identity
+branch: dee-1159-shared-modeled-stage
 riskTier: T3
 prPolicy: one-integration-pr
 executionSurfaces: [local, isolated-postgres, github-pr-ci]
@@ -87,6 +87,10 @@ The cross-module audit found that a caller could previously choose another sourc
 A separate native RED proved that successful backtest order/lifecycle writes survived a subsequent success-result insertion failure. Backtest and result persistence now share one driver-managed savepoint; terminal failure is written on the parent after both roll back, while the independently committed blind burn remains consumed. A unit scheduling counterexample also proved that two overlapping outcomes could prematurely restore shared parent methods. Reference-counted guards now restore only the original methods after the last outcome exits.
 
 Fresh cumulative synthetic PostgreSQL 16.14 evidence `dee1159-combined-pg16-v1` passes 69 cases across seven files, zero failures/skips: 29 lifecycle/ingress, 13 experiment registration, eight attempt registration, nine training payload and ten scoped ledger/progress. Captured source bytes remain unchanged during the run; this supersedes the earlier reader/attempt receipts only for the newly changed source and does not make those historical snapshots current. The separate targeted unit batch passes 26 cases. Original RED receipts remain retained. The reviewed ingress/outcome repairs are being extracted to child DEE-1183 for independent integration; the same-executable runner, trusted qualification and live readiness remain open here.
+
+## Behavior-preserving stage-kernel extraction
+
+After the bounded DEE-1200 diagnostic, extract only its modeled D5/accounting loop into a server-only internal kernel. The existing public entry retains root validation, strict request parsing, registered DEVELOPMENT loading, resolved policy/model checks, owner transaction and attempt lock, exact retry/material-ledger verification, final trace and atomic result insertion. The internal kernel receives only values assembled by that owner and its same transaction; it supplies no new public stage, payload, scorer, repository, clock or authority input. Preserve absolute source indices, advance-before-signal ordering, sizing, D20 signal admission, all actual effects and the current unqualified trace semantics. Return frozen outcome values rather than live exchange/repository ports. The seven native diagnostic cases and a new unknown-public-input-before-read refusal case must pass on a fresh isolated database; this extraction alone does not authorize validation, blind access, selection or qualification.
 
 ## WP-3 — evidence and callers
 

@@ -24,6 +24,7 @@ export const sourcePaths = [
   "lib/trader/research/research-training-payload-postgres-v1.ts",
   "lib/trader/research/research-training-policy-v1.ts",
   "lib/trader/research/research-training-diagnostic-postgres-v1.ts",
+  "lib/trader/research/research-modeled-stage-kernel-v1.ts",
   "lib/trader/research/research-lookback-evaluator-v1.ts",
   "lib/trader/research/dee-540-blind-tail-commit.ts",
   "lib/trader/research/research-orchestrator.ts",

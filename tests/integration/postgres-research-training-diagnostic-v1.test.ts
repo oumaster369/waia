@@ -163,6 +163,36 @@ describe.skipIf(!enabled || !url)("DEE-1159 registered training diagnostic Postg
     expect(counts!.fills).toBe(Number(first.fillCount));
   }, 120_000);
 
+  it("rejects caller-supplied payload, stage, score and ports before any database read", async () => {
+    const f = await fixture({ label: "public-request-strict", trials: [4],
+      closes: [100, 100, 100, 100, 90, 100, 100, 100] });
+    let queryCount = 0;
+    const monitoredSql = postgres(url!, {
+      max: 1, prepare: false, debug: () => { queryCount += 1; },
+    });
+    const monitoredDb = drizzle(monitoredSql, { schema: pgSchema }) as unknown as WaiaPostgresDb;
+    try {
+      const request = { attemptId: f.attempt.id, trialIndex: 0, limits: LIMITS };
+      const forbidden = {
+        bars: f.trainBars,
+        cycles: [{ cycleId: "caller-cycle" }],
+        stageKind: "blind",
+        score: "caller-pass",
+        result: { scientificQualified: true },
+        repository: { owner: "caller" },
+        policy: { capitalEligible: true },
+      } as const;
+      for (const [key, value] of Object.entries(forbidden)) {
+        await expect(runRegisteredResearchTrainingDiagnosticPostgresV1(
+          monitoredDb, f.context, { ...request, [key]: value },
+        )).rejects.toMatchObject({ name: "ZodError" });
+        expect(queryCount).toBe(0);
+      }
+    } finally {
+      await monitoredSql.end({ timeout: 5 });
+    }
+  }, 120_000);
+
   it("executes two declared lookbacks with separate actual D5 decisions, fills, accounting and exact retries", async () => {
     const f = await fixture({ label: "different-lookbacks", closes: [100, 100, 100, 100, 90, 100, 100, 100, 90, 100, 100, 100] });
     const short = await run(f, 0);
