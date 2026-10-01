@@ -44,7 +44,6 @@ import {
   listExecutionReportsV2Postgres,
   readExecutionAttemptProjectionV2Postgres,
   readExecutionAttemptV2Postgres,
-  readExecutionAttemptProjectionV2Postgres,
 } from "@/lib/trader/execution/v2/repository-postgres";
 import { HtxPlacementRejectedError } from "@/lib/trader/connectors/htx/classify-htx-placement";
 import {
