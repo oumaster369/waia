@@ -34,6 +34,10 @@ export type PaperLoopCycleDeps = {
 
 export type PaperLoopCycleReport = {
   outcome: "noop_disabled" | "skipped_no_signal" | "submitted" | "blocked";
+  reason?: "account_state_unavailable";
+  stateRefreshed?: boolean;
+  accountStateStatus?: "current" | "stale" | "unavailable";
+  accountStateErrorClass?: string;
   organizationId: string;
   cycleId: string | null;
   strategySignalCount: number;
