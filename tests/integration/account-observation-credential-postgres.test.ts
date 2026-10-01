@@ -305,6 +305,8 @@ describe.skipIf(!enabled)(
           'public.exchange_credentials','api_key_masked','SELECT') AS masked,
         has_column_privilege('waia_account_observation_credential',
           'public.exchange_credentials','observation_revision','SELECT') AS revision,
+        has_column_privilege('waia_account_observation_credential',
+          'public.exchange_credentials','observation_read_only','SELECT') AS observation_decision,
         has_any_column_privilege('waia_account_observation_credential',
           'public.exchange_credentials','INSERT,UPDATE') AS credential_writes,
         has_table_privilege('waia_account_observation_credential',
@@ -328,6 +330,7 @@ describe.skipIf(!enabled)(
         venue: false,
         masked: false,
         revision: false,
+        observation_decision: true,
         credential_writes: false,
         observation_reads: false,
         state_writes: false,
@@ -338,6 +341,60 @@ describe.skipIf(!enabled)(
         // DEE-1015 deliberately does not enable FORCE RLS on exchange_credentials.
         forced_rls: false,
       });
+    });
+
+    it("classifies only nonempty all-read scopes at the generated-column and decrypt boundaries", async () => {
+      const assignment = await seed();
+      const reader = await credentialReader([assignment]);
+      const cases = [
+        { name: "read", metadata: '{"scopes":["read"]}', allowed: true },
+        { name: "duplicate read", metadata: '{"scopes":["read","read"]}', allowed: true },
+        { name: "trade", metadata: '{"scopes":["read","trade"]}', allowed: false },
+        { name: "withdraw", metadata: '{"scopes":["read","withdraw"]}', allowed: false },
+        { name: "unknown", metadata: '{"scopes":["read","future-scope"]}', allowed: false },
+        { name: "empty array", metadata: '{"scopes":[]}', allowed: false },
+        { name: "missing scopes", metadata: "{}", allowed: false },
+        { name: "null scopes", metadata: '{"scopes":null}', allowed: false },
+        { name: "string scopes", metadata: '{"scopes":"read"}', allowed: false },
+        { name: "object scopes", metadata: '{"scopes":{}}', allowed: false },
+        { name: "non-string member", metadata: '{"scopes":["read",7]}', allowed: false },
+        { name: "mixed null and read", metadata: '{"scopes":["read",null]}', allowed: false },
+        { name: "empty metadata", metadata: "", allowed: false },
+        { name: "malformed metadata", metadata: "{", allowed: false },
+        { name: "SQL null metadata", metadata: null, allowed: false },
+      ] as const;
+
+      for (const candidate of cases) {
+        await admin`UPDATE public.exchange_credentials SET permission_metadata=${candidate.metadata}
+          WHERE id=${assignment.credentialId}`;
+        const credential = open("credential");
+        const role = ACCOUNT_OBSERVATION_LOGIN_PLAN.find((entry) => entry.purpose === "credential")!
+          .parentRole;
+        const projected = await credential.begin(async (tx) => {
+          await tx.unsafe(`SET LOCAL ROLE ${role}`);
+          await tx`SELECT set_config('waia.observation_org', ${assignment.organizationId}, true),
+            set_config('waia.observation_credential', ${assignment.credentialId}, true),
+            set_config('waia.observation_account', ${assignment.exchangeAccountId}, true)`;
+          return tx<{ observation_read_only: boolean }[]>`
+            SELECT observation_read_only FROM public.exchange_credentials
+            WHERE id=${assignment.credentialId}`;
+        });
+        expect(projected, candidate.name).toHaveLength(1);
+        expect(projected[0]!.observation_read_only, candidate.name).toBe(candidate.allowed);
+
+        const decrypted = reader.getDecryptedCredentials(
+          { organizationId: assignment.organizationId }, assignment.credentialId,
+        );
+        if (candidate.allowed) {
+          await expect(decrypted, candidate.name).resolves.toMatchObject({
+            apiKey: expect.any(String), apiSecret: expect.any(String),
+          });
+        } else {
+          await expect(decrypted, candidate.name).rejects.toThrow(
+            "ACCOUNT_OBSERVATION_CREDENTIAL_REFUSED:NOT_READ_ONLY",
+          );
+        }
+      }
     });
 
     it("refuses a trade-scoped credential before plaintext is returned", async () => {
