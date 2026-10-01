@@ -14,10 +14,7 @@ import {
   decryptCredentialPayload,
   encryptCredentialPayload,
 } from "@/lib/trader/credentials/envelope-crypto";
-import {
-  CredentialConflictError,
-  CredentialNotFoundError,
-} from "@/lib/trader/credentials/errors";
+import { CredentialConflictError, CredentialNotFoundError } from "@/lib/trader/credentials/errors";
 import { maskApiKey } from "@/lib/trader/credentials/masking";
 import {
   createPostgresExchangeCredentialRepository,
@@ -38,6 +35,7 @@ import type {
   StoreCredentialsInput,
 } from "@/lib/trader/credentials/types";
 import { createMasterKeyProvider } from "@/lib/trader/security/create-master-key-provider";
+import { assertTradeScopeStoredOnlyWhenLiveEnabledV1 } from "@/lib/trader/credentials/trade-scope-storage-gate";
 import {
   assertCredentialDecryptionAllowed,
   assertCredentialStorageAllowed,
@@ -132,6 +130,10 @@ export function createCredentialService(deps: CredentialServiceDeps): Credential
     async storeCredentials(context, input: StoreCredentialsInput): Promise<CredentialMetadata> {
       const scoped = await requireServiceOrgContext(context, deps.assertMembership);
 
+      assertTradeScopeStoredOnlyWhenLiveEnabledV1({
+        permissionMetadata: input.permissionMetadata,
+        orgLiveEnabled: input.orgLiveEnabled === true,
+      });
       const provider = await createProvider();
       assertCredentialStorageAllowed(provider);
 
@@ -273,12 +275,12 @@ export function createSqliteCredentialService(
   }
 
   const createProvider = deps.createProvider ?? createMasterKeyProvider;
-  const assertMembership = deps.assertMembership ?? ((context) => assertOrgMembershipSqlite(db, context));
-  const writeAudit = deps.writeAudit ?? ((input: TraderAuditInput) => writeTraderAuditLogSqlite(db, input));
+  const assertMembership =
+    deps.assertMembership ?? ((context) => assertOrgMembershipSqlite(db, context));
+  const writeAudit =
+    deps.writeAudit ?? ((input: TraderAuditInput) => writeTraderAuditLogSqlite(db, input));
   const writeAuditInTransaction = (tx: WaiaDb, input: TraderAuditInput): void => {
-    const result = deps.writeAudit
-      ? deps.writeAudit(input)
-      : writeTraderAuditLogSqlite(tx, input);
+    const result = deps.writeAudit ? deps.writeAudit(input) : writeTraderAuditLogSqlite(tx, input);
     if (result instanceof Promise) {
       throw new Error("[trader] SQLite credential audit writer must be synchronous");
     }
@@ -294,14 +296,18 @@ export function createSqliteCredentialService(
     ...base,
     async storeCredentials(context, input) {
       const scoped = await requireServiceOrgContext(context, assertMembership);
+      assertTradeScopeStoredOnlyWhenLiveEnabledV1({
+        permissionMetadata: input.permissionMetadata,
+        orgLiveEnabled: input.orgLiveEnabled === true,
+      });
       const provider = await createProvider();
       assertCredentialStorageAllowed(provider);
       const encrypted = await encryptCredentialPayload(provider, input.credentials);
 
       return db.transaction((tx) => {
         const sqlite = tx as WaiaDb;
-        const existing = listCredentialRowsForOrgSqlite(sqlite, scoped)
-          .find(
+        const existing =
+          listCredentialRowsForOrgSqlite(sqlite, scoped).find(
             (row) =>
               row.status === "active" &&
               row.venue === input.venue &&
@@ -390,16 +396,17 @@ export function createPostgresCredentialService(
         }),
     });
   }
-  const serviceFor = (executor: PgCredentialExecutor) => createCredentialService({
-    repository: createPostgresExchangeCredentialRepository(executor),
-    writeAudit: deps.writeAudit ?? ((input) => writeTraderAuditLogPostgres(executor, input)),
-    createProvider: deps.createProvider,
-    assertMembership:
-      deps.assertMembership ??
-      (async (context) => {
-        await assertOrgMembershipPostgres(executor, context);
-      }),
-  });
+  const serviceFor = (executor: PgCredentialExecutor) =>
+    createCredentialService({
+      repository: createPostgresExchangeCredentialRepository(executor),
+      writeAudit: deps.writeAudit ?? ((input) => writeTraderAuditLogPostgres(executor, input)),
+      createProvider: deps.createProvider,
+      assertMembership:
+        deps.assertMembership ??
+        (async (context) => {
+          await assertOrgMembershipPostgres(executor, context);
+        }),
+    });
   const base = serviceFor(ex);
   return {
     ...base,
