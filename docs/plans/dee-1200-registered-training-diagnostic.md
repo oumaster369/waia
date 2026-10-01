@@ -60,8 +60,26 @@ The independent CI review found that the scoped-ledger suite's existing local-on
 - The UUID normalization counterexample, corrected regression and rebased eight-suite native run are source-bound in the DEE-1200 readiness receipt. Independent review of the rebased changes and exact published-head CI remain pending.
 
 
-## PR732 integration correction — evaluator selection and actionability
+## PR732 scope correction — preserve legacy evaluation semantics
 
-The first published head `f233a585` failed the PostgreSQL 17 historical regression guard: the real one-bar poll caller supplied `activeStrategyIds:["__htr-blocked__"]` to prevent dispatch, but the paper runner reused that value as an evaluator selection. New strict selection validation then rejected it before Forecast persistence could run. Two focused fixture/poll cases reproduced the same failure (2 failed / 2 passed). The correction forwards only explicit `strategySignalIds` to evaluation and retains `activeStrategyIds` solely as its documented post-evaluation dispatch filter. Unknown explicitly selected evaluators still refuse before execution. The PIT-context unit fixture now selects the real mean-reversion evaluator while retaining its action-blocking sentinel. Default evaluation may contain additional diagnostic signals when only active IDs are supplied, but inactive signals still cannot dispatch. No registered research kernel, financial policy or permission is changed.
+The first published head f233 rejected an actionability sentinel in the PG17
+Forecast polling proof. The intermediate correction d828 restored that case but
+full CI then detected a changed sealed WP21 zero-fill signal/decision projection:
+legacy non-MI evaluation had begun applying an explicit strategy filter that
+main previously ignored. The sealed parity test and parent artifact are retained
+unchanged; their failure is evidence of a real compatibility change.
 
-This production-file correction supersedes the earlier byte-identical rebase statement for `paper-cycle-runner.ts` only. Prior 89-case native evidence remains historical; corrected focused tests, fresh PostgreSQL 17 original regression, independent delta review and new exact-head CI are required before merge. The initial failed CI and focused RED are retained.
+The registered diagnostic uses its dedicated lookback executable and closed
+modeled kernel. It does not call the legacy MVP evaluator or need new fixture/poll
+selection forwarding. Remove those unrelated evaluation/registry/paper changes
+from this child and restore their exact current-main bytes, including the prior
+PIT-context fixture. Remove only the two new tests for that excluded feature and
+their source-manifest entries; retain every existing parity/regression test.
+Earlier selection-specific tests and reviews describe abandoned intermediate
+heads, not current acceptance. The planned registered source/ledger/kernel,
+sizing, diagnostic and eight-suite executed CI remain in scope.
+
+The final correction requires the unchanged WP21 structural parity suite, legacy
+PIT context, the registered research focused tests, a fresh eight-suite PG16
+proof, independent delta review and all applicable exact-head CI. No strategy,
+financial rule, sealed golden or production authority is changed.

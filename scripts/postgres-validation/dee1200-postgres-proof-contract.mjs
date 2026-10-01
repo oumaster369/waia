@@ -45,8 +45,6 @@ export const sourcePaths = [
   "tests/helpers/research-experiment-fixture.ts",
   "tests/unit/trader-research-experiment-contract-v1.test.ts",
   "tests/unit/trader-research-lookback-evaluator-v1.test.ts",
-  "tests/unit/trader-research-strategy-selection-v1.test.ts",
-  "tests/unit/trader-paper-strategy-selection-forwarding.test.ts",
   "tests/unit/trader-research-stop-based-sizing.test.ts",
   "tests/unit/trader-research-training-policy-v1.test.ts",
   "tests/integration/postgres-research-experiment-registry-v1.test.ts",

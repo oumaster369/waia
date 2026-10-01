@@ -658,10 +658,7 @@ export async function runPaperCycleOnce(
     informationSufficiencySyntheticBinding: input.informationSufficiencySyntheticBinding,
     forecastRuntimeInput: input.forecastRuntimeInput,
     omitIntelligenceArtifacts: input.omitIntelligenceArtifacts,
-    // Evaluator selection and permission to act are separate contracts. Snapshot
-    // IDs are only the post-evaluation actionability filter below; they may
-    // intentionally match no registered evaluator to suppress every order.
-    strategySignalIds: input.strategySignalIds,
+    strategySignalIds: input.strategySignalIds ?? input.snapshot.activeStrategyIds,
   });
 
   const actionableSignals = evaluation.signals.filter(
@@ -1217,7 +1214,6 @@ export async function runFixturePaperCycles(
     const forecastRuntimeInput =
       (await input.forecastRuntimeInputResolver?.(next.snapshot)) ?? undefined;
     const result = await runPaperCycleOnce(input.deps, {
-      strategySignalIds: input.strategySignalIds,
       context: input.context,
       snapshot: next.snapshot,
       fusedContext:
@@ -1291,7 +1287,6 @@ export async function runPollPaperCycles(
     const forecastRuntimeInput =
       (await input.forecastRuntimeInputResolver?.(snapshot)) ?? undefined;
     const result = await runPaperCycleOnce(input.deps, {
-      strategySignalIds: input.strategySignalIds,
       context: input.context,
       snapshot,
       fusedContext,

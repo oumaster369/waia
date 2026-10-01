@@ -76,7 +76,7 @@ describe("runBacktest evaluation bar context", () => {
       accountKey: `evaluation-context-${input.runId}`,
       defaultQuantity: "0.01",
       costModel: createCostModelV1("0", "0"),
-      strategySignalIds: [MEAN_REVERSION_V0],
+      strategySignalIds: ["__htr-blocked__"],
       strategyId: MEAN_REVERSION_V0,
       strategyVersion: "0.1.0",
       regimeLabel: "AGGREGATE",
