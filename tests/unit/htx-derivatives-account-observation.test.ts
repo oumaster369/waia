@@ -21,7 +21,7 @@ const clock: ObservationClock = { now: () => now, sleep: (_ms, signal) => new Pr
 
 const fixtures = {
   usdt_isolated_perpetual: `{"status":"ok","ts":1780261200000,"data":[{"symbol":"BTC","contract_code":"BTC-USDT","margin_balance":99.755058840000000000,"margin_position":0,"margin_frozen":12.730000000000000000,"margin_available":87.025058840000000000,"profit_real":0,"profit_unreal":0,"risk_rate":123.5,"liquidation_price":null,"lever_rate":5,"margin_mode":"isolated","margin_account":"BTC-USDT","margin_asset":"USDT"}]}`,
-  usdt_cross_shared: `{"status":"ok","ts":1780261200000,"data":[{"margin_account":"USDT","margin_asset":"USDT","margin_balance":10000.000000000000000000,"margin_available":9000.000000000000000000,"margin_position":500.000000000000000000,"margin_frozen":500.000000000000000000,"margin_static":9800.000000000000000000,"profit_real":100.000000000000000000,"profit_unreal":100.000000000000000000,"risk_rate":12.500000000000000000,"margin_mode":"cross","contract_detail":[{"symbol":"BTC","contract_code":"BTC-USDT","margin_position":0,"margin_frozen":0,"margin_available":10000.000000000000000000,"profit_unreal":0,"liquidation_price":null,"lever_rate":5,"contract_type":"swap","pair":"BTC-USDT","business_type":"swap"}],"futures_contract_detail":[{"symbol":"BTC","contract_code":"BTC-USDT-211217","margin_position":0,"margin_frozen":0,"margin_available":10000.000000000000000000,"profit_unreal":0,"liquidation_price":null,"lever_rate":5,"contract_type":"next_week","pair":"BTC-USDT","business_type":"futures"}]}]}`,
+  usdt_cross_shared: `{"status":"ok","ts":1780261200000,"data":[{"margin_account":"USDT","margin_asset":"USDT","margin_balance":10000.000000000000000000,"withdraw_available":9000.000000000000000001,"margin_position":500.000000000000000000,"margin_frozen":500.000000000000000000,"margin_static":9800.000000000000000000,"profit_real":100.000000000000000000,"profit_unreal":100.000000000000000000,"risk_rate":12.500000000000000000,"margin_mode":"cross","contract_detail":[{"symbol":"BTC","contract_code":"BTC-USDT","margin_position":0,"margin_frozen":0,"margin_available":10000.000000000000000000,"profit_unreal":0,"liquidation_price":null,"lever_rate":5,"contract_type":"swap","pair":"BTC-USDT","business_type":"swap"}],"futures_contract_detail":[{"symbol":"BTC","contract_code":"BTC-USDT-211217","margin_position":0,"margin_frozen":0,"margin_available":10000.000000000000000000,"profit_unreal":0,"liquidation_price":null,"lever_rate":5,"contract_type":"next_week","pair":"BTC-USDT","business_type":"futures"}]}]}`,
   coin_perpetual: `{"status":"ok","ts":1780261200000,"data":[{"symbol":"THETA","contract_code":"THETA-USD","margin_balance":717.600960962561438668000000000000000000000000000000000000,"margin_position":15.483471394286599055,"margin_frozen":13.765413852951653365,"margin_available":688.352075715323186248,"profit_real":-1.234500000000000001,"profit_unreal":-6.321988896485647800000000000000000000000000000000000000,"risk_rate":24.134301218550508200,"liquidation_price":0.198584522842823398,"lever_rate":20,"margin_static":723.922949859047086468}]}`,
   coin_delivery_futures: `{"status":"ok","ts":1780261200000,"data":[{"symbol":"BTC","margin_balance":0.987654321098765432,"margin_available":0.800000000000000000,"margin_position":0.100000000000000000,"margin_frozen":0.087654321098765432,"profit_real":-0.000000000000000001,"profit_unreal":-0.000000000000000002,"risk_rate":null,"liquidation_price":null,"lever_rate":10,"margin_static":0.987654321098765432}]}`,
 } as const;
@@ -55,7 +55,8 @@ describe("HTX derivatives account projection", () => {
       expect(result.accounts[0]?.accountCode).toBe("USDT");
       expect(result.accounts[0]?.collateralAsset).toBe("USDT");
       expect(result.accounts[0]?.marginBalance).toBe("10000.000000000000000000");
-      expect(result.accounts[0]?.marginAvailable).toBe("9000.000000000000000000");
+      expect(result.accounts[0]?.marginAvailable).toBeNull();
+      expect(result.accounts[0]).toHaveProperty("withdrawAvailable", "9000.000000000000000001");
     }
     if (family === "coin_perpetual") { expect(result.accounts[0]?.accountCode).toBe("THETA-USD"); expect(result.accounts[0]?.collateralAsset).toBe("THETA"); }
     if (family === "coin_delivery_futures") {
@@ -70,7 +71,8 @@ describe("HTX derivatives account projection", () => {
   it("uses shared cross-pool top-level totals once despite perpetual and delivery details", () => {
     const [account] = parseHtxDerivativesAccountSnapshot("usdt_cross_shared", fixtures.usdt_cross_shared).accounts;
     expect(account?.marginBalance).toBe("10000.000000000000000000");
-    expect(account?.marginAvailable).toBe("9000.000000000000000000");
+    expect(account?.marginAvailable).toBeNull();
+    expect(account).toHaveProperty("withdrawAvailable", "9000.000000000000000001");
   });
 
   it("keeps valid empty data distinct from a zero-balance account", () => {

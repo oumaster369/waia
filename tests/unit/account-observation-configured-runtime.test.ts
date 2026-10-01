@@ -168,7 +168,7 @@ afterEach(() => vi.useRealTimers());
 
 describe("configured observation runtime, real local composition with mock persistence/network", () => {
   const derivativesResponse = () => Response.json({ status: "ok", ts: Date.now(), data: [{
-    margin_account: "USDT", margin_balance: "200.50", margin_available: "190.25",
+    margin_account: "USDT", margin_balance: "200.50", withdraw_available: "190.25",
   }] });
   const derivativesCalls = (f: ReturnType<typeof setup>) => f.fetchImpl.mock.calls.filter(
     ([url]) => new URL(String(url)).hostname === "api.hbdm.com");

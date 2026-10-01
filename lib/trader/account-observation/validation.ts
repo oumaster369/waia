@@ -41,6 +41,7 @@ const derivativeAccount = z.object({
   marginMode: z.enum(["isolated", "cross"]).nullable(),
   marginBalance: z.string().regex(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/).max(80).nullable(),
   marginAvailable: z.string().regex(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/).max(80).nullable(),
+  withdrawAvailable: z.string().regex(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/).max(80).nullable(),
   marginPosition: z.string().regex(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/).max(80).nullable(),
   marginFrozen: z.string().regex(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/).max(80).nullable(),
   marginStatic: z.string().regex(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/).max(80).nullable(),
@@ -79,11 +80,27 @@ export function sameObservationBinding(a: ObservationBinding, b: ObservationBind
     a.configurationRevision === b.configurationRevision;
 }
 /** Strict allowlist: stored/read payloads cannot acquire raw responses or credentials. */
+export type AccountObservationComponentStatus = "COMPLETE" | "PARTIAL" | "ERROR";
+
+/** Aggregate collected components only; NOT_CONFIGURED derivative families are omitted by callers. */
+export function deriveAccountObservationStatus(
+  statuses: readonly AccountObservationComponentStatus[],
+): AccountObservationComponentStatus {
+  return statuses.every(status => status === "COMPLETE") ? "COMPLETE" :
+    statuses.every(status => status === "ERROR") ? "ERROR" : "PARTIAL";
+}
+
 export function parseAccountObservation(value: unknown): AccountObservation {
   const result = observation.parse(value);
   const components = [result.balances, result.openOrders, ...result.trades.map(t => t.component)];
-  const status = components.every(c => c.status === "COMPLETE") ? "COMPLETE" :
-    components.every(c => c.status === "ERROR") ? "ERROR" : "PARTIAL";
+  const derivativeStatuses = result.schemaVersion === "account-observation/v2"
+    ? result.derivatives.families.flatMap(item =>
+      item.status === "NOT_CONFIGURED" ? [] : [item.status])
+    : [];
+  const status = deriveAccountObservationStatus([
+    ...components.map(component => component.status),
+    ...derivativeStatuses,
+  ]);
   if (result.collectionStartedAtMs > result.collectionCompletedAtMs || status !== result.status ||
     components.some(c => c.readStartedAtMs < result.collectionStartedAtMs ||
       c.readCompletedAtMs > result.collectionCompletedAtMs) ||
@@ -124,7 +141,11 @@ function validateDerivativesProjection(
       throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
     }
     const rows = item.accounts ?? [];
-    if (new Set(rows.map(row => row.accountCode)).size !== rows.length || rows.some(row => {
+    const missingRequiredBalance = item.status === "COMPLETE" && rows.some(row =>
+      row.marginBalance === null || (item.family === "usdt_cross_shared"
+        ? row.withdrawAvailable == null
+        : row.marginAvailable === null));
+    if (missingRequiredBalance || new Set(rows.map(row => row.accountCode)).size !== rows.length || rows.some(row => {
       if (item.family === "usdt_cross_shared") {
         return row.accountCode !== "USDT" || row.collateralAsset !== "USDT" ||
           (row.marginMode !== null && row.marginMode !== "cross");

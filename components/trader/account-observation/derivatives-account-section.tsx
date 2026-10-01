@@ -76,7 +76,9 @@ function Family({ observation, stale, nowMs }: { observation: DerivativesAccount
           </p>
           <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Value label="Margin balance" value={account.marginBalance} />
-            <Value label="Available margin" value={account.marginAvailable} />
+            {family === "usdt_cross_shared"
+              ? <Value label="Available to transfer" value={account.withdrawAvailable ?? null} />
+              : <Value label="Available margin" value={account.marginAvailable} />}
             <Value label="Frozen margin" value={account.marginFrozen} />
             <Value label="Unrealized PnL" value={account.unrealizedPnl} />
           </dl>

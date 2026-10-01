@@ -55,16 +55,20 @@ function observation(patch: Partial<AccountObservation> = {}): AccountObservatio
 function derivatives(): DerivativesAccountObservation {
   const accounts: Record<HtxDerivativesAccountFamily, HtxDerivativesAccountRow[]> = {
     usdt_isolated_perpetual: [{ accountCode: "BTC-USDT", collateralAsset: "USDT", marginMode: "isolated",
-      marginBalance: "0", marginAvailable: null, marginPosition: null, marginFrozen: null, marginStatic: null,
+      marginBalance: "0", marginAvailable: "0", withdrawAvailable: null,
+      marginPosition: null, marginFrozen: null, marginStatic: null,
       realizedPnl: null, unrealizedPnl: "-0.000000000000000001", riskRate: null, liquidationPrice: null, leverage: null }],
     usdt_cross_shared: [{ accountCode: "USDT", collateralAsset: "USDT", marginMode: "cross",
-      marginBalance: "10000", marginAvailable: "9000", marginPosition: null, marginFrozen: null, marginStatic: null,
+      marginBalance: "10000", marginAvailable: null, withdrawAvailable: "9000",
+      marginPosition: null, marginFrozen: null, marginStatic: null,
       realizedPnl: null, unrealizedPnl: null, riskRate: null, liquidationPrice: null, leverage: null }],
     coin_perpetual: [{ accountCode: "THETA-USD", collateralAsset: "THETA", marginMode: null,
-      marginBalance: "1.25", marginAvailable: null, marginPosition: null, marginFrozen: null, marginStatic: null,
+      marginBalance: "1.25", marginAvailable: "0", withdrawAvailable: null,
+      marginPosition: null, marginFrozen: null, marginStatic: null,
       realizedPnl: null, unrealizedPnl: null, riskRate: null, liquidationPrice: null, leverage: null }],
     coin_delivery_futures: [{ accountCode: "BTC", collateralAsset: "BTC", marginMode: null,
-      marginBalance: "0.5", marginAvailable: null, marginPosition: null, marginFrozen: null, marginStatic: null,
+      marginBalance: "0.5", marginAvailable: "0", withdrawAvailable: null,
+      marginPosition: null, marginFrozen: null, marginStatic: null,
       realizedPnl: null, unrealizedPnl: null, riskRate: null, liquidationPrice: null, leverage: null }],
   };
   const families: DerivativesAccountFamilyObservation[] = HTX_DERIVATIVES_ACCOUNT_FAMILIES.map((family) => ({
@@ -401,7 +405,7 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
           responseGeneratedAtMs: now - ACCOUNT_OBSERVATION_STALE_AFTER_MS - 5,
           status: "PARTIAL" as const, error: null }
       : item);
-    const mixed = parseAccountObservation({ ...saved,
+    const mixed = parseAccountObservation({ ...saved, status: "PARTIAL",
       collectionStartedAtMs: now - ACCOUNT_OBSERVATION_STALE_AFTER_MS - 20,
       derivatives: { ...saved.derivatives!, families } });
     render(<AccountObservationPanel view={{ status: "CURRENT", observation: mixed, stale: false }} />);

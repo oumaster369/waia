@@ -27,6 +27,8 @@ export type HtxDerivativesAccountRow = Readonly<{
   marginMode: "isolated" | "cross" | null;
   marginBalance: string | null;
   marginAvailable: string | null;
+  /** Venue transfer availability, distinct from margin available to open positions. */
+  withdrawAvailable: string | null;
   marginPosition: string | null;
   marginFrozen: string | null;
   marginStatic: string | null;

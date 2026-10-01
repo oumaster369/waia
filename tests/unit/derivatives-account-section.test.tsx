@@ -14,6 +14,7 @@ const account = (patch: Partial<HtxDerivativesAccountRow> = {}): HtxDerivativesA
   marginMode: "isolated",
   marginBalance: "0",
   marginAvailable: null,
+  withdrawAvailable: null,
   marginPosition: null,
   marginFrozen: "0.125000000000000001",
   marginStatic: null,
@@ -56,13 +57,15 @@ describe("futures account presentation", () => {
     const shared = family("usdt_cross_shared", {
       family: "usdt_cross_shared",
       accounts: [account({ accountCode: "USDT", collateralAsset: "USDT", marginMode: "cross",
-        marginBalance: "10000.000000000000000000", marginAvailable: "9000.000000000000000000" })],
+        marginBalance: "10000.000000000000000000", marginAvailable: null, withdrawAvailable: "9000.000000000000000001" })],
     });
     render(<DerivativesAccountSection nowMs={nowMs} projection={projection([shared])} />);
     const section = screen.getByRole("region", { name: "USDT cross · shared derivatives pool" });
     expect(within(section).getByText(/Shared USDT pool for perpetual and delivery contracts/)).toBeTruthy();
     expect(within(section).getAllByText("10000.000000000000000000")).toHaveLength(1);
-    expect(within(section).getByText("9000.000000000000000000")).toBeTruthy();
+    expect(within(section).getByText("9000.000000000000000001")).toBeTruthy();
+    expect(within(section).getByText("Available to transfer")).toBeTruthy();
+    expect(within(section).queryByText("Available margin")).toBeNull();
   });
 
   it("shows stale retained values and partial rows with safe fixed errors", () => {

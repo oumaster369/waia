@@ -312,7 +312,7 @@
       {"path": "lib/trader/account-observation/derivatives/htx-account-transport.ts","sha256": "46ffcbfffe47775709e133a322e47ec7ccb2249d23f0b7da9b857acd44c6dacc"},
       {"path": "lib/trader/account-observation/htx-get-transport.ts","sha256": "3b0ea19c5aff17186e10fe13f2ebbec2e39fa46cf8a0ebfaa36f2e781040c561"},
       {"path": "lib/trader/account-observation/htx-reader.ts","sha256": "cc600c6b4d4329bcd046b04f86a57c976fa89f791a6bcfc0ca62b74328b13c55"},
-      {"path": "lib/trader/account-observation/service.ts","sha256": "425fba8b0dfa45dd6303658ac131e9bea2b15b6278933850664875411ecd3f91"},
+      {"path": "lib/trader/account-observation/service.ts","sha256": "c5eac6cf86e61a3bd6cdb5ef407df5da63dc4e880092bfd7b40f7c1cce572334"},
       {"path": "lib/trader/account-observation/types.ts","sha256": "4e3d75570ce9f0640940e53e770cfc7224dfe3079494b943b288e5442ee8e18f"},
       {"path": "lib/trader/admin-console/collectors/fetch-news.ts","sha256": "5207fb0c80a46b83b3a82fdeed0e4bb13f409fcdc847c3d93a3b151d0d931633"},
       {"path": "lib/trader/admin-console/collectors/run-due.ts","sha256": "a06cd64107d225f86f6d23063a5b9af3d7bfae015afebc68514ba6107f93f9b6"},

@@ -132,8 +132,8 @@ describe("DEE-1019 tenant/Admin observation parity, enumeration and secret exclu
     const collectionCompletedAtMs = base.collectionCompletedAtMs + 30;
     const sharedPool: HtxDerivativesAccountRow = {
       accountCode: "USDT", collateralAsset: "USDT", marginMode: "cross",
-      marginBalance: "10000.000000000000000000", marginAvailable: "9000.000000000000000000",
-      marginPosition: null, marginFrozen: null, marginStatic: null, realizedPnl: null,
+      marginBalance: "10000.000000000000000000", marginAvailable: null,
+      withdrawAvailable: "9000.000000000000000000", marginPosition: null, marginFrozen: null, marginStatic: null, realizedPnl: null,
       unrealizedPnl: null, riskRate: null, liquidationPrice: null, leverage: null,
     };
     const families: DerivativesAccountFamilyObservation[] = HTX_DERIVATIVES_ACCOUNT_FAMILIES.map(family =>

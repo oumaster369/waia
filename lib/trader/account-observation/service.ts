@@ -5,7 +5,7 @@ import type { AccountObservation, AccountObservationReader, ObservationBinding, 
   DerivativesAccountFamilyObservation, DerivativesAccountObservation, ObservationComponent,
   ObservationConfig, ObservationLease, ObservationReadError, ObservationRepository,
   ObservationTickResult, ObservedOrder, ObservedTrade, ReadEnvelope } from "./types";
-import { parseAccountObservation, sameObservationBinding } from "./validation";
+import { deriveAccountObservationStatus, parseAccountObservation, sameObservationBinding } from "./validation";
 
 const bindingKeys = ["organizationId", "credentialId", "exchangeAccountId", "credentialRevision",
   "configurationRevision"] as const;
@@ -187,10 +187,12 @@ export function createAccountObservationService(deps: Readonly<{
       if (responseGeneratedAtMs !== null && responseGeneratedAtMs > ended) invalid();
       const accounts = Object.freeze(Array.from(snapshot.accounts, account =>
         Object.freeze({ ...row(account) }) as unknown as HtxDerivativesAccountRow));
-      // These account-info endpoints do not uniformly supply position-specific
-      // or optional metrics. Their absence stays null without downgrading an
-      // otherwise complete balance summary. Missing balance/available is partial.
-      const partial = accounts.some(account => account.marginBalance === null || account.marginAvailable === null);
+      // Cross-margin exposes withdraw_available as transferable account balance;
+      // other families use margin_available. Optional position metrics remain null.
+      const partial = accounts.some(account => account.marginBalance === null ||
+        (family === "usdt_cross_shared"
+          ? account.withdrawAvailable == null
+          : account.marginAvailable === null));
       return Object.freeze({ family, status: partial ? "PARTIAL" : "COMPLETE", accounts,
         readStartedAtMs: started, readCompletedAtMs: ended, responseGeneratedAtMs, error: null });
     } catch (error) {
@@ -241,13 +243,17 @@ export function createAccountObservationService(deps: Readonly<{
           if (trades.at(-1)!.component.error === "IDENTITY_MISMATCH") return { status: "FENCED" };
         }
         const components = [balances, openOrders, ...trades.map(item => item.component)];
-        const status: AccountObservation["status"] = components.every(item => item.status === "COMPLETE") ? "COMPLETE" :
-          components.every(item => item.status === "ERROR") ? "ERROR" : "PARTIAL";
         const observationId = text(deps.newObservationId());
         const holdings = balances.status === "COMPLETE" ? balances.values : null;
-        const common = (collectionCompletedAtMs: number) => ({ observationId, binding,
-          collectionStartedAtMs: started, collectionCompletedAtMs, status, balances, openOrders,
-          trades: Object.freeze(trades), holdings });
+        const common = (collectionCompletedAtMs: number,
+          derivativeFamilies: readonly DerivativesAccountFamilyObservation[] = []) => ({ observationId, binding,
+          collectionStartedAtMs: started, collectionCompletedAtMs,
+          status: deriveAccountObservationStatus([
+            ...components.map(item => item.status),
+            ...derivativeFamilies.flatMap(item =>
+              item.status === "NOT_CONFIGURED" ? [] : [item.status]),
+          ]),
+          balances, openOrders, trades: Object.freeze(trades), holdings });
         let derivatives: DerivativesAccountObservation | undefined;
         if (config.htxDerivativesFamilies?.length) {
           const families: DerivativesAccountFamilyObservation[] = HTX_DERIVATIVES_ACCOUNT_FAMILIES.map(family =>
@@ -263,7 +269,7 @@ export function createAccountObservationService(deps: Readonly<{
               try {
                 const candidateEnd = now();
                 if (candidateEnd < started) invalid();
-                parseAccountObservation({ schemaVersion: "account-observation/v2", ...common(candidateEnd),
+                parseAccountObservation({ schemaVersion: "account-observation/v2", ...common(candidateEnd, families),
                   derivatives: { schemaVersion: "htx-derivatives-observation/v1", families } });
               } catch {
                 families[index] = Object.freeze({ family, status: "ERROR", accounts: null,
@@ -279,7 +285,7 @@ export function createAccountObservationService(deps: Readonly<{
         if (!await active()) return { status: "FENCED" };
         const ended = now(); if (ended < started) invalid();
         const candidate = Object.freeze(derivatives
-          ? { schemaVersion: "account-observation/v2" as const, ...common(ended), derivatives }
+          ? { schemaVersion: "account-observation/v2" as const, ...common(ended, derivatives.families), derivatives }
           : { schemaVersion: "account-observation/v1" as const, ...common(ended) });
         parseAccountObservation(candidate);
         const observation: AccountObservation = candidate;

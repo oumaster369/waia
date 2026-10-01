@@ -36,7 +36,8 @@ export function createPostgresObservationAssignmentSource(
     accounts.add(account);
     approved.set(key(binding), Object.freeze({ binding, config }));
   }
-  const envelope = approved.values().next().value;
+  // Only a spot envelope can admit self-service inventory, regardless of manifest order.
+  const envelope = [...approved.values()].find(item => !item.config.htxDerivativesFamilies?.length);
   const reader = createPostgresObservationReader(sql);
   let loading = false;
   let live = new Map<string, ObservationAssignment>();

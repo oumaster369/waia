@@ -144,7 +144,7 @@ describe("explicit assignments filtered by current read-only DB state", () => {
     expect(list[1]?.binding.organizationId).toBe(extraOrg);
     expect(list[1]?.config.revision).toBe(a.config.revision);
   });
-  it("reserves a later explicit futures account before a full 20-row spot inventory", async () => {
+  it.each([false, true])("reserves explicit accounts with a full spot inventory (futures first: %s)", async (futuresFirst) => {
     const spot = assignment();
     const { revision: _revision, ...parameters } = spot.config;
     const config = createObservationConfiguration({ ...parameters, htxDerivativesFamilies: ["usdt_cross_shared"] });
@@ -156,10 +156,12 @@ describe("explicit assignments filtered by current read-only DB state", () => {
     }));
     const begin = vi.fn(async (run: (tx: unknown) => Promise<unknown>) => run(
       Object.assign(async () => rows, { unsafe: async () => undefined })));
-    const source = createPostgresObservationAssignmentSource(sql, [spot, futures], { begin } as unknown as Sql);
+    const manifest = futuresFirst ? [futures, spot] : [spot, futures];
+    const source = createPostgresObservationAssignmentSource(sql, manifest, { begin } as unknown as Sql);
     const result = await source.loadAssignments(signal());
     expect(result).toHaveLength(20);
-    expect(result.slice(0, 2)).toEqual([spot, futures]);
+    expect(result.slice(0, 2)).toEqual(manifest);
+    expect(begin).toHaveBeenCalledTimes(1);
     expect(result.slice(2).every(item => !item.config.htxDerivativesFamilies)).toBe(true);
     expect(await source.authorizeOpen(futures.binding, signal())).toBe(true);
     expect(await source.authorizeOpen({ ...spot.binding, exchangeAccountId: "1019" }, signal())).toBe(false);

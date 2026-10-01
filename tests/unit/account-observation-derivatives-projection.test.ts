@@ -36,7 +36,9 @@ function row(family: HtxDerivativesAccountFamily): HtxDerivativesAccountRow {
   const collateralAsset = family.startsWith("usdt_") ? "USDT" : family === "coin_perpetual" ? "THETA" : "BTC";
   return { accountCode, collateralAsset,
     marginMode: family === "usdt_cross_shared" ? "cross" : family === "usdt_isolated_perpetual" ? "isolated" : null,
-    marginBalance: "0", marginAvailable: null, marginPosition: null, marginFrozen: null, marginStatic: null,
+    marginBalance: "0", marginAvailable: family === "usdt_cross_shared" ? null : "0",
+    withdrawAvailable: family === "usdt_cross_shared" ? "0" : null,
+    marginPosition: null, marginFrozen: null, marginStatic: null,
     realizedPnl: null, unrealizedPnl: "-0.000000000000000001", riskRate: null, liquidationPrice: null, leverage: null };
 }
 function family(family: HtxDerivativesAccountFamily): DerivativesAccountFamilyObservation {
@@ -79,7 +81,12 @@ describe("saved derivatives observation projection", () => {
       accounts: [], readStartedAtMs: epoch + 10, readCompletedAtMs: epoch + 20 } : item);
     const errorState = unconfigured.map((item, index) => index === 0 ? { ...item, status: "ERROR" as const,
       accounts: null, readStartedAtMs: epoch + 10, readCompletedAtMs: epoch + 20, error: "READ_FAILED" as const } : item);
-    const make = (families: readonly DerivativesAccountFamilyObservation[]) => v2({ families });
+    const make = (families: readonly DerivativesAccountFamilyObservation[]) => {
+      const value = v2({ families });
+      return families.some(item => item.status === "PARTIAL" || item.status === "ERROR")
+        ? { ...value, status: "PARTIAL" as const }
+        : value;
+    };
     expect(parseAccountObservation(make(unconfigured)).schemaVersion).toBe("account-observation/v2");
     expect(parseAccountObservation(make(empty)).schemaVersion).toBe("account-observation/v2");
     expect(parseAccountObservation(make(errorState)).schemaVersion).toBe("account-observation/v2");

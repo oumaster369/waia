@@ -229,6 +229,7 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
               { name: "HtxDerivativesAccountFamily", original: undefined, typeOnly: true },
               { name: "HtxDerivativesAccountRow", original: undefined, typeOnly: true },
             ] : [
+              { name: "deriveAccountObservationStatus", original: undefined, typeOnly: false },
               { name: "parseAccountObservation", original: undefined, typeOnly: false },
               { name: "sameObservationBinding", original: undefined, typeOnly: false },
             ]);

@@ -12,8 +12,8 @@ state:
   currentWorkPackage: integration-review-and-acceptance
   completedWorkPackages: [read-only-foundation, v2-projection-service, shared-admin-cabinet-display, synthetic-native-pg-fixtures]
   remainingWorkPackages: [independent-security-review, current-integration-validation, migration-0229-sequence-resolution, exact-head-ci-and-rollout]
-  prNumber: null
-  prUrl: null
+  prNumber: 726
+  prUrl: https://github.com/oumaster369/waia/pull/726
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: "Production application of migration 0229 remains prohibited; resolve its assignment and sequence before rollout."
@@ -51,6 +51,14 @@ The four supported read families are USDT isolated perpetual, the shared USDT cr
 
 ## Acceptance
 
-Implementation scope is present, but DEE-1153 is not integration-ready or production-ready. Remaining acceptance requires current exact-head unit and tenant-isolation checks, lint/typecheck/build, Admin and cabinet e2e coverage, native PostgreSQL evidence against the approved migration/role design, independent security review of the new read-admission and family boundaries, and exact-head required CI checks. The existing native prototype only proves the local-validation schema path.
+The corrected implementation has passed local scoped and tenant checks (224 cases), Admin/cabinet browser coverage (3 cases), lint/typecheck/build, canonical and graph validation, plus an independent source review. A fresh isolated PostgreSQL 17.11 five-file run passed 135 cases with zero failures/skips and stable source hashes, including local-validation futures persistence and canonical restricted credential paths. Exact-head GitHub CI remains required after publication; this is not production rollout acceptance. The source-pinned native receipt must be bound to the eventual commit before claiming commit-level coverage.
 
 DEE-1032's dynamic credential inventory and derivatives-family enrollment remains open and out of scope; this implementation accepts only explicitly configured manifest families and must not claim all eligible accounts are discovered. Reconcile the ordered migration queue and resolve the explicit 0229 production-application prohibition before rollout. Do not add/apply a migration, widen roles, start a derivatives collector, or activate a family without that sequence review. No new blanket human-permission gate is introduced: once the concrete implementation passes the stated checks and the 0229 prohibition is resolved, the user's existing authorization covers merge and non-trading production deployment.
+
+## Review corrections before integration
+
+Mixed manifest ordering must not disable spot self-service inventory: select the spot-only inventory envelope independently of the order of explicit derivatives accounts, retaining the 20-account bound and priority for explicit assignments.
+
+The [official HTX cross-account schema](https://huobiapi.github.io/docs/usdt_swap/v1/en/#cross-query-user-39-s-account-information) supplies top-level `withdraw_available` (available to transfer); `margin_available` belongs to per-contract details. Preserve these as separate fields, display cross-pool transfer availability once, and never substitute transfer availability for available margin or sum contract details. Absent venue fields remain explicit null. The v2 projection first ships in this PR and its synthetic fixtures must follow the corrected contract; already deployed v1 projections remain compatible. Do not rewrite or silently normalize stored observation seals. Family completeness uses the documented required balance and family-specific availability. Snapshot completeness includes all configured derivatives families, while unconfigured families do not make a spot snapshot partial.
+
+Current correction evidence is saved in `audit-ai-trader-2026-10-01/pr726-integrated-local-readiness` and `dee1153-pg17-isolated-refresh-d4d6f234` outside the repository. An earlier shared-cluster run had 57 passed/78 skipped because the cluster retained DEE1032 role memberships; it is excluded from acceptance. The fresh cluster used a new volume, and the original local validation container was restored unchanged. No production or venue actions occurred.

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountObservationFailure, AccountObservationReadFailure, createAccountObservationService } from
   "@/lib/trader/account-observation/service";
+import { parseAccountObservation } from "@/lib/trader/account-observation/validation";
 import type { AccountObservation, AccountObservationReader, ObservationBinding, ObservationClock,
   ObservationConfig, ObservationLease, ObservationRepository, ObservedOrder, ReadEnvelope } from
   "@/lib/trader/account-observation/types";
@@ -54,7 +55,9 @@ function setup(overrides: Partial<ObservationConfig> = {}) {
     return { schemaVersion: "htx-derivatives-account/v1", family, responseGeneratedAtMs: null,
       accounts: [{ accountCode, collateralAsset,
         marginMode: family === "usdt_cross_shared" ? "cross" : family === "usdt_isolated_perpetual" ? "isolated" : null,
-        marginBalance: "1.250000000000000001", marginAvailable: "1", marginPosition: "0", marginFrozen: "0",
+        marginBalance: "1.250000000000000001", marginAvailable: "1",
+        withdrawAvailable: family === "usdt_cross_shared" ? "1" : null,
+        marginPosition: "0", marginFrozen: "0",
         marginStatic: "1", realizedPnl: "0", unrealizedPnl: "-0.000000000000000001", riskRate: "0",
         liquidationPrice: "0", leverage: "1" }],
     };
@@ -145,6 +148,75 @@ describe("DEE-960 injected account observation — no production adapter or real
     expect(observation.status).toBe("COMPLETE");
     expect(f.reader.dispose).toHaveBeenCalledOnce();
   });
+  it("uses cross withdrawAvailable as transferable balance without requiring per-contract marginAvailable", async () => {
+    const f = setup({ htxDerivativesFamilies: ["usdt_cross_shared"] });
+    vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => ({
+      binding: { ...initial },
+      snapshot: {
+        ...f.snapshot(family),
+        accounts: [{
+          ...f.snapshot(family).accounts[0]!,
+          marginAvailable: null,
+          withdrawAvailable: "0.75",
+        } as unknown as HtxDerivativesAccountSnapshot["accounts"][number]],
+      },
+    }));
+
+    expect(await f.service.tick(initial, "owner")).toMatchObject({ status: "COMMITTED" });
+    const observation = f.state.observations[0]!;
+    expect(observation.status).toBe("COMPLETE");
+    expect(observation.derivatives!.families.find(item => item.family === "usdt_cross_shared")?.accounts?.[0])
+      .toMatchObject({ marginAvailable: null, withdrawAvailable: "0.75" });
+    const malformedDerivatives = {
+      ...observation.derivatives!,
+      families: observation.derivatives!.families.map(item => item.family === "usdt_cross_shared"
+        ? { ...item, accounts: item.accounts?.map(account => ({ ...account, withdrawAvailable: null })) }
+        : item),
+    };
+    expect(() => parseAccountObservation({ ...observation, derivatives: malformedDerivatives }))
+      .toThrow("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
+
+    const missingTransferBalance = setup({ htxDerivativesFamilies: ["usdt_cross_shared"] });
+    vi.mocked(missingTransferBalance.reader.readDerivativesAccount!).mockImplementation(async family => ({
+      binding: { ...initial },
+      snapshot: { ...missingTransferBalance.snapshot(family), accounts: [{
+        ...missingTransferBalance.snapshot(family).accounts[0]!, withdrawAvailable: null,
+      }] },
+    }));
+    await missingTransferBalance.service.tick(initial, "owner");
+    expect(missingTransferBalance.state.observations[0]?.status).toBe("PARTIAL");
+    expect(missingTransferBalance.state.observations[0]?.derivatives!.families
+      .find(item => item.family === "usdt_cross_shared")?.status).toBe("PARTIAL");
+  });
+
+  it.each(["PARTIAL", "ERROR"] as const)(
+    "includes configured derivative %s in aggregate status without treating unconfigured families as failures",
+    async derivativeStatus => {
+      const f = setup({ htxDerivativesFamilies: ["coin_perpetual"] });
+      if (derivativeStatus === "PARTIAL") {
+        vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => ({
+          binding: { ...initial },
+          snapshot: { ...f.snapshot(family), accounts: [{
+            ...f.snapshot(family).accounts[0]!, marginAvailable: null,
+          }] },
+        }));
+      } else {
+        vi.mocked(f.reader.readDerivativesAccount!).mockRejectedValue(new Error("synthetic read failure"));
+      }
+
+      const result = await f.service.tick(initial, "owner");
+      expect(result).toMatchObject({ status: "COMMITTED" });
+      const observation = f.state.observations[0]!;
+      expect(observation.status).toBe("PARTIAL");
+      expect(observation.derivatives!.families.find(item => item.family === "coin_perpetual")?.status)
+        .toBe(derivativeStatus);
+      expect(() => parseAccountObservation({ ...observation, status: "COMPLETE" }))
+        .toThrow("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
+      expect(observation.derivatives!.families.filter(item => item.status === "NOT_CONFIGURED"))
+        .toHaveLength(HTX_DERIVATIVES_ACCOUNT_FAMILIES.length - 1);
+    },
+  );
+
   it("copies the configured family list and rejects empty, duplicate, or non-family entries", async () => {
     const families: HtxDerivativesAccountFamily[] = ["usdt_cross_shared"];
     const f = setup({ htxDerivativesFamilies: families });

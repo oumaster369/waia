@@ -102,7 +102,8 @@ function accountRow(family: HtxDerivativesAccountFamily, value: Record<string, u
   return Object.freeze({
     accountCode: accountCode(family, value), collateralAsset: collateralAsset?.toUpperCase() ?? null,
     marginMode: mode, marginBalance: decimalField(value, "margin_balance"),
-    marginAvailable: decimalField(value, "margin_available"), marginPosition: decimalField(value, "margin_position"),
+    marginAvailable: decimalField(value, "margin_available"),
+    withdrawAvailable: decimalField(value, "withdraw_available"), marginPosition: decimalField(value, "margin_position"),
     marginFrozen: decimalField(value, "margin_frozen"), marginStatic: decimalField(value, "margin_static"),
     realizedPnl: decimalField(value, "profit_real"), unrealizedPnl: decimalField(value, "profit_unreal"),
     riskRate: decimalField(value, "risk_rate"), liquidationPrice: decimalField(value, "liquidation_price"), leverage,
