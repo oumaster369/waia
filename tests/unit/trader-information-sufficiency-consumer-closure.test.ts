@@ -144,6 +144,9 @@ describe("DEE-689 information-sufficiency producer, consumer, and bypass closure
     )).toEqual([expect.objectContaining({
       path: "lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1.ts",
       authorityPurpose: "NONE",
+    }), expect.objectContaining({
+      path: "lib/trader/paper/scheduled-noncapital-owner-postgres-v1.ts",
+      authorityPurpose: "NONE",
     })]);
     const recorded = read("lib/trader/paper/durable-noncapital/evaluate-recorded-analysis-v1.ts");
     expect(recorded).toContain("UNEXPECTED_ANALYTICAL_AUTHORITY");
