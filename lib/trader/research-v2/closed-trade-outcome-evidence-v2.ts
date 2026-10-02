@@ -2,6 +2,7 @@ import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic
 import { compareDecimal, formatDecimal, parseDecimal } from "@/lib/trader/risk/numeric";
 import {
   assertResearchDiscoveryFitnessV2,
+  assertResearchV2ContentDigest,
   requireResearchV2DigestHex,
   requireResearchV2IsoUtc,
   requireResearchV2NonEmpty,
@@ -69,6 +70,41 @@ export type BuildClosedTradeOutcomeEvidencePackageV2Input = Readonly<{
   omitPolarities?: readonly ClosedTradeOutcomePolarityV2[];
 }>;
 
+function assertObservedAtOrBeforeCutoff(observedAtUtc: string, evidenceCutoffUtc: string): void {
+  requireResearchV2IsoUtc(evidenceCutoffUtc, "RESEARCH_EVIDENCE_CUTOFF_INVALID");
+  requireResearchV2IsoUtc(observedAtUtc, "RESEARCH_OUTCOME_TIME_INVALID");
+  if (Date.parse(observedAtUtc) > Date.parse(evidenceCutoffUtc)) {
+    throw new StrategyEvolutionResearchError(
+      "RESEARCH_OUTCOME_AFTER_CUTOFF",
+      "Outcome observation is later than the evidence cutoff",
+    );
+  }
+}
+
+/**
+ * Revalidates an untrusted/deserialized package's content consistency and temporal boundary.
+ * A matching digest proves byte consistency only; it does not authenticate issuance or provenance.
+ */
+export function assertClosedTradeOutcomeEvidencePackageV2Integrity(
+  value: ClosedTradeOutcomeEvidencePackageV2,
+): void {
+  assertResearchV2ContentDigest(value, "RESEARCH_EVIDENCE_PACKAGE_INVALID");
+  if (
+    value.schemaVersion !== CLOSED_TRADE_OUTCOME_EVIDENCE_PACKAGE_V2_SCHEMA ||
+    value.capitalAuthority !== "NONE" ||
+    !Array.isArray(value.records)
+  ) {
+    throw new StrategyEvolutionResearchError("RESEARCH_EVIDENCE_PACKAGE_INVALID");
+  }
+  requireResearchV2IsoUtc(value.evidenceCutoffUtc, "RESEARCH_EVIDENCE_CUTOFF_INVALID");
+  for (const record of value.records) {
+    if (record === null || typeof record !== "object") {
+      throw new StrategyEvolutionResearchError("RESEARCH_EVIDENCE_PACKAGE_INVALID");
+    }
+    assertObservedAtOrBeforeCutoff(record.observedAtUtc, value.evidenceCutoffUtc);
+  }
+}
+
 function classifyPolarity(input: ClosedTradeOutcomeInputV2): ClosedTradeOutcomePolarityV2 {
   if (input.status === "INCONCLUSIVE") return "INCONCLUSIVE";
   if (input.status === "INVALIDATED") return "INVALIDATED";
@@ -117,7 +153,7 @@ export function buildClosedTradeOutcomeEvidencePackageV2(
   const records = input.outcomes.map((outcome) => {
     requireResearchV2NonEmpty(outcome.outcomeId, "RESEARCH_OUTCOME_IDENTITY_INVALID");
     requireResearchV2NonEmpty(outcome.closedTradeRef, "RESEARCH_OUTCOME_IDENTITY_INVALID");
-    requireResearchV2IsoUtc(outcome.observedAtUtc, "RESEARCH_OUTCOME_TIME_INVALID");
+    assertObservedAtOrBeforeCutoff(outcome.observedAtUtc, input.evidenceCutoffUtc);
     requireResearchV2DigestHex(
       outcome.causalContextDigestHex,
       "RESEARCH_OUTCOME_CAUSAL_CONTEXT_INVALID",

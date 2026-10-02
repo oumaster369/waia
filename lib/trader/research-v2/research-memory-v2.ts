@@ -4,8 +4,15 @@ import type {
   ClosedTradeOutcomePolarityV2,
   ClosedTradeOutcomeRecordV2,
 } from "@/lib/trader/research-v2/closed-trade-outcome-evidence-v2";
-import { discardLosingOutcomesFromEvidencePackageV2 } from "@/lib/trader/research-v2/closed-trade-outcome-evidence-v2";
-import { StrategyEvolutionResearchError } from "@/lib/trader/research-v2/research-v2-guards";
+import {
+  assertClosedTradeOutcomeEvidencePackageV2Integrity,
+  discardLosingOutcomesFromEvidencePackageV2,
+} from "@/lib/trader/research-v2/closed-trade-outcome-evidence-v2";
+import {
+  assertResearchV2ContentDigest,
+  requireResearchV2IsoUtc,
+  StrategyEvolutionResearchError,
+} from "@/lib/trader/research-v2/research-v2-guards";
 
 export const RESEARCH_MEMORY_V2_SCHEMA = "waia.trader.research_memory.v2" as const;
 
@@ -21,6 +28,35 @@ export type ResearchMemoryV2 = Readonly<{
   contradictingCount: number;
   contentDigestHex: string;
 }>;
+
+function assertPriorMemoryIntegrityV2(prior: ResearchMemoryV2, evidenceCutoffUtc: string): void {
+  assertResearchV2ContentDigest(prior, "RESEARCH_MEMORY_INVALID");
+  if (
+    prior.schemaVersion !== RESEARCH_MEMORY_V2_SCHEMA ||
+    prior.capitalAuthority !== "NONE" ||
+    prior.authority !== "APPEND_ONLY_RESEARCH_MEMORY" ||
+    !Array.isArray(prior.records)
+  ) {
+    throw new StrategyEvolutionResearchError("RESEARCH_MEMORY_INVALID");
+  }
+  requireResearchV2IsoUtc(evidenceCutoffUtc, "RESEARCH_EVIDENCE_CUTOFF_INVALID");
+  for (const record of prior.records) {
+    if (record === null || typeof record !== "object") {
+      throw new StrategyEvolutionResearchError("RESEARCH_MEMORY_INVALID");
+    }
+    requireResearchV2IsoUtc(record.observedAtUtc, "RESEARCH_OUTCOME_TIME_INVALID");
+    if (Date.parse(record.observedAtUtc) > Date.parse(evidenceCutoffUtc)) {
+      throw new StrategyEvolutionResearchError(
+        "RESEARCH_MEMORY_OUTCOME_AFTER_CUTOFF",
+        "Prior memory contains an outcome later than the incoming evidence cutoff",
+      );
+    }
+  }
+}
+
+function snapshotOutcomeRecordV2(record: ClosedTradeOutcomeRecordV2): ClosedTradeOutcomeRecordV2 {
+  return Object.freeze({ ...record });
+}
 
 export function queryContradictingResearchMemoryV2(
   memory: ResearchMemoryV2,
@@ -44,10 +80,12 @@ export function appendResearchMemoryV2(
   evidencePackage: ClosedTradeOutcomeEvidencePackageV2,
   prior?: ResearchMemoryV2,
 ): ResearchMemoryV2 {
+  assertClosedTradeOutcomeEvidencePackageV2Integrity(evidencePackage);
   if (evidencePackage.records.length === 0) {
     throw new StrategyEvolutionResearchError("RESEARCH_MEMORY_EMPTY");
   }
   if (prior) {
+    assertPriorMemoryIntegrityV2(prior, evidencePackage.evidenceCutoffUtc);
     if (
       prior.organizationId !== evidencePackage.organizationId ||
       prior.campaignId !== evidencePackage.campaignId
@@ -56,7 +94,9 @@ export function appendResearchMemoryV2(
     }
   }
 
-  const merged: ClosedTradeOutcomeRecordV2[] = prior ? [...prior.records] : [];
+  const merged: ClosedTradeOutcomeRecordV2[] = prior
+    ? prior.records.map(snapshotOutcomeRecordV2)
+    : [];
   const seen = new Map(merged.map((record) => [record.outcomeId, record] as const));
   for (const record of evidencePackage.records) {
     const existing = seen.get(record.outcomeId);
@@ -66,8 +106,9 @@ export function appendResearchMemoryV2(
       }
       continue;
     }
-    merged.push(record);
-    seen.set(record.outcomeId, record);
+    const snapshot = snapshotOutcomeRecordV2(record);
+    merged.push(snapshot);
+    seen.set(snapshot.outcomeId, snapshot);
   }
   merged.sort((left, right) => (left.outcomeId < right.outcomeId ? -1 : 1));
 
