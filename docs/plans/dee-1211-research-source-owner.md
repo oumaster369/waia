@@ -226,3 +226,22 @@ review accepted these test-only corrections. The local source-owner suite
 passed19/19 with zero skips; affected lint/typecheck passed. Fresh published
 head CI, including scheduled-owner9/9, is still required. Earlier failed
 results remain retained and are not described as passed.
+
+## Repeated clean-EOF connection failure correction (2026-10-02)
+
+Second published CI9b916c68 again timed out in no-reconnect at30s, disproving
+that the original5s test allowance was the complete cause. Local postgres.js
+source shows pre-handshake clean close cancels connect_timeout and reconnects
+while an initial query is pending; repeated clean closes can therefore exceed
+that per-connection limit. The existing60s source-command AbortSignal is
+currently checked only at callback/file checkpoints, not while waiting for
+BEGIN or confirmation. Before changing runtime, add deterministic clean-EOF
+proxy refusal and retain a bounded failing native run. Enforce the same60s
+command signal at each owned pool boundary, force-ending only that private
+pool on abort, await cleanup, remove listeners, and never leave queued work
+able to write after returning. Before a candidate this is refusal; after a
+candidate, failed bounded read-only confirmation returns COMMIT_UNCERTAIN
+without payload or automatic write retry. The test allowance may cover that
+existing command deadline; runtime budget must not be raised. Independently
+review cancellation races and run all19 actual source scenarios plus focused
+abort/connection behavior. Fresh published-head CI remains mandatory.
