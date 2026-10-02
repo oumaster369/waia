@@ -50,7 +50,7 @@ function buildQuestionText(input: BuildResearchQuestionInput): string {
   if (rejectionContext && strategyId && strategyVersion) {
     return (
       `Under what market conditions does ${strategyId}@${strategyVersion} generate ` +
-      "trade-attributed activity in TREND_BEAR or STRESS, and when does signal generation " +
+      `trade-attributed activity under observed regime=${cluster.signature.regimeLabel}, and when does signal generation ` +
       `fail to produce closed trades? (trade-reference count band=${cluster.signature.tradeReferenceCountBand}; ` +
       "measured volatility unavailable.)"
     );

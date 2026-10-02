@@ -279,6 +279,29 @@ describe("discovery structure cluster versioned count bands", () => {
     expect(question.questionText).not.toMatch(/\bvol=/i);
   });
 
+  it.each(["CHOP", "RANGE", "TREND_BEAR", "STRESS"] as const)(
+    "uses the validated %s label in rejection-context question text and digest",
+    (regimeLabel) => {
+      const [cluster] = clusters([observation(`obs-rejection-${regimeLabel}`, 2, regimeLabel)]);
+      const question = buildResearchQuestion({
+        campaignRef: CAMPAIGN,
+        cluster: cluster as never,
+        rejectionContext: {
+          recordBody: { strategyId: "candidate", strategyVersion: "1.0.0" },
+        } as never,
+        questionId: `question-rejection-${regimeLabel}`,
+        createdAt: CREATED_AT,
+      });
+
+      expect(question.questionText).toContain(`observed regime=${regimeLabel}`);
+      expect(question.questionText).toContain("trade-reference count band=medium");
+      expect(question.questionText).toContain("measured volatility unavailable");
+      expect(question.questionText).not.toContain("TREND_BEAR or STRESS");
+      const { contentDigest, ...unsignedQuestion } = question;
+      expect(buildResearchQuestionContentDigest(unsignedQuestion)).toBe(contentDigest);
+    },
+  );
+
   it("refuses immutable V1 input for new question generation", () => {
     expect(() =>
       buildResearchQuestion({

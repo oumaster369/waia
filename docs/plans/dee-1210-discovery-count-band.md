@@ -9,9 +9,9 @@ requiredValidation: [targeted-unit, lint, typecheck, build, validate-canon, cons
 approvalGates: [issue-contract, independent-review, required-ci, no-production-data, no-live-activation]
 state:
   status: in-progress
-  completedWorkPackages: [WP-1-plan-and-baseline, WP-2-versioned-trade-count-band, WP-3-readiness]
-  remainingWorkPackages: [WP-3-rejection-context-wording, WP-4-review-and-ci]
-  nextAction: "Implement and verify the bounded rejection-context wording extension, then obtain independent review and exact-head CI; do not claim scientific qualification."
+  completedWorkPackages: [WP-1-plan-and-baseline, WP-2-versioned-trade-count-band, WP-3-readiness, WP-3-rejection-context-wording]
+  remainingWorkPackages: [WP-4-review-and-ci]
+  nextAction: "Obtain independent review and exact-head CI; do not claim scientific qualification."
 provenance:
   createdFrom: "DEE-1210 Linear contract and root implementation contract"
   supersedes: null
@@ -107,7 +107,12 @@ rules, historical V1 artifacts, or question text already persisted.
   verify the content digest over the resulting text. Preserve the count-band,
   question-kind/program selection, digest algorithm, all V1 bytes and stored
   text. No hypothesis-studio, executable mapping, financial rule, scoring or
-  source/PIT behavior is included.
+  source/PIT behavior is included. The retained RED has all four regime cases
+  fail against the hardcoded wording; the focused clusterer/registry suite now
+  passes 42/42, including exact label and canonical question-digest checks.
+  Lint (0 errors; 331 repository warnings), typecheck, build, canonical-doc
+  validation and both consumer-graph validators pass. The scope extension
+  changes no source/PIT or qualification claim.
 - **WP-4 — review and CI:** obtain independent review and pass exact-head CI
   before merge.
 
