@@ -117,6 +117,18 @@ gate, lint/typecheck/build, canon and both consumer graphs. Keep source pins and
 actual-base identities honest. Independent adversarial review and every
 applicable exact-head CI check precede merge; no redundant full local suite.
 
+### PR738 exact consumer-inventory correction (2026-10-02)
+
+The first published unit shard found that the new
+`research-development-source-read-v1.ts` directly imports only
+`deepFreezeInquiry` from the inquiry `contracts-v1` module, but the exact
+importer inventory omits that path. Add this one `CONTRACTS` consumer to
+`INFORMATION_INQUIRY_DIRECT_CONSUMERS_V1` and keep the exact-set closure test
+unchanged. The paired information-sufficiency inventory has no import of this
+reader and needs no change. Preserve the retained shard/local RED; run the
+inquiry and paired sufficiency closure suites after this metadata-only fix.
+No runtime behavior or DEE-1211 native source inputs change.
+
 ## Qualification and release limits
 
 The accepted trust boundary is the restricted internal writer; no new PKI is
