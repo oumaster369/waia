@@ -448,7 +448,7 @@ function maxQueryId(rows: readonly Record<string, unknown>[]): string | null {
   return text;
 }
 
-/** One match-results page. Identity is `id`. Duplicate ids and wrong contracts are rejected. */
+/** One match-results page. Identity is `id`. An identical id is one fill; a conflicting id is rejected. */
 export function parseHtxDerivativesFillsPage(
   family: HtxDerivativesAccountFamily,
   contract: string,
@@ -462,8 +462,17 @@ export function parseHtxDerivativesFillsPage(
       return invalid();
     const parsed = fillRoot.safeParse(parseJson(payload));
     if (!parsed.success) return invalid();
-    const fills = parsed.data.data.map((row) => fillRow(family, contract, row));
-    if (new Set(fills.map((row) => row.id)).size !== fills.length) return invalid();
+    const parsedRows = parsed.data.data.map((row) => fillRow(family, contract, row));
+    const seen = new Map<string, string>();
+    const fills: HtxDerivativesFillRow[] = [];
+    for (const row of parsedRows) {
+      const canonical = JSON.stringify(row);
+      const previous = seen.get(row.id);
+      if (previous === undefined) {
+        seen.set(row.id, canonical);
+        fills.push(row);
+      } else if (previous !== canonical) return invalid();
+    }
     const responseGeneratedAtMs = safeMillis(parsed.data.ts);
     if (parsed.data.ts !== undefined && responseGeneratedAtMs === null) return invalid();
     return Object.freeze({

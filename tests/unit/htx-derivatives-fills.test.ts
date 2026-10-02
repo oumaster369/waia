@@ -319,13 +319,27 @@ describe("HTX derivatives fill parser", () => {
       page([venueRow("coin_perpetual", "THETA-USD", { trade_fee: null })]),
     );
     expect(explicitNull.fills[0]?.fee).toBeNull();
+    const repeated = parseHtxDerivativesFillsPage(
+      "usdt_cross_shared",
+      "BTC-USDT",
+      page([
+        venueRow("usdt_cross_shared", "BTC-USDT", { id: "same" }),
+        venueRow("usdt_cross_shared", "BTC-USDT", { id: "same", query_id: 12 }),
+      ]),
+    );
+    expect(repeated.fills.map((row) => row.id)).toEqual(["same"]);
+    expect(repeated.nextFromId).toBe("12");
     expect(() =>
       parseHtxDerivativesFillsPage(
         "usdt_cross_shared",
         "BTC-USDT",
         page([
           venueRow("usdt_cross_shared", "BTC-USDT", { id: "same" }),
-          venueRow("usdt_cross_shared", "BTC-USDT", { id: "same", query_id: 12 }),
+          venueRow("usdt_cross_shared", "BTC-USDT", {
+            id: "same",
+            trade_volume: "9",
+            query_id: 12,
+          }),
         ]),
       ),
     ).toThrow("HTX_DERIVATIVES_INVALID_RESPONSE");
