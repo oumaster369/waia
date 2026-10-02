@@ -50,6 +50,8 @@ def _situations_ru(result: dict) -> str:
         "Комиссия 0.05% с каждой стороны и проскальзывание уже вычтены из R. Хвост — последние 20% календарного времени, его не использовали, чтобы выбрать правило.",
         result.get("liquidation_note") or "",
         "",
+        _coverage_ru(result),
+        "",
     ]
     for frame in result.get("timeframes") or []:
         tf = frame.get("decision_tf")
@@ -93,6 +95,23 @@ def _situations_ru(result: dict) -> str:
         "",
     ]
     return "\n".join(lines)
+
+
+def _coverage_ru(result: dict) -> str:
+    frames = result.get("timeframes") or []
+    minute = next((frame for frame in frames if frame.get("decision_tf") == "1m"), None)
+    five = next((frame for frame in frames if frame.get("decision_tf") == "5m"), None)
+    fifteen = next((frame for frame in frames if frame.get("decision_tf") == "15m"), None)
+    if fifteen and (minute or five):
+        wide = ", ".join(fifteen.get("symbols") or [])
+        narrow = ", ".join((minute or five).get("symbols") or [])
+        if wide != narrow:
+            return (
+                f"Пятнадцатиминутки посчитаны по {len(fifteen.get('symbols') or [])} инструментам ({wide}). "
+                f"Минутки и пятиминутки — только по {narrow}: публичная минутная история с 2024 года скачана для них. "
+                "Пятиминутки собраны из минуток."
+            )
+    return ""
 
 
 def _ru_header() -> str:
