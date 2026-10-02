@@ -26,7 +26,7 @@ This removes that presentation; it does not remove internal tenant isolation or
 create a new extra setup form under a different label. Autonomous research remains
 a separate runtime workstream, never implied complete by removing a page.
 
-## Scope and acceptance
+## Acceptance
 
 1. Remove the Org0 connection navigation item and its shell exception. Keep normal
    Accounts and Research navigation/query context intact.
