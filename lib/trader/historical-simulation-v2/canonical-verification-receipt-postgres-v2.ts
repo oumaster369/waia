@@ -41,7 +41,8 @@ import {
   type HistoricalDatasetMembershipV2,
   type HistoricalPreHoldoutDatasetMembershipV2,
 } from "./dataset-membership-v2";
-import { loadHistoricalSimulationBootstrapSourceSnapshotV2 } from
+import { loadHistoricalSimulationBootstrapSourceSnapshotV2,
+  type HistoricalSimulationBootstrapSourceSnapshotV2 } from
   "./bootstrap-source-loader-v2";
 import {
   withPostgresSerializableTransactionRetryV2,
@@ -584,11 +585,15 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
     symbol: "BTCUSDT" | "ETHUSDT";
     initialRecordIndex: number;
     cycleCount: number;
+    signal?: AbortSignal;
+    maxSourceBytes?: number;
+    maxReceiptBytes?: number;
   }>): Promise<Readonly<{
     authorityIds: ReadonlyMap<string, string>;
     cycleIds: readonly string[];
     qualificationReceiptDigestHex: string;
     partitionRawSha256Hex: string;
+    sourceSnapshot: HistoricalSimulationBootstrapSourceSnapshotV2;
   }>> {
     const snapshot = await loadHistoricalSimulationBootstrapSourceSnapshotV2(input);
     const cycles = snapshot.sources.map((source) => source.cycle);
@@ -606,6 +611,9 @@ function createCanonicalDecisionVerificationReceiptServiceInternalV2(
       cycleIds: Object.freeze(cycles.map((cycle) => cycle.cycleId)),
       qualificationReceiptDigestHex: snapshot.qualificationReceiptDigestHex,
       partitionRawSha256Hex: snapshot.partitionRawSha256Hex,
+      // These are the very bytes loaded and written in this operation, never a
+      // second file read or metadata supplied independently by the caller.
+      sourceSnapshot: snapshot,
     });
   }
 
