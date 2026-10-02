@@ -301,6 +301,12 @@ on:
       - "tests/unit/historical-postgres-ci-cli-profile.test.ts"
       - "lib/trader/observability/fhv-v2-postgres-schema-preflight.ts"
       - "tests/unit/fhv-v2-postgres-schema-preflight.test.ts"
+      - "lib/trader/execution/account-executor-lease-v1.ts"
+      - "lib/trader/execution/account-executor-lease-postgres-v1.ts"
+      - "tests/unit/account-executor-lease-v1.test.ts"
+      - "tests/integration/postgres-account-executor-lease-v1.test.ts"
+      - "tests/unit/postgres-capital-proof-guard.test.ts"
+      - "tests/unit/postgres-historical-reconciliation-profile-proof-guard.test.ts"
       - "drizzle.postgres.config.ts"
       - ".github/workflows/postgres-integration.yml"
 
@@ -722,7 +728,8 @@ jobs:
             tests/integration/postgres-research-application-v1.test.ts \
             tests/integration/postgres-runtime-domain-ownership-v1.test.ts \
             tests/integration/postgres-live-capital-envelope-v2.test.ts \
-            tests/integration/postgres-ordinary-paper-order-domain.test.ts
+            tests/integration/postgres-ordinary-paper-order-domain.test.ts \
+            tests/integration/postgres-account-executor-lease-v1.test.ts
           node scripts/postgres-validation/assert-capital-test-results.mjs .tmp/capital-postgres-results.json
 
   historical-reconciliation-profile:

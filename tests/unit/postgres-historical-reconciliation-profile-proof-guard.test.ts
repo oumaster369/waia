@@ -42,6 +42,7 @@ const capitalFiles = [
   "postgres-runtime-domain-ownership-v1.test.ts",
   "postgres-live-capital-envelope-v2.test.ts",
   "postgres-ordinary-paper-order-domain.test.ts",
+  "postgres-account-executor-lease-v1.test.ts",
 ];
 const capitalPassed = () => capitalFiles.map(name => ({ name: `/workspace/tests/integration/${name}`, status: "passed",
   assertionResults: [{ title: "synthetic guard control, not native proof", status: "passed" }] }));
@@ -84,7 +85,7 @@ describe("mandatory PROFILE35 executed proof", () => {
     expect(run(passed(), { ...environment, WAIA_HISTORICAL_KNOWLEDGE_CONTINUATION_PROOF: "1" }).status).not.toBe(0);
     expect(run(passed(), { ...environment, WAIA_HISTORICAL_PG_RECONCILIATION_PROFILE: "LEGACY" }).status).not.toBe(0);
   });
-  it("wires the exact capital29 union and independent75-minute PROFILE35 job without changing generic LEGACY", () => {
+  it("wires the exact capital30 union and independent75-minute PROFILE35 job without changing generic LEGACY", () => {
     const workflow = parse(readFileSync(".github/workflows/postgres-integration.yml", "utf8"));
     const capital = workflow.jobs["capital-authority"];
     expect(capital["timeout-minutes"]).toBe(30);
@@ -95,7 +96,7 @@ describe("mandatory PROFILE35 executed proof", () => {
     const selected = (command.run.match(/tests\/integration\/[^\s]+\.test\.ts/g) as string[])
       .map(path => path.replace("tests/integration/", ""));
     expect(selected).toEqual(capitalFiles);
-    expect(new Set(selected).size).toBe(29);
+    expect(new Set(selected).size).toBe(30);
     const guard = readFileSync("scripts/postgres-validation/assert-capital-test-results.mjs", "utf8");
     const requiredArray = guard.match(/const requiredFiles = \[([\s\S]*?)\];/)?.[1];
     expect(requiredArray).toBeDefined();
@@ -114,14 +115,23 @@ describe("mandatory PROFILE35 executed proof", () => {
     expect(profile.steps.some((s: { run?: string }) => s.run === "pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres")).toBe(true);
     expect(workflow.jobs.integration.steps.some((s: { run?: string }) => s.run?.includes("postgres-historical-production-first-cycle-v2.test.ts"))).toBe(true);
     expect(workflow.jobs.integration.env?.WAIA_HISTORICAL_PG_RECONCILIATION_PROFILE).toBeUndefined();
-    for (const path of ["tests/unit/postgres-historical-reconciliation-bootstrap.test.ts", "tests/unit/postgres-historical-reconciliation-profile-proof-guard.test.ts", "tests/integration/postgres-historical-production-reconciliation-frontier-v1.test.ts"]) {
+    for (const path of [
+      "tests/unit/postgres-historical-reconciliation-bootstrap.test.ts",
+      "tests/unit/postgres-historical-reconciliation-profile-proof-guard.test.ts",
+      "tests/integration/postgres-historical-production-reconciliation-frontier-v1.test.ts",
+      "lib/trader/execution/account-executor-lease-v1.ts",
+      "lib/trader/execution/account-executor-lease-postgres-v1.ts",
+      "tests/unit/account-executor-lease-v1.test.ts",
+      "tests/integration/postgres-account-executor-lease-v1.test.ts",
+      "tests/unit/postgres-capital-proof-guard.test.ts",
+    ]) {
       expect(workflow.on.pull_request.paths).toContain(path);
     }
   });
-  it("accepts the exact synthetic29-file guard control", () => {
+  it("accepts the exact synthetic30-file guard control", () => {
     const result = runCapital();
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain("29 critical suites, no skipped tests");
+    expect(result.stdout).toContain("30 critical suites, no skipped tests");
   });
   it.each(capitalFiles)("refuses a report omitting mandatory %s", missing => {
     const result = runCapital(capitalPassed().filter(row => !row.name.endsWith(`/${missing}`)));

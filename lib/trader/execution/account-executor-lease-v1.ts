@@ -36,7 +36,24 @@ const ACCOUNT_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function accountExecutorLockIdentityV1(organizationId: string, accountId: string): string {
-  return `${organizationId}:${accountId}`;
+  if (typeof organizationId !== "string" || organizationId.length !== 36 ||
+      !UUID.test(organizationId) || typeof accountId !== "string" ||
+      accountId !== accountId.trim() || !ACCOUNT_KEY.test(accountId)) {
+    throw new Error("ACCOUNT_EXECUTOR_IDENTITY_INVALID");
+  }
+  return `${organizationId.toLowerCase()}:${accountId}`;
+}
+
+/** Capture once before an asynchronous claim; PostgreSQL UUID case is not identity. */
+export function captureAccountExecutorScopeV1(input: Pick<
+  AccountExecutorFenceV1, "organizationId" | "accountId" | "holderId"
+>): Readonly<Pick<AccountExecutorFenceV1, "organizationId" | "accountId" | "holderId">> {
+  const { organizationId, accountId, holderId } = input;
+  accountExecutorLockIdentityV1(organizationId, accountId);
+  if (typeof holderId !== "string" || !holderId.trim() || holderId.includes("\0")) {
+    throw new Error("ACCOUNT_EXECUTOR_IDENTITY_INVALID");
+  }
+  return Object.freeze({ organizationId: organizationId.toLowerCase(), accountId, holderId });
 }
 
 export function assertAccountExecutorIdentityV1(input: {
@@ -51,13 +68,7 @@ export function assertAccountExecutorIdentityV1(input: {
   if (input.executionMode !== "paper" && input.executionMode !== "mock") {
     throw new Error("ACCOUNT_EXECUTOR_MODE_FORBIDDEN");
   }
-  if (
-    !UUID.test(input.organizationId) ||
-    !ACCOUNT_KEY.test(input.accountId) ||
-    !input.holderId.trim()
-  ) {
-    throw new Error("ACCOUNT_EXECUTOR_IDENTITY_INVALID");
-  }
+  captureAccountExecutorScopeV1(input);
 }
 
 type MemoryRow = { holderId: string; fence: string };
@@ -69,22 +80,23 @@ export function createMemoryAccountExecutorLeaseV1(): AccountExecutorLeasePortV1
   const held = new Map<string, MemoryRow>();
   return {
     async claim(input) {
-      const key = accountExecutorLockIdentityV1(input.organizationId, input.accountId);
+      const captured = captureAccountExecutorScopeV1(input);
+      const key = accountExecutorLockIdentityV1(captured.organizationId, captured.accountId);
       if (held.has(key)) return null;
       const fence: AccountExecutorFenceV1 = Object.freeze({
-        organizationId: input.organizationId,
-        accountId: input.accountId,
-        holderId: input.holderId,
+        ...captured,
         fence: randomUUID(),
       });
       held.set(key, { holderId: fence.holderId, fence: fence.fence });
       return fence;
     },
     async holds(fence) {
+      captureAccountExecutorScopeV1(fence);
       const row = held.get(accountExecutorLockIdentityV1(fence.organizationId, fence.accountId));
       return row?.holderId === fence.holderId && row.fence === fence.fence;
     },
     async release(fence) {
+      captureAccountExecutorScopeV1(fence);
       const key = accountExecutorLockIdentityV1(fence.organizationId, fence.accountId);
       const row = held.get(key);
       if (row?.holderId === fence.holderId && row.fence === fence.fence) held.delete(key);
