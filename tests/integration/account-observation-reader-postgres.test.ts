@@ -275,7 +275,9 @@ describe.skipIf(!enabled)("DEE-979 actual PostgreSQL 17 host session attestation
       await tx.unsafe("SET LOCAL ROLE dee960_local_owner");
       await tx.unsafe("CREATE TABLE public.organizations (id uuid PRIMARY KEY)");
       for (const path of ["db/migrations_postgres/0006_exchange_credentials.sql",
-        "db/migrations_postgres/0007_exchange_credentials_rls.sql", "db/migrations_postgres/0205_trader_account_observation_v1.sql"])
+        "db/migrations_postgres/0007_exchange_credentials_rls.sql",
+        "db/migrations_postgres/0205_trader_account_observation_v1.sql",
+        "db/migrations_postgres/0230_trader_account_observation_spot_inventory_v1.sql"])
         await tx.unsafe(readFileSync(path, "utf8").replaceAll("--> statement-breakpoint", ""));
     });
   }, 30000);
@@ -287,8 +289,11 @@ describe.skipIf(!enabled)("DEE-979 actual PostgreSQL 17 host session attestation
   async function login(purpose: "collector" | "reader", membership = "WITH INHERIT FALSE, SET TRUE") {
     const name = `${db}_${++serial}`;
     const role = purpose === "reader" ? "waia_account_observation_reader" : "waia_account_observer";
+    const inventoryGrant = purpose === "collector"
+      ? `GRANT waia_account_observation_inventory TO "${name}" WITH INHERIT FALSE, SET TRUE;`
+      : "";
     await admin.unsafe(`CREATE ROLE "${name}" LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE
-      PASSWORD 'synthetic_host_only'; GRANT ${role} TO "${name}" ${membership};`);
+      PASSWORD 'synthetic_host_only'; GRANT ${role} TO "${name}" ${membership}; ${inventoryGrant}`);
     const sql = postgres(`postgres://${name}:synthetic_host_only@127.0.0.1:${localPort}/${db}`, observationPoolLimits);
     clients.push(sql); return { name, sql };
   }

@@ -57,7 +57,7 @@ export function createPostgresObservationAssignmentSource(
     cancelled(signal);
     try {
       const rows = await collectorSql.begin(async (tx) => {
-        await tx.unsafe("SET LOCAL ROLE waia_account_observer");
+        await tx.unsafe("SET LOCAL ROLE waia_account_observation_inventory");
         await tx.unsafe("SET LOCAL statement_timeout = '3000ms'");
         await tx.unsafe("SET LOCAL lock_timeout = '1000ms'");
         return tx<
@@ -70,21 +70,11 @@ export function createPostgresObservationAssignmentSource(
             symbols: unknown;
           }[]
         >`
-          SELECT c.organization_id::text AS organization_id,
-            c.id::text AS credential_id,
-            c.exchange_account_id,
-            c.observation_revision::text AS credential_revision,
-            state.configuration_revision,
-            state.symbols
-          FROM public.exchange_credentials c
-          JOIN public.trader_account_collection_state state
-            ON state.organization_id = c.organization_id
-            AND state.credential_id = c.id
-            AND state.exchange_account_id = c.exchange_account_id
-          WHERE c.venue = 'htx' AND c.status = 'active'
-            AND state.configuration_revision = ${envelope.config.revision}
-          ORDER BY (state.last_observation_id IS NULL) DESC, c.organization_id, c.exchange_account_id
-          LIMIT 20`;
+          SELECT organization_id, credential_id, exchange_account_id,
+            credential_revision, configuration_revision, symbols
+          FROM public.trader_account_observation_spot_inventory(
+            ${envelope.config.revision},
+            ${JSON.stringify(envelope.config.symbols)}::jsonb)`;
       });
       cancelled(signal);
       const extra: ObservationAssignment[] = [];
@@ -106,11 +96,13 @@ export function createPostgresObservationAssignmentSource(
         seen.add(account);
         extra.push(Object.freeze({ binding: Object.freeze(binding), config: envelope.config }));
       }
+      if (extra.length > 20) throw new Error("ACCOUNT_OBSERVATION_INVENTORY_OVERFLOW");
       return extra;
     } catch (error) {
       if (error instanceof Error && error.message === "ACCOUNT_OBSERVATION_ASSIGNMENTS_CANCELLED")
         throw error;
-      return [];
+      live.clear();
+      throw new Error("ACCOUNT_OBSERVATION_ASSIGNMENTS_FAILED");
     }
   }
   return Object.freeze({

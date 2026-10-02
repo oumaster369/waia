@@ -334,8 +334,8 @@ describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational
       const folder = "db/migrations_postgres";
       const journal = JSON.parse(readFileSync(`${folder}/meta/_journal.json`, "utf8")) as {
         entries: { idx: number; tag: string; when: number }[] };
-      expect(journal.entries).toHaveLength(230);
-      expect(journal.entries.at(-1)).toMatchObject({ idx: 229, tag: "0229_trader_observation_read_only_credential_v1", when: 1780000000229 });
+      expect(journal.entries).toHaveLength(231);
+      expect(journal.entries.at(-1)).toMatchObject({ idx: 230, tag: "0230_trader_account_observation_spot_inventory_v1", when: 1780000000230 });
       await migrate(db(), { migrationsFolder: folder });
       const actual = await owner.sql`SELECT hash,created_at::text AS when FROM drizzle.__drizzle_migrations ORDER BY created_at`;
       expect(actual).toEqual(journal.entries.map(entry => ({ hash: hash(readFileSync(`${folder}/${entry.tag}.sql`)), when: String(entry.when) })));
@@ -353,9 +353,15 @@ describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational
       initialPosture = await loginPosture(owner.sql); expect(initialPosture).toHaveLength(3);
       for (const row of initialPosture) {
         const plan = ACCOUNT_OBSERVATION_LOGIN_PLAN.find(entry => entry.loginRole === row.rolname)!;
+        const membership = row.rolname === "waia_account_observer_login"
+          ? [
+              { parent: "waia_account_observation_inventory", admin: false, inherit: false, set: true },
+              { parent: "waia_account_observer", admin: false, inherit: false, set: true },
+            ]
+          : [{ parent: plan.parentRole, admin: false, inherit: false, set: true }];
         expect(row).toMatchObject({ rolcanlogin: true, rolinherit: false, rolsuper: false, rolcreatedb: false,
           rolcreaterole: false, rolreplication: false, rolbypassrls: false, rolconnlimit: 2,
-          membership: [{ parent: plan.parentRole, admin: false, inherit: false, set: true }] });
+          membership });
       }
       receipt("runtime-login-posture", { mode: freshCi ? "FRESH_CI" : "PRESERVED_LOCAL", rows: initialPosture });
       for (const purpose of ["collector", "reader", "credential"] as const) {

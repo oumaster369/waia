@@ -83,6 +83,11 @@ function requireUnprivileged(role, code) {
 }
 
 const ROLE_NAME = /^[a-z][a-z0-9_]{2,62}$/;
+const INVENTORY_ROLE = "waia_account_observation_inventory";
+
+function expectedParents(entry) {
+  return entry.purpose === "collector" ? [entry.parentRole, INVENTORY_ROLE].sort() : [entry.parentRole];
+}
 
 function quoteRole(name) {
   if (!ROLE_NAME.test(name)) throw refuse("ROLE_NAME");
@@ -144,6 +149,8 @@ async function provisionOne(sql, entry, verifier) {
   const parent = quoteRole(entry.parentRole);
   if (entry.loginRole === entry.parentRole) throw refuse("LOGIN_NOT_SEPARATE");
   await readParent(sql, entry.parentRole);
+  if (entry.purpose === "collector") await readParent(sql, INVENTORY_ROLE);
+  const parents = expectedParents(entry);
 
   const existing = await sql.unsafe(
     `SELECT ${LOGIN_POSTURE("login")} FROM pg_roles login WHERE login.rolname = $1`,
@@ -152,7 +159,7 @@ async function provisionOne(sql, entry, verifier) {
   if (existing.length > 0) {
     const current = existing[0];
     requireUnprivileged(current, "LOGIN_PRIVILEGED");
-    if (current.memberships.some((name) => name !== entry.parentRole)) {
+    if (current.memberships.some((name) => !parents.includes(name))) {
       throw refuse("UNEXPECTED_MEMBERSHIP");
     }
     if (current.unsafe_membership_options !== false) throw refuse("MEMBERSHIP_OPTIONS");
@@ -175,6 +182,11 @@ async function provisionOne(sql, entry, verifier) {
       `PASSWORD ${quoteVerifier(verifier)}`,
   );
   await sql.unsafe(`GRANT ${parent} TO ${login} WITH ADMIN FALSE, INHERIT FALSE, SET TRUE`);
+  if (entry.purpose === "collector") {
+    await sql.unsafe(
+      `GRANT ${quoteRole(INVENTORY_ROLE)} TO ${login} WITH ADMIN FALSE, INHERIT FALSE, SET TRUE`,
+    );
+  }
 
   const verified = await sql.unsafe(
     `SELECT ${LOGIN_POSTURE("login")}, database.datdba = login.oid AS owns_current_database
@@ -198,8 +210,8 @@ async function provisionOne(sql, entry, verifier) {
     posture.has_direct_grants !== false ||
     posture.can_create_in_database !== false ||
     posture.owns_objects !== false ||
-    posture.memberships.length !== 1 ||
-    posture.memberships[0] !== entry.parentRole
+    posture.memberships.length !== parents.length ||
+    [...posture.memberships].sort().some((name, index) => name !== parents[index])
   ) {
     throw refuse("POSTURE");
   }

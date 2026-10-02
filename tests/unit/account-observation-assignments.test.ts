@@ -80,18 +80,39 @@ describe("explicit assignments filtered by current read-only DB state", () => {
       "ACCOUNT_OBSERVATION_READ_FAILED",
     );
   });
-  it("ignores a broken collector inventory and keeps manifest assignments", async () => {
+  it("refuses a broken collector inventory and clears dynamic authorization", async () => {
+    const a = assignment();
+    const extraOrg = "00000000-0000-4000-8000-000000000003";
+    const extraCredential = "00000000-0000-4000-8000-000000000004";
+    let fail = false;
     const collectorSql = {
-      begin: async () => {
-        throw new Error("synthetic-inventory");
+      begin: async (
+        run: (tx: ((strings: TemplateStringsArray) => Promise<unknown>) & { unsafe: () => Promise<void> }) => Promise<unknown>,
+      ) => {
+        if (fail) throw new Error("synthetic-inventory");
+        const tx = Object.assign(
+          async () => [
+            {
+              organization_id: extraOrg,
+              credential_id: extraCredential,
+              exchange_account_id: "456",
+              credential_revision: "1",
+              configuration_revision: a.config.revision,
+              symbols: ["BTCUSDT"],
+            },
+          ],
+          { unsafe: async () => undefined },
+        );
+        return run(tx);
       },
     } as never;
-    const a = assignment();
     const source = createPostgresObservationAssignmentSource(sql, [a], collectorSql);
-    const list = await source.loadAssignments(signal());
-    expect(list).toHaveLength(1);
-    expect(list[0]?.binding).toEqual(a.binding);
-    expect(ports.isCurrentAssignment).toHaveBeenCalledTimes(1);
+    expect((await source.loadAssignments(signal())).map((item) => item.binding.exchangeAccountId)).toEqual(["123", "456"]);
+    expect(await source.authorizeOpen({ ...a.binding, organizationId: extraOrg, credentialId: extraCredential, exchangeAccountId: "456" }, signal())).toBe(true);
+    fail = true;
+    await expect(source.loadAssignments(signal())).rejects.toThrow("ACCOUNT_OBSERVATION_ASSIGNMENTS_FAILED");
+    expect(await source.authorizeOpen({ ...a.binding, organizationId: extraOrg, credentialId: extraCredential, exchangeAccountId: "456" }, signal())).toBe(false);
+    expect(await source.authorizeOpen(a.binding, signal())).toBe(true);
   });
   it("never inventories or grants dynamic accounts for a derivatives envelope at the 20-row boundary", async () => {
     const a = assignment();
@@ -122,6 +143,7 @@ describe("explicit assignments filtered by current read-only DB state", () => {
           },
         ) => Promise<unknown>,
       ) => {
+        const unsafe = vi.fn(async () => undefined);
         const tx = Object.assign(
           async () => [
             {
@@ -133,9 +155,11 @@ describe("explicit assignments filtered by current read-only DB state", () => {
               symbols: ["BTCUSDT"],
             },
           ],
-          { unsafe: async () => undefined },
+          { unsafe },
         );
-        return run(tx);
+        const rows = await run(tx);
+        expect(unsafe).toHaveBeenCalledWith("SET LOCAL ROLE waia_account_observation_inventory");
+        return rows;
       },
     } as never;
     const source = createPostgresObservationAssignmentSource(sql, [a], collectorSql);

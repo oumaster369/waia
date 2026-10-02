@@ -110,6 +110,12 @@ describe.skipIf(!enabled)(
           }
         }
       });
+      for (const statement of readFileSync(
+        "db/migrations_postgres/0230_trader_account_observation_spot_inventory_v1.sql",
+        "utf8",
+      ).split("--> statement-breakpoint")) {
+        if (statement.trim()) await admin.unsafe(statement);
+      }
 
       // The reviewed Human operator provisions the actual three runtime LOGIN identities.
       const receipt = await provisionAccountObservationLoginsV1({
@@ -158,11 +164,16 @@ describe.skipIf(!enabled)(
         apiKey: "synthetic-observation-key",
         apiSecret: "synthetic-observation-secret",
       });
-      const permissionMetadata = typeof options.permissionMetadata === "function"
-        ? options.permissionMetadata(exchangeAccountId)
-        : options.permissionMetadata ?? JSON.stringify(buildHtxPermissionMetadata({
-          exchangeAccountId, scopes: ["read"],
-        }));
+      const permissionMetadata =
+        typeof options.permissionMetadata === "function"
+          ? options.permissionMetadata(exchangeAccountId)
+          : (options.permissionMetadata ??
+            JSON.stringify(
+              buildHtxPermissionMetadata({
+                exchangeAccountId,
+                scopes: ["read"],
+              }),
+            ));
       await admin`INSERT INTO public.organizations VALUES (${organizationId})`;
       await admin`INSERT INTO public.exchange_credentials (id, organization_id, venue,
         exchange_account_id, api_key_masked, encrypted_payload, payload_key_version,
@@ -259,7 +270,10 @@ describe.skipIf(!enabled)(
           unsafe_options: false,
           owns_objects: false,
           direct_grants: false,
-          memberships: [expected.parentRole],
+          memberships:
+            expected.purpose === "collector"
+              ? ["waia_account_observation_inventory", "waia_account_observer"]
+              : [expected.parentRole],
         });
         expect(row.login).not.toBe(expected.parentRole);
       }
@@ -354,16 +368,30 @@ describe.skipIf(!enabled)(
       const assignment = await seed();
       const reader = await credentialReader([assignment]);
       const canonical = buildHtxPermissionMetadata({
-        exchangeAccountId: assignment.exchangeAccountId, scopes: ["read"],
+        exchangeAccountId: assignment.exchangeAccountId,
+        scopes: ["read"],
       });
-      const withField = (field: string, value: unknown) => JSON.stringify({ ...canonical, [field]: value });
+      const withField = (field: string, value: unknown) =>
+        JSON.stringify({ ...canonical, [field]: value });
       const cases = [
         { name: "canonical read", metadata: JSON.stringify(canonical), allowed: true },
         { name: "duplicate read", metadata: withField("scopes", ["read", "read"]), allowed: true },
-        { name: "valid account label", metadata: withField("accountLabel", "primary"), allowed: true },
+        {
+          name: "valid account label",
+          metadata: withField("accountLabel", "primary"),
+          allowed: true,
+        },
         { name: "trade scope", metadata: withField("scopes", ["read", "trade"]), allowed: false },
-        { name: "withdraw scope", metadata: withField("scopes", ["read", "withdraw"]), allowed: false },
-        { name: "unknown scope", metadata: withField("scopes", ["read", "future-scope"]), allowed: false },
+        {
+          name: "withdraw scope",
+          metadata: withField("scopes", ["read", "withdraw"]),
+          allowed: false,
+        },
+        {
+          name: "unknown scope",
+          metadata: withField("scopes", ["read", "future-scope"]),
+          allowed: false,
+        },
         { name: "empty scopes", metadata: withField("scopes", []), allowed: false },
         { name: "scopes-only legacy metadata", metadata: '{"scopes":["read"]}', allowed: false },
         { name: "missing scopes", metadata: withField("scopes", undefined), allowed: false },
@@ -371,22 +399,55 @@ describe.skipIf(!enabled)(
         { name: "string scopes", metadata: withField("scopes", "read"), allowed: false },
         { name: "object scopes", metadata: withField("scopes", {}), allowed: false },
         { name: "non-string member", metadata: withField("scopes", ["read", 7]), allowed: false },
-        { name: "mixed null member", metadata: withField("scopes", ["read", null]), allowed: false },
+        {
+          name: "mixed null member",
+          metadata: withField("scopes", ["read", null]),
+          allowed: false,
+        },
         { name: "wrong version", metadata: withField("version", 2), allowed: false },
         { name: "string version", metadata: withField("version", "1"), allowed: false },
         { name: "wrong market", metadata: withField("marketType", "futures"), allowed: false },
         { name: "non-string market", metadata: withField("marketType", 1), allowed: false },
-        { name: "foreign account metadata", metadata: withField("exchangeAccountId", "foreign-account"), allowed: false },
-        { name: "non-string account metadata", metadata: withField("exchangeAccountId", 123), allowed: false },
-        { name: "withdraw not forbidden", metadata: withField("withdrawForbidden", false), allowed: false },
-        { name: "withdraw flag wrong type", metadata: withField("withdrawForbidden", "true"), allowed: false },
-        { name: "transfer not forbidden", metadata: withField("transferForbidden", false), allowed: false },
-        { name: "transfer flag wrong type", metadata: withField("transferForbidden", "true"), allowed: false },
+        {
+          name: "foreign account metadata",
+          metadata: withField("exchangeAccountId", "foreign-account"),
+          allowed: false,
+        },
+        {
+          name: "non-string account metadata",
+          metadata: withField("exchangeAccountId", 123),
+          allowed: false,
+        },
+        {
+          name: "withdraw not forbidden",
+          metadata: withField("withdrawForbidden", false),
+          allowed: false,
+        },
+        {
+          name: "withdraw flag wrong type",
+          metadata: withField("withdrawForbidden", "true"),
+          allowed: false,
+        },
+        {
+          name: "transfer not forbidden",
+          metadata: withField("transferForbidden", false),
+          allowed: false,
+        },
+        {
+          name: "transfer flag wrong type",
+          metadata: withField("transferForbidden", "true"),
+          allowed: false,
+        },
         { name: "warnings not array", metadata: withField("warnings", "none"), allowed: false },
         { name: "non-string warning", metadata: withField("warnings", [1]), allowed: false },
         { name: "null label", metadata: withField("accountLabel", null), allowed: false },
         { name: "numeric label", metadata: withField("accountLabel", 1), allowed: false },
-        { name: "wrong row venue", metadata: JSON.stringify(canonical), venue: "binance", allowed: false },
+        {
+          name: "wrong row venue",
+          metadata: JSON.stringify(canonical),
+          venue: "binance",
+          allowed: false,
+        },
         { name: "empty metadata", metadata: "", allowed: false },
         { name: "malformed metadata", metadata: "{", allowed: false },
         { name: "SQL null metadata", metadata: null, allowed: false },
@@ -400,24 +461,32 @@ describe.skipIf(!enabled)(
         let oracleAllowed = false;
         try {
           const raw: unknown = candidate.metadata === null ? null : JSON.parse(candidate.metadata);
-          const parsed = typeof raw === "object" && raw !== null && !Array.isArray(raw)
-            ? raw as Record<string, unknown> : null;
+          const parsed =
+            typeof raw === "object" && raw !== null && !Array.isArray(raw)
+              ? (raw as Record<string, unknown>)
+              : null;
           const verified = requireHtxStoredPermissionMetadata({
-            purpose: "read", venue: candidateVenue,
-            exchangeAccountId: assignment.exchangeAccountId, permissionMetadata: parsed,
+            purpose: "read",
+            venue: candidateVenue,
+            exchangeAccountId: assignment.exchangeAccountId,
+            permissionMetadata: parsed,
           });
-          oracleAllowed = verified.scopes.length > 0 && verified.scopes.every((scope) => scope === "read");
+          oracleAllowed =
+            verified.scopes.length > 0 && verified.scopes.every((scope) => scope === "read");
         } catch {
           oracleAllowed = false;
         }
-        expect(oracleAllowed, `${candidate.name} independent HTX read oracle`).toBe(candidate.allowed);
+        expect(oracleAllowed, `${candidate.name} independent HTX read oracle`).toBe(
+          candidate.allowed,
+        );
 
         const [generated] = await admin<{ observation_read_only: boolean }[]>`
           SELECT observation_read_only FROM public.exchange_credentials WHERE id=${assignment.credentialId}`;
         expect(generated?.observation_read_only, candidate.name).toBe(candidate.allowed);
         const credential = open("credential");
-        const role = ACCOUNT_OBSERVATION_LOGIN_PLAN.find((entry) => entry.purpose === "credential")!
-          .parentRole;
+        const role = ACCOUNT_OBSERVATION_LOGIN_PLAN.find(
+          (entry) => entry.purpose === "credential",
+        )!.parentRole;
         const projected = await credential.begin(async (tx) => {
           await tx.unsafe(`SET LOCAL ROLE ${role}`);
           await tx`SELECT set_config('waia.observation_org', ${assignment.organizationId}, true),
@@ -431,11 +500,13 @@ describe.skipIf(!enabled)(
         expect(projected[0]!.observation_read_only, candidate.name).toBe(candidate.allowed);
 
         const decrypted = reader.getDecryptedCredentials(
-          { organizationId: assignment.organizationId }, assignment.credentialId,
+          { organizationId: assignment.organizationId },
+          assignment.credentialId,
         );
         if (candidate.allowed) {
           await expect(decrypted, candidate.name).resolves.toMatchObject({
-            apiKey: expect.any(String), apiSecret: expect.any(String),
+            apiKey: expect.any(String),
+            apiSecret: expect.any(String),
           });
         } else {
           await expect(decrypted, candidate.name).rejects.toThrow(
@@ -452,15 +523,35 @@ describe.skipIf(!enabled)(
           ${wrongExpectedAccount}) AS allowed
         FROM public.exchange_credentials WHERE id=${assignment.credentialId}`;
       expect(accountMismatch?.allowed).toBe(false);
-      expect(() => requireHtxStoredPermissionMetadata({ purpose: "read", venue: "htx",
-        exchangeAccountId: wrongExpectedAccount, permissionMetadata: canonical })).toThrow();
+      expect(() =>
+        requireHtxStoredPermissionMetadata({
+          purpose: "read",
+          venue: "htx",
+          exchangeAccountId: wrongExpectedAccount,
+          permissionMetadata: canonical,
+        }),
+      ).toThrow();
     });
 
     it("matches canonical account whitespace rejection before read-only admission", async () => {
       const valid = buildHtxPermissionMetadata({ exchangeAccountId: "73737331", scopes: ["read"] });
-      const whitespace = [9, 10, 11, 12, 13, 32, 0x00a0, 0x1680,
+      const whitespace = [
+        9,
+        10,
+        11,
+        12,
+        13,
+        32,
+        0x00a0,
+        0x1680,
         ...Array.from({ length: 11 }, (_, index) => 0x2000 + index),
-        0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff];
+        0x2028,
+        0x2029,
+        0x202f,
+        0x205f,
+        0x3000,
+        0xfeff,
+      ];
       for (const code of whitespace) {
         const char = String.fromCodePoint(code);
         for (const account of [char, `${char}73737331`, `73737331${char}`]) {
@@ -469,16 +560,25 @@ describe.skipIf(!enabled)(
             SELECT public.exchange_credential_observation_read_only(
               ${JSON.stringify(metadata)}, 'htx', ${account}) AS allowed`;
           expect(row?.allowed, `U+${code.toString(16)}`).toBe(false);
-          expect(() => requireHtxStoredPermissionMetadata({ purpose: "read", venue: "htx",
-            exchangeAccountId: account, permissionMetadata: metadata })).toThrow();
+          expect(() =>
+            requireHtxStoredPermissionMetadata({
+              purpose: "read",
+              venue: "htx",
+              exchangeAccountId: account,
+              permissionMetadata: metadata,
+            }),
+          ).toThrow();
         }
       }
     });
 
     it("refuses a trade-scoped credential before plaintext is returned", async () => {
-      const assignment = await seed({ permissionMetadata: (exchangeAccountId) => JSON.stringify(
-        buildHtxPermissionMetadata({ exchangeAccountId, scopes: ["read", "trade"] }),
-      ) });
+      const assignment = await seed({
+        permissionMetadata: (exchangeAccountId) =>
+          JSON.stringify(
+            buildHtxPermissionMetadata({ exchangeAccountId, scopes: ["read", "trade"] }),
+          ),
+      });
       const reader = await credentialReader([assignment]);
       await expect(
         reader.getDecryptedCredentials(
