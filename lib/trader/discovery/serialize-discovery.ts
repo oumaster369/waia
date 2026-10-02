@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
 import type { ResearchCampaignCharter } from "@/lib/trader/discovery/research-campaign.types";
 import type { ObservationRecord } from "@/lib/trader/discovery/observation.types";
-import type { StructureCluster } from "@/lib/trader/discovery/structure.types";
+import type { StructureCluster, StructureClusterV2 } from "@/lib/trader/discovery/structure.types";
 import type { ResearchQuestion } from "@/lib/trader/discovery/research-question.types";
 import type { HypothesisProposalArtifact } from "@/lib/trader/discovery/hypothesis-proposal.types";
 import type { EpistemicEvidenceRecord } from "@/lib/trader/discovery/evidence.types";
@@ -68,6 +68,25 @@ export function buildStructureClusterContentDigest(
         campaignRef: cluster.campaignRef,
         signature: cluster.signature,
         memberObservationRefs: cluster.memberObservationRefs,
+      }),
+      "utf8",
+    )
+    .digest("hex");
+}
+
+export function buildStructureClusterV2ContentDigest(
+  cluster: Omit<StructureClusterV2, "contentDigest">,
+): string {
+  return createHash("sha256")
+    .update(
+      canonicalJsonString({
+        schemaVersion: cluster.schemaVersion,
+        clusterId: cluster.clusterId,
+        campaignRef: cluster.campaignRef,
+        signature: cluster.signature,
+        memberObservationRefs: cluster.memberObservationRefs,
+        memberTradeReferenceCounts: cluster.memberTradeReferenceCounts,
+        createdAt: cluster.createdAt,
       }),
       "utf8",
     )
