@@ -226,6 +226,7 @@ export function runStrategyEvolutionResearchPassV2(
     nEvents: development.admission.assessment.nEvents,
     nDates: development.admission.assessment.nDates,
     netMeanDate: development.admission.assessment.netMeanDate,
+    observationConvention: development.admission.observationConvention,
     seMethod: "newey_west",
     nwLag: development.admission.assessment.nwLag,
     t: development.admission.assessment.t,

@@ -6,6 +6,7 @@ import {
   assessStrategyAdmissionReadOnly,
   strategyAdmissionHypothesisId,
   StrategyAdmissionError,
+  STRATEGY_ADMISSION_NET_CONVENTION_V2,
   type StrategyAdmissionAssessment,
   type StrategyAdmissionKind,
   type StrategyAdmissionObservation,
@@ -51,6 +52,8 @@ export type QualificationAdmissionV2 = Readonly<{
   kind: StrategyAdmissionKind;
   intraday: boolean;
   sideDeclared: StrategyAdmissionSide;
+  /** Absent only on historical records; current writers always bind V2. */
+  observationConvention?: typeof STRATEGY_ADMISSION_NET_CONVENTION_V2;
   horizonBars: number;
   barIntervalMinutes: number;
   usedForDiscovery: boolean;
@@ -215,9 +218,16 @@ function buildQualificationRecord(
     journal?: AppendOnlyStrategyAdmissionJournal;
     /** IS did not qualify. Validation is recorded as unscored and is not assessed. */
     unscored?: boolean;
-  } & { verdict?: never; replay?: never },
+  } & { verdict?: never; replay?: never; observationConvention?: never },
   readOnly: boolean,
+  conventionMode: "current" | "legacy-long-replay" = "current",
 ): QualificationRecordV2 {
+  if (Object.hasOwn(input, "observationConvention")) {
+    throw new StrategyEvolutionResearchError("QUALIFICATION_NET_CONVENTION_NOT_CALLER_CONTROLLED");
+  }
+  if (conventionMode === "legacy-long-replay" && (!readOnly || input.sideDeclared !== "long")) {
+    throw new StrategyEvolutionResearchError("QUALIFICATION_LEGACY_NET_CONVENTION_REFUSED");
+  }
   if (input.partition === "BLIND_HOLDOUT") {
     queryBlindHoldoutAsIterativeFitnessV2();
   }
@@ -318,6 +328,7 @@ function buildQualificationRecord(
         kind,
         intraday,
         sideDeclared,
+        ...(conventionMode === "current" ? { observationConvention: STRATEGY_ADMISSION_NET_CONVENTION_V2 } : {}),
         horizonBars,
         split,
         trials: familyObservationNets.map((observations, index) => ({
@@ -357,6 +368,7 @@ function buildQualificationRecord(
       nEvents: assessment.nEvents,
       nDates: assessment.nDates,
       netMeanDate: assessment.netMeanDate,
+      observationConvention: STRATEGY_ADMISSION_NET_CONVENTION_V2,
       seMethod: "newey_west",
       nwLag: assessment.nwLag,
       t: assessment.t,
@@ -410,6 +422,7 @@ function buildQualificationRecord(
     kind,
     intraday,
     sideDeclared,
+    ...(conventionMode === "current" ? { observationConvention: STRATEGY_ADMISSION_NET_CONVENTION_V2 } : {}),
     horizonBars,
     barIntervalMinutes,
     usedForDiscovery,
@@ -488,6 +501,11 @@ export function assertQualificationPairForCandidateV2(input: {
     if (record.partition !== partition) {
       throw new StrategyEvolutionResearchError("QUALIFICATION_PARTITION_MISMATCH");
     }
+    const convention = record.admission.observationConvention;
+    if ((convention !== undefined && convention !== STRATEGY_ADMISSION_NET_CONVENTION_V2) ||
+        (convention === undefined && record.admission.sideDeclared !== "long")) {
+      throw new StrategyEvolutionResearchError("QUALIFICATION_NET_CONVENTION_UNVERIFIED");
+    }
     const replay = buildQualificationRecord(
       {
         candidate: input.candidate,
@@ -514,10 +532,16 @@ export function assertQualificationPairForCandidateV2(input: {
         unscored: record.admission.scored === false,
       },
       true,
+      convention === undefined ? "legacy-long-replay" : "current",
     );
     if (replay.contentDigestHex !== record.contentDigestHex) {
       throw new StrategyEvolutionResearchError("QUALIFICATION_RECORD_INVALID");
     }
+  }
+  // A pair is one experiment: neither partition may switch net arithmetic.
+  // Validate/replay each record first so unknown conventions still fail closed.
+  if (input.development.admission.observationConvention !== input.walkForward.admission.observationConvention) {
+    throw new StrategyEvolutionResearchError("QUALIFICATION_NET_CONVENTION_MISMATCH");
   }
 }
 
