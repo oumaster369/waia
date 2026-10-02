@@ -88,7 +88,16 @@ rules, historical V1 artifacts, or question text already persisted.
   with 0 errors and 331 repository warnings; typecheck, build, canonical docs,
   and both consumer graph validators passed. The pre-fix review RED is retained
   in `audit-ai-trader-2026-10-01/dee1210/review-fixes-red.json` and `.log`.
-  No database or real market data was used.
+  No database or real market data was used. Independent review found that the
+  V2 registry validated a caller-owned cluster, awaited campaign lookup, then
+  reread mutable fields for insertion. The deferred-query RED is retained in
+  `audit-ai-trader-2026-10-01/dee1210/caller-mutation-red.json` and `.log`.
+  The registry now validates and detaches the complete canonical V2 artifact
+  and copies `createdAt` before its first await. The focused registry/clusterer
+  suites pass 38/38 after this correction; scoped lint, typecheck, and diff
+  check pass. These 38 tests overlap the earlier 62-test batch and are not
+  added to it. The final follow-up evidence is in
+  `audit-ai-trader-2026-10-01/dee1210/caller-mutation-followup/`.
 - **WP-4 — review and CI:** obtain independent review and pass exact-head CI
   before merge.
 
@@ -107,10 +116,12 @@ rules, historical V1 artifacts, or question text already persisted.
    as V2.
 4. Invalid version, metric marker, key, digest, member count, aggregate count,
    band consistency, or noncanonical timestamp is refused before a new research
-  question is emitted.
+   question is emitted.
 5. The existing registry appends validated V2 payloads through its current
    organization-scoped table path only when the campaign resolves in that org
-   with matching stored digest/state, while retaining legacy V1 insert behavior.
+   with matching stored digest/state, and inserts the exact validated snapshot
+   even if caller-owned input is mutated while lookup is pending, while
+   retaining legacy V1 insert behavior.
 6. Focused and adjacent checks, independent review, and required exact-head CI
    pass. This establishes artifact labeling/integrity only, not volatility
    measurement, provenance, scientific validity, or production use.

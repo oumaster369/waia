@@ -183,7 +183,15 @@ export async function insertDiscoveryStructureClusterPostgres(
     createdAt: Date | undefined;
   };
   if ("cluster" in row) {
-    const structureCluster = row.cluster;
+    const structureClusterInput = row.cluster;
+    const createdAt = row.createdAt === undefined ? undefined : new Date(row.createdAt.getTime());
+    assertValidStructureClusterV2(structureClusterInput);
+    // Capture the entire validated artifact synchronously. The campaign lookup
+    // below awaits I/O, during which a caller could otherwise mutate nested
+    // fields and make the inserted row differ from the object we validated.
+    const structureCluster = JSON.parse(
+      canonicalJsonString(structureClusterInput),
+    ) as typeof structureClusterInput;
     assertValidStructureClusterV2(structureCluster);
     const [campaign] = await ex
       .select({
@@ -216,7 +224,7 @@ export async function insertDiscoveryStructureClusterPostgres(
       signatureKey: structureCluster.signature.signatureKey,
       payloadJson: canonicalJsonString(structureCluster),
       contentDigest: structureCluster.contentDigest,
-      createdAt: row.createdAt,
+      createdAt,
     };
   } else {
     values = {

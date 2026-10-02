@@ -235,6 +235,69 @@ describe("discovery structure cluster append boundary", () => {
     expect(inserted).toHaveLength(0);
   });
 
+  it("does not mix a validated V2 payload with caller mutations during campaign lookup", async () => {
+    const [cluster] = clusterStructureSignatures(
+      { campaignRef: CAMPAIGN, observations: [observation()] },
+      () => "cluster-registry-mutation-race",
+      "2026-01-01T00:04:00.000Z",
+    );
+    const originalPayload = canonicalJsonString(cluster);
+    const originalRefs = [...cluster.memberObservationRefs];
+    const originalDigest = cluster.contentDigest;
+    let beginCampaignRead!: () => void;
+    const campaignReadStarted = new Promise<void>((resolve) => { beginCampaignRead = resolve; });
+    let releaseCampaignRead!: () => void;
+    const campaignReadGate = new Promise<void>((resolve) => { releaseCampaignRead = resolve; });
+    const inserted: Record<string, unknown>[] = [];
+    let campaignWhereParams: unknown[] = [];
+    const executor = {
+      insert: () => ({ values: async (value: Record<string, unknown>) => { inserted.push(value); } }),
+      select: (projection?: unknown) => ({
+        from: () => ({
+          where: (condition: unknown) => ({
+            limit: async () => {
+              if (!projection) return inserted;
+              campaignWhereParams = pgDialect.sqlToQuery(condition as SQL).params;
+              beginCampaignRead();
+              await campaignReadGate;
+              return [{
+                id: CAMPAIGN.campaignId,
+                organizationId: "org-registry",
+                contentDigest: CAMPAIGN.campaignDigest,
+                currentState: CAMPAIGN.state,
+              }];
+            },
+          }),
+        }),
+      }),
+    };
+
+    const append = insertDiscoveryStructureClusterPostgres(
+      executor as never,
+      { organizationId: "org-registry" },
+      { cluster },
+    );
+    await campaignReadStarted;
+
+    // Mutate campaign identity and nested payload after validation has begun
+    // but before the awaited ownership lookup returns.
+    cluster.campaignRef.campaignId = "campaign-attacker";
+    cluster.signature.tradeCount += 1;
+    (cluster.memberObservationRefs as string[]).push("attacker-observation");
+    releaseCampaignRead();
+    await append;
+
+    expect(campaignWhereParams).toEqual([CAMPAIGN.campaignId, "org-registry"]);
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0]).toMatchObject({
+      campaignId: CAMPAIGN.campaignId,
+      payloadJson: originalPayload,
+      contentDigest: originalDigest,
+    });
+    const insertedCluster = JSON.parse(String(inserted[0]!.payloadJson)) as typeof cluster;
+    expect(insertedCluster.memberObservationRefs).toEqual(originalRefs);
+  });
+
   it("preserves the legacy scalar-row append contract", async () => {
     const { executor, inserted, getCampaignReads } = registryExecutor();
     const legacy: InsertStructureClusterRow = {
