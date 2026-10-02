@@ -262,9 +262,11 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
         allowanceId: null,
         orderId: null,
         venueEffects: "ZERO",
-        invalidated: true,
+        invalidated: false,
       });
       expect(result.decision).not.toBe("PUBLISHED");
+      expect(await stageCount(organizationId, issued.commandId, "INVALIDATED")).toBe(0);
+      expect(await stageCount(organizationId, issued.commandId, "PUBLISHED")).toBe(0);
       const watchedAccount = "accountId" in item.observed ? item.observed.accountId : issued.accountId;
       for (const accountId of new Set([issued.accountId, watchedAccount])) {
         const [current] = await client<{ n: number }[]>`
@@ -272,10 +274,45 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
           where organization_id = ${organizationId}::uuid and account_id = ${accountId}`;
         expect(current!.n).toBe(0);
       }
+      const published = await produceLiveCapitalEnvelopeV2(client, {
+        sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
+        command: issued,
+        boundOrganizationId: organizationId,
+        observed: watch(issued),
+      });
+      expect(published).toMatchObject({
+        decision: "PUBLISHED",
+        invalidated: false,
+        allowanceId: null,
+        orderId: null,
+        venueEffects: "ZERO",
+      });
+      const replay = await produceLiveCapitalEnvelopeV2(client, {
+        sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED,
+        command: issued,
+        boundOrganizationId: organizationId,
+        observed: watch(issued),
+      });
+      expect(replay).toMatchObject({
+        decision: "PUBLISHED",
+        replayed: true,
+        envelopeDigest: published.envelopeDigest,
+        basisDigest: published.basisDigest,
+        allowanceId: null,
+        orderId: null,
+      });
+      expect(await stageCount(organizationId, issued.commandId, "PUBLISHED")).toBe(1);
+      expect(await stageCount(organizationId, issued.commandId, "INVALIDATED")).toBe(0);
+      const [foreignCurrent] = await client<{ n: number }[]>`
+        select count(*)::int as n from trader_live_capital_envelope_current_v2
+        where organization_id = ${organizationId}::uuid and account_id = ${watchedAccount}
+          and account_id <> ${issued.accountId}`;
+      expect(foreignCurrent!.n).toBe(0);
     }
     expect(await counts(organizationId)).toMatchObject({
-      current_rows: 0,
-      bases: 0,
+      current_rows: 3,
+      bases: 3,
+      invalidated: 0,
       allowances: 0,
       orders: 0,
     });

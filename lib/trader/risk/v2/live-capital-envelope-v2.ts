@@ -279,3 +279,59 @@ export function liveCapitalBasisBindingV2(
 ): LiveCapitalBasisBindingV2 {
   return bindingFromReceipt(assertLiveCapitalEnvelopeReceiptV2(receipt));
 }
+
+export type LiveCapitalEnvelopeCommandLimitV2 = Readonly<{
+  commandId: string;
+  /** Refusals and replays never spend a new basis. */
+  consumeLimit: false;
+  /** One INVALIDATED row. Expiry, or a refusal of the command that already owns current. */
+  writeTerminal: boolean;
+  /** Only that same commandId may drop the current pointer. */
+  clearOwnedCurrent: boolean;
+  /** A commandId that already has a terminal row is not written again. */
+  idempotentClosed: boolean;
+}>;
+
+/**
+ * Binds a refusal to commandId.
+ * The account limit is the current pointer plus one basis. An invalid command
+ * does not spend that limit and does not freeze its commandId, unless the
+ * window is already expired. A different commandId cannot clear current.
+ * A repeated commandId does not insert a second terminal row.
+ */
+export function liveCapitalEnvelopeCommandLimitV2(input: {
+  commandId: string;
+  currentCommandId: string | null;
+  alreadyInvalidated: boolean;
+  alreadyPublished: boolean;
+  refusalReason: string;
+}): LiveCapitalEnvelopeCommandLimitV2 {
+  const ownsCurrent =
+    input.currentCommandId !== null && input.currentCommandId === input.commandId;
+  const bound = { commandId: input.commandId, consumeLimit: false as const };
+  // A commandId that already published, or that already has its one terminal row,
+  // cannot spend a second basis and cannot be frozen again.
+  if (input.alreadyInvalidated || input.alreadyPublished) {
+    return {
+      ...bound,
+      writeTerminal: false,
+      clearOwnedCurrent: false,
+      idempotentClosed: true,
+    };
+  }
+  const stale = input.refusalReason === "LIVE_CAPITAL_ENVELOPE_STALE";
+  if (!ownsCurrent && !stale) {
+    return {
+      ...bound,
+      writeTerminal: false,
+      clearOwnedCurrent: false,
+      idempotentClosed: false,
+    };
+  }
+  return {
+    ...bound,
+    writeTerminal: true,
+    clearOwnedCurrent: ownsCurrent,
+    idempotentClosed: false,
+  };
+}

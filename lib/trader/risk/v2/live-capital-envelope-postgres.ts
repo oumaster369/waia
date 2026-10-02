@@ -8,6 +8,7 @@ import {
   decideLiveCapitalEnvelopePublicationV2,
   decideLiveCapitalEnvelopeWindowV2,
   liveCapitalBasisBindingV2,
+  liveCapitalEnvelopeCommandLimitV2,
   liveCapitalEnvelopeCommandSchemaV2,
   readStoredSourceMethodQualifiedV2,
   sealLiveCapitalEnvelopeV2,
@@ -284,7 +285,8 @@ async function recheckPublishedAuthorityV2(
     });
   }
   await tx`delete from trader_live_capital_envelope_current_v2
-    where organization_id = ${pointer.organizationId}::uuid and account_id = ${pointer.accountId}`;
+    where organization_id = ${pointer.organizationId}::uuid and account_id = ${pointer.accountId}
+      and command_id = ${stored.commandId}::uuid`;
   return { ...refused(reason, true), envelopeDigest, basisDigest };
 }
 
@@ -394,15 +396,28 @@ export async function advanceLiveCapitalEnvelopeStageV2(
     });
     let current = await loadCurrent(tx, command.organizationId, command.accountId);
     if (decision.decision !== "PUBLISHED") {
-      if (invalidated) return refused(invalidated.reason ?? decision.reason, true);
-      if (current?.command_id === command.commandId) {
+      const limit = liveCapitalEnvelopeCommandLimitV2({
+        commandId: command.commandId,
+        currentCommandId: current?.command_id ?? null,
+        alreadyInvalidated: Boolean(invalidated),
+        alreadyPublished: Boolean(publishedRow),
+        refusalReason: decision.reason,
+      });
+      if (limit.idempotentClosed) {
+        return refused(invalidated?.reason ?? decision.reason, true);
+      }
+      if (!limit.writeTerminal) {
+        return refused(decision.reason, false);
+      }
+      if (limit.clearOwnedCurrent && current?.command_id === command.commandId) {
         await journalInvalidatedOnce(tx, command, rows, {
           envelopeDigest: current.envelope_digest,
           basisDigest: current.basis_digest,
           reason: decision.reason,
         });
         await tx`delete from trader_live_capital_envelope_current_v2
-          where organization_id = ${command.organizationId}::uuid and account_id = ${command.accountId}`;
+          where organization_id = ${command.organizationId}::uuid and account_id = ${command.accountId}
+            and command_id = ${command.commandId}::uuid`;
         return {
           ...refused(decision.reason, true),
           envelopeDigest: current.envelope_digest,
@@ -575,6 +590,9 @@ export async function invalidateLiveCapitalEnvelopeV2(
     }
     const reason = windowRefusalReason(decision);
     const rows = await loadJournal(tx, command);
+    if (current.command_id !== command.commandId) {
+      return refused("LIVE_CAPITAL_IDENTITY_CHANGED", false);
+    }
     if (!rows.some((row) => row.stage === "INVALIDATED")) {
       await journal(tx, command, "INVALIDATED", {
         envelopeDigest: current.envelope_digest,
@@ -583,7 +601,8 @@ export async function invalidateLiveCapitalEnvelopeV2(
       });
     }
     await tx`delete from trader_live_capital_envelope_current_v2
-      where organization_id = ${input.boundOrganizationId}::uuid and account_id = ${pointerAccountId}`;
+      where organization_id = ${input.boundOrganizationId}::uuid and account_id = ${pointerAccountId}
+        and command_id = ${command.commandId}::uuid`;
     return {
       ...refused(reason, true),
       envelopeDigest: current.envelope_digest,
