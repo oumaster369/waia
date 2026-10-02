@@ -3,6 +3,24 @@ enforceServerOnly();
 import postgres from "postgres";
 import { createScheduledPostgresTransportV1, type ScheduledPostgresEndpointV1 } from "./scheduled-owned-postgres-transport-v1";
 
+/** postgres.begin can reject on close before its transaction callback finishes. */
+export async function withJoinedScheduledTransactionV1<Tx, T>(
+  transaction: (callback: (tx: Tx) => Promise<T>) => Promise<T>,
+  work: (tx: Tx) => Promise<T>,
+): Promise<T> {
+  let callbackTask: Promise<T> | undefined;
+  try {
+    return await transaction((tx) => {
+      callbackTask = Promise.resolve().then(() => work(tx));
+      return callbackTask;
+    });
+  } finally {
+    // This joins application work only. It does not attest server rollback or
+    // turn a callback return into COMMIT acknowledgment.
+    if (callbackTask) await callbackTask.catch(() => undefined);
+  }
+}
+
 /** Validate before either postgres or its environment fallback can choose an endpoint. */
 export function parseScheduledPostgresEndpointV1(raw: string): ScheduledPostgresEndpointV1 {
   const refuse = (): never => { throw new Error("SCHEDULED_POSTGRES_DSN_PROFILE_REFUSED"); };

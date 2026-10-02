@@ -10,7 +10,10 @@ vi.mock("@/lib/trader/paper/scheduled-owned-postgres-transport-v1", () => ({
   createScheduledPostgresTransportV1: createTransportMock,
 }));
 
-import { withScheduledOwnedPostgresPoolV1 } from "@/lib/trader/paper/scheduled-owned-postgres-pool-v1";
+import {
+  withJoinedScheduledTransactionV1,
+  withScheduledOwnedPostgresPoolV1,
+} from "@/lib/trader/paper/scheduled-owned-postgres-pool-v1";
 
 const URL = "postgres://fixture@localhost/test?sslmode=disable";
 
@@ -105,5 +108,52 @@ describe("withScheduledOwnedPostgresPoolV1 lifetime", () => {
       .rejects.toThrow();
     expect(createTransportMock).not.toHaveBeenCalled();
     expect(postgresMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("withJoinedScheduledTransactionV1", () => {
+  it("joins a transaction callback after an early driver rejection and preserves that rejection", async () => {
+    const callbackGate = deferred<string>();
+    const driverFailure = new Error("connection closed before callback settled");
+    let callbackEntered = false;
+    let returned = false;
+    const tx = { marker: "realistic-transaction-shape" };
+
+    const operation = withJoinedScheduledTransactionV1(
+      async (callback) => {
+        void callback(tx);
+        throw driverFailure;
+      },
+      async (receivedTx) => {
+        expect(receivedTx).toBe(tx);
+        callbackEntered = true;
+        return callbackGate.promise;
+      },
+    ).then(
+      (value) => { returned = true; return value; },
+      (error: unknown) => { returned = true; throw error; },
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(callbackEntered).toBe(true);
+    expect(returned).toBe(false);
+
+    callbackGate.resolve("callback settled after driver failure");
+    await expect(operation).rejects.toBe(driverFailure);
+    expect(returned).toBe(true);
+  });
+
+  it("returns an acknowledged transaction result unchanged", async () => {
+    const tx = { marker: "acknowledged-transaction" };
+    const result = await withJoinedScheduledTransactionV1(
+      async (callback) => callback(tx),
+      async (receivedTx) => {
+        expect(receivedTx).toBe(tx);
+        return "commit acknowledged";
+      },
+    );
+
+    expect(result).toBe("commit acknowledged");
   });
 });

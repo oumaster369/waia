@@ -6,7 +6,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
-import { withScheduledOwnedPostgresPoolV1 } from "./scheduled-owned-postgres-pool-v1";
+import { withJoinedScheduledTransactionV1, withScheduledOwnedPostgresPoolV1 } from "./scheduled-owned-postgres-pool-v1";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { emitTraderTelemetry, type WaiaTraderTelemetryPayload } from "@/lib/observability/waia-trader-telemetry";
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
@@ -457,7 +457,7 @@ export async function runScheduledNoncapitalPaperLoopFromEnv(
     try {
       outcome = await withScheduledOwnedPostgresPoolV1(postgresUrl, controller.signal, async (client) => {
         const db = drizzle(client, { schema: pgSchema });
-        return db.transaction(async (tx) => {
+        return withJoinedScheduledTransactionV1<HeldTx, typeof outcome>((work) => db.transaction(work), async (tx) => {
           await tx.execute(sql`SET LOCAL lock_timeout = '5s'`);
           await tx.execute(sql`SET LOCAL statement_timeout = '30s'`);
           const lock = await tx.execute<{ acquired: boolean }>(sql`
