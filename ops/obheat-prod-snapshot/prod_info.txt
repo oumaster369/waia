@@ -1,0 +1,53 @@
+# Каталог данных. Не пересекается с waia-binance.
+OBHEAT_DATA=/srv/obheat
+# Слушать только localhost. Для 0.0.0.0 обязателен OBHEAT_TOKEN.
+OBHEAT_BIND=0.0.0.0
+OBHEAT_PORT=8790
+OBHEAT_TOKEN=***
+OBHEAT_LOG_LEVEL=INFO
+OBHEAT_SYMBOLS=BTCUSDT,ETHUSDT
+OBHEAT_VENUES=BINANCE,BYBIT,OKX,HTX,BITGET,GATE,BINANCE_SPOT,COINBASE,OKX_SPOT,BYBIT_SPOT
+aiodns==4.0.4
+aiofile==3.12.3
+aiohappyeyeballs==2.7.1
+aiohttp==3.14.3
+aiohttp-fast-zlib==0.3.0
+aiosignal==1.4.0
+attrs==26.1.0
+caio==0.12.9
+ccxt==4.5.85
+certifi==2026.6.17
+cffi==2.0.0
+charset-normalizer==3.4.7
+coincurve==21.0.0
+cryptofeed==2.5.0
+cryptography==50.0.2
+duckdb==1.5.6
+frozenlist==1.8.0
+idna==3.18
+multidict==6.7.1
+order_book==1.0.2
+orjson==3.11.9
+propcache==0.5.2
+pyarrow==25.0.1
+pycares==5.0.1
+pycparser==3.0
+PyYAML==6.0.3
+requests==2.34.2
+typing_extensions==4.16.0
+urllib3==2.8.0
+uvloop==0.22.1
+websockets==17.1
+yapic.json==1.9.5
+yarl==1.25.1
+zlib-ng==1.0.0
+total 644
+drwxr-xr-x 4 obheat obheat   4096 Oct  2 17:08 .
+drwxr-xr-x 4 root   root     4096 Oct  2 14:12 ..
+drwxr-xr-x 3 obheat obheat   4096 Oct  2 14:13 data
+-rw-r--r-- 1 obheat obheat 571808 Oct  2 17:08 feedhandler.log
+-rw-r--r-- 1 obheat obheat  48406 Oct  2 15:54 gaps.jsonl
+-rw-r--r-- 1 obheat obheat   4702 Oct  2 17:08 health.json
+drwxr-xr-x 2 obheat obheat   4096 Oct  2 17:08 live
+-rw-r--r-- 1 obheat obheat   4697 Oct  2 15:05 meta.json
+61M	/srv/obheat
