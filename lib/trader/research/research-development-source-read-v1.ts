@@ -39,7 +39,12 @@ export async function readResearchDevelopmentSourceIssuanceV1(
 
 export async function readResearchDevelopmentSourceRowsV1(
   tx: postgres.Sql, supplied: ResearchDevelopmentSourceIssuanceV1,
+  limits: Readonly<{ maxBytes: number }> = { maxBytes: MAX_ROW_BYTES },
 ) {
+  const maxBytes = limits.maxBytes;
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_ROW_BYTES) {
+    throw new Error("RESEARCH_DEVELOPMENT_SOURCE_ROW_BUDGET_INVALID");
+  }
   const issuance = parseResearchDevelopmentSourceIssuanceV1(supplied);
   const r = issuance.request;
   const total = r.observationBarCount + r.gapBarCount + r.trainingBarCount;
@@ -50,7 +55,7 @@ export async function readResearchDevelopmentSourceRowsV1(
     FROM public.trader_historical_dataset_authority_v2 dataset
     WHERE organization_id=${r.organizationId}::uuid AND run_id=${issuance.sourceRunId}`;
   if (!size || size.count !== total || !Number.isSafeInteger(Number(size.bytes)) ||
-      Number(size.bytes) <= 0 || Number(size.bytes) > MAX_ROW_BYTES) {
+      Number(size.bytes) <= 0 || Number(size.bytes) > maxBytes) {
     throw new Error("RESEARCH_DEVELOPMENT_SOURCE_ROW_BUDGET_OR_COUNT_MISMATCH");
   }
   const rows = await tx<(DatasetRow & { dataset_authority_class: string })[]>`

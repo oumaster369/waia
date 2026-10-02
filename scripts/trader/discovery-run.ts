@@ -23,10 +23,10 @@ import {
   buildCampaignRunFrontmatter,
   type CampaignRunFrontmatter,
 } from "@/lib/trader/research/campaign-run-frontmatter";
-import { prepareResearchDevelopmentSourcePostgresV1 } from
-  "@/lib/trader/research/research-development-source-owner-postgres-v1";
-import { captureResearchDevelopmentSourceRequestV1 } from
-  "@/lib/trader/research/research-development-source-contract-v1";
+import { prepareResearchDevelopmentSourcePostgresV1 } from "@/lib/trader/research/research-development-source-owner-postgres-v1";
+import { captureResearchDevelopmentSourceRequestV1 } from "@/lib/trader/research/research-development-source-contract-v1";
+import { captureResearchIssuedTrainingRequestV2 } from "@/lib/trader/research/research-issued-training-contract-v2";
+import { runResearchIssuedTrainingDiagnosticPostgresV2 } from "@/lib/trader/research/research-issued-training-diagnostic-postgres-v2";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 const LOG_PREFIX = "[trader:discovery:run]";
@@ -96,6 +96,13 @@ Separate source preparation (returns observation and stops before research execu
     WAIA_RESEARCH_SOURCE_VOLUME_PATH; WAIA_RESEARCH_SOURCE_REQUALIFICATION_PATH
     is required when source and runtime releases differ.
   The dedicated database login and current CLI/Org0 allowlist checks are required.
+
+Separate issued-source DEVELOPMENT diagnostic (does not register an experiment or qualify it):
+  pnpm trader:discovery:run -- --run-issued-training=1 --org-id=<Org0 uuid>
+    --attempt-id=<issued V2 attempt uuid> --trial-index=<0..31>
+    --max-bars=<1..4096> --max-bytes=<1..33554432>
+  Requires WAIA_TRADER_CLI=1 and operator authorization. Prints only the
+  diagnostic status and immutable identifiers/digests; uncertain commit exits nonzero.
 `);
 }
 
@@ -167,8 +174,14 @@ export function parseDiscoverySourcePreparationArgs(argv: readonly string[]) {
     organizationId: values.get("org-id"),
     commandId: values.get("command-id"),
     symbol: values.get("symbol"),
-    initialRecordIndex: parseStrictInteger(values.get("initial-record-index"), "initial-record-index"),
-    observationBarCount: parseStrictInteger(values.get("observation-bar-count"), "observation-bar-count"),
+    initialRecordIndex: parseStrictInteger(
+      values.get("initial-record-index"),
+      "initial-record-index",
+    ),
+    observationBarCount: parseStrictInteger(
+      values.get("observation-bar-count"),
+      "observation-bar-count",
+    ),
     gapBarCount: parseStrictInteger(values.get("gap-bar-count"), "gap-bar-count"),
     trainingBarCount: parseStrictInteger(values.get("training-bar-count"), "training-bar-count"),
   });
@@ -211,6 +224,125 @@ export async function runDiscoverySourcePreparationBranch(
   }
 }
 
+const ISSUED_TRAINING_FLAGS = new Set([
+  "run-issued-training",
+  "org-id",
+  "attempt-id",
+  "trial-index",
+  "max-bars",
+  "max-bytes",
+]);
+
+function hasIssuedTrainingFlag(argv: readonly string[]): boolean {
+  return argv.some(
+    (arg) => arg === "--run-issued-training" || arg.startsWith("--run-issued-training="),
+  );
+}
+
+function parseIssuedTrainingInteger(value: string | undefined): number {
+  if (!value || !/^(0|[1-9][0-9]*)$/.test(value)) {
+    throw new Error("ISSUED_TRAINING_ARGUMENTS_INVALID");
+  }
+  const number = Number(value);
+  if (!Number.isSafeInteger(number)) throw new Error("ISSUED_TRAINING_ARGUMENTS_INVALID");
+  return number;
+}
+
+export function parseDiscoveryIssuedTrainingArgs(argv: readonly string[]) {
+  if (!hasIssuedTrainingFlag(argv)) return null;
+  if (hasSourcePreparationFlag(argv)) throw new Error("ISSUED_TRAINING_ARGUMENTS_INVALID");
+
+  const seen = new Set<string>();
+  const values = new Map<string, string>();
+  for (const arg of argv) {
+    if (!arg.startsWith("--")) throw new Error("ISSUED_TRAINING_ARGUMENTS_INVALID");
+    const body = arg.slice(2);
+    const equals = body.indexOf("=");
+    if (equals <= 0) throw new Error("ISSUED_TRAINING_ARGUMENTS_INVALID");
+    const name = body.slice(0, equals);
+    const value = body.slice(equals + 1);
+    if (!ISSUED_TRAINING_FLAGS.has(name) || seen.has(name) || value.length === 0) {
+      throw new Error("ISSUED_TRAINING_ARGUMENTS_INVALID");
+    }
+    seen.add(name);
+    values.set(name, value);
+  }
+  if (values.get("run-issued-training") !== "1")
+    throw new Error("ISSUED_TRAINING_ARGUMENTS_INVALID");
+
+  try {
+    return captureResearchIssuedTrainingRequestV2({
+      organizationId: values.get("org-id"),
+      attemptId: values.get("attempt-id"),
+      trialIndex: parseIssuedTrainingInteger(values.get("trial-index")),
+      limits: {
+        maxBars: parseIssuedTrainingInteger(values.get("max-bars")),
+        maxBytes: parseIssuedTrainingInteger(values.get("max-bytes")),
+      },
+    });
+  } catch {
+    throw new Error("ISSUED_TRAINING_ARGUMENTS_INVALID");
+  }
+}
+
+type IssuedTrainingOwnerTrace = NonNullable<
+  Awaited<ReturnType<typeof runResearchIssuedTrainingDiagnosticPostgresV2>>["trace"]
+>;
+type IssuedTrainingCliResult = Readonly<{
+  status: "COMMITTED" | "REPLAYED" | "CONFIRMED_AFTER_UNCERTAINTY" | "COMMIT_UNCERTAIN";
+  trace: Readonly<
+    Pick<IssuedTrainingOwnerTrace, "traceSha256" | "stageRunId" | "sourceIssuanceDigest">
+  > | null;
+}>;
+
+export function buildIssuedTrainingCliSummary(result: IssuedTrainingCliResult) {
+  const trace = result.trace;
+  return {
+    status: result.status,
+    trace: trace
+      ? {
+          traceSha256: trace.traceSha256,
+          stageRunId: trace.stageRunId,
+          sourceIssuanceDigest: trace.sourceIssuanceDigest,
+        }
+      : null,
+    scientificQualified: false as const,
+    capitalEligible: false as const,
+  };
+}
+
+export async function runDiscoveryIssuedTrainingBranch(
+  argv: readonly string[],
+  input: {
+    cliEnabled: boolean;
+    authorize(): void;
+    run(
+      request: NonNullable<ReturnType<typeof parseDiscoveryIssuedTrainingArgs>>,
+    ): Promise<IssuedTrainingCliResult>;
+    print(value: ReturnType<typeof buildIssuedTrainingCliSummary>): void;
+  },
+): Promise<{ handled: boolean; exitCode: number; error?: string }> {
+  if (!hasIssuedTrainingFlag(argv)) return { handled: false, exitCode: 0 };
+  if (!input.cliEnabled) return { handled: true, exitCode: 1, error: "WAIA_TRADER_CLI_REQUIRED" };
+
+  let request: NonNullable<ReturnType<typeof parseDiscoveryIssuedTrainingArgs>>;
+  try {
+    request = parseDiscoveryIssuedTrainingArgs(argv)!;
+  } catch {
+    return { handled: true, exitCode: 1, error: "ISSUED_TRAINING_ARGUMENTS_INVALID" };
+  }
+
+  try {
+    input.authorize();
+    const result = await input.run(request);
+    const summary = buildIssuedTrainingCliSummary(result);
+    input.print(summary);
+    return { handled: true, exitCode: result.status === "COMMIT_UNCERTAIN" ? 1 : 0 };
+  } catch {
+    return { handled: true, exitCode: 1, error: "ISSUED_TRAINING_FAILED" };
+  }
+}
+
 async function main(): Promise<void> {
   if (process.env.WAIA_TRADER_CLI !== "1") {
     console.error(`${LOG_PREFIX} WAIA_TRADER_CLI=1 is required`);
@@ -218,6 +350,17 @@ async function main(): Promise<void> {
   }
 
   const argv = process.argv.slice(2);
+  if (hasIssuedTrainingFlag(argv)) {
+    const outcome = await runDiscoveryIssuedTrainingBranch(argv, {
+      cliEnabled: process.env.WAIA_TRADER_CLI === "1",
+      authorize: () => assertOperatorActionAllowed("authorize_discovery_run"),
+      run: runResearchIssuedTrainingDiagnosticPostgresV2,
+      print: (summary) => console.log(`${LOG_PREFIX} issued-training ${JSON.stringify(summary)}`),
+    });
+    if (outcome.error) console.error(`${LOG_PREFIX} ${outcome.error}`);
+    if (outcome.exitCode !== 0) process.exitCode = outcome.exitCode;
+    return;
+  }
   if (hasSourcePreparationFlag(argv)) {
     const outcome = await runDiscoverySourcePreparationBranch(argv, {
       cliEnabled: process.env.WAIA_TRADER_CLI === "1",
@@ -303,7 +446,11 @@ async function main(): Promise<void> {
   }
 }
 
-if (process.env.WAIA_TRADER_CLI === "1" || hasSourcePreparationFlag(process.argv.slice(2))) {
+if (
+  process.env.WAIA_TRADER_CLI === "1" ||
+  hasSourcePreparationFlag(process.argv.slice(2)) ||
+  hasIssuedTrainingFlag(process.argv.slice(2))
+) {
   main().catch((error: unknown) => {
     console.error(`${LOG_PREFIX} failed`, error);
     process.exit(1);

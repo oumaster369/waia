@@ -54,13 +54,19 @@ export type ResearchDevelopmentSourceFixtureV1 = Readonly<{
  */
 export function createResearchDevelopmentSourceFixtureV1(input: Readonly<{
   barCount?: number;
+  /** Optional deterministic close series for execution-engine integration tests. */
+  closes?: readonly number[];
   organizationId?: string;
   sourceReleaseSha?: string;
   releaseSha?: string;
 }> = {}): ResearchDevelopmentSourceFixtureV1 {
-  const barCount = input.barCount ?? 8;
+  const barCount = input.closes?.length ?? input.barCount ?? 8;
   if (!Number.isSafeInteger(barCount) || barCount < 6 || barCount > 10_000) {
     throw new Error("RESEARCH_DEVELOPMENT_SOURCE_FIXTURE_BAR_COUNT_INVALID");
+  }
+  if (input.closes && ((input.barCount !== undefined && input.barCount !== input.closes.length) ||
+      input.closes.some(close => !Number.isFinite(close) || close <= 0))) {
+    throw new Error("RESEARCH_DEVELOPMENT_SOURCE_FIXTURE_CLOSES_INVALID");
   }
   const organizationId = input.organizationId ?? DEFAULT_ORGANIZATION_ID;
   const sourceReleaseSha = input.sourceReleaseSha ?? DEFAULT_RELEASE_SHA;
@@ -72,22 +78,34 @@ export function createResearchDevelopmentSourceFixtureV1(input: Readonly<{
   const rootDir = mkdtempSync(join(tmpdir(), "waia-research-development-source-v1-"));
   try {
     const datasetRoot = rootDir;
-    const bars: Bar[] = Array.from({ length: barCount }, (_, index) => {
-      const openMs = DEVELOPMENT_START_MS + index * ONE_MINUTE_MS;
-      const open = 100 + index;
-      const close = open + (index % 2 === 0 ? 1 : -0.5);
-      return {
-        symbol: "BTC/USDT",
-        interval: "1m",
-        open: String(open),
-        high: String(Math.max(open, close) + 1),
-        low: String(Math.min(open, close) - 1),
-        close: String(close),
-        volume: String(index + 2),
-        barOpenTime: new Date(openMs).toISOString(),
-        barCloseTime: new Date(openMs + ONE_MINUTE_MS).toISOString(),
-      };
-    });
+    const bars: Bar[] = input.closes
+      ? input.closes.map((close, index) => {
+        const openMs = DEVELOPMENT_START_MS + index * ONE_MINUTE_MS;
+        const open = index === 0 ? close : input.closes![index - 1]!;
+        return {
+          symbol: "BTC/USDT", interval: "1m", open: String(open),
+          high: String(Math.max(open, close) + 1), low: String(Math.min(open, close) - 1),
+          close: String(close), volume: String(index + 2),
+          barOpenTime: new Date(openMs).toISOString(),
+          barCloseTime: new Date(openMs + ONE_MINUTE_MS).toISOString(),
+        };
+      })
+      : Array.from({ length: barCount }, (_, index) => {
+        const openMs = DEVELOPMENT_START_MS + index * ONE_MINUTE_MS;
+        const open = 100 + index;
+        const close = open + (index % 2 === 0 ? 1 : -0.5);
+        return {
+          symbol: "BTC/USDT",
+          interval: "1m",
+          open: String(open),
+          high: String(Math.max(open, close) + 1),
+          low: String(Math.min(open, close) - 1),
+          close: String(close),
+          volume: String(index + 2),
+          barOpenTime: new Date(openMs).toISOString(),
+          barCloseTime: new Date(openMs + ONE_MINUTE_MS).toISOString(),
+        };
+      });
     const rawBytes = Buffer.from(
       bars.map((bar) => serializeFhvBarsV2Record(barToFhvBarsV2Record(bar))).join(""),
       "utf8",

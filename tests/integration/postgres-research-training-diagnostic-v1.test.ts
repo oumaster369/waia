@@ -587,6 +587,52 @@ describe.skipIf(!enabled || !url)("DEE-1159 registered training diagnostic Postg
     expect(await stageWriteCounts(f)).toEqual([1, 0, 0, 0]);
   }, 120_000);
 
+  it("refuses self-resealed visible trace lineage changes without changing the committed ledger", async () => {
+    const f = await fixture({ label: "trace-lineage-mutation", trials: [4],
+      closes: [100, 100, 100, 100, 90, 100, 100, 100] });
+    const committed = await run(f, 0);
+    const [stored] = await ownerSql`select trace_canonical_json,trace_sha256
+      from public.trader_research_training_diagnostics_v1
+      where organization_id=${f.orgId}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=0`;
+    expect(stored).toBeTruthy();
+    const originalJson = stored!.trace_canonical_json;
+    const originalDigest = stored!.trace_sha256;
+    const original = JSON.parse(originalJson) as Record<string, unknown>;
+    const before = await stageWriteCounts(f);
+    const changes: ReadonlyArray<readonly [string, unknown]> = [
+      ["sourceRunId", `research-source-v1:${"0".repeat(64)}`],
+      ["experimentSpecSha256", "f".repeat(64)],
+      ["trainPartitionSha256", "e".repeat(64)],
+      ["historicalExecutionModelSha256", "f".repeat(64)],
+      ["requestedExecutableSourceSha256", "e".repeat(64)],
+      ["requestedPointInTimeEvidenceSha256", "f".repeat(64)],
+      ["barCount", f.trainBars.length - 1],
+    ];
+    await ownerSql`alter table public.trader_research_training_diagnostics_v1
+      disable trigger research_training_diagnostic_append_only`;
+    try {
+      for (const [field, replacement] of changes) {
+        const forged = { ...original, [field]: replacement };
+        const canonical = canonicalJsonString(forged);
+        await ownerSql`update public.trader_research_training_diagnostics_v1
+          set trace_canonical_json=${canonical},trace_sha256=${computeStableJsonDigest(forged)}
+          where organization_id=${f.orgId}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=0`;
+        try {
+          await expect(run(f, 0)).rejects.toThrow("COMMITTED_TRACE_LINEAGE_MISMATCH");
+          expect(await stageWriteCounts(f)).toEqual(before);
+        } finally {
+          await ownerSql`update public.trader_research_training_diagnostics_v1
+            set trace_canonical_json=${originalJson},trace_sha256=${originalDigest}
+            where organization_id=${f.orgId}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=0`;
+        }
+      }
+    } finally {
+      await ownerSql`alter table public.trader_research_training_diagnostics_v1
+        enable trigger research_training_diagnostic_append_only`;
+    }
+    expect(await run(f, 0)).toEqual(committed);
+  }, 180_000);
+
   it("executes two declared lookbacks with separate actual D5 decisions, fills, accounting and exact retries", async () => {
     const f = await fixture({ label: "different-lookbacks", closes: [100, 100, 100, 100, 90, 100, 100, 100, 90, 100, 100, 100] });
     const short = await run(f, 0);
@@ -617,7 +663,7 @@ describe.skipIf(!enabled || !url)("DEE-1159 registered training diagnostic Postg
     const orders = await ownerSql`select historical_run_id,count(*)::int as n from public.trader_orders
       where historical_run_id in (${short.stageRunId},${long.stageRunId}) group by historical_run_id`;
     expect(orders).toHaveLength(2);
-    const firstOrderId = (short.orders as Array<{ id: string }>)[0]?.id;
+    const firstOrderId = (short.orders as readonly { id: string }[])[0]?.id;
     expect(firstOrderId).toBeTruthy();
     const [originalOrder] = await ownerSql`select quantity,updated_at from public.trader_orders
       where id=${firstOrderId}::uuid`;
@@ -657,7 +703,7 @@ describe.skipIf(!enabled || !url)("DEE-1159 registered training diagnostic Postg
       closes: [100, 100, 100, 100, 90, 89, 88, 87, 86, 85, 84] });
     const trace = await run(f, 0);
     expect(Number(trace.fillCount)).toBeGreaterThan(0);
-    const orders = trace.orders as Array<{ state: string; quantity: string; filledQuantity: string }>;
+    const orders = trace.orders as readonly { state: string; quantity: string; filledQuantity: string }[];
     expect(orders.some(order => order.state === "EXPIRED")).toBe(true);
     expect(orders.some(order => order.state === "EXPIRED" &&
       Number(order.filledQuantity) > 0 && Number(order.filledQuantity) < Number(order.quantity))).toBe(true);
@@ -692,17 +738,24 @@ describe.skipIf(!enabled || !url)("DEE-1159 registered training diagnostic Postg
   }, 120_000);
 
   it("serializes concurrent owners into one committed trace and refuses a poisoned pre-result ledger", async () => {
-    const f = await fixture({ label: "concurrent-owners", closes: [100, 100, 100, 100, 90, 100, 100, 100] });
-    const simultaneous = await Promise.allSettled([run(f, 0), run(f, 0)]);
-    const results = await Promise.all(simultaneous.map(async outcome =>
-      outcome.status === "fulfilled" ? outcome.value :
-        /SERIALIZATION_RETRY_REQUIRED|LOCK_TIMEOUT_RETRY_REQUIRED/.test(String(outcome.reason))
-          ? run(f, 0) : Promise.reject(outcome.reason)));
-    const [left, right] = results;
-    expect(left).toEqual(right);
-    const rows = await ownerSql`select count(*)::int as n from public.trader_research_training_diagnostics_v1
-      where organization_id=${f.orgId}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=0`;
-    expect(rows[0]!.n).toBe(1);
+    const concurrent = [await fixture({ label: "concurrent-owners-0",
+      closes: [100, 100, 100, 100, 90, 100, 100, 100] })];
+    for (let index = 1; index < 4; index += 1) {
+      concurrent.push(await fixture({ label: `concurrent-owners-${index}`,
+        closes: [100, 100, 100, 100, 90, 100, 100, 100] }));
+    }
+    const simultaneous = await Promise.all(concurrent.map(f => Promise.allSettled([run(f, 0), run(f, 0)])));
+    for (const [index, outcomes] of simultaneous.entries()) {
+      const f = concurrent[index]!;
+      const results = await Promise.all(outcomes.map(async outcome =>
+        outcome.status === "fulfilled" ? outcome.value :
+          /SERIALIZATION_RETRY_REQUIRED|LOCK_TIMEOUT_RETRY_REQUIRED/.test(String(outcome.reason))
+            ? run(f, 0) : Promise.reject(outcome.reason)));
+      expect(results[0]).toEqual(results[1]);
+      const rows = await ownerSql`select count(*)::int as n from public.trader_research_training_diagnostics_v1
+        where organization_id=${f.orgId}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=0`;
+      expect(rows[0]!.n).toBe(1);
+    }
     const poisoned = await fixture({ label: "orphan-ledger", closes: [100, 100, 100, 100, 90, 100, 100, 100] });
     const stageRunId = (await import("@/lib/trader/research/research-attempt-registry-postgres-v1"))
       .loadResearchTrainingLedgerScopePostgresV1(db, poisoned.context,
@@ -768,5 +821,60 @@ describe.skipIf(!enabled || !url)("DEE-1159 registered training diagnostic Postg
     }
     const recovered = await run(f, 0);
     expect(Number(recovered.fillCount)).toBeGreaterThan(0);
+  }, 120_000);
+
+  it("refuses an exact frontier primary-key 23505 when no committed result exists", async () => {
+    const f = await fixture({ label: "frontier-pkey-conflict", trials: [4],
+      closes: [100, 100, 100, 100, 90, 100, 100, 100] });
+    const scope = await loadResearchTrainingLedgerScopePostgresV1(db, f.context,
+      { attemptId: f.attempt.id, trialIndex: 0 });
+    const stageRunId = scope.ledgerScope.historicalRunId;
+    const readStageRows = async () => {
+      const rows = await ownerSql`select
+        (select count(*)::int from public.trader_research_training_diagnostics_v1
+          where organization_id=${f.orgId}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=0) as diagnostics,
+        (select count(*)::int from public.trader_orders
+          where organization_id=${f.orgId}::uuid and historical_run_id=${stageRunId}) as orders,
+        (select count(*)::int from public.trader_order_events e join public.trader_orders o on o.id=e.order_id
+          where o.organization_id=${f.orgId}::uuid and o.historical_run_id=${stageRunId}) as events,
+        (select count(*)::int from public.trader_fills fl join public.trader_orders o on o.id=fl.order_id
+          where o.organization_id=${f.orgId}::uuid and o.historical_run_id=${stageRunId}) as fills,
+        (select count(*)::int from public.trader_fill_execution_economics ec
+          join public.trader_orders o on o.id=ec.order_id
+          where o.organization_id=${f.orgId}::uuid and o.historical_run_id=${stageRunId}) as economics,
+        (select count(*)::int from public.trader_accounting_frontier
+          where organization_id=${f.orgId}::uuid and run_id=${stageRunId}) as frontiers`;
+      return rows;
+    };
+    const before = await readStageRows();
+    const token = randomUUID().replaceAll("-", "");
+    const sequence = `d12v1_${token}`;
+    const fn = `${sequence}_fn`;
+    const trigger = `${sequence}_trigger`;
+    try {
+      await ownerSql.unsafe(`CREATE SEQUENCE public.${sequence}`);
+      await ownerSql.unsafe(`CREATE FUNCTION public.${fn}() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          PERFORM nextval('public.${sequence}');
+          RAISE unique_violation USING MESSAGE='DEE1212_SYNTHETIC_FRONTIER_PRIMARY_KEY',
+            SCHEMA='public',TABLE='trader_accounting_frontier',
+            CONSTRAINT='trader_accounting_frontier_pkey';
+        END; $$`);
+      await ownerSql.unsafe(`CREATE TRIGGER ${trigger} BEFORE INSERT ON public.trader_accounting_frontier
+        FOR EACH ROW WHEN (NEW.organization_id='${f.orgId}'::uuid AND NEW.run_id='${scope.ledgerScope.historicalRunId}')
+        EXECUTE FUNCTION public.${fn}()`);
+      let caught: unknown;
+      try { await run(f, 0); } catch (error) { caught = error; }
+      expect(caught).toMatchObject({ code: "23505", schema_name: "public",
+        table_name: "trader_accounting_frontier", constraint_name: "trader_accounting_frontier_pkey" });
+      expect(await readStageRows()).toEqual(before);
+      expect(before).toEqual([{ diagnostics: 0, orders: 0, events: 0, fills: 0, economics: 0, frontiers: 0 }]);
+      const [sequenceState] = await ownerSql.unsafe(`select last_value,is_called from public.${sequence}`);
+      expect(sequenceState).toMatchObject({ last_value: "1", is_called: true });
+    } finally {
+      await ownerSql.unsafe(`DROP TRIGGER IF EXISTS ${trigger} ON public.trader_accounting_frontier`);
+      await ownerSql.unsafe(`DROP FUNCTION IF EXISTS public.${fn}()`);
+      await ownerSql.unsafe(`DROP SEQUENCE IF EXISTS public.${sequence}`);
+    }
   }, 120_000);
 });

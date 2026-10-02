@@ -1,7 +1,7 @@
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 enforceServerOnly();
 
-import type { WaiaPostgresTransactionCallback } from "@/db/waia-postgres-transaction";
+import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type { AccountingFrontierV1 } from "@/lib/trader/accounting/accounting-frontier.types";
 import { createAccountingFrontierRepositoryPostgres } from "@/lib/trader/accounting/accounting-frontier-repository-postgres";
 import { buildHistoricalAccountingInceptionV2 } from "@/lib/trader/historical-simulation-v2/accounting-inception-v2";
@@ -32,7 +32,7 @@ import { calculateRiskAdmissionV2 } from "@/lib/trader/risk/v2/risk-admission-se
 import { addDecimal, compareDecimal, divideDecimal, multiplyDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import { evaluateResearchFeatureInvocationV1, type ResearchFeatureInvocationReceiptV1 } from "@/lib/trader/research/research-feature-invocation-v1";
-import type { loadRegisteredResearchTrainingExecutionInputPostgresV1 } from "@/lib/trader/research/research-training-payload-postgres-v1";
+import type { ResearchModeledStageSourceV1 } from "./research-modeled-stage-source-v1";
 import type { resolveResearchTrainingPolicyV1 } from "@/lib/trader/research/research-training-policy-v1";
 
 function refuse(reason: string): never {
@@ -72,8 +72,8 @@ function sizingAccount(frontier: AccountingFrontierV1, runConfig: PortfolioRunCo
  * transaction. This function is not a registration, stage-access or authority
  * boundary. Do not export it through a public request/service facade. */
 export async function runOwnedResearchModeledStageV1(input: Readonly<{
-  tx: Parameters<WaiaPostgresTransactionCallback<unknown>>[0];
-  source: Awaited<ReturnType<typeof loadRegisteredResearchTrainingExecutionInputPostgresV1>>;
+  tx: Pick<WaiaPostgresDb, "select" | "insert" | "update" | "execute">;
+  source: ResearchModeledStageSourceV1;
   request: Readonly<{ attemptId: string; trialIndex: number }>;
   policy: ReturnType<typeof resolveResearchTrainingPolicyV1>;
   model: ReturnType<typeof createHistoricalExecutionModelV1>;

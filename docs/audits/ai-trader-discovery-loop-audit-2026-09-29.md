@@ -252,3 +252,15 @@ Keep the fail-closed posture. Connect the stages in this order so a proposal can
 ## What this audit did not do
 
 No production SQL, no secret stores, no broker calls, no code changes besides this file. Whether `trader_discovery_*` or `trader_market_bars` contain rows in the live database was not re-checked; the code path above cannot be the writer of `trader_strategy_promotion_records`.
+
+## Follow-up — 2026-10-02 issued-source DEVELOPMENT CLI
+
+The DEE-1212 branch adds a separate, default-off command for a registered V2 attempt; it does not turn on the general discovery loop described above:
+
+```bash
+pnpm trader:discovery:run -- --run-issued-training=1 \
+  --org-id=<Org0 uuid> --attempt-id=<issued V2 attempt uuid> \
+  --trial-index=<0..31> --max-bars=<1..4096> --max-bytes=<1..33554432>
+```
+
+It requires `WAIA_TRADER_CLI=1` and operator authorization, reads only the already issued DEVELOPMENT attempt, and prints a bounded status/digest summary. It does not register a hypothesis, qualify a result, or make it capital-eligible. Source qualification, validation, walk-forward, blind, promotion, and live gates remain separate and open. The original findings above describe the general discovery path at the audit date; this follow-up records the narrower issued-source route.

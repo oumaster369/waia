@@ -33,7 +33,8 @@ async function ownedConnection<T>(work: (sql: postgres.Sql) => Promise<T>): Prom
   try { return await work(sql); } finally { await sql.end({ timeout: 1 }); }
 }
 
-async function boundSourceAndExperiment(tx: postgres.Sql, organizationId: string,
+/** Internal metadata-only reader; caller owns the snapshot. It grants no execution. */
+export async function readResearchIssuedSourceAndExperimentV2(tx: postgres.Sql, organizationId: string,
   specSha256: string, sourceRunId: string,
   runtime: ReturnType<typeof resolveCurrentResearchExecutableIdentityV1>) {
   const issuance = await readResearchDevelopmentSourceIssuanceV1(tx, organizationId, sourceRunId);
@@ -84,7 +85,7 @@ export async function registerResearchIssuedAttemptPostgresV2(supplied: unknown)
   const runtime = resolveCurrentResearchExecutableIdentityV1();
   return ownedConnection(sql => withPostgresSessionTransaction(sql, "SERIALIZABLE", async tx => {
     await tx`SELECT pg_advisory_xact_lock(hashtextextended(${`research-attempt-v2:${request.organizationId}:${request.commandId}`},0))`;
-    const { issuance } = await boundSourceAndExperiment(tx, request.organizationId,
+    const { issuance } = await readResearchIssuedSourceAndExperimentV2(tx, request.organizationId,
       request.specSha256, request.sourceRunId, runtime);
     // Registration refuses a corrupt/incomplete source; it does not execute or
     // select any trial. Every subsequent consumer rechecks under its snapshot.
@@ -127,7 +128,7 @@ export async function loadResearchIssuedTrainingInputPostgresV2(supplied: unknow
           organizationId: request.organizationId, commandId: row.command_id }))) {
       throw new Error("RESEARCH_ISSUED_ATTEMPT_REQUIRED");
     }
-    const bound = await boundSourceAndExperiment(tx, request.organizationId,
+    const bound = await readResearchIssuedSourceAndExperimentV2(tx, request.organizationId,
       row.spec_sha256, row.source_run_id, runtime);
     if (row.source_issuance_digest !== bound.issuance.contentDigest) {
       throw new Error("RESEARCH_ISSUED_ATTEMPT_SOURCE_CHANGED");
