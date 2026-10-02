@@ -12,7 +12,7 @@ state:
   status: in-progress
   completedWorkPackages: [WP-1, WP-2, WP-3]
   remainingWorkPackages: [WP-4]
-  nextAction: "After the prepared DEE1212 dependency chain merges, rebase onto exact main; complete admission and require published-head CI."
+  nextAction: "On actual main after PR740, finish current-head scoped readiness and independent review; require published-head CI before merge."
 provenance:
   createdFrom: "Independent October 1 code audit and explicit user authorization for technical fixes"
   supersedes: null
@@ -21,7 +21,7 @@ provenance:
 # DEE-1206 — research net convention correction
 
 Plan frozen before source changes. Original implementation base: main `31c78cba`.
-Prepared integration base: DEE1212 prepared head `818d63246fa89841d6151c4772ce468310ea1592`; this is not merged authority. Actual main remains `98a591c8`. Parent: DEE-1152.
+Actual integration base: main `ef5c79ececf0606ab37963c08499cc54a078c6ce` after PR740. Parent: DEE-1152. The earlier prepared-base evidence below is historical and does not establish current-head readiness.
 The user authorizes technical corrections, tests, independent audits and PR
 integration after required checks. This implements existing after-cost return
 meaning; it changes no financial threshold, cost constant, strategy or live gate.
@@ -96,7 +96,7 @@ caller-supplied metrics are qualified. All new records are research-only. A reve
 PR is the code rollback; old or unsupported receipts fail qualification reuse.
 
 
-## Prepared dependency integration evidence (2026-10-02)
+## Historical prepared dependency integration evidence (2026-10-02)
 
 For queue preparation only, the two DEE1206-owned commits were rebased onto
 prepared DEE1212 head `818d63246fa89841d6151c4772ce468310ea1592`. This is not a
@@ -116,3 +116,13 @@ passing tests. Logs and exact hashes are in external
 `dee1206-after1212-readiness`. Exact-main rebase, independent review and
 published-head CI remain. This work does not qualify a strategy or alter
 financial thresholds, cost inputs, production state, or trading authority.
+
+## Actual-main integration (2026-10-02)
+
+The three DEE1206-owned commits from prepared base818d6324 were rebased onto
+actual main `ef5c79ececf0606ab37963c08499cc54a078c6ce` after PR739 and PR740
+merged. All six owned files were byte-identical immediately after rebase; this
+metadata update is the only later change. Prior prepared proofs retain their
+original source identities. Fresh scoped tests, local readiness, independent
+current-base review and published-head CI are required before integration.
+There is no database migration or change to source qualification authority.
