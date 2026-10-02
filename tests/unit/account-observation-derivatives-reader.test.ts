@@ -30,11 +30,23 @@ const payloads: Record<HtxDerivativesAccountFamily, string> = {
   coin_perpetual: `{"status":"ok","ts":1780261200000,"data":[{"symbol":"BTC","contract_code":"BTC-USD","margin_balance":"0.25","margin_available":"0.2"}]}`,
   coin_delivery_futures: `{"status":"ok","ts":1780261200000,"data":[{"symbol":"BTC","margin_balance":"0.5","margin_available":"0.4"}]}`,
 };
+const positionPayloads: Record<HtxDerivativesAccountFamily, string> = {
+  usdt_isolated_perpetual: `{"status":"ok","data":[{"symbol":"BTC","contract_code":"BTC-USDT","margin_account":"BTC-USDT","margin_asset":"USDT","direction":"buy","volume":"1","available":"1","frozen":"0","cost_open":"10","cost_hold":"10","profit_unreal":"0","position_margin":"1","lever_rate":2}]}`,
+  usdt_cross_shared: `{"status":"ok","data":[{"symbol":"BTC","contract_code":"BTC-USDT","margin_account":"USDT","margin_asset":"USDT","direction":"sell","volume":"1","available":"1","frozen":"0","cost_open":"10","cost_hold":"10","profit_unreal":"0","position_margin":"1","lever_rate":2}]}`,
+  coin_perpetual: `{"status":"ok","data":[{"symbol":"BTC","contract_code":"BTC-USD","direction":"buy","volume":"1","available":"1","frozen":"0","cost_open":"10","cost_hold":"10","profit_unreal":"0","position_margin":"1","lever_rate":2}]}`,
+  coin_delivery_futures: `{"status":"ok","data":[{"symbol":"BTC","contract_code":"BTC201225","contract_type":"quarter","direction":"sell","volume":"1","available":"1","frozen":"0","cost_open":"10","cost_hold":"10","profit_unreal":"0","position_margin":"1","lever_rate":2}]}`,
+};
 const endpoints: Record<HtxDerivativesAccountFamily, { path: string; body: Record<string, string> }> = {
   usdt_isolated_perpetual: { path: "/linear-swap-api/v1/swap_account_info", body: {} },
   usdt_cross_shared: { path: "/linear-swap-api/v1/swap_cross_account_info", body: { margin_account: "USDT" } },
   coin_perpetual: { path: "/swap-api/v1/swap_account_info", body: {} },
   coin_delivery_futures: { path: "/api/v1/contract_account_info", body: {} },
+};
+const positionEndpoints: Record<HtxDerivativesAccountFamily, { path: string; body: Record<string, string> }> = {
+  usdt_isolated_perpetual: { path: "/linear-swap-api/v1/swap_position_info", body: {} },
+  usdt_cross_shared: { path: "/linear-swap-api/v1/swap_cross_position_info", body: {} },
+  coin_perpetual: { path: "/swap-api/v1/swap_position_info", body: {} },
+  coin_delivery_futures: { path: "/api/v1/contract_position_info", body: {} },
 };
 
 type MutableCredential = { binding: ObservationBinding; apiKey: string; apiSecret: string; dispose(): void };
@@ -47,9 +59,12 @@ function setup(options: {
   const families = options.families ?? [...HTX_DERIVATIVES_ACCOUNT_FAMILIES];
   const fetchImpl = options.fetchImpl ?? vi.fn<typeof fetch>(async url => {
     const pathname = new URL(String(url)).pathname;
-    const family = Object.entries(endpoints).find(([, endpoint]) => endpoint.path === pathname)?.[0] as
+    const accountEntry = Object.entries(endpoints).find(([, endpoint]) => endpoint.path === pathname);
+    const positionEntry = Object.entries(positionEndpoints).find(([, endpoint]) => endpoint.path === pathname);
+    const family = (accountEntry?.[0] ?? positionEntry?.[0]) as
       HtxDerivativesAccountFamily | undefined;
-    return new Response(family ? payloads[family] : "not found", { status: family ? 200 : 404 });
+    return new Response(accountEntry && family ? payloads[family] : positionEntry && family ? positionPayloads[family] : "not found",
+      { status: family ? 200 : 404 });
   });
   const verifyReadOnlyAdmission = options.verifyReadOnlyAdmission ?? vi.fn(async () => true);
   const input = { credential: credential as HtxObservationCredentialHandle, families, clock, fetchImpl,
@@ -65,24 +80,28 @@ describe("HTX derivatives observation reader composition", () => {
   it.each(HTX_DERIVATIVES_ACCOUNT_FAMILIES)("reads %s through its exact fixed account-info endpoint", async family => {
     const f = setup({ families: [family] });
     const result = await f.reader.readDerivativesAccount(family, signal());
-    expect(Object.keys(result).sort()).toEqual(["binding", "snapshot"]);
+    expect(Object.keys(result).sort()).toEqual(["binding", "positions", "snapshot"]);
     expect(result.binding).toEqual(binding);
     expect(result.snapshot.family).toBe(family);
     expect(result.snapshot.accounts).toHaveLength(1);
-    expect(f.fetchImpl).toHaveBeenCalledTimes(1);
-    const [url, init] = vi.mocked(f.fetchImpl).mock.calls[0]!;
-    expect(new URL(String(url)).origin).toBe("https://api.hbdm.com");
-    expect(new URL(String(url)).pathname).toBe(endpoints[family].path);
-    expect(init).toMatchObject({ method: "POST", redirect: "error", credentials: "omit", cache: "no-store" });
-    expect(init?.body).toBe(JSON.stringify(endpoints[family].body));
-    expect(String(url)).not.toContain(secret);
+    expect(result.positions.status).toBe("COMPLETE");
+    expect(f.fetchImpl).toHaveBeenCalledTimes(2);
+    for (const [index, [url, init]] of vi.mocked(f.fetchImpl).mock.calls.entries()) {
+      const route = index === 0 ? endpoints[family] : positionEndpoints[family];
+      expect(new URL(String(url)).origin).toBe("https://api.hbdm.com");
+      expect(new URL(String(url)).pathname).toBe(route.path);
+      expect(init).toMatchObject({ method: "POST", redirect: "error", credentials: "omit", cache: "no-store" });
+      expect(init?.body).toBe(JSON.stringify(route.body));
+      expect(String(url)).not.toContain(secret);
+    }
     const digest = createHash("sha256").update(key).digest("hex");
     const expectedBinding = binding;
-    expect(f.verifyReadOnlyAdmission).toHaveBeenCalledTimes(2);
+    expect(f.verifyReadOnlyAdmission).toHaveBeenCalledTimes(4);
     const calls = vi.mocked(f.verifyReadOnlyAdmission).mock.calls;
     expect(calls.map(([admissionBinding, keyDigest]) => [admissionBinding, keyDigest]))
-      .toEqual([[expectedBinding, digest], [expectedBinding, digest]]);
+      .toEqual(Array.from({ length: 4 }, () => [expectedBinding, digest]));
     expect(calls[0]?.[0]).toBe(calls[1]?.[0]);
+    expect(calls[2]?.[0]).toBe(calls[3]?.[0]);
     expect(calls.every(([, , admissionSignal]) => admissionSignal instanceof AbortSignal)).toBe(true);
     expect(Object.isFrozen(calls[0]?.[0])).toBe(true);
     await f.reader.settled();
@@ -98,11 +117,11 @@ describe("HTX derivatives observation reader composition", () => {
   });
 
   it("returns no snapshot when fresh read-only admission refuses after the venue response", async () => {
-    const verifyReadOnlyAdmission = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    const verifyReadOnlyAdmission = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
     const f = setup({ verifyReadOnlyAdmission });
     await expect(f.reader.readDerivativesAccount("coin_perpetual", signal())).rejects.toThrow("PERMISSION_DENIED");
     expect(f.fetchImpl).toHaveBeenCalledTimes(1);
-    expect(verifyReadOnlyAdmission).toHaveBeenCalledTimes(2);
+    expect(verifyReadOnlyAdmission).toHaveBeenCalledTimes(3);
     await f.reader.settled();
   });
 
@@ -165,12 +184,13 @@ describe("HTX derivatives observation reader composition", () => {
   it("allows another configured family to read after one family's HTTP failure", async () => {
     const fetchImpl = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response("", { status: 500 }))
-      .mockResolvedValueOnce(new Response(payloads.coin_perpetual));
+      .mockResolvedValueOnce(new Response(payloads.coin_perpetual))
+      .mockResolvedValueOnce(new Response(positionPayloads.coin_perpetual));
     const f = setup({ families: ["usdt_isolated_perpetual", "coin_perpetual"], fetchImpl });
     await expect(f.reader.readDerivativesAccount("usdt_isolated_perpetual", signal())).rejects.toThrow("READ_FAILED");
     const result = await f.reader.readDerivativesAccount("coin_perpetual", signal());
     expect(result.snapshot.family).toBe("coin_perpetual");
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
     await f.reader.settled();
   });
 

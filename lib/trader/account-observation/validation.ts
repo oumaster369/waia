@@ -51,12 +51,33 @@ const derivativeAccount = z.object({
   liquidationPrice: z.string().regex(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/).max(80).nullable(),
   leverage: z.string().regex(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/).max(80).nullable(),
 }).strict();
+const positionDecimal = z.string().regex(/^\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/).max(80).nullable();
+const signedPositionDecimal = z.string().regex(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/).max(80).nullable();
+const derivativePosition = z.object({
+  symbol: text.regex(/^[A-Z0-9_-]{1,64}$/), contractCode: text.regex(/^[A-Z0-9_-]{1,64}$/),
+  contractType: z.string().regex(/^[a-z0-9_-]{1,32}$/).nullable(), direction: z.enum(["buy", "sell"]),
+  volume: positionDecimal, available: positionDecimal, frozen: positionDecimal,
+  costOpen: positionDecimal, costHold: positionDecimal, unrealizedPnl: signedPositionDecimal,
+  profitRate: signedPositionDecimal, positionMargin: positionDecimal,
+  marginAsset: z.string().regex(/^[A-Z0-9]{1,16}$/).nullable(), leverage: positionDecimal,
+  lastPrice: positionDecimal, liquidationPrice: positionDecimal,
+}).strict();
+const derivativePositions = z.object({
+  status: z.enum(["COMPLETE", "PARTIAL", "ERROR"]),
+  values: z.array(derivativePosition).max(100).nullable(),
+  readStartedAtMs: time, readCompletedAtMs: time,
+  responseGeneratedAtMs: time.nullable(), error: error.nullable(),
+}).strict().refine(value => value.readStartedAtMs <= value.readCompletedAtMs &&
+  (value.responseGeneratedAtMs === null || value.responseGeneratedAtMs <= value.readCompletedAtMs) &&
+  (value.status === "ERROR" ? value.values === null && value.error !== null :
+    value.values !== null && value.error === null));
 const derivativeFamily = z.object({
   family: z.enum(HTX_DERIVATIVES_ACCOUNT_FAMILIES),
   status: z.enum(["NOT_CONFIGURED", "COMPLETE", "PARTIAL", "ERROR"]),
   accounts: z.array(derivativeAccount).max(100).nullable(),
   readStartedAtMs: time.nullable(), readCompletedAtMs: time.nullable(),
   responseGeneratedAtMs: time.nullable(), error: error.nullable(),
+  positions: derivativePositions.optional(),
 }).strict();
 const derivatives = z.object({
   schemaVersion: z.literal("htx-derivatives-observation/v1"),
@@ -95,7 +116,7 @@ export function parseAccountObservation(value: unknown): AccountObservation {
   const components = [result.balances, result.openOrders, ...result.trades.map(t => t.component)];
   const derivativeStatuses = result.schemaVersion === "account-observation/v2"
     ? result.derivatives.families.flatMap(item =>
-      item.status === "NOT_CONFIGURED" ? [] : [item.status])
+      item.status === "NOT_CONFIGURED" ? [] : [item.status, ...(item.positions ? [item.positions.status] : [])])
     : [];
   const status = deriveAccountObservationStatus([
     ...components.map(component => component.status),
@@ -127,7 +148,7 @@ function validateDerivativesProjection(
     const notConfigured = item.status === "NOT_CONFIGURED";
     if (notConfigured) {
       if (item.accounts !== null || item.readStartedAtMs !== null || item.readCompletedAtMs !== null ||
-        item.responseGeneratedAtMs !== null || item.error !== null) {
+        item.responseGeneratedAtMs !== null || item.error !== null || item.positions !== undefined) {
         throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
       }
       continue;
@@ -145,7 +166,27 @@ function validateDerivativesProjection(
       row.marginBalance === null || (item.family === "usdt_cross_shared"
         ? row.withdrawAvailable == null
         : row.marginAvailable === null));
-    if (missingRequiredBalance || new Set(rows.map(row => row.accountCode)).size !== rows.length || rows.some(row => {
+    const positions = item.positions;
+    const invalidPositions = positions !== undefined && (
+      positions.readStartedAtMs < collectionStartedAtMs || positions.readCompletedAtMs > collectionCompletedAtMs ||
+      (positions.responseGeneratedAtMs !== null && positions.responseGeneratedAtMs > positions.readCompletedAtMs) ||
+      (positions.status === "ERROR" ? positions.values !== null || positions.error === null :
+        positions.values === null || positions.error !== null) ||
+      (positions.status === "COMPLETE" && positions.values?.some(row => row.volume === null ||
+        row.available === null || row.frozen === null || row.costOpen === null || row.costHold === null ||
+        row.unrealizedPnl === null || row.positionMargin === null || row.leverage === null)) ||
+      (positions.values !== null && (new Set(positions.values.map(row => `${row.contractCode}\u0000${row.direction}`)).size !== positions.values.length ||
+        positions.values.some(row => {
+          if (item.family === "usdt_isolated_perpetual") return row.marginAsset !== "USDT" ||
+            row.contractCode !== `${row.symbol}-USDT`;
+          if (item.family === "usdt_cross_shared") return row.marginAsset !== "USDT" ||
+            !row.contractCode.startsWith(`${row.symbol}-USDT`) ||
+            !/^[A-Z0-9]+-USDT(?:-\d{6})?$/.test(row.contractCode);
+          if (item.family === "coin_perpetual") return row.marginAsset !== row.symbol ||
+            row.contractCode !== `${row.symbol}-USD`;
+          return row.marginAsset !== row.symbol || !new RegExp(`^${row.symbol}\\d{6}$`).test(row.contractCode);
+        }))));
+    if (missingRequiredBalance || invalidPositions || new Set(rows.map(row => row.accountCode)).size !== rows.length || rows.some(row => {
       if (item.family === "usdt_cross_shared") {
         return row.accountCode !== "USDT" || row.collateralAsset !== "USDT" ||
           (row.marginMode !== null && row.marginMode !== "cross");

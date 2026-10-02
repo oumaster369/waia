@@ -119,7 +119,7 @@ function pathTo(closure: Map<string, string[]>, target: string): string[] {
 
 const DERIVATIVES_TRANSPORT = "lib/trader/account-observation/derivatives/htx-account-transport.ts";
 
-/** A single reviewed private POST reader is allowed, with a closed source shape.
+/** Reviewed private account/position POST reads are allowed, with a closed source shape.
  * Behavioral transport tests separately exercise family routing and admission refusal.
  * A renamed/generalized reader must receive a fresh authority review. */
 function derivativesBoundaryViolations(source: string): string[] {
@@ -131,6 +131,10 @@ function derivativesBoundaryViolations(source: string): string[] {
     ["/linear-swap-api/v1/swap_cross_account_info", { margin_account: "USDT" }],
     ["/swap-api/v1/swap_account_info", {}],
     ["/api/v1/contract_account_info", {}],
+    ["/linear-swap-api/v1/swap_position_info", {}],
+    ["/linear-swap-api/v1/swap_cross_position_info", {}],
+    ["/swap-api/v1/swap_position_info", {}],
+    ["/api/v1/contract_position_info", {}],
   ];
   if (JSON.stringify(endpoints) !== JSON.stringify(expected)) violations.push("fixed endpoint/body inventory");
   const input = source.match(/export function createHtxDerivativesAccountTransport\(input: Readonly<\{([\s\S]*?)\}>\)/)?.[1];
@@ -139,21 +143,25 @@ function derivativesBoundaryViolations(source: string): string[] {
     'input.host !== "api.hbdm.com"',
     'const host = input.host;',
     'if (!HTX_DERIVATIVES_ACCOUNT_FAMILIES.includes(family) || disposed || active || signal.aborted)',
-    'const { path, body } = endpoints[family];',
+    'const { path, body } = (purpose === "account" ? endpoints : positionEndpoints)[family];',
     'const verifyReadAdmission = input.verifyReadAdmission;',
     'if (await verifyReadAdmission(admissionRequest, controller.signal) !== true) fail("PERMISSION_DENIED");',
     'const url = `https://${host}${path}?${auth}`;',
     'response = await fetchImpl(url, { method: "POST", signal: controller.signal,',
     'redirect: "error", credentials: "omit", cache: "no-store",',
     'body: JSON.stringify(body)',
+    'try { await isCurrent(); } catch (admissionError) { error = admissionError; }',
   ]) if (!source.includes(required)) violations.push(`missing boundary: ${required}`);
   const networkCalls = [...source.matchAll(/\b(?:fetchImpl|fetch)\s*\(|\bhttps?\.request\s*\(/g)];
   const methods = [...source.matchAll(/method:\s*["']([^"']+)["']/g)].map((match) => match[1]);
   if (networkCalls.length !== 1 || JSON.stringify(methods) !== '["POST"]') violations.push("network call/method inventory");
   const checks = [...source.matchAll(/await isCurrent\(\);/g)];
   const fetchAt = source.indexOf("response = await fetchImpl(");
-  if (checks.length !== 2 || checks[0]!.index! >= fetchAt || checks[1]!.index! <= fetchAt ||
-    checks[1]!.index! >= source.indexOf("return text;")) violations.push("pre/post read admission");
+  if (checks.length !== 4 || checks[0]!.index! >= fetchAt || checks[1]!.index! <= fetchAt ||
+    checks[1]!.index! >= source.indexOf("return text;") || checks[2]!.index! <= fetchAt ||
+    checks[2]!.index! >= source.indexOf("return text;") || checks[3]!.index! <= source.indexOf("catch (error)")) {
+    violations.push("pre/post read admission and rejected-fetch recheck");
+  }
   return violations;
 }
 
@@ -276,7 +284,7 @@ describe("DEE-1015 observation authority graph", () => {
   it.each([
     ["different method", (source: string) => source.replace('method: "POST"', 'method: "PUT"')],
     ["venue write endpoint", (source: string) => source.replace("/api/v1/contract_account_info", "/api/v1/contract_order")],
-    ["fifth endpoint", (source: string) => source.replace('const uuid =', 'const extra = { path: "/api/v1/extra", body: Object.freeze({}) };\nconst uuid =')],
+    ["ninth endpoint", (source: string) => source.replace('const uuid =', 'const extra = { path: "/api/v1/extra", body: Object.freeze({}) };\nconst uuid =')],
     ["arbitrary body", (source: string) => source.replace('body: JSON.stringify(body)', 'body: JSON.stringify(input)')],
     ["other host", (source: string) => source.replace('input.host !== "api.hbdm.com"', 'input.host !== "other.example"')],
     ["removed admission", (source: string) => source.replace('await isCurrent();', '')],

@@ -62,10 +62,22 @@ function setup(overrides: Partial<ObservationConfig> = {}) {
         liquidationPrice: "0", leverage: "1" }],
     };
   };
+  const position = (family: HtxDerivativesAccountFamily) => ({
+    status: "COMPLETE" as const,
+    values: [{ symbol: family === "usdt_isolated_perpetual" ? "BTC" : family === "coin_perpetual" ? "THETA" : "BTC",
+      contractCode: family === "usdt_isolated_perpetual" ? "BTC-USDT" : family === "usdt_cross_shared" ? "BTC-USDT" :
+        family === "coin_perpetual" ? "THETA-USD" : "BTC201225",
+      contractType: family === "coin_delivery_futures" ? "quarter" : null,
+      direction: "buy" as const, volume: "1", available: "1", frozen: "0", costOpen: "100", costHold: "100",
+      unrealizedPnl: "-0.01", profitRate: null, positionMargin: "1",
+      marginAsset: family.startsWith("usdt_") ? "USDT" : family === "coin_perpetual" ? "THETA" : "BTC",
+      leverage: "2", lastPrice: null, liquidationPrice: null }],
+    readStartedAtMs: Date.now(), readCompletedAtMs: Date.now(), responseGeneratedAtMs: null, error: null,
+  });
   const reader: AccountObservationReader = { readBalances: vi.fn(async () => envelope<Balance>()),
     readOpenOrders: vi.fn(async () => envelope<ObservedOrder>()), readTrades: vi.fn(async () => envelope<Trade>()),
     readDerivativesAccount: vi.fn(async (family: HtxDerivativesAccountFamily) => ({
-      binding: { ...state.binding }, snapshot: snapshot(family),
+      binding: { ...state.binding }, snapshot: snapshot(family), positions: position(family),
     })), dispose: vi.fn() };
   const openReader = vi.fn(async (_binding: ObservationBinding, _signal: AbortSignal) => {
     void _binding; void _signal; return reader;
@@ -73,7 +85,7 @@ function setup(overrides: Partial<ObservationConfig> = {}) {
   const deps = { repository, clock, openReader,
     newObservationId: () => `10000000-0000-4000-8000-${String(state.counter).padStart(12, "0")}` };
   const service = createAccountObservationService(deps, { ...config, ...overrides });
-  return { state, repository, reader, openReader, service, envelope, snapshot, beforeCommit, deps };
+  return { state, repository, reader, openReader, service, envelope, snapshot, position, beforeCommit, deps };
 }
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(10000); });
 afterEach(() => { vi.useRealTimers(); });
@@ -145,13 +157,31 @@ describe("DEE-960 injected account observation — no production adapter or real
     expect(observation.derivatives!.families.map(item => [item.family, item.status])).toEqual(
       HTX_DERIVATIVES_ACCOUNT_FAMILIES.map(item => [item, item === family ? "COMPLETE" : "NOT_CONFIGURED"]));
     expect(observation.derivatives!.families[0]?.accounts?.[0]?.marginBalance).toBe("1.250000000000000001");
+    expect(observation.derivatives!.families[0]?.positions).toMatchObject({ status: "COMPLETE",
+      values: [{ contractCode: "BTC-USDT", marginAsset: "USDT", unrealizedPnl: "-0.01" }] });
     expect(observation.status).toBe("COMPLETE");
     expect(f.reader.dispose).toHaveBeenCalledOnce();
+  });
+  it("keeps a successful account balance visible when the position component is partial", async () => {
+    const f = setup({ htxDerivativesFamilies: ["coin_perpetual"] });
+    vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => ({
+      binding: { ...initial }, snapshot: f.snapshot(family),
+      positions: { ...f.position(family), status: "PARTIAL", values: [{
+        ...f.position(family).values[0]!, positionMargin: null,
+      }] },
+    }));
+    expect(await f.service.tick(initial, "owner")).toMatchObject({ status: "COMMITTED" });
+    const observation = f.state.observations[0]!;
+    expect(observation.status).toBe("PARTIAL");
+    expect(observation.derivatives!.families.find(item => item.family === "coin_perpetual"))
+      .toMatchObject({ status: "COMPLETE", accounts: [{ marginBalance: "1.250000000000000001" }],
+        positions: { status: "PARTIAL", values: [{ positionMargin: null }] } });
   });
   it("uses cross withdrawAvailable as transferable balance without requiring per-contract marginAvailable", async () => {
     const f = setup({ htxDerivativesFamilies: ["usdt_cross_shared"] });
     vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => ({
       binding: { ...initial },
+      positions: f.position(family),
       snapshot: {
         ...f.snapshot(family),
         accounts: [{
@@ -179,6 +209,7 @@ describe("DEE-960 injected account observation — no production adapter or real
     const missingTransferBalance = setup({ htxDerivativesFamilies: ["usdt_cross_shared"] });
     vi.mocked(missingTransferBalance.reader.readDerivativesAccount!).mockImplementation(async family => ({
       binding: { ...initial },
+      positions: missingTransferBalance.position(family),
       snapshot: { ...missingTransferBalance.snapshot(family), accounts: [{
         ...missingTransferBalance.snapshot(family).accounts[0]!, withdrawAvailable: null,
       }] },
@@ -196,6 +227,7 @@ describe("DEE-960 injected account observation — no production adapter or real
       if (derivativeStatus === "PARTIAL") {
         vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => ({
           binding: { ...initial },
+          positions: f.position(family),
           snapshot: { ...f.snapshot(family), accounts: [{
             ...f.snapshot(family).accounts[0]!, marginAvailable: null,
           }] },
@@ -239,6 +271,7 @@ describe("DEE-960 injected account observation — no production adapter or real
     const f = setup({ htxDerivativesFamilies: ["coin_perpetual"] });
     vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => ({
       binding: { ...initial },
+      positions: f.position(family),
       snapshot: { ...f.snapshot(family), accounts: [{ ...f.snapshot(family).accounts[0]!, marginAvailable: null }] },
     }));
     await f.service.tick(initial, "owner");
@@ -251,7 +284,7 @@ describe("DEE-960 injected account observation — no production adapter or real
   it("preserves a complete balance summary when optional position metrics are unavailable", async () => {
     const f = setup({ htxDerivativesFamilies: ["coin_perpetual"] });
     vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => ({
-      binding: { ...initial }, snapshot: { ...f.snapshot(family), accounts: [{
+      binding: { ...initial }, positions: f.position(family), snapshot: { ...f.snapshot(family), accounts: [{
         ...f.snapshot(family).accounts[0]!, riskRate: null, liquidationPrice: null, leverage: null,
         realizedPnl: null, unrealizedPnl: null, marginPosition: null, marginStatic: null, marginFrozen: null,
       }] },
@@ -264,6 +297,7 @@ describe("DEE-960 injected account observation — no production adapter or real
     const f = setup({ htxDerivativesFamilies: ["usdt_isolated_perpetual", "coin_perpetual"] });
     vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => ({
       binding: mismatch === "binding" ? { ...initial, credentialRevision: "2" } : { ...initial },
+      positions: f.position(family),
       snapshot: mismatch === "family" ? f.snapshot("usdt_cross_shared") : f.snapshot(family),
     }));
     expect(await f.service.tick(initial, "owner")).toEqual({ status: "FENCED" });
@@ -275,7 +309,7 @@ describe("DEE-960 injected account observation — no production adapter or real
   it("rechecks the exact current binding after each family and fences a mid-read rotation", async () => {
     const f = setup({ htxDerivativesFamilies: ["usdt_isolated_perpetual", "usdt_cross_shared"] });
     vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => {
-      const response = { binding: { ...initial }, snapshot: f.snapshot(family) };
+      const response = { binding: { ...initial }, snapshot: f.snapshot(family), positions: f.position(family) };
       f.state.binding.credentialRevision = "2";
       return response;
     });
@@ -299,6 +333,7 @@ describe("DEE-960 injected account observation — no production adapter or real
     const f = setup({ htxDerivativesFamilies: ["usdt_isolated_perpetual"] });
     vi.mocked(f.reader.readDerivativesAccount!).mockImplementation(async family => ({
       binding: { ...initial },
+      positions: f.position(family),
       snapshot: { ...f.snapshot(family), accounts: [{ ...f.snapshot(family).accounts[0]!, collateralAsset: "BTC" }] },
     }));
     await f.service.tick(initial, "owner");

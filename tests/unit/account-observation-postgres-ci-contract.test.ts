@@ -44,6 +44,13 @@ function requireEnforcedObservationJob(source: string) {
   expect(block).toContain(`\n        run: ${unitCommand}\n`);
   return block;
 }
+function hasSafeReaderPortGuard(source: string): boolean {
+  return source.includes('const requestedPort = process.env.DEE960_LOCAL_PG17_PORT ?? "55460";') &&
+    source.includes('requestedPort !== "55460" && requestedPort !== "55461"') &&
+    source.includes('const localPort = requestedPort === "55461" ? "55461" : "55460";') &&
+    source.includes('`postgres://waia_local_admin:local_validation_only@127.0.0.1:${localPort}/waia_dee960_local`') &&
+    !/process\.env\.(?:DATABASE_URL|POSTGRES_URL)/.test(source);
+}
 
 describe("account observation PostgreSQL CI contract", () => {
   it("retains both pre-existing historical jobs byte-for-byte", () => {
@@ -67,8 +74,30 @@ describe("account observation PostgreSQL CI contract", () => {
     for (const suite of suites) {
       const source = readFileSync(suite, "utf8");
       expect(source).toContain('process.env.DEE960_LOCAL_PG17 === "1"');
-      expect(source).toContain(`const url = "${syntheticUrl}"`);
+      if (suite === "tests/integration/account-observation-reader-postgres.test.ts") {
+        // The reader suite may target the separately provisioned, loopback-only
+        // PG17 validation cluster. The other four suites remain pinned to CI's
+        // 55460 service and never inherit this opt-in port.
+        expect(hasSafeReaderPortGuard(source)).toBe(true);
+      } else {
+        expect(source).toContain(`const url = "${syntheticUrl}"`);
+      }
       expect(source).not.toMatch(/\b(?:describe|it|test)\.(?:skip|todo|only)\s*\(/);
+    }
+  });
+
+  it("keeps the reader's alternate PG17 port closed and loopback-only", () => {
+    const readerPath = "tests/integration/account-observation-reader-postgres.test.ts";
+    const reader = readFileSync(readerPath, "utf8");
+    expect(hasSafeReaderPortGuard(reader)).toBe(true);
+    for (const mutation of [
+      reader.replace('requestedPort !== "55460" && requestedPort !== "55461"', 'requestedPort !== "55460"'),
+      reader.replace('requestedPort !== "55460" && requestedPort !== "55461"', 'false'),
+      reader.replace('127.0.0.1:${localPort}/waia_dee960_local', 'example.com:${localPort}/waia_dee960_local'),
+      reader.replace('waia_dee960_local`', 'production`'),
+      reader.replace('const localPort = requestedPort === "55461" ? "55461" : "55460";', 'const localPort = requestedPort;'),
+    ]) {
+      expect(hasSafeReaderPortGuard(mutation)).toBe(false);
     }
   });
 

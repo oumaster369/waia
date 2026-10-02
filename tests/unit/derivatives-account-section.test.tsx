@@ -5,6 +5,7 @@ import {
 } from "@/components/trader/account-observation/derivatives-account-section";
 import type { HtxDerivativesAccountFamily, HtxDerivativesAccountRow } from "@/lib/trader/account-observation/derivatives/types";
 import type { DerivativesAccountFamilyObservation, DerivativesAccountObservation } from "@/lib/trader/account-observation/types";
+import { ACCOUNT_OBSERVATION_STALE_AFTER_MS } from "@/lib/trader/account-observation/cabinet-view";
 
 afterEach(cleanup);
 
@@ -33,6 +34,34 @@ const family = (family: HtxDerivativesAccountFamily, patch: Partial<DerivativesA
   readCompletedAtMs: 1_800_000_000_010,
   responseGeneratedAtMs: 1_800_000_000_005,
   accounts: [account()],
+  error: null,
+  ...patch,
+});
+const position = (patch: Partial<import("@/lib/trader/account-observation/derivatives/types").HtxDerivativesPositionRow> = {}) => ({
+  symbol: "BTC",
+  contractCode: "BTC-USDT",
+  contractType: "swap",
+  direction: "buy" as const,
+  volume: "0.000000000000000013",
+  available: "0.000000000000000011",
+  frozen: "0.000000000000000002",
+  costOpen: "100.000000000000000001",
+  costHold: "99.000000000000000009",
+  unrealizedPnl: "-0.000000000000000007",
+  profitRate: "-0.000000000000000003",
+  positionMargin: "3.125000000000000001",
+  marginAsset: "USDT",
+  leverage: "5",
+  lastPrice: "101.000000000000000003",
+  liquidationPrice: null,
+  ...patch,
+});
+const positionRead = (patch: Partial<NonNullable<DerivativesAccountFamilyObservation["positions"]>> = {}) => ({
+  status: "COMPLETE" as const,
+  values: [position()],
+  readStartedAtMs: nowMs,
+  readCompletedAtMs: nowMs,
+  responseGeneratedAtMs: nowMs,
   error: null,
   ...patch,
 });
@@ -97,5 +126,62 @@ describe("futures account presentation", () => {
     expect(screen.getByText("No accounts were returned for this family.")).toBeTruthy();
     expect(screen.getByText("This account family is not configured for collection.")).toBeTruthy();
     expect(screen.getByText("This account family is not available for display.")).toBeTruthy();
+  });
+
+  it("shows exact HTX position values separately from balances without combining rows", () => {
+    const rows = [position(), position({
+      symbol: "ETH", contractCode: "ETH-USDT", direction: "sell",
+      volume: "2.000000000000000001", unrealizedPnl: "0.000000000000000009",
+    })];
+    render(<DerivativesAccountSection nowMs={nowMs} projection={projection([
+      family("usdt_isolated_perpetual", {
+        accounts: [account({ marginBalance: "500.000000000000000000" })],
+        positions: positionRead({ values: rows }),
+      }),
+    ])} />);
+
+    const section = screen.getByRole("region", { name: "USDT perpetual · isolated accounts" });
+    expect(within(section).getByText("Open positions")).toBeTruthy();
+    expect(within(section).getByText("BTC · BTC-USDT")).toBeTruthy();
+    expect(within(section).getByText("ETH · ETH-USDT")).toBeTruthy();
+    expect(within(section).getByText("Long · swap")).toBeTruthy();
+    expect(within(section).getByText("Short · swap")).toBeTruthy();
+    expect(within(section).getByText("-0.000000000000000007")).toBeTruthy();
+    expect(within(section).getByText("0.000000000000000009")).toBeTruthy();
+    expect(within(section).getAllByText("3.125000000000000001")).toHaveLength(2);
+    expect(within(section).getAllByText("USDT")).toHaveLength(2);
+    expect(within(section).getByText("500.000000000000000000")).toBeTruthy();
+    expect(within(section).queryByText("No open positions were returned for this family.")).toBeNull();
+  });
+
+  it("distinguishes unobserved, empty-success, partial-stale, and failed positions", () => {
+    render(<DerivativesAccountSection nowMs={nowMs} projection={projection([
+      family("usdt_isolated_perpetual", { positions: undefined }),
+      family("usdt_cross_shared", { family: "usdt_cross_shared", positions: positionRead({ values: [] }) }),
+      family("coin_perpetual", { family: "coin_perpetual", positions: positionRead({
+        status: "PARTIAL", readCompletedAtMs: nowMs - ACCOUNT_OBSERVATION_STALE_AFTER_MS,
+      }) }),
+      family("coin_delivery_futures", { family: "coin_delivery_futures", positions: positionRead({
+        status: "ERROR", values: null, error: "RATE_LIMITED",
+      }) }),
+    ])} />);
+
+    const unobserved = screen.getByRole("region", { name: "USDT perpetual · isolated accounts" });
+    expect(within(unobserved).getByText("Not collected in this observation.")).toBeTruthy();
+    expect(within(unobserved).queryByTestId("positions-status-usdt_isolated_perpetual")).toBeNull();
+
+    const empty = screen.getByRole("region", { name: "USDT cross · shared derivatives pool" });
+    expect(within(empty).getByText("No open positions were returned for this family.")).toBeTruthy();
+    expect(within(empty).getByTestId("positions-status-usdt_cross_shared").textContent).toBe("CURRENT");
+
+    const partial = screen.getByRole("region", { name: "Coin-margined perpetual accounts" });
+    expect(within(partial).getByText("Some position values are unavailable in this read.")).toBeTruthy();
+    expect(within(partial).getByTestId("positions-status-coin_perpetual").textContent).toBe("STALE · PARTIAL");
+    expect(within(partial).getByText("Showing the last received position read; it may be out of date.")).toBeTruthy();
+
+    const failed = screen.getByRole("region", { name: "Coin-margined delivery futures accounts" });
+    expect(within(failed).getByTestId("positions-status-coin_delivery_futures").textContent).toBe("ERROR");
+    expect(within(failed).getByText("The exchange temporarily limited account reads.")).toBeTruthy();
+    expect(within(failed).queryByText("No open positions were returned for this family.")).toBeNull();
   });
 });

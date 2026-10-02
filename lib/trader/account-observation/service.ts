@@ -1,8 +1,9 @@
 import type { Balance } from "@/lib/trader/connectors/types";
 import { HTX_DERIVATIVES_ACCOUNT_FAMILIES, type HtxDerivativesAccountFamily,
-  type HtxDerivativesAccountRow } from "./derivatives/types";
+  type HtxDerivativesAccountRow, type HtxDerivativesPositionRow } from "./derivatives/types";
 import type { AccountObservation, AccountObservationReader, ObservationBinding, ObservationClock,
   DerivativesAccountFamilyObservation, DerivativesAccountObservation, ObservationComponent,
+  DerivativesPositionsObservation,
   ObservationConfig, ObservationLease, ObservationReadError, ObservationRepository,
   ObservationTickResult, ObservedOrder, ObservedTrade, ReadEnvelope } from "./types";
 import { deriveAccountObservationStatus, parseAccountObservation, sameObservationBinding } from "./validation";
@@ -28,6 +29,16 @@ function decimal(value: unknown): string {
   const result = text(value);
   if (!/^\d+(?:\.\d+)?$/.test(result)) invalid();
   return result;
+}
+function signedDecimal(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value !== "string" || value.length > 80 || !/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(value)) invalid();
+  return value;
+}
+function nonnegativePositionDecimal(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value !== "string" || value.length > 80 || !/^\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(value)) invalid();
+  return value;
 }
 function optionalClientId(value: unknown): string { return value === "" ? "" : text(value); }
 function enumValue<T extends string>(value: unknown, allowed: readonly T[]): T {
@@ -69,6 +80,22 @@ function trade(value: unknown, symbol: string): ObservedTrade {
   return Object.freeze({ tradeId: text(r.tradeId), orderId: text(r.orderId), clientOrderId: optionalClientId(r.clientOrderId),
     symbol, side: enumValue(r.side, ["buy", "sell"]), price: decimal(r.price), quantity: decimal(r.quantity),
     fee: decimal(r.fee), feeAsset: text(r.feeAsset), executedAt: dateText(r.executedAt) });
+}
+function position(value: unknown, family: HtxDerivativesAccountFamily): HtxDerivativesPositionRow {
+  const r = row(value);
+  const symbol = text(r.symbol).toUpperCase(); const contractCode = text(r.contractCode).toUpperCase();
+  const direction = enumValue(r.direction, ["buy", "sell"] as const);
+  const contractType = r.contractType === null ? null : text(r.contractType).toLowerCase();
+  const marginAsset = r.marginAsset === null ? null : text(r.marginAsset).toUpperCase();
+  if (!/^[A-Z0-9_-]{1,64}$/.test(symbol) || !/^[A-Z0-9_-]{1,64}$/.test(contractCode) ||
+      (contractType !== null && !/^[a-z0-9_-]{1,32}$/.test(contractType)) ||
+      (family.startsWith("usdt_") ? marginAsset !== "USDT" : marginAsset !== symbol)) invalid();
+  const signed = new Set(["unrealizedPnl", "profitRate"]);
+  const values = ["volume", "available", "frozen", "costOpen", "costHold", "unrealizedPnl", "profitRate",
+    "positionMargin", "leverage", "lastPrice", "liquidationPrice"] as const;
+  const numeric = Object.fromEntries(values.map(key => [key,
+    signed.has(key) ? signedDecimal(r[key]) : nonnegativePositionDecimal(r[key])])) as Record<typeof values[number], string | null>;
+  return Object.freeze({ symbol, contractCode, contractType, direction, ...numeric, marginAsset });
 }
 
 /** Injected domain core. NOT a runtime or PostgreSQL adapter; no background work starts here. */
@@ -160,7 +187,9 @@ export function createAccountObservationService(deps: Readonly<{
     signal?.addEventListener("abort", cancel, { once: true });
     const failed = (error: ObservationReadError, completedAt = now()): DerivativesAccountFamilyObservation =>
       Object.freeze({ family, status: "ERROR", accounts: null, readStartedAtMs: started,
-        readCompletedAtMs: completedAt, responseGeneratedAtMs: null, error });
+        readCompletedAtMs: completedAt, responseGeneratedAtMs: null, error,
+        positions: Object.freeze({ status: "ERROR", values: null, readStartedAtMs: started,
+          readCompletedAtMs: completedAt, responseGeneratedAtMs: null, error }) });
     try {
       if (signal?.aborted) throw new AccountObservationReadFailure("READ_FAILED");
       const readDerivativesAccount = reader.readDerivativesAccount;
@@ -187,6 +216,27 @@ export function createAccountObservationService(deps: Readonly<{
       if (responseGeneratedAtMs !== null && responseGeneratedAtMs > ended) invalid();
       const accounts = Object.freeze(Array.from(snapshot.accounts, account =>
         Object.freeze({ ...row(account) }) as unknown as HtxDerivativesAccountRow));
+      const positionsResponse = response.positions;
+      if (!positionsResponse) invalid();
+      let positions: DerivativesPositionsObservation | undefined;
+      {
+        if (!["COMPLETE", "PARTIAL", "ERROR"].includes(positionsResponse.status) ||
+            !Number.isSafeInteger(positionsResponse.readStartedAtMs) ||
+            !Number.isSafeInteger(positionsResponse.readCompletedAtMs) ||
+            positionsResponse.readStartedAtMs > positionsResponse.readCompletedAtMs ||
+            positionsResponse.readStartedAtMs < started || positionsResponse.readCompletedAtMs > ended ||
+            (positionsResponse.responseGeneratedAtMs !== null &&
+              (!Number.isSafeInteger(positionsResponse.responseGeneratedAtMs) || positionsResponse.responseGeneratedAtMs > positionsResponse.readCompletedAtMs)) ||
+            (positionsResponse.status === "ERROR" ? positionsResponse.values !== null || positionsResponse.error === null :
+              !Array.isArray(positionsResponse.values) || positionsResponse.error !== null)) invalid();
+        if (positionsResponse.error === "IDENTITY_MISMATCH" || positionsResponse.error === "PERMISSION_DENIED") return null;
+        const positionValues = positionsResponse.values === null ? null : Object.freeze(Array.from(
+          positionsResponse.values, value => position(value, family)));
+        if (positionValues && positionValues.length > 100) invalid();
+        positions = Object.freeze({ status: positionsResponse.status, values: positionValues,
+          readStartedAtMs: positionsResponse.readStartedAtMs, readCompletedAtMs: positionsResponse.readCompletedAtMs,
+          responseGeneratedAtMs: positionsResponse.responseGeneratedAtMs, error: positionsResponse.error });
+      }
       // Cross-margin exposes withdraw_available as transferable account balance;
       // other families use margin_available. Optional position metrics remain null.
       const partial = accounts.some(account => account.marginBalance === null ||
@@ -194,13 +244,14 @@ export function createAccountObservationService(deps: Readonly<{
           ? account.withdrawAvailable == null
           : account.marginAvailable === null));
       return Object.freeze({ family, status: partial ? "PARTIAL" : "COMPLETE", accounts,
-        readStartedAtMs: started, readCompletedAtMs: ended, responseGeneratedAtMs, error: null });
+        readStartedAtMs: started, readCompletedAtMs: ended, responseGeneratedAtMs, error: null,
+        ...(positions ? { positions } : {}) });
     } catch (error) {
       if (error instanceof AccountObservationFailure) throw error;
       const code = error instanceof AccountObservationReadFailure && errors.includes(error.code)
         ? error.code : error instanceof Error && error.message === "HTX_DERIVATIVES_INVALID_RESPONSE"
           ? "INVALID_RESPONSE" : "READ_FAILED";
-      if (code === "IDENTITY_MISMATCH") return null;
+      if (code === "IDENTITY_MISMATCH" || code === "PERMISSION_DENIED") return null;
       return failed(code);
     } finally { signal?.removeEventListener("abort", cancel); abort.abort(); }
   }
@@ -250,8 +301,9 @@ export function createAccountObservationService(deps: Readonly<{
           collectionStartedAtMs: started, collectionCompletedAtMs,
           status: deriveAccountObservationStatus([
             ...components.map(item => item.status),
-            ...derivativeFamilies.flatMap(item =>
-              item.status === "NOT_CONFIGURED" ? [] : [item.status]),
+            ...derivativeFamilies.flatMap(item => item.status === "NOT_CONFIGURED" ? [] : [
+              item.status, ...(item.positions ? [item.positions.status] : []),
+            ]),
           ]),
           balances, openOrders, trades: Object.freeze(trades), holdings });
         let derivatives: DerivativesAccountObservation | undefined;
@@ -291,7 +343,7 @@ export function createAccountObservationService(deps: Readonly<{
         const observation: AccountObservation = candidate;
         // Bounded venue coverage remains PARTIAL, but is not a transport/collection failure.
         const failed = components.some(item => item.status === "ERROR") ||
-          (derivatives?.families.some(item => item.status === "ERROR") ?? false);
+          (derivatives?.families.some(item => item.status === "ERROR" || item.positions?.status === "ERROR") ?? false);
         const failures = failed ? Math.min(lease.consecutiveFailures + 1, 30) : 0;
         const delay = !failed ? config.pollIntervalMs :
           Math.min(config.maxBackoffMs, config.pollIntervalMs * 2 ** failures);

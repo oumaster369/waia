@@ -12,7 +12,12 @@ import { accountObservationClock } from "@/lib/trader/account-observation/clock"
 
 // Explicit synthetic loopback-only target; never use production environment URLs.
 const enabled = process.env.DEE960_LOCAL_PG17 === "1";
-const url = "postgres://waia_local_admin:local_validation_only@127.0.0.1:55460/waia_dee960_local";
+const requestedPort = process.env.DEE960_LOCAL_PG17_PORT ?? "55460";
+if (enabled && requestedPort !== "55460" && requestedPort !== "55461") {
+  throw new Error("DEE960_LOCAL_PG17_PORT must be one of the explicitly isolated loopback ports");
+}
+const localPort = requestedPort === "55461" ? "55461" : "55460";
+const url = `postgres://waia_local_admin:local_validation_only@127.0.0.1:${localPort}/waia_dee960_local`;
 describe.skipIf(!enabled)("DEE-960 dedicated read-only LOGIN on actual PostgreSQL 17", () => {
   let root: Sql; let admin: Sql; let client: Sql;
   let reader: ReturnType<typeof createPostgresObservationReader>;
@@ -44,7 +49,7 @@ describe.skipIf(!enabled)("DEE-960 dedicated read-only LOGIN on actual PostgreSQ
       PASSWORD 'synthetic_reader_local_only';
       GRANT waia_account_observation_reader TO "${login}" WITH INHERIT FALSE, SET TRUE;
       GRANT CONNECT ON DATABASE "${db}" TO "${login}";`);
-    client = postgres(`postgres://${login}:synthetic_reader_local_only@127.0.0.1:55460/${db}`,
+    client = postgres(`postgres://${login}:synthetic_reader_local_only@127.0.0.1:${localPort}/${db}`,
       { max: 2, connect_timeout: 3, max_lifetime: 60, prepare: false });
     reader = createPostgresObservationReader(client);
   }, 30000);
@@ -93,6 +98,50 @@ describe.skipIf(!enabled)("DEE-960 dedicated read-only LOGIN on actual PostgreSQ
     expect(await reader.resolveActiveBinding(scope(b))).toEqual(b);
     expect(await reader.resolveActiveBinding(b)).toEqual(b);
     expect(await reader.readLatest(b)).toEqual(observation);
+  });
+  it("round-trips exact derivatives positions through the persisted observation projection", async () => {
+    const row = (family: string) => ({
+      symbol: "BTC", contractCode: family === "usdt_isolated_perpetual" ? "BTC-USDT"
+        : family === "usdt_cross_shared" ? "BTC-USDT-211217"
+          : family === "coin_perpetual" ? "BTC-USD" : "BTC201225",
+      contractType: family === "usdt_cross_shared" ? "next_week"
+        : family === "coin_delivery_futures" ? "quarter" : null,
+      direction: family === "usdt_cross_shared" || family === "coin_delivery_futures" ? "sell" : "buy",
+      volume: "0.000000000000000013", available: "0.000000000000000011", frozen: "0.000000000000000002",
+      costOpen: "100.000000000000000001", costHold: "99.000000000000000009",
+      unrealizedPnl: "-0.000000000000000007", profitRate: "-0.000000000000000003",
+      positionMargin: "3.125000000000000001", marginAsset: family.startsWith("usdt_") ? "USDT" : "BTC", leverage: "5",
+      lastPrice: "101.000000000000000003", liquidationPrice: null,
+    });
+    const { b } = await seed((o) => ({
+      ...o,
+      schemaVersion: "account-observation/v2",
+      derivatives: {
+        schemaVersion: "htx-derivatives-observation/v1",
+        families: [
+          "usdt_isolated_perpetual", "usdt_cross_shared", "coin_perpetual", "coin_delivery_futures",
+        ].map((family) => ({
+          family, status: "COMPLETE", accounts: [], readStartedAtMs: o.collectionStartedAtMs,
+          readCompletedAtMs: o.collectionCompletedAtMs, responseGeneratedAtMs: o.collectionCompletedAtMs,
+          error: null,
+          positions: {
+            status: "COMPLETE", values: [row(family)], readStartedAtMs: o.collectionStartedAtMs,
+            readCompletedAtMs: o.collectionCompletedAtMs, responseGeneratedAtMs: o.collectionCompletedAtMs,
+            error: null,
+          },
+        })),
+      },
+    }));
+
+    const stored = await reader.readLatest(b);
+    expect(stored?.schemaVersion).toBe("account-observation/v2");
+    if (stored?.schemaVersion !== "account-observation/v2") throw new Error("expected v2 projection");
+    const family = stored.derivatives?.families.find(item => item.family === "usdt_isolated_perpetual");
+    expect(family?.positions).toMatchObject({
+      status: "COMPLETE", values: [row("usdt_isolated_perpetual")], error: null,
+    });
+    expect(family?.positions?.values?.[0]?.volume).toBe("0.000000000000000013");
+    expect(family?.positions?.values?.[0]?.unrealizedPnl).toBe("-0.000000000000000007");
   });
   it("checks exact current assignment and configured symbols through the restricted reader", async () => {
     const { b } = await seed();
@@ -240,7 +289,7 @@ describe.skipIf(!enabled)("DEE-979 actual PostgreSQL 17 host session attestation
     const role = purpose === "reader" ? "waia_account_observation_reader" : "waia_account_observer";
     await admin.unsafe(`CREATE ROLE "${name}" LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE
       PASSWORD 'synthetic_host_only'; GRANT ${role} TO "${name}" ${membership};`);
-    const sql = postgres(`postgres://${name}:synthetic_host_only@127.0.0.1:55460/${db}`, observationPoolLimits);
+    const sql = postgres(`postgres://${name}:synthetic_host_only@127.0.0.1:${localPort}/${db}`, observationPoolLimits);
     clients.push(sql); return { name, sql };
   }
   it("attests two distinct constrained LOGINs and leaves no role or timeout session residue", async () => {
