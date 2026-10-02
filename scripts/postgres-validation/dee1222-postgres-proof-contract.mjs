@@ -36,6 +36,8 @@ export const requiredAssertionTitles = [
   "refuses selection after current accounting frontier corruption",
   "refuses the whole family when an actual diagnostic leaves a pending order",
   "refuses a self-resealed trace metric that no longer matches terminal accounting",
+  "checks the aggregate trace byte budget before parsing malformed committed trace text",
+  "rejects a later legacy trace schema before reading source rows",
   "commits one identical family receipt for concurrent selection calls",
   "rolls back the family receipt when its insert fails",
   "confirms a committed receipt after a real COMMIT acknowledgment is withheld",

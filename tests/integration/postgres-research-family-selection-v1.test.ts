@@ -1,5 +1,5 @@
 /** Synthetic-only proof that DEE-1222 selects only complete issued DEVELOPMENT families. */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -445,6 +445,80 @@ describe.skipIf(!enabled)("DEE-1222 complete issued DEVELOPMENT training family 
           enable trigger research_issued_training_diagnostic_append_only`;
       }
       expect(await selectionCount(f.attempt.id)).toBe(0);
+    } finally { f.source.cleanup(); }
+  }, 180_000);
+
+  it("checks the aggregate trace byte budget before parsing malformed committed trace text", async () => {
+    const f = await familyFixture("family-byte-budget-invalid-json");
+    try {
+      for (const index of [0, 1]) await runTrial(f, index);
+      const [stored] = await admin`select trace_canonical_json,trace_sha256
+        from public.trader_research_issued_training_diagnostics_v2
+        where organization_id=${ORG}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=0`;
+      expect(stored).toBeTruthy();
+      const malformed = "{\"schemaVersion\":";
+      const malformedDigest = createHash("sha256").update(malformed, "utf8").digest("hex");
+      await admin`alter table public.trader_research_issued_training_diagnostics_v2
+        disable trigger research_issued_training_diagnostic_append_only`;
+      let changed = false;
+      try {
+        await admin`update public.trader_research_issued_training_diagnostics_v2
+          set trace_canonical_json=${malformed},trace_sha256=${malformedDigest}
+          where organization_id=${ORG}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=0`;
+        changed = true;
+        const before = await executionCounts();
+        await expect(selectResearchIssuedTrainingFamilyPostgresV1({ organizationId: ORG,
+          attemptId: f.attempt.id, limits: { ...LIMITS, maxTraceBytes: 1 } }))
+          .rejects.toThrow("RESEARCH_FAMILY_SELECTION_REFUSED:TRACE_BYTE_LIMIT");
+        expect(await selectionCount(f.attempt.id)).toBe(0);
+        expect(await executionCounts()).toEqual(before);
+      } finally {
+        if (changed) {
+          await admin`update public.trader_research_issued_training_diagnostics_v2
+            set trace_canonical_json=${stored!.trace_canonical_json},trace_sha256=${stored!.trace_sha256}
+            where organization_id=${ORG}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=0`;
+        }
+        await admin`alter table public.trader_research_issued_training_diagnostics_v2
+          enable trigger research_issued_training_diagnostic_append_only`;
+      }
+    } finally { f.source.cleanup(); }
+  }, 180_000);
+
+  it("rejects a later legacy trace schema before reading source rows", async () => {
+    const f = await familyFixture("family-later-legacy-schema");
+    try {
+      for (const index of [0, 1]) await runTrial(f, index);
+      const [stored] = await admin`select trace_canonical_json,trace_sha256
+        from public.trader_research_issued_training_diagnostics_v2
+        where organization_id=${ORG}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=1`;
+      expect(stored).toBeTruthy();
+      const parsed = JSON.parse(stored!.trace_canonical_json) as Record<string, unknown>;
+      const legacy = { ...parsed, schemaVersion: "waia.research.training-diagnostic.v1" };
+      const canonical = canonicalJsonString(legacy);
+      const digest = computeStableJsonDigest(legacy);
+      await admin`alter table public.trader_research_issued_training_diagnostics_v2
+        disable trigger research_issued_training_diagnostic_append_only`;
+      let changed = false;
+      try {
+        await admin`update public.trader_research_issued_training_diagnostics_v2
+          set trace_canonical_json=${canonical},trace_sha256=${digest}
+          where organization_id=${ORG}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=1`;
+        changed = true;
+        const before = await executionCounts();
+        await expect(selectResearchIssuedTrainingFamilyPostgresV1({ organizationId: ORG,
+          attemptId: f.attempt.id, limits: { ...LIMITS, maxBytes: 1 } }))
+          .rejects.toThrow("RESEARCH_FAMILY_SELECTION_REFUSED:COMPLETE_ISSUED_FAMILY_REQUIRED");
+        expect(await selectionCount(f.attempt.id)).toBe(0);
+        expect(await executionCounts()).toEqual(before);
+      } finally {
+        if (changed) {
+          await admin`update public.trader_research_issued_training_diagnostics_v2
+            set trace_canonical_json=${stored!.trace_canonical_json},trace_sha256=${stored!.trace_sha256}
+            where organization_id=${ORG}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=1`;
+        }
+        await admin`alter table public.trader_research_issued_training_diagnostics_v2
+          enable trigger research_issued_training_diagnostic_append_only`;
+      }
     } finally { f.source.cleanup(); }
   }, 180_000);
 

@@ -34,7 +34,7 @@ describe("DEE-1222 executed PostgreSQL proof guard", () => {
   it("binds the exact fresh database, draft set, single suite, and complete named assertion roster", () => {
     expect(databaseName).toBe("waia_hsv2_it_dee1222_complete_training_family_v1");
     expect(requiredSuites).toEqual(["tests/integration/postgres-research-family-selection-v1.test.ts"]);
-    expect(requiredAssertionTitles).toHaveLength(13);
+    expect(requiredAssertionTitles).toHaveLength(15);
     expect(new Set(requiredAssertionTitles).size).toBe(requiredAssertionTitles.length);
     expect(draftSql).toEqual([
       "docs/plans/dee-1159-research-experiment-registration.sql",

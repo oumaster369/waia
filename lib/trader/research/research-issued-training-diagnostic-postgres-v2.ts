@@ -267,21 +267,32 @@ async function verifyFamilyAndPersist(tx: postgres.Sql, executor: ReturnType<typ
   const policy = resolveResearchTrainingPolicyV1(spec);
   if (bound.issuance.training.barCount > request.limits.maxBars) familyRefuse("BAR_LIMIT");
   const metadata = await tx<{ trial_index: number; experiment_spec_sha256: string; source_run_id: string;
-    source_issuance_digest: string; trace_sha256: string; trace_bytes: number; schema_version: string }[]>`
+    source_issuance_digest: string; trace_sha256: string; trace_bytes: number }[]>`
     SELECT trial_index,experiment_spec_sha256,source_run_id,source_issuance_digest,trace_sha256,
-      octet_length(trace_canonical_json) AS trace_bytes,trace_canonical_json::jsonb->>'schemaVersion' AS schema_version
+      octet_length(trace_canonical_json) AS trace_bytes
     FROM public.trader_research_issued_training_diagnostics_v2
     WHERE organization_id=${request.organizationId}::uuid AND attempt_id=${request.attemptId}::uuid
     ORDER BY trial_index`;
   if (metadata.length !== spec.orderedTrials.length || metadata.some((row, index) =>
     row.trial_index !== index || row.experiment_spec_sha256 !== attempt.spec_sha256 ||
     row.source_run_id !== attempt.source_run_id || row.source_issuance_digest !== attempt.source_issuance_digest ||
-    row.schema_version !== RESEARCH_ISSUED_TRAINING_DIAGNOSTIC_V2 || !/^[a-f0-9]{64}$/.test(row.trace_sha256))) {
+    !/^[a-f0-9]{64}$/.test(row.trace_sha256))) {
     familyRefuse("COMPLETE_ISSUED_FAMILY_REQUIRED");
   }
   if (metadata.some(row => !Number.isSafeInteger(row.trace_bytes) || row.trace_bytes < 1) ||
       metadata.reduce((sum, row) => sum + row.trace_bytes, 0) > request.limits.maxTraceBytes) {
     familyRefuse("TRACE_BYTE_LIMIT");
+  }
+  // PostgreSQL must not parse trace JSON until the whole family's byte budget
+  // is proved. Check every schema now, before any trial can read source payload.
+  const schemas = await tx<{ trial_index: number; schema_version: string | null }[]>`
+    SELECT trial_index,trace_canonical_json::jsonb->>'schemaVersion' AS schema_version
+    FROM public.trader_research_issued_training_diagnostics_v2
+    WHERE organization_id=${request.organizationId}::uuid AND attempt_id=${request.attemptId}::uuid
+    ORDER BY trial_index`;
+  if (schemas.length !== metadata.length || schemas.some((row, index) =>
+    row.trial_index !== index || row.schema_version !== RESEARCH_ISSUED_TRAINING_DIAGNOSTIC_V2)) {
+    familyRefuse("COMPLETE_ISSUED_FAMILY_REQUIRED");
   }
   const rows = await tx<FamilyRow[]>`SELECT organization_id::text,attempt_id::text,experiment_spec_sha256,
     source_run_id,source_issuance_digest,receipt_canonical_json,receipt_sha256
