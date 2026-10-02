@@ -37,7 +37,7 @@
   #live.off { color: #ffb4b4; border-color: #6b2a2a; }
   #hover { position: absolute; display: none; pointer-events: none; background: #111722; border: 1px solid #2c3444; border-radius: 6px; padding: 6px 8px; font-size: 12px; z-index: 2; white-space: pre-line; line-height: 1.35; }
   .legend i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; }
-  .bid { background: #3ddc84; } .ask { background: #c46bff; } .mid { background: #f2d48a; } .liq { background: #d38bff; }
+  .bid { background: #3ddc84; } .ask { background: #c46bff; } .mid { background: #f7f8fb; } .liq { background: #d38bff; }
   details.howto { margin: 6px 12px 0; background: #111722; border: 1px solid #2c3444; border-radius: 8px; }
   details.howto summary { cursor: pointer; padding: 6px 12px; font-weight: 650; }
   details.howto summary:focus-visible { outline: 2px solid #6d8cff; }
@@ -66,7 +66,7 @@
     <option value="coinglass">желто-зелено-фиолетовая</option>
     <option value="side">bid/ask</option>
   </select>
-  <label class="slider">Порог яркости <input id="bright" type="range" min="0" max="85" value="0"></label>
+  <label class="slider">Порог яркости <input id="bright" type="range" min="0" max="95" value="50" step="1"> <span id="bright-val">0.50</span></label>
   <label class="n">Порог $ <input id="threshold" type="number" min="0" value="0"></label>
   <button type="button" id="reset">Сброс</button>
   <a href="https://www.coinglass.com/pro/futures/LiquidationHeatMap" target="_blank" rel="noopener">CoinGlass</a>
@@ -76,9 +76,9 @@
 <details class="howto">
   <summary>Как читать</summary>
   <div class="howto-body">
-    <p>Время идёт вправо, цена — вверх. Яркость — сколько долларов стоит в лимитных заявках: чем ярче, тем плотнее уровень.</p>
-    <p>Зелёный — покупка (bid), фиолетовый — продажа (ask), жёлтый — самые крупные. Серый столбец значит, что честной книги в эту секунду не было.</p>
-    <p>Свечи — цена. Жёлтая линия и подпись справа — последняя цена. На графике не больше трёх стен сверху и трёх снизу, остальные — в списке «Крупнейшие стены».</p>
+    <p>Время идёт вправо, цена — вверх. Цвет — место уровня среди заявок этого окна: тёмный фон — обычный объём, жёлтый — только верхние проценты.</p>
+    <p>Ползунок «Порог яркости» поднимает этот порог: 0.50 значит, что медиана ещё тёмная, а жёлтый начинается около 98-го перцентиля. Серый столбец — не было честной книги.</p>
+    <p>Свечи — цена. Белая линия и подпись справа — последняя цена. Справа от карты зелёный — покупка, фиолетовый — продажа. На графике не больше трёх стен сверху и трёх снизу.</p>
     <p>«Стакан» показывает лимитные заявки. «Ликвидации (модель)» — оценка скопления плеч, не отчёт биржи. Оба режима можно включить вместе.</p>
     <p>Колесо мыши и перетаскивание приближают график по времени и по цене. Кнопка «Сброс» возвращает весь обзор.</p>
     <p>Плюс — крупную стену добавили, минус — сняли. Цена часто тянется к плотной заявке и к ближайшему скоплению ликвидаций.</p>
@@ -140,7 +140,7 @@
   <span class="legend"><i class="liq"></i>ликвидация</span>
   <span class="legend"><span class="mark-add">+</span> добавили</span>
   <span class="legend"><span class="mark-pull">−</span> сняли</span>
-  <span>МСК (UTC+3). Цвет — доллары в заявке. Серый столбец — нет честной книги. Ликвидации (модель) — оценка, не принт биржи.</span>
+  <span>МСК (UTC+3). Цвет карты — перцентиль объёма в окне, жёлтый только сверху. Справа зелёный — покупка, фиолетовый — продажа. Серый столбец — нет честной книги.</span>
 </footer>
 <script>
 /*__CHART_MODEL__*/
@@ -157,7 +157,7 @@ const MODES = {book: "Стакан", estimate: "Ликвидации (модел
 const view = ObheatChart.createView({symbol: "BTCUSDT", venue: "ALL", windowId: "4h"});
 const ui = {
   window: "4h",
-  brightT: 0,
+  brightT: 0.5,
   threshold: 0,
   palette: "coinglass",
   layers: {book: true, estimate: false, prints: false, candles: true, vwap: false},
@@ -220,7 +220,8 @@ function renderControls() {
 }
 
 document.getElementById("bright").addEventListener("input", (event) => {
-  ui.brightT = Math.max(0, Math.min(0.85, Number(event.target.value) / 100));
+  ui.brightT = Math.max(0, Math.min(0.95, Number(event.target.value) / 100));
+  document.getElementById("bright-val").textContent = ui.brightT.toFixed(2);
   ui.shot = null;
   draw();
 });
@@ -614,28 +615,27 @@ function draw() {
   const cellW = plotW / cols.length;
   const usd = [];
   for (const col of cols) {
-    for (const row of (col.bids || [])) if (row[2] > 0) usd.push(row[2]);
-    for (const row of (col.asks || [])) if (row[2] > 0) usd.push(row[2]);
+    for (const row of (col.bids || [])) if (row[2] > ui.threshold && row[0] >= minP && row[0] <= maxP) usd.push(row[2]);
+    for (const row of (col.asks || [])) if (row[2] > ui.threshold && row[0] >= minP && row[0] <= maxP) usd.push(row[2]);
   }
   usd.sort((a, b) => a - b);
-  const p95 = percentile(usd, 0.95);
-  const denom = Math.log10(1 + (p95 || 1));
-  ctx.fillStyle = "#0e121a";
+  ctx.fillStyle = "#07040f";
   ctx.fillRect(padL, padT, plotW, plotH);
   if (ui.layers.book) {
     cols.forEach((col, index) => {
       const x = padL + index / cols.length * plotW;
       if (!col.book_ok || col.bids == null) {
-        ctx.fillStyle = "rgba(120,130,150,0.18)";
+        ctx.fillStyle = "rgba(80,86,110,0.28)";
         ctx.fillRect(x, padT, Math.max(1, cellW + 0.5), plotH);
         return;
       }
       const paint = (rows, side) => {
         for (const row of rows || []) {
           if (row[2] < ui.threshold || row[0] < minP || row[0] > maxP) continue;
-          const t = denom > 0 ? Math.max(0, Math.min(1, Math.log10(1 + row[2]) / denom)) : 0;
-          if (t < ui.brightT) continue;
-          ctx.fillStyle = ui.palette === "coinglass" ? heatColor(Math.max(t, 0.08), side) : (side === "b" ? `rgba(18,180,110,${Math.max(0.12, t).toFixed(3)})` : `rgba(220,70,70,${Math.max(0.12, t).toFixed(3)})`);
+          const tone = ObheatChart.heatTone(ObheatChart.percentileRank(usd, row[2]), ui.brightT);
+          ctx.fillStyle = ui.palette === "coinglass"
+            ? heatColor(tone)
+            : (side === "b" ? `rgba(18,180,110,${(0.16 + 0.84 * tone).toFixed(3)})` : `rgba(220,70,70,${(0.16 + 0.84 * tone).toFixed(3)})`);
           const h = Math.max(1.4, Math.abs(yOf(row[0]) - yOf(row[0] + (col.step || stepOf(row[0])))));
           ctx.fillRect(x, yOf(row[0]) - h / 2, Math.max(1, cellW + 0.5), h);
         }
@@ -651,9 +651,15 @@ function draw() {
   const lastPrice = view.anchor || auto.last;
   if (lastPrice && lastPrice >= minP && lastPrice <= maxP) {
     const y = yOf(lastPrice);
-    ctx.strokeStyle = "#ffe38a";
-    ctx.lineWidth = 1.2;
     ctx.setLineDash([]);
+    ctx.strokeStyle = "rgba(0,0,0,0.85)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(padL + plotW, y);
+    ctx.stroke();
+    ctx.strokeStyle = "#f7f8fb";
+    ctx.lineWidth = 1.25;
     ctx.beginPath();
     ctx.moveTo(padL, y);
     ctx.lineTo(padL + plotW, y);
@@ -662,14 +668,14 @@ function draw() {
     ctx.font = "12px system-ui, sans-serif";
     const tw = ctx.measureText(text).width + 10;
     const tagX = padL + plotW + profileW;
-    ctx.fillStyle = "#3a2f12";
+    ctx.fillStyle = "#1a1e28";
     ctx.fillRect(tagX, y - 9, Math.min(axisW - 4, tw), 16);
-    ctx.fillStyle = "#ffe38a";
+    ctx.fillStyle = "#f7f8fb";
     ctx.fillText(text, tagX + 4, y + 3);
   }
   labelWalls(yOf, padL, plotW, minP, maxP, lastPrice);
   drawWallEvents(cols, xOf, yOf, minP, maxP);
-  paintLegend(p95, padT, plotH);
+  paintLegend(usd, ui.brightT, padT, plotH);
   paintAxis(yOf, minP, maxP, padL, plotW, profileW, padT, plotH, cols);
   paintTime(cols, padL, plotW, height);
   const geom = {padL, padT, plotW, plotH, minP, maxP, width, height, cols, profileW, axisW};
@@ -685,21 +691,23 @@ function draw() {
   }
 }
 
-function paintLegend(p95, padT, plotH) {
+function paintLegend(sorted, floor, padT, plotH) {
   const x = 8;
   const w = 10;
   for (let i = 0; i < plotH; i++) {
     const t = 1 - i / plotH;
-    ctx.fillStyle = heatColor(Math.max(0.08, t), t > 0.45 ? "b" : "a");
+    ctx.fillStyle = heatColor(t);
     ctx.fillRect(x, padT + i, w, 1);
   }
   ctx.font = "10px system-ui, sans-serif";
-  ctx.fillStyle = "#9aa3b5";
-  [1, 0.72, 0.4, 0.12].forEach(t => {
-    const usd = p95 > 0 ? Math.pow(10, t * Math.log10(1 + p95)) - 1 : 0;
+  ctx.fillStyle = "#c5cedd";
+  const hi = 0.98;
+  const marks = [[1, hi], [0.5, floor + (hi - floor) * 0.5], [0, floor]];
+  for (const [t, rank] of marks) {
+    const usd = sorted.length ? sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(rank * (sorted.length - 1))))] : 0;
     const y = padT + (1 - t) * plotH;
-    ctx.fillText("$" + fmtUsdShort(usd), x + w + 3, y + 3);
-  });
+    ctx.fillText("$" + fmtUsdShort(usd), x + w + 3, Math.min(padT + plotH - 2, Math.max(padT + 8, y + 3)));
+  }
 }
 
 function paintAxis(yOf, minP, maxP, padL, plotW, profileW, padT, plotH, cols) {
@@ -859,11 +867,26 @@ function nearestLevel(col, price) {
   return best.dist <= span ? best : null;
 }
 
-function heatColor(t, side) {
-  const a = Math.max(0, Math.min(1, t)).toFixed(3);
-  if (t > 0.74) return `rgba(255,231,87,${a})`;
-  if (t > 0.38) return side === "b" ? `rgba(97,255,120,${a})` : `rgba(190,92,255,${a})`;
-  return side === "b" ? `rgba(42,139,255,${a})` : `rgba(113,69,255,${a})`;
+const HEAT_STOPS = [
+  [0.00, [16, 6, 36]],
+  [0.18, [36, 16, 96]],
+  [0.40, [24, 48, 150]],
+  [0.62, [12, 110, 160]],
+  [0.80, [20, 150, 100]],
+  [0.92, [170, 196, 42]],
+  [1.00, [255, 228, 64]]
+];
+
+function heatColor(t) {
+  const x = Math.max(0, Math.min(1, t));
+  let i = 1;
+  while (i < HEAT_STOPS.length - 1 && HEAT_STOPS[i][0] < x) i += 1;
+  const left = HEAT_STOPS[i - 1];
+  const right = HEAT_STOPS[i];
+  const span = right[0] - left[0] || 1;
+  const local = (x - left[0]) / span;
+  const rgb = left[1].map((channel, k) => Math.round(channel + (right[1][k] - channel) * local));
+  return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
 }
 
 function drawVwap(cols, xOf, yOf) {
@@ -886,20 +909,32 @@ function drawCandles(cols, xOf, yOf, plotW) {
   const target = Math.max(12, Math.min(cols.length, Math.floor(plotW / 7)));
   const candles = ObheatChart.bucketCandles(cols, target);
   const slot = plotW / Math.max(1, candles.length);
-  const half = Math.max(1.5, Math.min(5, slot * 0.28));
+  const half = Math.max(2.2, Math.min(6.5, slot * 0.34));
   for (const candle of candles) {
     const x = xOf(candle.i);
     const up = candle.close >= candle.open;
-    ctx.strokeStyle = up ? "rgba(230,255,236,0.9)" : "rgba(255,214,220,0.9)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x, yOf(candle.high));
-    ctx.lineTo(x, yOf(candle.low));
-    ctx.stroke();
-    ctx.fillStyle = up ? "rgba(61,220,132,0.92)" : "rgba(255,93,122,0.92)";
+    const yHigh = yOf(candle.high);
+    const yLow = yOf(candle.low);
     const y1 = yOf(Math.max(candle.open, candle.close));
     const y2 = yOf(Math.min(candle.open, candle.close));
-    ctx.fillRect(x - half, y1, half * 2, Math.max(1, y2 - y1));
+    const body = Math.max(2.5, y2 - y1);
+    ctx.strokeStyle = "rgba(0,0,0,0.9)";
+    ctx.lineWidth = half * 2 + 2.5;
+    ctx.lineCap = "butt";
+    ctx.beginPath();
+    ctx.moveTo(x, yHigh);
+    ctx.lineTo(x, yLow);
+    ctx.stroke();
+    ctx.strokeStyle = up ? "#f2fff6" : "#fff2f4";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(x, yHigh);
+    ctx.lineTo(x, yLow);
+    ctx.stroke();
+    ctx.fillStyle = "#07040f";
+    ctx.fillRect(x - half - 1, y1 - 1, half * 2 + 2, body + 2);
+    ctx.fillStyle = up ? "#3ddc84" : "#ff5d7a";
+    ctx.fillRect(x - half, y1, half * 2, body);
   }
 }
 
