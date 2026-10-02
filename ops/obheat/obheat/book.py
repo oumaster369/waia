@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import heapq
 import threading
 from dataclasses import dataclass
 from decimal import Decimal
@@ -22,16 +23,40 @@ class ApplyResult:
     detail: str = ""
 
 
-def _dec(value) -> Decimal:
-    if isinstance(value, Decimal):
+# Цена в целых тиках 1e-8. Целый ключ дешевле Decimal на каждой дельте и на
+# обходе книги раз в секунду: именно этот обход на раздутом стакане ел ядро.
+TICK = 100_000_000
+# Жёсткий потолок на сторону. Дифф дописывает цены и не удаляет дальние,
+# без потолка RSS коллектора рос (340 → 535 МБ за полчаса) без остановки.
+MAX_LEVELS = 8192
+
+
+def price_tick(value) -> int:
+    if isinstance(value, int):
         return value
-    return Decimal(str(value))
+    if isinstance(value, Decimal):
+        return int((value * TICK).to_integral_value(rounding="ROUND_HALF_EVEN"))
+    if isinstance(value, float):
+        return int(round(value * TICK))
+    return int((Decimal(str(value)) * TICK).to_integral_value(rounding="ROUND_HALF_EVEN"))
 
 
-def _levels(levels) -> list[tuple[Decimal, Decimal]]:
+def tick_price(tick: int) -> float:
+    return tick / TICK
+
+
+def _qty(value) -> float:
+    if isinstance(value, float):
+        return value
+    if isinstance(value, Decimal):
+        return float(value)
+    return float(value)
+
+
+def _levels(levels) -> list[tuple[int, float]]:
     out = []
     for level in levels or []:
-        out.append((_dec(level[0]), _dec(level[1])))
+        out.append((price_tick(level[0]), _qty(level[1])))
     return out
 
 
@@ -39,8 +64,8 @@ class L2Book:
     def __init__(self, venue: str, symbol: str) -> None:
         self.venue = venue
         self.symbol = symbol
-        self.bids: dict[Decimal, Decimal] = {}
-        self.asks: dict[Decimal, Decimal] = {}
+        self.bids: dict[int, float] = {}
+        self.asks: dict[int, float] = {}
         self.status = WAITING
         self.last_seq: int | None = None
         self.gap_count = 0
@@ -48,15 +73,17 @@ class L2Book:
         self.detail = "waiting for snapshot"
         self.needs_resync = False
         self.gapped_this_second = False
+        self._best_bid: int | None = None
+        self._best_ask: int | None = None
         self.lock = threading.RLock()
 
     def honest(self) -> bool:
         with self.lock:
             if self.gapped_this_second or self.status != VALID:
                 return False
-            if not self.bids or not self.asks:
+            if self._best_bid is None or self._best_ask is None:
                 return False
-            return max(self.bids) < min(self.asks)
+            return self._best_bid < self._best_ask
 
     def end_second(self) -> None:
         with self.lock:
@@ -70,6 +97,8 @@ class L2Book:
         self.gap_count += 1
         self.bids.clear()
         self.asks.clear()
+        self._best_bid = None
+        self._best_ask = None
         self.last_seq = None
         self.status = INVALID
         self.needs_resync = True
@@ -78,22 +107,77 @@ class L2Book:
         return ApplyResult("gap", detail)
 
     def _replace(self, bids, asks) -> None:
-        self.bids = {}
-        self.asks = {}
-        self._side(self.bids, bids)
-        self._side(self.asks, asks)
+        with self.lock:
+            self.bids = {}
+            self.asks = {}
+            self._best_bid = None
+            self._best_ask = None
+            self._side(self.bids, bids, bid=True)
+            self._side(self.asks, asks, bid=False)
 
     def _merge(self, bids, asks) -> None:
         with self.lock:
-            self._side(self.bids, bids)
-            self._side(self.asks, asks)
+            self._side(self.bids, bids, bid=True)
+            self._side(self.asks, asks, bid=False)
 
-    def _side(self, book: dict[Decimal, Decimal], levels) -> None:
+    def _side(self, book: dict[int, float], levels, *, bid: bool) -> None:
+        best = self._best_bid if bid else self._best_ask
+        removed_best = False
         for price, qty in _levels(levels):
-            if qty == 0:
-                book.pop(price, None)
-            elif qty > 0:
+            if qty <= 0.0:
+                if book.pop(price, None) is not None and price == best:
+                    best = None
+                    removed_best = True
+            else:
                 book[price] = qty
+                if not removed_best and (best is None or (price > best if bid else price < best)):
+                    best = price
+        if removed_best or best is None or best not in book:
+            if not book:
+                best = None
+            else:
+                best = max(book) if bid else min(book)
+        if bid:
+            self._best_bid = best
+        else:
+            self._best_ask = best
+
+    def trim_far(self, band: Decimal = Decimal("0.04"), limit: int = 2048) -> None:
+        """Выкинуть уровни дальше полосы и упереться в MAX_LEVELS.
+
+        Снимок Binance — 1000 уровней, дифф дописывает цены по всей глубине и
+        никогда их не забывает. Через несколько минут это десятки тысяч
+        ключей, и обход на каждой секунде сажает ядро. Касание всегда остаётся.
+        """
+        with self.lock:
+            self._trim_far_locked(band, limit)
+
+    def _trim_far_locked(self, band: Decimal = Decimal("0.04"), limit: int = 2048) -> None:
+        if self._best_bid is not None and self._best_ask is not None and (
+            len(self.bids) > limit or len(self.asks) > limit
+        ):
+            mid = (self._best_bid + self._best_ask) // 2
+            pct = int((band * 100).to_integral_value(rounding="ROUND_HALF_EVEN"))
+            delta = mid * pct // 100
+            lo = min(self._best_bid, mid - delta)
+            hi = max(self._best_ask, mid + delta)
+            for side in (self.bids, self.asks):
+                for price in [price for price in side if price < lo or price > hi]:
+                    del side[price]
+        self._cap_side(self.bids, bid=True)
+        self._cap_side(self.asks, bid=False)
+        if self._best_bid not in self.bids:
+            self._best_bid = max(self.bids) if self.bids else None
+        if self._best_ask not in self.asks:
+            self._best_ask = min(self.asks) if self.asks else None
+
+    def _cap_side(self, book: dict[int, float], *, bid: bool) -> None:
+        if len(book) <= MAX_LEVELS:
+            return
+        keep = heapq.nlargest(MAX_LEVELS, book) if bid else heapq.nsmallest(MAX_LEVELS, book)
+        keep_set = set(keep)
+        for price in [price for price in book if price not in keep_set]:
+            del book[price]
 
     def _finish(self, kind: str, detail: str, seq: int) -> ApplyResult:
         with self.lock:
@@ -102,10 +186,16 @@ class L2Book:
     def _finish_locked(self, kind: str, detail: str, seq: int) -> ApplyResult:
         self.last_seq = int(seq)
         self.needs_resync = False
-        if self.bids and self.asks and max(self.bids) >= min(self.asks):
+        if (
+            self._best_bid is not None
+            and self._best_ask is not None
+            and self._best_bid >= self._best_ask
+        ):
             self.crossed_count += 1
             self.bids.clear()
             self.asks.clear()
+            self._best_bid = None
+            self._best_ask = None
             self.status = INVALID
             self.needs_resync = True
             self.gapped_this_second = True
@@ -118,6 +208,8 @@ class L2Book:
             return ApplyResult("ignored", "empty side")
         self.status = VALID
         self.detail = detail
+        if len(self.bids) > MAX_LEVELS * 2 or len(self.asks) > MAX_LEVELS * 2:
+            self._trim_far_locked()
         return ApplyResult(kind, detail)
 
     def apply_binance_snapshot(self, last_update_id: int, bids, asks) -> ApplyResult:
@@ -133,8 +225,8 @@ class L2Book:
         with self.lock:
             if not (first_id <= target <= final_id):
                 return self._clear_gap(f"binance first diff {first_id}..{final_id} misses {target}")
-            self._side(self.bids, bids)
-            self._side(self.asks, asks)
+            self._side(self.bids, bids, bid=True)
+            self._side(self.asks, asks, bid=False)
             return self._finish_locked("update", "binance first diff", final_id)
 
     def apply_binance_diff(self, first_id: int, final_id: int, prev_u: int | None, bids, asks) -> ApplyResult:
@@ -151,8 +243,8 @@ class L2Book:
                     return self._clear_gap(f"binance pu {int(prev_u)} != {self.last_seq}")
             elif first_id > self.last_seq + 1:
                 return self._clear_gap(f"binance gap U {first_id} > {self.last_seq}+1")
-            self._side(self.bids, bids)
-            self._side(self.asks, asks)
+            self._side(self.bids, bids, bid=True)
+            self._side(self.asks, asks, bid=False)
             return self._finish_locked("update", "binance diff", final_id)
 
     def apply_bybit(self, kind: str, update_id: int, bids, asks) -> ApplyResult:

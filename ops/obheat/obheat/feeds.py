@@ -251,13 +251,16 @@ class ObheatBybit(_HubFeed, Bybit):
 
     async def message_handler(self, msg: str, conn, timestamp: float) -> None:
         self._conn = conn
-        try:
-            payload = json.loads(msg, parse_float=Decimal)
-        except Exception:
-            payload = None
-        if isinstance(payload, dict) and str(payload.get("topic", "")).startswith("allLiquidation."):
-            await self._liquidation(payload)
-            return
+        # orderbook.1000 is ~40 KB. Parsing it as Decimal here and again inside
+        # cryptofeed doubled that cost on every snapshot. Liquidations are rare.
+        if "allLiquidation." in msg:
+            try:
+                payload = json.loads(msg, parse_float=Decimal)
+            except Exception:
+                payload = None
+            if isinstance(payload, dict):
+                await self._liquidation(payload)
+                return
         await super().message_handler(msg, conn, timestamp)
 
     async def subscribe(self, connection: AsyncConnection) -> None:

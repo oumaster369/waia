@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from obheat.book import L2Book
+from obheat.book import L2Book, price_tick, tick_price
 from obheat.normalize import ContractSpec
 from obheat.symbols import BAND, step_of
 
@@ -78,41 +78,62 @@ def empty_ladder(step: Decimal) -> Ladder:
 
 def sample_ladder(book: L2Book, spec: ContractSpec, step: Decimal | None = None, band: Decimal = BAND) -> Ladder:
     step = step_of(book.symbol) if step is None else step
+    size = float(spec.contract_size)
+    if spec.inverse or size <= 0:
+        return empty_ladder(step)
+    step_tick = price_tick(step)
+    if step_tick <= 0:
+        return empty_ladder(step)
+    bps = int((band * Decimal(10000)).to_integral_value(rounding="ROUND_HALF_EVEN"))
     with book.lock:
-        if not book.honest():
+        # Раз в секунду, не на каждом диффе: иначе обрезка сама становится горячим путём.
+        book.trim_far(band * 2)
+        if not book.honest() or book._best_bid is None or book._best_ask is None:
             return empty_ladder(step)
-        best_bid = max(book.bids)
-        best_ask = min(book.asks)
+        best_bid = book._best_bid
+        best_ask = book._best_ask
         bid_items = list(book.bids.items())
         ask_items = list(book.asks.items())
-        visible_bid = min(book.bids)
-        visible_ask = max(book.asks)
-    mid = (best_bid + best_ask) / 2
-    if mid <= 0:
+    mid_tick = (best_bid + best_ask) // 2
+    if mid_tick <= 0:
         return empty_ladder(step)
-    lo = mid * (1 - band)
-    hi = mid * (1 + band)
-    buckets: dict[Decimal, tuple[Decimal, Decimal, Decimal, Decimal]] = {}
+    mid = tick_price(mid_tick)
+    delta = mid_tick * bps // 10000
+    lo = mid_tick - delta
+    hi = mid_tick + delta
+    buckets: dict[float, list[float]] = {}
+    visible_bid = min((price for price, _qty in bid_items), default=None)
+    visible_ask = max((price for price, _qty in ask_items), default=None)
 
-    def add(side: str, price: Decimal, raw_qty: Decimal) -> None:
-        if price < lo or price > hi:
+    def add(side: str, price: int, raw_qty: float) -> None:
+        if price < lo or price > hi or raw_qty <= 0:
             return
-        coin = spec.to_coin(raw_qty)
-        usd = spec.to_usd(raw_qty, mid)
-        if coin is None or usd is None:
-            return
-        slot = bucket_floor(price, step)
-        bid_coin, ask_coin, bid_usd, ask_usd = buckets.get(slot, (Decimal(0), Decimal(0), Decimal(0), Decimal(0)))
+        coin = raw_qty * size
+        usd = coin * mid
+        slot = tick_price((price // step_tick) * step_tick)
+        cell = buckets.get(slot)
+        if cell is None:
+            cell = [0.0, 0.0, 0.0, 0.0]
+            buckets[slot] = cell
         if side == "bid":
-            buckets[slot] = (bid_coin + coin, ask_coin, bid_usd + usd, ask_usd)
+            cell[0] += coin
+            cell[2] += usd
         else:
-            buckets[slot] = (bid_coin, ask_coin + coin, bid_usd, ask_usd + usd)
+            cell[1] += coin
+            cell[3] += usd
 
     for price, qty in bid_items:
         add("bid", price, qty)
     for price, qty in ask_items:
         add("ask", price, qty)
-    return Ladder(True, mid, step, visible_bid, visible_ask, buckets)
+    return Ladder(
+        True,
+        Decimal(str(mid)),
+        step,
+        None if visible_bid is None else Decimal(str(tick_price(visible_bid))),
+        None if visible_ask is None else Decimal(str(tick_price(visible_ask))),
+        buckets,
+    )
 
 
 def aggregate(ladders: list[Ladder], step: Decimal) -> Ladder:
@@ -120,12 +141,18 @@ def aggregate(ladders: list[Ladder], step: Decimal) -> Ladder:
     honest = [ladder for ladder in ladders if ladder.book_ok and ladder.buckets is not None and ladder.mid is not None]
     if not honest:
         return empty_ladder(step)
-    buckets: dict[Decimal, tuple[Decimal, Decimal, Decimal, Decimal]] = {}
+    buckets: dict[float, list[float]] = {}
     for ladder in honest:
         assert ladder.buckets is not None
         for price, parts in ladder.buckets.items():
-            have = buckets.get(price, (Decimal(0), Decimal(0), Decimal(0), Decimal(0)))
-            buckets[price] = tuple(have[i] + parts[i] for i in range(4))  # type: ignore[assignment]
+            have = buckets.get(price)
+            if have is None:
+                buckets[price] = [float(parts[0]), float(parts[1]), float(parts[2]), float(parts[3])]
+            else:
+                have[0] += float(parts[0])
+                have[1] += float(parts[1])
+                have[2] += float(parts[2])
+                have[3] += float(parts[3])
     mid = sum((ladder.mid for ladder in honest), Decimal(0)) / Decimal(len(honest))
     return Ladder(
         True,

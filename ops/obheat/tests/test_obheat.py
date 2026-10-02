@@ -45,6 +45,44 @@ class BookTests(unittest.TestCase):
         self.assertFalse(empty.book_ok)
         self.assertIsNone(empty.buckets)
 
+    def test_fat_book_trims_to_the_band_and_keeps_the_touch(self) -> None:
+        book = L2Book("BINANCE", "BTCUSDT")
+        mid = Decimal("100000")
+        n = 3000
+        bids = []
+        asks = []
+        for i in range(1, n + 1):
+            frac = Decimal(i) / Decimal(n)
+            bids.append((mid * (1 - Decimal("0.25") * frac), Decimal("1.5")))
+            asks.append((mid * (1 + Decimal("0.25") * frac), Decimal("1.2")))
+        book.apply_binance_snapshot(1, bids, asks)
+        self.assertGreater(len(book.bids), 2048)
+        ladder = sample_ladder(book, _spec("BINANCE"))
+        self.assertTrue(ladder.book_ok)
+        self.assertLessEqual(len(book.bids), 2048)
+        self.assertTrue(book.honest())
+        self.assertIsNotNone(ladder.buckets)
+        # A one-level diff must not walk the book: the touch price stays valid.
+        seq = book.last_seq
+        result = book.apply_binance_diff(seq + 1, seq + 1, seq, [(mid - Decimal("1"), Decimal("4"))], [])
+        self.assertEqual(result.kind, "update")
+        self.assertTrue(book.honest())
+
+    def test_in_band_book_is_capped(self) -> None:
+        from obheat.book import MAX_LEVELS
+
+        book = L2Book("BINANCE", "BTCUSDT")
+        mid = Decimal("100000")
+        n = MAX_LEVELS + 2500
+        bids = [(mid - Decimal("0.1") * i, Decimal("1")) for i in range(1, n + 1)]
+        asks = [(mid + Decimal("0.1") * i, Decimal("1")) for i in range(1, n + 1)]
+        book.apply_binance_snapshot(1, bids, asks)
+        sample_ladder(book, _spec("BINANCE"))
+        self.assertLessEqual(len(book.bids), MAX_LEVELS)
+        self.assertLessEqual(len(book.asks), MAX_LEVELS)
+        self.assertTrue(book.honest())
+        self.assertTrue(book._best_bid in book.bids)
+
 
 class HealthTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -126,6 +164,72 @@ class StoreTests(unittest.TestCase):
         window = read_window(root, "BTCUSDT", "BINANCE", 1, "1m", include_prints=False)
         self.assertTrue(window["columns"])
         self.assertTrue(window["columns"][-1]["book_ok"])
+
+    def test_all_window_reads_only_the_all_partition(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        data = root / "data"
+        store = HourStore(data)
+        ts = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+        for venue, mid in (("BINANCE", 111.0), ("ALL", 222.0)):
+            store.add_minute(
+                {
+                    "ts": ts,
+                    "row_kind": "minute",
+                    "venue": venue,
+                    "symbol": "BTCUSDT",
+                    "book_ok": True,
+                    "mid": mid,
+                    "step": 10.0,
+                    "prices": [mid],
+                    "bid_coin": [1.0],
+                    "ask_coin": [1.0],
+                    "bid_usd": [mid],
+                    "ask_usd": [mid],
+                    "visible_bid_min": mid,
+                    "visible_ask_max": mid,
+                }
+            )
+        store.flush()
+        window = read_window(root, "BTCUSDT", "ALL", 1, "1m", include_prints=False)
+        self.assertEqual(len(window["columns"]), 1)
+        self.assertEqual(window["columns"][0]["mid"], 222.0)
+
+    def test_long_step_does_not_scan_the_second_history(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        data = root / "data"
+        store = HourStore(data)
+        end = datetime.now(timezone.utc).replace(microsecond=0)
+        for age in range(600):
+            store.add(
+                {
+                    "ts": end - timedelta(seconds=600 - age),
+                    "row_kind": "second",
+                    "venue": "BINANCE",
+                    "symbol": "BTCUSDT",
+                    "book_ok": True,
+                    "mid": 100000.0,
+                    "step": 10.0,
+                    "prices": [100000.0],
+                    "bid_coin": [1.0],
+                    "ask_coin": [1.0],
+                    "bid_usd": [1.0],
+                    "ask_usd": [1.0],
+                }
+            )
+        store.flush()
+        window = read_window(root, "BTCUSDT", "BINANCE", 10, "1m", include_prints=False)
+        self.assertLessEqual(len(window["columns"]), 5)
+
+
+class PageTests(unittest.TestCase):
+    def test_page_explains_the_map_in_russian(self) -> None:
+        text = (Path(__file__).resolve().parents[1] / "obheat" / "web" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("Как читать", text)
+        self.assertIn("Что это значит сейчас", text)
+        self.assertIn("Ближайший магнит", text)
+        self.assertIn('window: "4h"', text)
+        self.assertIn("drawWallEvents", text)
+        self.assertIn("topWalls(10)", text)
 
 
 class LiquidityTests(unittest.TestCase):

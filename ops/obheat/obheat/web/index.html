@@ -8,7 +8,7 @@
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: #0b0e14; color: #d7dde8; font: 14px/1.4 system-ui, sans-serif; }
-  body { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; height: 100vh; }
+  body { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; height: 100vh; }
   header, footer { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 8px 12px; }
   header { border-bottom: 1px solid #222834; }
   footer { border-top: 1px solid #222834; color: #9aa3b5; font-size: 12px; }
@@ -36,6 +36,16 @@
   #hover { position: absolute; display: none; pointer-events: none; background: #111722; border: 1px solid #2c3444; border-radius: 6px; padding: 4px 6px; font-size: 12px; z-index: 2; }
   .legend i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; }
   .bid { background: #44e27f; } .ask { background: #f25c8a; } .mid { background: #f2d48a; } .liq { background: #d38bff; }
+  details.howto { margin: 8px 12px 0; background: #111722; border: 1px solid #2c3444; border-radius: 8px; }
+  details.howto summary { cursor: pointer; padding: 8px 12px; font-weight: 650; }
+  details.howto summary:focus-visible { outline: 2px solid #6d8cff; }
+  .howto { padding: 0 12px 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 16px; }
+  .howto i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; }
+  .howto h3 { margin: 0 0 4px; font-size: 13px; color: #fff; }
+  .howto p, .howto li { margin: 0 0 6px; color: #c5cedd; font-size: 13px; }
+  .howto ol { margin: 0; padding-left: 18px; }
+  #meaning .conclusion { margin: 0 0 8px; color: #fff; font-size: 15px; line-height: 1.35; }
+  .mark-add { color: #7dffa8; } .mark-pull { color: #ff9eb4; }
 </style>
 </head>
 <body>
@@ -52,6 +62,38 @@
   <span id="live">нет потока</span>
   <span id="status"></span>
 </header>
+<details class="howto">
+  <summary>Как читать</summary>
+  <div class="howto">
+    <div>
+      <h3>Цвета</h3>
+      <p>Время идёт вправо, цена — вверх. Яркость — сколько долларов стоит в заявках: чем ярче, тем плотнее.</p>
+      <p><i class="legend bid"></i>Зелёный и синий — заявки на покупку (bid), обычно под ценой.</p>
+      <p><i class="legend ask"></i>Розовый и фиолетовый — заявки на продажу (ask), обычно над ценой.</p>
+      <p>Жёлтый — самые плотные уровни. Серый столбец — в эту секунду книга была с дырой. Это не ноль, данных просто нет.</p>
+      <p><i class="legend liq"></i>Фиолетовый ромб — реальная ликвидация с биржи. Пунктир — модельная оценка, не факт.</p>
+    </div>
+    <div>
+      <h3>Что такое стена</h3>
+      <p>Стена — крупная пачка заявок на одной цене. Снизу это поддержка: кто-то готов купить много. Сверху сопротивление: кто-то готов продать много.</p>
+      <p>Держится: яркая полоса остаётся на той же цене, пока рынок к ней подходит, и объём не тает. На графике это плюс <span class="mark-add">+</span>, если стену добавили.</p>
+      <p>Снимают: полоса бледнеет или исчезает, когда цена подходит — заявку убрали. На графике это минус <span class="mark-pull">−</span>. Такая опора слабая: её уже нет, когда до неё дошли.</p>
+    </div>
+    <div>
+      <h3>Ликвидации и магнит</h3>
+      <p>Кластер ликвидаций — оценка, не отчёт биржи. Недавний объём раскладывается по плечам 5, 10, 25, 50 и 100. Лонги оказываются ниже цены, шорты — выше.</p>
+      <p>Цена часто идёт туда, где есть что исполнить. Плотная стена — это встречный объём. Скопление ликвидаций — топливо: когда цена доходит до плеч, закрытия сами толкают её дальше. Поэтому ближайший крупный кластер называют магнитом.</p>
+    </div>
+    <div>
+      <h3>Три примера</h3>
+      <ol>
+        <li>Под ценой яркая зелёная полоса не бледнеет пятнадцать минут, и цена от неё отскакивает. Поддержка держится.</li>
+        <li>Полоса была яркой и за минуту стала пустой, пока цена к ней шла. Стену сняли, опираться на неё нельзя.</li>
+        <li>Под ценой плотный кластер лонгов, а bid-стен мало. Ближайший магнит снизу: цену может потянуть туда, чтобы закрыть плечи.</li>
+      </ol>
+    </div>
+  </div>
+</details>
 <div class="macro">
   <div class="tradingview-widget-container">
     <div class="tradingview-widget-container__widget"></div>
@@ -81,6 +123,11 @@
     <div id="empty">Нет записанных секунд. Сборщик ещё не положил честную книгу.</div>
   </div>
   <aside>
+    <div class="card" id="meaning">
+      <h2>Что это значит сейчас</h2>
+      <p class="conclusion" id="conclusion">Ждём первую честную книгу.</p>
+      <div id="meaning-body" class="small"></div>
+    </div>
     <div class="card">
       <h2>Профиль и глубина</h2>
       <div id="levels" class="small">Загрузка…</div>
@@ -97,10 +144,12 @@
   </aside>
 </div>
 <footer>
-  <span class="legend"><i class="bid"></i>bid</span>
-  <span class="legend"><i class="ask"></i>ask</span>
-  <span class="legend"><i class="mid"></i>середина</span>
+  <span class="legend"><i class="bid"></i>покупка, bid</span>
+  <span class="legend"><i class="ask"></i>продажа, ask</span>
+  <span class="legend"><i class="mid"></i>последняя цена</span>
   <span class="legend"><i class="liq"></i>ликвидация</span>
+  <span class="legend"><span class="mark-add">+</span> стену добавили</span>
+  <span class="legend"><span class="mark-pull">−</span> стену сняли</span>
   <span>Московское время (UTC+3). Цвет — логарифм долларовой ликвидности; серый столбец значит «нет честной книги», не ноль. Estimated liquidation levels — модель, реальные ликвидации — отдельные принты.</span>
 </footer>
 <script>
@@ -113,7 +162,7 @@ const WINDOWS = {
 };
 const VENUE_LABEL = {ALL: "Все", BINANCE: "Binance perp", BYBIT: "Bybit perp", OKX: "OKX perp", HTX: "HTX", BITGET: "Bitget", GATE: "Gate", BINANCE_SPOT: "Binance spot", COINBASE: "Coinbase", OKX_SPOT: "OKX spot", BYBIT_SPOT: "Bybit spot"};
 const LAYERS = {book: "стакан", estimate: "ликв. модель", prints: "принты", candles: "свечи", vwap: "VWAP"};
-const state = {symbol: "BTCUSDT", venue: "ALL", window: "1h", minBright: 1, threshold: 0, palette: "coinglass", layers: {book: true, estimate: true, prints: true, candles: true, vwap: true}, columns: [], health: null, levels: null, hover: null, liquidity: null, stream: "off"};
+const state = {symbol: "BTCUSDT", venue: "ALL", window: "4h", minBright: 1, threshold: 0, palette: "coinglass", layers: {book: true, estimate: false, prints: false, candles: false, vwap: false}, columns: [], health: null, levels: null, hover: null, liquidity: null, stream: "off"};
 const token = new URLSearchParams(location.search).get("token");
 const canvas = document.getElementById("map");
 const ctx = canvas.getContext("2d");
@@ -265,10 +314,12 @@ function listen() {
     document.getElementById("empty").style.display = state.columns.length ? "none" : "flex";
     draw();
     paintStatus();
+    paintMeaning();
   });
   source.addEventListener("liquidity", (event) => {
     state.liquidity = JSON.parse(event.data);
     paintLevels();
+    paintMeaning();
   });
 }
 
@@ -289,6 +340,173 @@ function paintStatus() {
 }
 
 function fmtUsd(v) { return (v || 0).toLocaleString("ru-RU", {maximumFractionDigits: 0}); }
+
+function stepOf(price) {
+  return price > 2000 ? 10 : 0.5;
+}
+
+function usdNear(col, side, price) {
+  if (!col) return 0;
+  const rows = side === "bid" ? col.bids : col.asks;
+  const slack = (col.step || stepOf(price)) / 2;
+  let best = 0;
+  for (const row of rows || []) {
+    if (Math.abs(row[0] - price) <= slack) best = Math.max(best, row[2] || 0);
+  }
+  return best;
+}
+
+function atr14(cols) {
+  const minutes = new Map();
+  for (const col of cols) {
+    if (!col.mid) continue;
+    const key = Math.floor(col.ts / 60) * 60;
+    const slot = minutes.get(key) || {hi: col.mid, lo: col.mid, last: col.mid};
+    slot.hi = Math.max(slot.hi, col.mid);
+    slot.lo = Math.min(slot.lo, col.mid);
+    slot.last = col.mid;
+    minutes.set(key, slot);
+  }
+  const bars = [...minutes.keys()].sort((a, b) => a - b).map(key => minutes.get(key));
+  if (bars.length < 2) return null;
+  const ranges = [];
+  for (let i = 1; i < bars.length; i++) {
+    const prev = bars[i - 1].last;
+    ranges.push(Math.max(bars[i].hi - bars[i].lo, Math.abs(bars[i].hi - prev), Math.abs(bars[i].lo - prev)));
+  }
+  const tail = ranges.slice(-14);
+  const value = tail.reduce((sum, item) => sum + item, 0) / tail.length;
+  return value > 0 ? value : null;
+}
+
+function topWalls(limit) {
+  const raw = ((state.liquidity || {}).walls) || (((state.levels || {}).measured || {}).walls) || [];
+  return raw.filter(row => (row.usd || 0) >= state.threshold).sort((a, b) => (b.usd || 0) - (a.usd || 0)).slice(0, limit);
+}
+
+function wallEvents(cols) {
+  const amounts = [];
+  for (const col of cols) {
+    for (const row of (col.bids || []).concat(col.asks || [])) if ((row[2] || 0) > 0) amounts.push(row[2]);
+  }
+  amounts.sort((a, b) => a - b);
+  const cut = Math.max(state.threshold, percentile(amounts, 0.9));
+  const events = [];
+  let prev = new Map();
+  for (const col of cols) {
+    const now = new Map();
+    for (const side of ["bid", "ask"]) {
+      const rows = (side === "bid" ? col.bids : col.asks) || [];
+      const ranked = [...rows].sort((a, b) => (b[2] || 0) - (a[2] || 0)).slice(0, 15);
+      for (const row of ranked) {
+        if ((row[2] || 0) < cut) continue;
+        const key = side + ":" + row[0];
+        now.set(key, row[2]);
+        const before = prev.get(key) || 0;
+        if (before < cut * 0.45) events.push({ts: col.ts, price: row[0], side, kind: "add", usd: row[2]});
+      }
+    }
+    for (const [key, usd] of prev) {
+      if (usd < cut || now.has(key)) continue;
+      const split = key.indexOf(":");
+      events.push({ts: col.ts, price: Number(key.slice(split + 1)), side: key.slice(0, split), kind: "pull", usd});
+    }
+    prev = now;
+  }
+  const kept = [];
+  for (const event of events) {
+    const last = kept[kept.length - 1];
+    if (last && last.kind === event.kind && last.side === event.side && Math.abs(last.price - event.price) <= stepOf(event.price)) continue;
+    kept.push(event);
+  }
+  return kept.slice(-16);
+}
+
+function holdOf(wall, cols, lastTs) {
+  if (!wall || !cols.length) return "unknown";
+  const past = [...cols].reverse().find(col => col.book_ok && col.ts <= lastTs - 15 * 60) || cols.find(col => col.book_ok);
+  const now = [...cols].reverse().find(col => col.book_ok);
+  const before = usdNear(past, wall.side, wall.price);
+  const after = usdNear(now, wall.side, wall.price) || wall.usd || 0;
+  if (before <= 0) return "added";
+  if (after < before * 0.7) return "pulled";
+  return "holding";
+}
+
+function distText(price, last, atr) {
+  if (!last) return "";
+  const pct = (price - last) / last * 100;
+  const pctText = `${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`;
+  if (!atr) return pctText;
+  const units = Math.abs(price - last) / atr;
+  return `${pctText}, ${units.toFixed(1)} ATR`;
+}
+
+function paintMeaning() {
+  const box = document.getElementById("meaning-body");
+  const line = document.getElementById("conclusion");
+  const liq = state.liquidity || {};
+  const last = liq.last || liq.mid || ((state.levels || {}).mid) || null;
+  const cols = state.columns || [];
+  if (!last) {
+    line.textContent = "Ждём первую честную книгу.";
+    box.innerHTML = "";
+    return;
+  }
+  const walls = topWalls(10);
+  const support = walls.filter(row => row.side === "bid" && row.price < last).sort((a, b) => b.price - a.price)[0] || null;
+  const resist = walls.filter(row => row.side === "ask" && row.price > last).sort((a, b) => a.price - b.price)[0] || null;
+  const clusters = (liq.liquidation_clusters || (((state.levels || {}).estimated || {}).liquidation_clusters) || [])
+    .filter(row => (row.usd || 0) >= state.threshold);
+  const liqBelow = clusters.filter(row => row.price < last && (row.side === "longs" || row.side === "long")).sort((a, b) => b.price - a.price)[0] || null;
+  const liqAbove = clusters.filter(row => row.price > last && (row.side === "shorts" || row.side === "short")).sort((a, b) => a.price - b.price)[0] || null;
+  const atr = atr14(cols);
+  const lastTs = cols.length ? cols[cols.length - 1].ts : (liq.ts || 0);
+  const supportHold = holdOf(support, cols, lastTs);
+  const resistHold = holdOf(resist, cols, lastTs);
+  const major = walls.slice(0, 10).map(wall => holdOf(wall, cols, lastTs));
+  const pulled = major.filter(item => item === "pulled").length;
+  const holding = major.filter(item => item === "holding" || item === "added").length;
+  const stance = !major.length ? "крупных стен в окне не видно" : pulled > holding ? "крупные стены за 15 минут снимают" : "крупные стены за 15 минут держатся";
+  const measured = ((state.levels || {}).measured || {}).imbalance;
+  let imbalance = measured;
+  if (imbalance == null) {
+    const col = [...cols].reverse().find(item => item.book_ok && item.mid);
+    if (col) {
+      let bid = 0, ask = 0;
+      for (const row of col.bids || []) if (row[0] >= col.mid * 0.98) bid += row[2] || 0;
+      for (const row of col.asks || []) if (row[0] <= col.mid * 1.02) ask += row[2] || 0;
+      imbalance = bid + ask > 0 ? (bid - ask) / (bid + ask) : null;
+    }
+  }
+  const imbalanceText = imbalance == null ? "нет данных" : `${imbalance > 0 ? "перевес покупок" : "перевес продаж"} ${(imbalance * 100).toFixed(0)}%`;
+  const verb = {holding: "держится", pulled: "снимают", added: "только появилась", unknown: "мало истории"};
+  function wallLine(title, wall, how) {
+    if (!wall) return `<div class="row"><span>${title}</span><span>нет крупной</span></div>`;
+    return `<div class="row"><span>${title} ${fmtPrice(wall.price)}</span><span>$${fmtUsd(wall.usd)} · ${distText(wall.price, last, atr)} · ${verb[how] || ""}</span></div>`;
+  }
+  function clusterLine(title, row) {
+    if (!row) return `<div class="row"><span>${title}</span><span>нет</span></div>`;
+    const name = row.price < last ? "лонги" : "шорты";
+    return `<div class="row"><span>${title} ${fmtPrice(row.price)}</span><span>${name} $${fmtUsd(row.usd)} · ${distText(row.price, last, atr)}</span></div>`;
+  }
+  const magnet = liqBelow && (!liqAbove || Math.abs(liqBelow.price - last) <= Math.abs(liqAbove.price - last)) ? liqBelow : liqAbove;
+  const bits = [];
+  if (magnet) {
+    const where = magnet.price < last ? "снизу" : "сверху";
+    const who = magnet.price < last ? "лонги" : "шорты";
+    bits.push(`Ближайший магнит ${where} ${fmtPrice(magnet.price)} — ${who} на $${fmtUsd(magnet.usd)}`);
+  }
+  if (support) {
+    const near = walls.filter(row => row.side === "bid" && row.price <= support.price && (support.price - row.price) / last < 0.0015);
+    const low = near.length ? Math.min(...near.map(row => row.price)) : support.price;
+    const span = Math.abs(low - support.price) > stepOf(last) ? `${fmtPrice(low)}–${fmtPrice(support.price)}` : fmtPrice(support.price);
+    bits.push(`поддержка ${span} ${verb[supportHold] || "держится"}`);
+  }
+  line.textContent = (bits.length ? bits.join("; ") + "." : "Крупных стен и кластеров рядом с ценой не видно.");
+  box.innerHTML = wallLine("Поддержка", support, supportHold) + wallLine("Сопротивление", resist, resistHold) + clusterLine("Ликвидации снизу", liqBelow) + clusterLine("Ликвидации сверху", liqAbove) + `<div class="row"><span>Стакан ±2%</span><span>${imbalanceText}</span></div>` + `<div class="row"><span>15 минут</span><span>${stance}</span></div>`;
+}
+
 function paintLevels() {
   const data = state.levels || {};
   const measured = data.measured || {};
@@ -299,6 +517,7 @@ function paintLevels() {
   document.getElementById("walls").innerHTML = walls.length ? walls.map(w => `<div class="row"><span>${w.side} ${w.price}</span><span>$${fmtUsd(w.usd)}</span></div>`).join("") : "Нет данных";
   const clusters = (((data.estimated || {}).liquidation_clusters) || []).filter(x => (x.usd || 0) >= state.threshold).slice(0, 12);
   document.getElementById("clusters").innerHTML = clusters.map(c => `<div class="row"><span>${c.side} ${c.price}</span><span>$${fmtUsd(c.usd)}</span></div>`).join("");
+  paintMeaning();
 }
 
 function percentile(values, p) {
@@ -481,6 +700,7 @@ function draw() {
     if (ask) { ctx.fillStyle = "#ff9eb4"; ctx.fillText("ask " + fmtPrice(ask), padL + 6, yOf(ask) + 12); }
   }
   labelWalls(yOf, padL, plotW);
+  drawWallEvents(cols, xOf, yOf);
   if (state.hover) paintCrosshair(state.hover, cols, yOf, xOf, padL, padT, plotW, plotH, minP, maxP);
   const fmtTime = ts => new Date((ts + 3 * 3600) * 1000).toISOString().slice(11, 16) + " МСК";
   ctx.fillText(fmtTime(cols[cols.length - 1].ts), padL + plotW - 80, height - 6);
@@ -505,21 +725,33 @@ function bestPrice(rows, pick) {
   return prices.length ? pick(...prices) : null;
 }
 function labelWalls(yOf, left, plotW) {
-  const walls = (((state.liquidity || {}).walls) || (state.levels && state.levels.measured && state.levels.measured.walls) || [])
-    .filter(row => (row.usd || 0) >= state.threshold)
-    .slice(0, 4);
+  const walls = topWalls(10).sort((a, b) => b.price - a.price);
   ctx.font = "11px system-ui, sans-serif";
+  let lastY = -999;
   for (const wall of walls) {
-    const y = yOf(wall.price);
+    let y = yOf(wall.price);
+    if (y - lastY < 12) y = lastY + 12;
+    lastY = y;
     ctx.fillStyle = wall.side === "bid" ? "rgba(125,255,168,0.95)" : "rgba(255,158,180,0.95)";
     const trend = wall.trend === "growing" ? " ↑" : wall.trend === "pulled" ? " ↓" : "";
-    ctx.fillText(`${wall.side} ${fmtPrice(wall.price)} $${fmtUsd(wall.usd)}${trend}`, left + plotW - 168, y);
+    const name = wall.side === "bid" ? "поддержка" : "сопротивл.";
+    ctx.fillText(`${name} ${fmtPrice(wall.price)} $${fmtUsd(wall.usd)}${trend}`, left + plotW - 188, y);
   }
   const clusters = (state.liquidity && state.liquidity.liquidation_clusters) || (((state.levels || {}).estimated || {}).liquidation_clusters) || [];
   clusters.filter(row => (row.usd || 0) >= state.threshold).slice(0, 3).forEach(row => {
     ctx.fillStyle = "#d38bff";
-    ctx.fillText(`liq ${row.side} ${fmtPrice(row.price)}`, left + 8, yOf(row.price));
+    const name = row.side === "longs" || row.side === "long" ? "лонги" : "шорты";
+    ctx.fillText(`${name} ${fmtPrice(row.price)} $${fmtUsd(row.usd)}`, left + 8, yOf(row.price));
   });
+}
+function drawWallEvents(cols, xOf, yOf) {
+  ctx.font = "bold 13px system-ui, sans-serif";
+  for (const event of wallEvents(cols)) {
+    const index = cols.findIndex(col => col.ts === event.ts);
+    if (index < 0) continue;
+    ctx.fillStyle = event.kind === "add" ? "#7dffa8" : "#ff9eb4";
+    ctx.fillText(event.kind === "add" ? "+" : "−", xOf(index) - 4, yOf(event.price) - 3);
+  }
 }
 function paintCrosshair(hover, cols, yOf, xOf, padL, padT, plotW, plotH, minP, maxP) {
   if (hover.x < padL || hover.x > padL + plotW || hover.y < padT || hover.y > padT + plotH) {

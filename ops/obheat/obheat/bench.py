@@ -42,6 +42,68 @@ def _fill(book: L2Book, symbol: str) -> None:
     book.apply_binance_snapshot(1, bids, asks)
 
 
+def _grow(book: L2Book, levels: int, span: Decimal) -> None:
+    """Spread `levels` per side from just outside the touch out to `span`.
+
+    This is what a diff feed does if nothing ever deletes far prices: the
+    REST snapshot is 1000 levels, and eight minutes later the dict holds
+    the whole book. 20 such books were ~340 MB RSS in this process.
+    """
+    mid = Decimal("100000") if book.symbol == "BTCUSDT" else Decimal("4000")
+    bids = []
+    asks = []
+    for i in range(1, levels + 1):
+        frac = Decimal(i) / Decimal(levels)
+        bids.append((mid * (1 - span * frac), Decimal("1.25")))
+        asks.append((mid * (1 + span * frac), Decimal("1.10")))
+    book.apply_binance_snapshot(1, bids, asks)
+
+
+def collect_hot(samples: int = 8, levels: int = 20000, diffs_per_book: int = 10) -> dict:
+    """10 venues × 2 symbols at a book depth that matches the 340 MB RSS.
+
+    Each second applies `diffs_per_book` updates of 20 levels, then samples.
+    cpu_pct_one_core is that cost at 1 Hz.
+    """
+    import resource
+
+    specs = {}
+    books = []
+    for venue in VENUES:
+        for symbol in ("BTCUSDT", "ETHUSDT"):
+            book = L2Book(venue, symbol)
+            _grow(book, levels, Decimal("0.25"))
+            books.append(book)
+            size = Decimal("0.001") if symbol == "BTCUSDT" else Decimal("0.01")
+            specs[(venue, symbol)] = ContractSpec(venue, symbol, True, False, size, symbol[:3], "perp")
+    from obheat.buckets import sample_ladder
+
+    for book in books:
+        sample_ladder(book, specs[(book.venue, book.symbol)])
+    cpu0 = time.process_time()
+    for _ in range(samples):
+        for book in books:
+            spec = specs[(book.venue, book.symbol)]
+            mid = Decimal("100000") if book.symbol == "BTCUSDT" else Decimal("4000")
+            for _diff in range(diffs_per_book):
+                seq = (book.last_seq or 1) + 1
+                changed = [(mid - Decimal(seq % 80) * Decimal("0.1"), Decimal("3"))]
+                book.apply_binance_diff(seq, seq, book.last_seq, changed, [])
+            sample_ladder(book, spec)
+    cpu = time.process_time() - cpu0
+    per_second = cpu / samples
+    rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+    return {
+        "books": len(books),
+        "levels_each_side_before_trim": levels,
+        "levels_each_side_after": len(books[0].bids),
+        "diffs_per_book_per_second": diffs_per_book,
+        "cpu_ms_per_second": round(per_second * 1000.0, 1),
+        "cpu_pct_one_core": round(100.0 * per_second, 1),
+        "rss_mb": round(rss_mb, 1),
+    }
+
+
 def collect_cpu(samples: int = 20, diffs_per_book: int = 10) -> dict:
     """One closed second = `diffs_per_book` updates on every book, then sample.
 
@@ -245,9 +307,67 @@ def store_flush_ms(minutes: int = 30) -> dict:
     }
 
 
+def serve_scan(minutes: int = 15) -> dict:
+    """What the idle warmer used to do: parallel ALL-window reads over history.
+
+    Files are written for every venue. The fixed reader opens only venue=ALL.
+    """
+    import resource
+
+    from obheat.query import read_window
+
+    root = Path(tempfile.mkdtemp())
+    data = root / "data"
+    store = HourStore(data)
+    end = datetime.now(timezone.utc).replace(microsecond=0)
+    prices = [100000.0 - i * 10 for i in range(40)] + [100000.0 + (i + 1) * 10 for i in range(40)]
+    bid_usd = [50000.0 if i < 40 else 0.0 for i in range(80)]
+    ask_usd = [0.0 if i < 40 else 40000.0 for i in range(80)]
+    zeros = [0.0] * 80
+    venues = list(VENUES) + ["ALL"]
+    for sec in range(minutes * 60):
+        ts = end - timedelta(seconds=minutes * 60 - sec)
+        for venue in venues:
+            for symbol in ("BTCUSDT", "ETHUSDT"):
+                store.add(
+                    {
+                        "ts": ts,
+                        "row_kind": "second",
+                        "venue": venue,
+                        "symbol": symbol,
+                        "book_ok": True,
+                        "mid": 100000.0,
+                        "step": 10.0,
+                        "prices": prices,
+                        "bid_coin": zeros,
+                        "ask_coin": zeros,
+                        "bid_usd": bid_usd,
+                        "ask_usd": ask_usd,
+                        "visible_bid_min": 98000.0,
+                        "visible_ask_max": 102000.0,
+                    }
+                )
+        if sec % 600 == 599:
+            store.flush()
+    store.flush()
+    t0 = time.perf_counter()
+    window = read_window(root, "BTCUSDT", "ALL", min(minutes, 60), "5s", include_prints=False)
+    one_ms = (time.perf_counter() - t0) * 1000.0
+    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+    return {
+        "history_minutes": minutes,
+        "venues_on_disk": len(venues),
+        "all_60m_5s_ms": round(one_ms, 1),
+        "columns": len(window["columns"]),
+        "rss_mb": round(rss, 1),
+    }
+
+
 def main() -> None:
+    print("collect_hot", json.dumps(collect_hot(), ensure_ascii=False))
     print("collect", json.dumps(collect_cpu(), ensure_ascii=False))
     print("store", json.dumps(store_flush_ms(), ensure_ascii=False))
+    print("serve_scan", json.dumps(serve_scan(), ensure_ascii=False))
     data = Path(tempfile.mkdtemp())
     _seed_history(data)
     os.environ.setdefault("OBHEAT_BIND", "127.0.0.1")

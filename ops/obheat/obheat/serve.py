@@ -21,10 +21,74 @@ from obheat.symbols import ALL, SYMBOLS, VENUES
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: dict[tuple, dict] = {}
-_REFRESHING: set[tuple] = set()
+# A heatmap window changes once a second, but rebuilding it from parquet is
+# the expensive part. 30s is fresh enough for the page and keeps an idle
+# process off the history files.
+_FRESH_S = 30.0
 
 WEB = Path(__file__).resolve().parent / "web" / "index.html"
 STEPS = {"1s": 1, "5s": 5, "15s": 15, "1m": 60, "5m": 300}
+_CACHE_MAX = 4
+_HEAVY = threading.BoundedSemaphore(1)
+_HEALTH_FALLBACK = b'{"ok":false,"venues":{}}'
+
+
+class LiveSurface:
+    """Bytes for `/` and `/health`, refreshed off the request path.
+
+    Heatmap builds take the GIL while they turn parquet into Python objects.
+    The reachability probe on `/` waits 2.5s. These two routes only copy a
+    buffer that a private thread already prepared, and they do not take the
+    heatmap lock.
+    """
+
+    def __init__(self, data_dir: Path) -> None:
+        self.data_dir = Path(data_dir)
+        self.html = WEB.read_bytes()
+        self._lock = threading.Lock()
+        self._health = _HEALTH_FALLBACK
+        self._latest: dict | None = None
+        self._liquidity: dict | None = None
+        self._stop = threading.Event()
+
+    def start(self) -> None:
+        self.refresh()
+        threading.Thread(target=self._loop, name="obheat-surface", daemon=True).start()
+
+    def _loop(self) -> None:
+        while not self._stop.wait(0.25):
+            try:
+                self.refresh()
+            except Exception:
+                continue
+
+    def refresh(self) -> None:
+        health = _read_bytes(self.data_dir / "health.json", _HEALTH_FALLBACK)
+        latest = _read_json(self.data_dir / "live" / "latest.json", None)
+        liquidity = _read_json(self.data_dir / "live" / "liquidity.json", None)
+        with self._lock:
+            self._health = health
+            self._latest = latest
+            self._liquidity = liquidity
+
+    def health(self) -> bytes:
+        with self._lock:
+            return self._health
+
+    def latest(self) -> dict | None:
+        with self._lock:
+            return self._latest
+
+    def liquidity(self) -> dict | None:
+        with self._lock:
+            return self._liquidity
+
+
+def _read_bytes(path: Path, default: bytes) -> bytes:
+    try:
+        return path.read_bytes()
+    except OSError:
+        return default
 
 
 def public_bind(bind: str) -> bool:
@@ -41,6 +105,7 @@ class Handler(BaseHTTPRequestHandler):
     data_dir: Path
     bind: str
     token: str
+    surface: LiveSurface | None = None
 
     def log_message(self, fmt: str, *args) -> None:
         return
@@ -54,9 +119,9 @@ class Handler(BaseHTTPRequestHandler):
         query = parse_qs(parsed.query)
         try:
             if path == "/":
-                self._html()
+                self._raw(200, "text/html; charset=utf-8", self._page_bytes())
             elif path == "/health":
-                self._json(200, _read_json(self.data_dir / "health.json", {"ok": False, "venues": {}}))
+                self._raw(200, "application/json; charset=utf-8", self._health_bytes())
             elif path == "/meta":
                 self._json(200, _read_json(self.data_dir / "meta.json", {}))
             elif path == "/book":
@@ -91,10 +156,21 @@ class Handler(BaseHTTPRequestHandler):
             presented = (parse_qs(query).get("token") or [""])[0]
         return token_ok(presented, self.token)
 
-    def _html(self) -> None:
-        body = WEB.read_bytes()
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
+    def _page_bytes(self) -> bytes:
+        surface = type(self).surface
+        if surface is not None:
+            return surface.html
+        return WEB.read_bytes()
+
+    def _health_bytes(self) -> bytes:
+        surface = type(self).surface
+        if surface is not None:
+            return surface.health()
+        return _read_bytes(self.data_dir / "health.json", _HEALTH_FALLBACK)
+
+    def _raw(self, code: int, content_type: str, body: bytes) -> None:
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -122,10 +198,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Connection", "keep-alive")
         self.end_headers()
         last = None
-        path = self.data_dir / "live" / "latest.json"
         try:
             while True:
-                payload = _read_json(path, None)
+                surface = type(self).surface
+                payload = surface.latest() if surface is not None else _read_json(self.data_dir / "live" / "latest.json", None)
                 stamp = None if payload is None else payload.get("ts")
                 if payload is not None and stamp != last:
                     column = ((payload.get("columns") or {}).get(symbol) or {}).get(venue)
@@ -191,7 +267,8 @@ def _venue(query: dict) -> str:
 
 
 def _book(data_dir: Path, symbol: str, venue: str) -> dict:
-    payload = _read_json(data_dir / "live" / "latest.json", None)
+    surface = Handler.surface
+    payload = surface.latest() if surface is not None else _read_json(data_dir / "live" / "latest.json", None)
     if not payload:
         return {"symbol": symbol, "venue": venue, "book_ok": False, "bids": None, "asks": None}
     column = ((payload.get("columns") or {}).get(symbol) or {}).get(venue)
@@ -206,22 +283,62 @@ def _heatmap(data_dir: Path, query: dict) -> dict:
         raise ValueError("step must be 1s, 5s, 15s, 1m or 5m")
     minutes = int(_one(query, "minutes", "1440"))
     as_columns = _one(query, "format", "compact") == "columns"
-    window = cached_window(data_dir, _symbol(query), _venue(query), minutes, step, include_prints=as_columns)
+    symbol = _symbol(query)
+    venue = _venue(query)
     if as_columns:
-        return window
-    width = int(_one(query, "width", "1200"))
-    levels = int(_one(query, "levels", "40"))
-    return _compact_heatmap(window, max(64, min(2400, width)), max(16, min(512, levels)))
+        return _load_window(data_dir, symbol, venue, minutes, step, include_prints=True)
+    width = max(64, min(2400, int(_one(query, "width", "1200"))))
+    levels = max(16, min(512, int(_one(query, "levels", "40"))))
+    key = (str(data_dir), symbol, venue, minutes, step, width, levels)
+    hit = _cache_get(key)
+    if hit is not None and time.monotonic() - hit["at"] < _FRESH_S:
+        return hit["compact"]
+    # Wait out the current one-file backfill instead of answering with an
+    # empty grid. `/` and `/health` do not take this lock.
+    if not _HEAVY.acquire(timeout=8):
+        if hit is not None:
+            return hit["compact"]
+        return _empty_compact(symbol, venue, step, minutes)
+    try:
+        fresh = _cache_get(key)
+        if fresh is not None and time.monotonic() - fresh["at"] < _FRESH_S:
+            return fresh["compact"]
+        window = read_window(data_dir, symbol, venue, minutes, step, include_prints=False)
+        compact = _compact_heatmap(window, width, levels)
+        del window
+        _cache_put(key, compact)
+        return compact
+    finally:
+        _HEAVY.release()
+
+
+def _empty_compact(symbol: str, venue: str, step: str, minutes: int) -> dict:
+    return {
+        "symbol": symbol,
+        "venue": venue,
+        "step": step,
+        "minutes": minutes,
+        "format": "compact-v1",
+        "columns": 0,
+        "prices": [],
+        "times": [],
+        "bid": "",
+        "ask": "",
+        "mid": [],
+        "busy": True,
+    }
 
 
 def _levels(data_dir: Path, query: dict) -> dict:
     symbol = _symbol(query)
     venue = _venue(query)
     current = _book(data_dir, symbol, venue)
+    # The page polls /levels every 5s. It used to rebuild the whole heatmap
+    # window for that. Clusters already live in the liquidity snapshot.
     try:
-        window = cached_window(data_dir, symbol, venue, int(_one(query, "minutes", "60")), "1m", include_prints=True)
-        clusters = _estimated_liquidations(window.get("columns") or [])
-        estimate_status = "ok"
+        snap = _liquidity(data_dir, {"symbol": [symbol], "venue": [venue]})
+        clusters = list(snap.get("liquidation_clusters") or [])
+        estimate_status = "ok" if clusters or snap.get("book_ok") else "partial: no snapshot"
     except Exception as exc:  # noqa: BLE001 - levels must be partial, never 500
         clusters = []
         estimate_status = f"partial: {exc}"
@@ -383,45 +500,25 @@ def _estimated_liquidations(columns: list[dict]) -> list[dict]:
     return rows[:40]
 
 
-def cached_window(data_dir: Path, symbol: str, venue: str, minutes: int, step: str, include_prints: bool) -> dict:
-    """Stale-while-revalidate. A slow parquet build must not sit on the request."""
-    key = (str(data_dir), symbol, venue, int(minutes), step, bool(include_prints))
-    now = time.monotonic()
+def _load_window(data_dir: Path, symbol: str, venue: str, minutes: int, step: str, include_prints: bool) -> dict:
+    """On-demand column window. One heavy read at a time, nothing retained."""
+    if not _HEAVY.acquire(timeout=2):
+        return {"symbol": symbol, "venue": venue, "step": step, "minutes": minutes, "columns": [], "busy": True}
+    try:
+        return read_window(data_dir, symbol, venue, minutes, step, include_prints=include_prints)
+    finally:
+        _HEAVY.release()
+
+
+def _cache_get(key: tuple) -> dict | None:
     with _CACHE_LOCK:
-        hit = _CACHE.get(key)
-    if hit is not None and now - hit["at"] < 2.0:
-        return hit["window"]
-    if hit is not None and now - hit["at"] < 120.0:
-        _schedule_refresh(data_dir, symbol, venue, minutes, step, include_prints, key)
-        return hit["window"]
-    window = read_window(data_dir, symbol, venue, minutes, step, include_prints=include_prints)
-    _store_window(key, window)
-    return window
+        return _CACHE.get(key)
 
 
-def _schedule_refresh(data_dir: Path, symbol: str, venue: str, minutes: int, step: str, include_prints: bool, key: tuple) -> None:
+def _cache_put(key: tuple, compact: dict) -> None:
     with _CACHE_LOCK:
-        if key in _REFRESHING:
-            return
-        _REFRESHING.add(key)
-
-    def run() -> None:
-        try:
-            window = read_window(data_dir, symbol, venue, minutes, step, include_prints=include_prints)
-            _store_window(key, window)
-        except Exception:
-            return
-        finally:
-            with _CACHE_LOCK:
-                _REFRESHING.discard(key)
-
-    threading.Thread(target=run, name="obheat-heat-refresh", daemon=True).start()
-
-
-def _store_window(key: tuple, window: dict) -> None:
-    with _CACHE_LOCK:
-        _CACHE[key] = {"at": time.monotonic(), "window": window}
-        if len(_CACHE) > 32:
+        _CACHE[key] = {"at": time.monotonic(), "compact": compact}
+        while len(_CACHE) > _CACHE_MAX:
             _CACHE.pop(next(iter(_CACHE)))
 
 
@@ -430,7 +527,8 @@ def _liquidity(data_dir: Path, query: dict) -> dict:
     venue = _one(query, "venue", ALL).upper()
     if venue not in (*VENUES, ALL):
         raise ValueError("unknown venue")
-    payload = _read_json(data_dir / "live" / "liquidity.json", None)
+    surface = Handler.surface
+    payload = surface.liquidity() if surface is not None else _read_json(data_dir / "live" / "liquidity.json", None)
     if not payload:
         return {
             "symbol": symbol,
@@ -448,27 +546,21 @@ def _liquidity(data_dir: Path, query: dict) -> dict:
     return snap
 
 
-def warm_cache(data_dir: Path) -> None:
-    """Build the windows the page actually requests so the first click is a hit."""
-    presets = ((60, "5s"), (240, "15s"), (720, "1m"), (1440, "1m"), (4320, "5m"))
+def _backfill_loop(data_dir: Path) -> None:
+    """One legacy hour file at a time, and never while a heatmap read runs."""
+    from obheat.query import backfill_one
 
-    def loop() -> None:
+    while True:
+        if not _HEAVY.acquire(blocking=False):
+            time.sleep(1.0)
+            continue
         try:
-            from obheat.query import backfill_minutes
-
-            backfill_minutes(data_dir)
+            wrote = backfill_one(data_dir)
         except Exception:
-            pass
-        while True:
-            for symbol in SYMBOLS:
-                for minutes, step in presets:
-                    try:
-                        cached_window(data_dir, symbol, ALL, minutes, step, include_prints=False)
-                    except Exception:
-                        continue
-            time.sleep(2.0)
-
-    threading.Thread(target=loop, name="obheat-heat-warm", daemon=True).start()
+            wrote = False
+        finally:
+            _HEAVY.release()
+        time.sleep(0.5 if wrote else 30.0)
 
 
 def _points(data_dir: Path, query: dict, kind: str) -> list:
@@ -488,8 +580,11 @@ def main(argv: list[str] | None = None) -> None:
     Handler.data_dir = Path(args.data_dir)
     Handler.bind = args.bind
     Handler.token = token
-    warm_cache(Handler.data_dir)
+    Handler.surface = LiveSurface(Handler.data_dir)
+    Handler.surface.start()
+    threading.Thread(target=_backfill_loop, args=(Handler.data_dir,), name="obheat-minute-backfill", daemon=True).start()
     server = ThreadingHTTPServer((args.bind, args.port), Handler)
+    server.daemon_threads = True
     print(f"obheat serve http://{args.bind}:{args.port}/ data={args.data_dir}", flush=True)
     server.serve_forever()
 

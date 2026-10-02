@@ -143,26 +143,28 @@ def read_window(
         raise ValueError("window is too wide; use a coarser step")
     end = datetime.now(timezone.utc)
     start = end - timedelta(minutes=minutes)
-    # Minute sidecars cover 1m/5m once they span the window. A partial backfill
-    # must not hide the older per-second files.
-    seconds = []
+    # Long steps never materialise the raw second history. That scan is what
+    # pushed serve RSS past 6 GB. Minute sidecars (plus a three-minute tail)
+    # are the only rows a 1m/5m window is allowed to hold.
     if step_s >= 60:
         minutes_rows = _read_rows(data_dir, symbol, venue, start, kinds=("minute",))
-        if _covers(minutes_rows, start, step_s):
+        if minutes_rows and _covers(minutes_rows, start, step_s):
             tail_at = _as_datetime(minutes_rows[-1]["ts"]) + timedelta(seconds=60)
-            tail = _read_rows(data_dir, symbol, venue, tail_at, kinds=("second",)) if tail_at < end else []
-            seconds = minutes_rows + tail
-    if not seconds:
+        else:
+            tail_at = end - timedelta(seconds=180)
+        tail = _read_rows(data_dir, symbol, venue, tail_at, kinds=("second",)) if tail_at < end else []
+        seconds = list(minutes_rows) + tail
+    else:
         seconds = _read_rows(data_dir, symbol, venue, start, kinds=("second",))
     prints: list[dict] = []
     if include_prints:
         # The liquidation model only looks at the recent edge, not the whole window.
         print_start = max(start, end - timedelta(seconds=900))
         if venue == "ALL":
-            prints = _read_rows(data_dir, symbol, None, print_start, kinds=("trade", "liquidation"))
+            prints = _read_rows(data_dir, symbol, None, print_start, kinds=("trade", "liquidation"), limit=5000)
             prints = [row for row in prints if row.get("venue") != "ALL"]
         else:
-            prints = _read_rows(data_dir, symbol, venue, print_start, kinds=("trade", "liquidation"))
+            prints = _read_rows(data_dir, symbol, venue, print_start, kinds=("trade", "liquidation"), limit=5000)
     by_ts: dict[int, dict] = {}
     for row in seconds:
         column = column_from_second(row)
@@ -212,10 +214,10 @@ def read_points(data_dir: Path, symbol: str, venue: str, minutes: int, kind: str
         raise ValueError("minutes must be 1..4320")
     start = datetime.now(timezone.utc) - timedelta(minutes=minutes)
     if venue == "ALL":
-        rows = _read_rows(data_dir, symbol, None, start, kinds=(kind,))
+        rows = _read_rows(data_dir, symbol, None, start, kinds=(kind,), limit=5000)
         rows = [row for row in rows if row.get("venue") != "ALL"]
     else:
-        rows = _read_rows(data_dir, symbol, venue, start, kinds=(kind,))
+        rows = _read_rows(data_dir, symbol, venue, start, kinds=(kind,), limit=5000)
     points = []
     for row in rows:
         ts = row["ts"]
@@ -235,7 +237,14 @@ def read_points(data_dir: Path, symbol: str, venue: str, minutes: int, kind: str
     return points[-5000:]
 
 
-def _read_rows(data_dir: Path, symbol: str, venue: str | None, start: datetime, kinds: tuple[str, ...]) -> list[dict]:
+def _read_rows(
+    data_dir: Path,
+    symbol: str,
+    venue: str | None,
+    start: datetime,
+    kinds: tuple[str, ...],
+    limit: int | None = None,
+) -> list[dict]:
     from obheat.symbols import ALL, SYMBOLS, VENUES
 
     if symbol not in SYMBOLS:
@@ -249,31 +258,53 @@ def _read_rows(data_dir: Path, symbol: str, venue: str | None, start: datetime, 
     root = Path(data_dir) / "data"
     if not root.exists():
         return []
-    files = _parquet_files(root, symbol, None if venue in {None, ALL} else venue, minute_only=("minute" in kinds and kinds == ("minute",)))
+    # venue=ALL is its own partition (the collector writes the summed ladder).
+    # Opening every venue folder and materialising those list columns was the
+    # multi-GB serve path: one 60min window was ~1.2 GB, four in parallel ~4 GB.
+    files = _parquet_files(root, symbol, venue, minute_only=("minute" in kinds and kinds == ("minute",)))
     if not files:
         return []
     import duckdb
 
     kind_list = ", ".join(f"'{kind}'" for kind in kinds)
-    venue_sql = "" if venue in {None, ALL} else f" AND venue = '{venue}'"
+    venue_sql = "" if venue is None else f" AND venue = '{venue}'"
     listed = ", ".join("'" + path.replace("'", "''") + "'" for path in files)
+    book_kinds = {"second", "minute"}
+    if book_kinds.intersection(kinds):
+        lists = "prices, bid_coin, ask_coin, bid_usd, ask_usd"
+    else:
+        lists = "NULL AS prices, NULL AS bid_coin, NULL AS ask_coin, NULL AS bid_usd, NULL AS ask_usd"
+    order = "ORDER BY ts DESC" if limit else "ORDER BY ts"
+    limit_sql = f"LIMIT {int(limit)}" if limit else ""
     con = duckdb.connect()
-    frame = con.execute(
-        f"""
-        SELECT ts, row_kind, venue, symbol, book_ok, mid, step,
-               visible_bid_min, visible_ask_max,
-               prices, bid_coin, ask_coin, bid_usd, ask_usd,
-               price, side, coin, usd
-        FROM read_parquet([{listed}], union_by_name=true)
-        WHERE symbol = '{symbol}'
-          AND ts >= ?
-          AND row_kind IN ({kind_list})
-          {venue_sql}
-        ORDER BY ts
-        """,
-        [start],
-    ).to_arrow_table()
-    return frame.to_pylist()
+    try:
+        # Spill instead of growing the process. The failed deploy crossed 6 GB
+        # because several of these scans were materialised at once.
+        con.execute("SET memory_limit='512MB'")
+        con.execute("SET threads=1")
+        con.execute("SET preserve_insertion_order=false")
+        frame = con.execute(
+            f"""
+            SELECT ts, row_kind, venue, symbol, book_ok, mid, step,
+                   visible_bid_min, visible_ask_max,
+                   {lists},
+                   price, side, coin, usd
+            FROM read_parquet([{listed}], union_by_name=true)
+            WHERE symbol = '{symbol}'
+              AND ts >= ?
+              AND row_kind IN ({kind_list})
+              {venue_sql}
+            {order}
+            {limit_sql}
+            """,
+            [start],
+        ).to_arrow_table()
+        rows = frame.to_pylist()
+    finally:
+        con.close()
+    if limit:
+        rows.reverse()
+    return rows
 
 
 def _covers(rows: list[dict], start: datetime, step_s: int) -> bool:
@@ -287,6 +318,38 @@ def _as_datetime(value) -> datetime:
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
     return datetime.fromtimestamp(int(value), timezone.utc)
+
+
+def backfill_one(data_dir: Path) -> bool:
+    """Convert a single legacy hour file. One file, then the rows are dropped.
+
+    Serve calls this from a background thread between requests. It must not
+    walk the whole tree in one go: that is a full-history load.
+    """
+    path = _next_hour_without_minutes(data_dir)
+    if path is None:
+        return False
+    target = path.with_name(f"{path.name[:-8]}-minute.parquet")
+    rows = _minute_rows_from_hour(path)
+    from obheat.store import _write
+
+    _write(target, rows)
+    return True
+
+
+def _next_hour_without_minutes(data_dir: Path):
+    root = Path(data_dir) / "data"
+    if not root.exists():
+        return None
+    for path in sorted(root.glob("date=*/venue=*/symbol=*/*.parquet")):
+        stem = path.name[:-8] if path.name.endswith(".parquet") else ""
+        if not stem.isdigit():
+            continue
+        target = path.with_name(f"{stem}-minute.parquet")
+        if target.exists() and target.stat().st_mtime >= path.stat().st_mtime:
+            continue
+        return path
+    return None
 
 
 def backfill_minutes(data_dir: Path) -> int:
