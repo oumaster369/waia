@@ -4,6 +4,7 @@ import type {
   HtxDerivativesAccountFamily,
   HtxDerivativesAccountRow,
   HtxDerivativesAccountSnapshot,
+  HtxDerivativesPositionRow,
 } from "./derivatives/types";
 
 export type ObservationBinding = Readonly<{
@@ -37,8 +38,17 @@ export type AccountObservationReader = Readonly<{
   readTrades(symbol: string, signal: AbortSignal): Promise<ReadEnvelope<ObservedTrade>>;
   /** Optional unless this exact family list is present in digest-bound config. */
   readDerivativesAccount?(family: HtxDerivativesAccountFamily, signal: AbortSignal):
-    Promise<Readonly<{ binding: ObservationBinding; snapshot: HtxDerivativesAccountSnapshot }>>;
+    Promise<Readonly<{ binding: ObservationBinding; snapshot: HtxDerivativesAccountSnapshot;
+      positions: DerivativesPositionsObservation }>>;
   dispose(): void;
+}>;
+export type DerivativesPositionsObservation = Readonly<{
+  status: "COMPLETE" | "PARTIAL" | "ERROR";
+  values: readonly HtxDerivativesPositionRow[] | null;
+  readStartedAtMs: number;
+  readCompletedAtMs: number;
+  responseGeneratedAtMs: number | null;
+  error: ObservationReadError | null;
 }>;
 export type DerivativesAccountFamilyObservation = Readonly<{
   family: HtxDerivativesAccountFamily;
@@ -48,6 +58,8 @@ export type DerivativesAccountFamilyObservation = Readonly<{
   readCompletedAtMs: number | null;
   responseGeneratedAtMs: number | null;
   error: ObservationReadError | null;
+  /** Omitted only for legacy stored observations; a fresh read always records it. */
+  positions?: DerivativesPositionsObservation;
 }>;
 export type DerivativesAccountObservation = Readonly<{
   schemaVersion: "htx-derivatives-observation/v1";

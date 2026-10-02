@@ -232,6 +232,7 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
               { name: "HTX_DERIVATIVES_ACCOUNT_FAMILIES", original: undefined, typeOnly: false },
               { name: "HtxDerivativesAccountFamily", original: undefined, typeOnly: true },
               { name: "HtxDerivativesAccountRow", original: undefined, typeOnly: true },
+              { name: "HtxDerivativesPositionRow", original: undefined, typeOnly: true },
             ] : [
               { name: "deriveAccountObservationStatus", original: undefined, typeOnly: false },
               { name: "parseAccountObservation", original: undefined, typeOnly: false },
@@ -244,7 +245,7 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
             const bindings = statement.importClause?.namedBindings;
             expect(statement.importClause?.name).toBeUndefined();
             expect(bindings && ts.isNamedImports(bindings) && bindings.elements.map(element => element.name.text))
-              .toEqual(["HtxDerivativesAccountFamily", "HtxDerivativesAccountRow", "HtxDerivativesAccountSnapshot"]);
+              .toEqual(["HtxDerivativesAccountFamily", "HtxDerivativesAccountRow", "HtxDerivativesAccountSnapshot", "HtxDerivativesPositionRow"]);
             continue;
           }
           if (

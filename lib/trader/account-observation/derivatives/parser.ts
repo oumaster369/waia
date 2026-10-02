@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { HTX_DERIVATIVES_ACCOUNT_FAMILIES, type HtxDerivativesAccountFamily,
-  type HtxDerivativesAccountRow, type HtxDerivativesAccountSnapshot } from "./types";
+  type HtxDerivativesAccountRow, type HtxDerivativesAccountSnapshot,
+  type HtxDerivativesPositionRow, type HtxDerivativesPositionsSnapshot } from "./types";
 
 const decimal = z.string().regex(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/).max(80);
+const nonnegativeDecimal = z.string().regex(/^\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/).max(80);
 const optionalDecimal = z.union([decimal, z.null()]).optional().transform(value => value ?? null);
 const token = z.string().min(1).max(64);
 const root = z.object({ status: z.literal("ok"), data: z.array(z.record(z.string(), z.unknown())).max(100),
@@ -67,6 +69,11 @@ function decimalField(row: Record<string, unknown>, key: string): string | null 
   const value = row[key];
   return value === null ? null : optionalDecimal.parse(value);
 }
+function nonnegativeDecimalField(row: Record<string, unknown>, key: string): string | null {
+  if (!(key in row)) return null;
+  const value = row[key];
+  return value === null ? null : nonnegativeDecimal.parse(value);
+}
 function marginMode(value: unknown): "isolated" | "cross" | null {
   if (value === undefined || value === null) return null;
   if (value === "isolated" || value === "cross") return value;
@@ -110,6 +117,43 @@ function accountRow(family: HtxDerivativesAccountFamily, value: Record<string, u
   });
 }
 
+function positionRow(family: HtxDerivativesAccountFamily, value: Record<string, unknown>): HtxDerivativesPositionRow {
+  const symbol = nullableText(value.symbol)?.toUpperCase();
+  const contractCode = nullableText(value.contract_code)?.toUpperCase();
+  if (!symbol || !contractCode || !/^[A-Z0-9_-]{1,64}$/.test(symbol) ||
+      !/^[A-Z0-9_-]{1,64}$/.test(contractCode) ||
+      (value.direction !== "buy" && value.direction !== "sell")) return invalid();
+
+  let marginAsset: string;
+  if (family.startsWith("usdt_")) {
+    const isolated = family === "usdt_isolated_perpetual";
+    const expectedMode = isolated ? "isolated" : "cross";
+    const validContractCode = isolated ? contractCode === `${symbol}-USDT`
+      : contractCode.startsWith(`${symbol}-USDT`) && /^[A-Z0-9]+-USDT(?:-\d{6})?$/.test(contractCode);
+    const validMarginAccount = value.margin_account == null ||
+      (isolated ? value.margin_account === contractCode : value.margin_account === "USDT");
+    const validMarginMode = value.margin_mode == null || value.margin_mode === expectedMode;
+    if (!validContractCode || !validMarginAccount || !validMarginMode ||
+        (value.margin_asset != null && String(value.margin_asset).toUpperCase() !== "USDT")) return invalid();
+    marginAsset = "USDT";
+  } else {
+    marginAsset = symbol;
+    if (value.margin_asset != null && String(value.margin_asset).toUpperCase() !== marginAsset) return invalid();
+    if (family === "coin_perpetual" && contractCode !== `${symbol}-USD`) return invalid();
+    if (family === "coin_delivery_futures" && !new RegExp(`^${symbol}\\d{6}$`).test(contractCode)) return invalid();
+  }
+  const contractType = nullableText(value.contract_type)?.toLowerCase() ?? null;
+  return Object.freeze({
+    symbol, contractCode, contractType, direction: value.direction,
+    volume: nonnegativeDecimalField(value, "volume"), available: nonnegativeDecimalField(value, "available"),
+    frozen: nonnegativeDecimalField(value, "frozen"), costOpen: nonnegativeDecimalField(value, "cost_open"),
+    costHold: nonnegativeDecimalField(value, "cost_hold"), unrealizedPnl: decimalField(value, "profit_unreal"),
+    profitRate: decimalField(value, "profit_rate"), positionMargin: nonnegativeDecimalField(value, "position_margin"),
+    marginAsset, leverage: value.lever_rate === undefined || value.lever_rate === null ? null : nonnegativeDecimal.parse(value.lever_rate),
+    lastPrice: nonnegativeDecimalField(value, "last_price"), liquidationPrice: nonnegativeDecimalField(value, "liquidation_price"),
+  });
+}
+
 /** Projects only a small allowlist from the four official HTX account-info payload families. */
 export function parseHtxDerivativesAccountSnapshot(
   family: HtxDerivativesAccountFamily,
@@ -126,6 +170,24 @@ export function parseHtxDerivativesAccountSnapshot(
     if (new Set(keys).size !== keys.length) return invalid();
     return Object.freeze({ schemaVersion: "htx-derivatives-account/v1", family,
       accounts: Object.freeze(accounts), responseGeneratedAtMs: parsed.data.ts === undefined ? null : Number(parsed.data.ts) });
+  } catch {
+    return invalid();
+  }
+}
+
+/** Projects open position rows only. Oversized or ambiguous data is rejected, never truncated. */
+export function parseHtxDerivativesPositionsSnapshot(
+  family: HtxDerivativesAccountFamily,
+  payload: string | unknown,
+): HtxDerivativesPositionsSnapshot {
+  try {
+    if (!HTX_DERIVATIVES_ACCOUNT_FAMILIES.includes(family)) return invalid();
+    const parsed = root.safeParse(parseJson(payload));
+    if (!parsed.success) return invalid();
+    const positions = parsed.data.data.map(row => positionRow(family, row));
+    if (new Set(positions.map(row => `${row.contractCode}\u0000${row.direction}`)).size !== positions.length) return invalid();
+    return Object.freeze({ schemaVersion: "htx-derivatives-positions/v1", family,
+      positions: Object.freeze(positions), responseGeneratedAtMs: parsed.data.ts === undefined ? null : Number(parsed.data.ts) });
   } catch {
     return invalid();
   }

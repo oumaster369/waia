@@ -12,6 +12,12 @@ const endpoints: Readonly<Record<HtxDerivativesAccountFamily, Readonly<{ path: s
   coin_perpetual: { path: "/swap-api/v1/swap_account_info", body: Object.freeze({}) },
   coin_delivery_futures: { path: "/api/v1/contract_account_info", body: Object.freeze({}) },
 });
+const positionEndpoints: Readonly<Record<HtxDerivativesAccountFamily, Readonly<{ path: string; body: Readonly<Record<string, string>> }>>> = Object.freeze({
+  usdt_isolated_perpetual: { path: "/linear-swap-api/v1/swap_position_info", body: Object.freeze({}) },
+  usdt_cross_shared: { path: "/linear-swap-api/v1/swap_cross_position_info", body: Object.freeze({}) },
+  coin_perpetual: { path: "/swap-api/v1/swap_position_info", body: Object.freeze({}) },
+  coin_delivery_futures: { path: "/api/v1/contract_position_info", body: Object.freeze({}) },
+});
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const fail = (code: "READ_FAILED" | "INVALID_RESPONSE" | "PERMISSION_DENIED" | "TIMEOUT" | "RATE_LIMITED"): never => {
   throw new AccountObservationReadFailure(code);
@@ -20,6 +26,7 @@ const fail = (code: "READ_FAILED" | "INVALID_RESPONSE" | "PERMISSION_DENIED" | "
 export type HtxDerivativesAccountTransport = Readonly<{
   binding: HtxDerivativesObservationBinding;
   readAccount(family: HtxDerivativesAccountFamily, signal: AbortSignal): Promise<string>;
+  readPositions(family: HtxDerivativesAccountFamily, signal: AbortSignal): Promise<string>;
   dispose(): void;
   settled(): Promise<void>;
 }>;
@@ -73,18 +80,24 @@ export function createHtxDerivativesAccountTransport(input: Readonly<{
   };
   const dispose = () => { disposed = true; active?.abort(); accessKey = ""; secret = ""; };
 
-  async function readAccount(family: HtxDerivativesAccountFamily, signal: AbortSignal): Promise<string> {
+  async function read(family: HtxDerivativesAccountFamily, purpose: "account" | "positions", signal: AbortSignal): Promise<string> {
     if (!HTX_DERIVATIVES_ACCOUNT_FAMILIES.includes(family) || disposed || active || signal.aborted) return fail("PERMISSION_DENIED");
-    const { path, body } = endpoints[family];
+    const { path, body } = (purpose === "account" ? endpoints : positionEndpoints)[family];
     const admissionRequest: HtxDerivativesReadAdmissionRequest = Object.freeze({ binding, family, accessKeySha256: keyDigest });
     const controller = new AbortController(); active = controller;
     const cancel = () => controller.abort(); signal.addEventListener("abort", cancel, { once: true });
     let bodyReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     let response: Response | undefined;
+    let admissionCalls = 0;
+    let initialAdmissionPassed = false;
+    let postAdmissionChecked = false;
     const isCurrent = async () => {
       if (disposed || controller.signal.aborted) fail("READ_FAILED");
+      const callNumber = ++admissionCalls;
+      if (callNumber > 1) postAdmissionChecked = true;
       if (await verifyReadAdmission(admissionRequest, controller.signal) !== true) fail("PERMISSION_DENIED");
       if (disposed || controller.signal.aborted) fail("READ_FAILED");
+      if (callNumber === 1) initialAdmissionPassed = true;
     };
     const work = async (): Promise<string> => {
       await isCurrent();
@@ -99,6 +112,9 @@ export function createHtxDerivativesAccountTransport(input: Readonly<{
         body: JSON.stringify(body) });
       if (disposed || controller.signal.aborted) { cancelQuietly(response.body?.cancel()); fail("READ_FAILED"); }
       if (response.redirected || (response.url && response.url !== url) || response.status !== 200) {
+        // Recheck authorization even when the venue returned an HTTP error or
+        // redirect. A failed observation must not publish data under a revoked key.
+        await isCurrent();
         cancelQuietly(response.body?.cancel());
         if (response.status === 429) fail("RATE_LIMITED");
         if (response.status === 401 || response.status === 403) fail("PERMISSION_DENIED");
@@ -132,6 +148,12 @@ export function createHtxDerivativesAccountTransport(input: Readonly<{
     try {
       return await Promise.race([track(work()), timeout, aborted]);
     } catch (error) {
+      // A rejected fetch has no Response on which the normal post-read check
+      // can run. Recheck this admitted request before representing its failure.
+      if (initialAdmissionPassed && !postAdmissionChecked && !disposed && !controller.signal.aborted &&
+          !(error instanceof AccountObservationReadFailure && error.code === "TIMEOUT")) {
+        try { await isCurrent(); } catch (admissionError) { error = admissionError; }
+      }
       dispose();
       if (error instanceof AccountObservationReadFailure) throw error;
       return fail("READ_FAILED");
@@ -143,7 +165,10 @@ export function createHtxDerivativesAccountTransport(input: Readonly<{
     }
   }
 
-  return Object.freeze({ binding, readAccount, dispose, async settled() {
+  return Object.freeze({ binding,
+    readAccount: (family: HtxDerivativesAccountFamily, signal: AbortSignal) => read(family, "account", signal),
+    readPositions: (family: HtxDerivativesAccountFamily, signal: AbortSignal) => read(family, "positions", signal),
+    dispose, async settled() {
     dispose();
     while (pending.size) await Promise.allSettled([...pending]);
     if (cancellationFailed) fail("READ_FAILED");

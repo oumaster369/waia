@@ -2,11 +2,11 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { HtxObservationCredentialHandle } from "../htx-reader-opener";
 import { AccountObservationReadFailure } from "../service";
-import type { ObservationBinding, ObservationClock } from "../types";
+import type { ObservationBinding, ObservationClock, ObservationReadError } from "../types";
 import { observationBindingSchema, sameObservationBinding } from "../validation";
 import { createHtxDerivativesAccountTransport, type HtxDerivativesAccountTransport } from "./htx-account-transport";
-import { parseHtxDerivativesAccountSnapshot } from "./parser";
-import { HTX_DERIVATIVES_ACCOUNT_FAMILIES, type HtxDerivativesAccountFamily } from "./types";
+import { parseHtxDerivativesAccountSnapshot, parseHtxDerivativesPositionsSnapshot } from "./parser";
+import { HTX_DERIVATIVES_ACCOUNT_FAMILIES, type HtxDerivativesAccountFamily, type HtxDerivativesPositionRow } from "./types";
 
 /** One exact opened key and explicit configuration-bound families. The composition
  * supplies concrete fresh read-only key admission; this reader cannot enroll a
@@ -78,7 +78,49 @@ export function createHtxDerivativesObservationReader(input: Readonly<{
         transports.add(transport);
         const snapshot = parseHtxDerivativesAccountSnapshot(family, await transport.readAccount(family, signal));
         if (disposed || signal.aborted) throw new AccountObservationReadFailure("READ_FAILED");
-        return Object.freeze({ binding, snapshot });
+        const positionStartedAtMs = clock.now();
+        if (!Number.isSafeInteger(positionStartedAtMs) || positionStartedAtMs < 0) {
+          throw new AccountObservationReadFailure("INVALID_RESPONSE");
+        }
+        let positions: Readonly<{
+          status: "COMPLETE" | "PARTIAL" | "ERROR";
+          values: readonly HtxDerivativesPositionRow[] | null;
+          readStartedAtMs: number; readCompletedAtMs: number;
+          responseGeneratedAtMs: number | null; error: ObservationReadError | null;
+        }>;
+        try {
+          const positionSnapshot = parseHtxDerivativesPositionsSnapshot(family,
+            await transport.readPositions(family, signal));
+          const positionCompletedAtMs = clock.now();
+          if (disposed || signal.aborted || !Number.isSafeInteger(positionCompletedAtMs) ||
+              positionCompletedAtMs < positionStartedAtMs ||
+              (positionSnapshot.responseGeneratedAtMs !== null &&
+                positionSnapshot.responseGeneratedAtMs > positionCompletedAtMs)) {
+            throw new AccountObservationReadFailure("READ_FAILED");
+          }
+          const partial = positionSnapshot.positions.some(position => position.volume === null ||
+            position.available === null || position.frozen === null || position.costOpen === null ||
+            position.costHold === null || position.unrealizedPnl === null ||
+            position.positionMargin === null || position.leverage === null);
+          positions = Object.freeze({ status: partial ? "PARTIAL" : "COMPLETE", values: positionSnapshot.positions,
+            readStartedAtMs: positionStartedAtMs, readCompletedAtMs: positionCompletedAtMs,
+            responseGeneratedAtMs: positionSnapshot.responseGeneratedAtMs, error: null });
+        } catch (error) {
+          const positionCompletedAtMs = clock.now();
+          const code: ObservationReadError = error instanceof AccountObservationReadFailure &&
+            ["TIMEOUT", "RATE_LIMITED", "PERMISSION_DENIED", "READ_FAILED", "INVALID_RESPONSE", "IDENTITY_MISMATCH"].includes(error.code)
+            ? error.code as ObservationReadError
+            : error instanceof Error && error.message === "HTX_DERIVATIVES_INVALID_RESPONSE"
+              ? "INVALID_RESPONSE" : "READ_FAILED";
+          // Admission or identity refusal invalidates the family result; a venue,
+          // timeout, or parser failure may leave the already-read account visible.
+          if (disposed || signal.aborted || code === "PERMISSION_DENIED" || code === "IDENTITY_MISMATCH") throw error;
+          positions = Object.freeze({ status: "ERROR", values: null,
+            readStartedAtMs: positionStartedAtMs, readCompletedAtMs: Number.isSafeInteger(positionCompletedAtMs) &&
+              positionCompletedAtMs >= positionStartedAtMs ? positionCompletedAtMs : positionStartedAtMs,
+            responseGeneratedAtMs: null, error: code });
+        }
+        return Object.freeze({ binding, snapshot, positions });
       } finally {
         reading = false;
         if (transport) {

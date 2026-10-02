@@ -45,6 +45,13 @@ function family(family: HtxDerivativesAccountFamily): DerivativesAccountFamilyOb
   return { family, status: "COMPLETE", accounts: [row(family)], readStartedAtMs: epoch + 10,
     readCompletedAtMs: epoch + 40, responseGeneratedAtMs: epoch + 30, error: null };
 }
+function positions(status: "COMPLETE" | "PARTIAL" = "COMPLETE"): NonNullable<DerivativesAccountFamilyObservation["positions"]> {
+  return { status, values: [{ symbol: "BTC", contractCode: "BTC-USDT", contractType: null, direction: "buy",
+    volume: status === "PARTIAL" ? null : "1", available: "1", frozen: "0", costOpen: "60000", costHold: "61000",
+    unrealizedPnl: "-0.01", profitRate: "-0.0001", positionMargin: "12", marginAsset: "USDT", leverage: "5",
+    lastPrice: null, liquidationPrice: null }], readStartedAtMs: epoch + 15,
+    readCompletedAtMs: epoch + 25, responseGeneratedAtMs: epoch + 20, error: null };
+}
 function v2(overrides: Partial<DerivativesAccountObservation> = {}): AccountObservation {
   const derivatives: DerivativesAccountObservation = {
     schemaVersion: "htx-derivatives-observation/v1",
@@ -72,6 +79,27 @@ describe("saved derivatives observation projection", () => {
     expect(parsed.derivatives!.families.map(item => item.accounts?.[0]?.marginBalance)).toEqual(Array(4).fill("0"));
   });
 
+  it("accepts additive positions while retaining legacy v2 rows with no positions field", () => {
+    const families = HTX_DERIVATIVES_ACCOUNT_FAMILIES.map(family);
+    families[0] = { ...families[0]!, positions: positions() };
+    const parsed = parseAccountObservation(v2({ families }));
+    expect(parsed.schemaVersion).toBe("account-observation/v2");
+    if (parsed.schemaVersion !== "account-observation/v2") throw new Error("expected v2");
+    expect(parsed.derivatives!.families[0]?.positions?.values?.[0]).toMatchObject({
+      volume: "1", unrealizedPnl: "-0.01", profitRate: "-0.0001", liquidationPrice: null,
+    });
+    expect(parsed.derivatives!.families.slice(1).every(item => item.positions === undefined)).toBe(true);
+  });
+
+  it("keeps missing required position values PARTIAL and rejects negative quantities", () => {
+    const families = HTX_DERIVATIVES_ACCOUNT_FAMILIES.map(family);
+    families[0] = { ...families[0]!, positions: positions("PARTIAL") };
+    expect(parseAccountObservation({ ...v2({ families }), status: "PARTIAL" }).status).toBe("PARTIAL");
+    const invalidPosition = { ...positions(), values: [{ ...positions().values![0]!, volume: "-1" }] };
+    families[0] = { ...families[0]!, positions: invalidPosition };
+    expect(() => parseAccountObservation(v2({ families }))).toThrow();
+  });
+
   it("keeps NOT_CONFIGURED distinct from empty and error; rejects unsafe family identity and timing", () => {
     const unconfigured: DerivativesAccountFamilyObservation[] = HTX_DERIVATIVES_ACCOUNT_FAMILIES.map(family => ({
       family, status: "NOT_CONFIGURED", accounts: null, readStartedAtMs: null,
@@ -83,7 +111,8 @@ describe("saved derivatives observation projection", () => {
       accounts: null, readStartedAtMs: epoch + 10, readCompletedAtMs: epoch + 20, error: "READ_FAILED" as const } : item);
     const make = (families: readonly DerivativesAccountFamilyObservation[]) => {
       const value = v2({ families });
-      return families.some(item => item.status === "PARTIAL" || item.status === "ERROR")
+      return families.some(item => item.status === "PARTIAL" || item.status === "ERROR" ||
+        item.positions?.status === "PARTIAL" || item.positions?.status === "ERROR")
         ? { ...value, status: "PARTIAL" as const }
         : value;
     };

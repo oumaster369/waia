@@ -50,6 +50,22 @@ test("mounted Admin and tenant update the same observation automatically and cle
       ["coin_perpetual", [derivativeRow("BTC-USD", "BTC", null, "0.003")]],
       ["coin_delivery_futures", [derivativeRow("BTC", "BTC", null, "0.004")]],
     ] as const;
+    const position = (symbol: string, contractCode: string, contractType: string | null, marginAsset: string,
+      direction: "buy" | "sell", unrealizedPnl: string) => ({
+      symbol, contractCode, contractType, direction,
+      volume: "0.000000000000000013", available: "0.000000000000000011",
+      frozen: "0.000000000000000002", costOpen: "100.000000000000000001",
+      costHold: "99.000000000000000009", unrealizedPnl,
+      profitRate: "-0.000000000000000003", positionMargin: "3.125000000000000001",
+      marginAsset, leverage: "5", lastPrice: "101.000000000000000003",
+      liquidationPrice: null,
+    });
+    const positionRows = [
+      ["usdt_isolated_perpetual", [position("BTC", "BTC-USDT", null, "USDT", "buy", "-0.000000000000000007")]],
+      ["usdt_cross_shared", [position("BTC", "BTC-USDT-211217", "next_week", "USDT", "sell", "0.000000000000000009")]],
+      ["coin_perpetual", [position("BTC", "BTC-USD", null, "BTC", "buy", "-0.000000000000000011")]],
+      ["coin_delivery_futures", [position("BTC", "BTC201225", "quarter", "BTC", "sell", "0.000000000000000013")]],
+    ] as const;
     return {
       schemaVersion: "account-observation/v2",
       binding,
@@ -69,6 +85,11 @@ test("mounted Admin and tenant update the same observation automatically and cle
         families: families.map(([family, accounts]) => ({
           family, status: "COMPLETE", accounts, readStartedAtMs: at,
           readCompletedAtMs: at, responseGeneratedAtMs: at, error: null,
+          positions: {
+            status: "COMPLETE",
+            values: positionRows.find(([positionFamily]) => positionFamily === family)?.[1] ?? [],
+            readStartedAtMs: at, readCompletedAtMs: at, responseGeneratedAtMs: at, error: null,
+          },
         })),
       },
     };
@@ -130,6 +151,13 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(tenantCross.getByText("200.50", { exact: true })).toBeVisible();
   await expect(tenantCross.getByText("180.25", { exact: true })).toBeVisible();
   await expect(tenantCross.getByText("Shared USDT pool for perpetual and delivery contracts. Account totals are shown once; contract details are not added again.")).toBeVisible();
+  const tenantIsolated = tenantPanel.getByRole("region", { name: "USDT perpetual · isolated accounts" });
+  await expect(tenantIsolated.getByText("Open positions")).toBeVisible();
+  await expect(tenantIsolated.getByText("BTC · BTC-USDT")).toBeVisible();
+  await expect(tenantIsolated.getByText("Long · Contract type unavailable")).toBeVisible();
+  await expect(tenantIsolated.getByText("-0.000000000000000007", { exact: true })).toBeVisible();
+  await expect(tenantCross.getByText("Short · next_week")).toBeVisible();
+  await expect(tenantCross.getByText("0.000000000000000009", { exact: true })).toBeVisible();
   for (const family of ["USDT perpetual · isolated accounts", "Coin-margined perpetual accounts", "Coin-margined delivery futures accounts"]) {
     await expect(tenantPanel.getByRole("region", { name: family })).toBeVisible();
   }
@@ -158,6 +186,13 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(adminCross.getByText("200.50", { exact: true })).toBeVisible();
   await expect(adminCross.getByText("180.25", { exact: true })).toBeVisible();
   await expect(adminCross.getByText("Shared USDT pool for perpetual and delivery contracts. Account totals are shown once; contract details are not added again.")).toBeVisible();
+  const adminIsolated = adminPanel.getByRole("region", { name: "USDT perpetual · isolated accounts" });
+  await expect(adminIsolated.getByText("Open positions")).toBeVisible();
+  await expect(adminIsolated.getByText("BTC · BTC-USDT")).toBeVisible();
+  await expect(adminIsolated.getByText("Long · Contract type unavailable")).toBeVisible();
+  await expect(adminIsolated.getByText("-0.000000000000000007", { exact: true })).toBeVisible();
+  await expect(adminCross.getByText("Short · next_week")).toBeVisible();
+  await expect(adminCross.getByText("0.000000000000000009", { exact: true })).toBeVisible();
   await expect(adminPanel.getByRole("button")).toHaveCount(0);
   await expect(tenantPanel.getByText("Reconnecting automatically.")).toBeVisible();
   await expect(adminPanel.getByText("Reconnecting automatically.")).toBeVisible();
@@ -184,6 +219,8 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(adminPanel.getByText(observation().observationId)).toHaveCount(0);
   await expect(tenantPanel.getByText("200.50", { exact: true })).toHaveCount(0);
   await expect(adminPanel.getByText("200.50", { exact: true })).toHaveCount(0);
+  await expect(tenantPanel.getByText("BTC · BTC-USDT", { exact: true })).toHaveCount(0);
+  await expect(adminPanel.getByText("BTC · BTC-USDT", { exact: true })).toHaveCount(0);
   await admin.close();
 });
 

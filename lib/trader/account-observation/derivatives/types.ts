@@ -46,3 +46,32 @@ export type HtxDerivativesAccountSnapshot = Readonly<{
   /** HTX ts is response-generation time, not a per-balance freshness timestamp. */
   responseGeneratedAtMs: number | null;
 }>;
+
+/** One venue-reported open futures position; all quantities/prices remain exact
+ * decimal strings. Collateral identity is data, not a cross-family total. */
+export type HtxDerivativesPositionRow = Readonly<{
+  symbol: string;
+  contractCode: string;
+  contractType: string | null;
+  direction: "buy" | "sell";
+  volume: string | null;
+  available: string | null;
+  frozen: string | null;
+  costOpen: string | null;
+  costHold: string | null;
+  unrealizedPnl: string | null;
+  profitRate: string | null;
+  positionMargin: string | null;
+  marginAsset: string | null;
+  leverage: string | null;
+  lastPrice: string | null;
+  liquidationPrice: string | null;
+}>;
+
+export type HtxDerivativesPositionsSnapshot = Readonly<{
+  schemaVersion: "htx-derivatives-positions/v1";
+  family: HtxDerivativesAccountFamily;
+  positions: readonly HtxDerivativesPositionRow[];
+  /** HTX ts labels response generation, not per-position freshness. */
+  responseGeneratedAtMs: number | null;
+}>;
