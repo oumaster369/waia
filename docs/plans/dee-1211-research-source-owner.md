@@ -12,7 +12,7 @@ state:
   status: in-progress
   completedWorkPackages: [WP-1, WP-2, WP-3]
   remainingWorkPackages: [WP-4]
-  nextAction: "Finish independent proof/gate review, bind the actual-main integration, then publish after DEE-1207. Preserve prior diagnostic-only readers."
+  nextAction: "Complete independent acceptance and published-head CI on the actual-main branch. Preserve prior diagnostic-only readers."
 provenance:
   createdFrom: "Root design and independent source-owner review, 2026-10-02; explicit autonomous engineering authorization"
   supersedes: null
@@ -20,10 +20,11 @@ provenance:
 
 # DEE-1211 — observed DEVELOPMENT source preparation
 
-This plan precedes implementation on actual main
-`07ae1bc3af54027b1acc7e1fc7be9da0ef6641d9`. The implementation integrates only
-after DEE-1203 and DEE-1207; their old prepared branches are not copied into
-this issue. This is one source preparation and consumption boundary, with
+This plan was first authored against the then-prepared DEE-1203 dependency
+branch; it is now rebound to actual main `98a591c896d7e91ee10a0314b1b42b08afeebf5d`
+after PR737 (DEE-1207) merged. The implementation integrates only after its
+reviewed prerequisites; their old prepared branches are not copied into this
+issue. This is one source preparation and consumption boundary, with
 several work packages and one PR. It is not an Integration Train or permission
 to retroactively combine already implemented issues.
 
@@ -181,6 +182,33 @@ actual one-file/two-nested-suite native report, and the isolated source-proof
 service explicitly uses local-only trust authentication for the synthetic
 restricted login. No production authentication setting is changed.
 
-DEE-1207 is now PR737 and still precedes publication. A subsequent actual-main
-binding after that merge, final independent acceptance and all published-head
-CI results remain required. The source-owner feature remains unpublished.
+Historical checkpoint before PR737 merged: actual-main rebinding, independent
+acceptance and published-head CI were pending. The current actual-main state is
+recorded in the update below.
+
+
+## Actual-main readiness update (2026-10-02)
+
+The DEE-1211 commits were rebased onto actual main
+`98a591c896d7e91ee10a0314b1b42b08afeebf5d` after PR737 merged. The old
+prepared head was `4986eefb8abd7145fd813b2a12039ca3f7313b81`; current prepared
+head is `71acdad1d6d432751a917249e6eb69f3bb74f9ab`. The rebase completed without
+conflicts; the current uncommitted delta is limited to this plan update. Range-diff
+matched the six owned commits, with an inherited PR737 workflow trigger retained.
+This does not claim the older native proof
+is byte-identical to the rebased source: comparison against its 1,826-file
+source receipt found four changed pinned paths (the modeled-stage kernel,
+training diagnostic, training policy and source-owner native test). The
+19/19 PG16 run remains historical, synthetic, and bound to its captured tree;
+no native rerun was performed for this actual-main preparation.
+
+On this actual-main head the seven focused source-owner, CLI, reader, proof
+guard and consumer-graph unit files passed 102/102 assertions, 15/15 suites,
+with zero failures/pending/todo. Lint, typecheck, production build, canonical
+plan validation, Reality graph, Execution graph and `git diff --check` passed.
+Lint reports 331 warnings and zero errors, consistent with the repository
+baseline. The detailed command receipts are in `dee1211-after737-readiness`
+under the October audit directory. Independent current-base review and exact
+published-head required CI remain outstanding. This is not source/PIT or
+scientific qualification and does not authorize production migration,
+deployment or trading.
