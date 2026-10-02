@@ -18,6 +18,7 @@ export const requiredCaseTitles = [
   "preserves an acknowledged native COMMIT when cancellation starts before pool cleanup (DEE-1213)",
   "preserves full historical rows, rejects half-tagged writes, and refuses ordinary paper orders",
   "allows two different organizations to commit concurrently under separate fixed-domain locks",
+  "keeps a held paper executor lease independent of scheduled owner startup, repeated jobs, and lease restart",
 ];
 
 export const sourcePaths = [
@@ -29,6 +30,8 @@ export const sourcePaths = [
   "lib/trader/execution/v2/org-order-path.ts",
   "lib/trader/paper/run-paper-loop-cycle.ts",
   "lib/trader/paper/scheduled-noncapital-owner-postgres-v1.ts",
+  "lib/trader/execution/account-executor-lease-v1.ts",
+  "lib/trader/execution/account-executor-lease-postgres-v1.ts",
   "lib/trader/paper/paper-cycle-runner.ts",
   "lib/trader/paper/build-worker-deps.ts",
   "lib/trader/market-data/htx-bar-poll-source.ts",
