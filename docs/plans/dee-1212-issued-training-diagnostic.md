@@ -117,3 +117,22 @@ On prepared worktree `8b9fa353697191f86f77734732a788399c6fb014` plus the two cap
 After rebasing onto `d61e0cef64e3f7265f47a9015b0fc169a4936b92`, the same targeted batch passed187/187 assertions across14 files; the 15 dedicated DEE-1212 proof-guard tests are included in that count. Full lint completed with zero errors and331 warnings, typecheck and build completed, canonical validation checked287 documents, Reality V2 graph passed (164 sources,154 consumers,27 connector references), and Execution V2 graph passed with zero violations. The PR-body governance preflight passed. Current rebase evidence is in the external audit's `dee1212-rebase-readiness/` receipt. These checks do not replace published-head required CI.
 
 This remains a prepared branch, not a published PR. Independent review and published-head required CI remain. The 53-case proof demonstrates synthetic DEVELOPMENT execution integrity only: it does not establish source/PIT availability, empirical qualification, strategy performance, production readiness or trading authority. Production migration0229 remains prohibited;0230 remains deferred. No real market/C3/holdout payload, production database, venue, live account or deployment was used.
+
+## Published CI concurrency proof repair admitted before code (2026-10-02)
+
+PR739 head56fa1436 failed the inherited DEE1200 native suite: its V1
+same-attempt contention test accepted documented SERIALIZATION_RETRY_REQUIRED /
+LOCK_TIMEOUT_RETRY_REQUIRED outcomes, but then started all explicit recovery
+requests together via Promise.all. If both initial owners refused, their
+recovery requests raced again; one could truthfully refuse with40001. The raw
+CI RED is retained as pr739-dee1200-ci-failure.log (run36984854110,
+job110767433375,100 passed/1 failed). The aggregate proof guard also refused
+because one test failed; it has no fixed94-case cap and must stay unchanged.
+
+Keep the initial eight real concurrent owners and every exact trace, row-count
+and poisoned-ledger assertion. Await each explicit recovery sequentially after
+all original operations settle, and only after the existing known retry-required
+refusal. This separates the concurrency experiment from its recovery proof;
+it changes no runtime retry budget, error or transaction behavior and accepts
+no new failure class. Run the affected native V1/V2/payload suites, source-bind
+the result and obtain independent narrow review before pushing a new head.
