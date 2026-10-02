@@ -52,9 +52,16 @@ byte bounds are operational limits, never scientific sample thresholds.
   only the official-layout DEVELOPMENT file through actual qualification,
   requalification, full-stream hashing and volume checks. No raw-bars fallback,
   caller-built receipt or WAL/validation/blind selector supplies this path.
-- Use a real constrained PostgreSQL login/role and one reserved owned root
-  transaction. Extract the existing internal dataset-row writer if necessary;
-  never call a separately committing writer and append issuance afterward.
+- Use dedicated `waia_research_source_writer_login` (NOINHERIT, no object
+  ownership or direct grants) with exactly the `waia_research_source_writer`
+  role. Its synthetic grants cover only source rows/issuance for the existing
+  fixed Org0 `3c50b4e9-1138-43a5-a29f-e65088124cfc`; other organizations refuse.
+  This first internal-research scope changes neither trading allowlists nor
+  the existing historical runner role. Browser/general roles receive no grants.
+  One reserved owned root SERIALIZABLE transaction binds the existing dataset
+  service to that same handle. The existing AsyncLocalStorage transaction helper
+  joins nested same-handle operations without committing/retrying independently;
+  prove that fact by native rollback rather than introducing a second commit.
 - Bind observed qualification/requalification identities, raw and semantic
   partition digests, volume receipt, actual ordered row set, absolute indices,
   timestamps, split and running release into an append-only source issuance.
@@ -67,9 +74,11 @@ byte bounds are operational limits, never scientific sample thresholds.
 
 ## WP-2 — issued attempt and snapshot reader
 
-Add an explicitly versioned issued-source path that verifies source/spec bindings
-inside root attempt registration and includes the issuer digest in durable
-identity. The source ID only selects an existing trusted record. Read its
+Add a separate `trader_research_issued_attempts_v2` record with an explicit V2
+schema discriminator, composite organization/spec FK and organization/source/
+issuer-digest FK. Its registrar verifies source/spec bindings inside one root
+transaction; the legacy attempt table cannot masquerade as this record. The
+source ID only selects an existing trusted record. Read its
 issuance, experiment, attempt and exact source rows under one read-only snapshot;
 verify count/bytes, ordered indices, bar/seal/volume digests, symbol, interval,
 observation cutoff and train identity. Reject missing, altered, foreign or
@@ -83,7 +92,10 @@ permission is introduced by successful registration or loading.
 ## WP-3 — real default-off preparation entrypoint
 
 Wire an explicit source-preparation mode through the existing operator discovery
-CLI. It produces a truthful source-preparation receipt and bounded observation
+CLI, before constructing the generic Drizzle client or ordinary orchestrator.
+The owner resolves its dedicated connection and deployment release from the
+host, not from caller assertions or an attestation string. It produces a
+truthful source-preparation receipt and bounded observation
 slice, then stops before scoring. Merely passing bars to the current discovery
 orchestrator would still leave closed-trade/admission requirements unresolved;
 do not disguise that as a complete hypothesis-to-strategy pipeline. The ordinary
