@@ -130,3 +130,21 @@ No real FHV/C3/validation/WF/blind payload, exchange action, key mutation, finan
 threshold, production migration or deployment is in this issue. Production0229
 remains prohibited and0230 deferred. The broader DEE-1159,646,1139 contracts stay
 open after this bounded source boundary until their own acceptance is proved.
+
+## Implementation checkpoint (2026-10-02)
+
+WP-1–3 implementation and targeted synthetic helpers are in progress. Pure
+contract24, CLI18, bounded receipt4 and loader6 checks are separate bounded
+results, not native owner acceptance. The source owner now reserves a private
+backend, verifies the authenticated login and exact role ACL, uses SET LOCAL
+ROLE within the owned transaction, and closes the private pool. The source
+record and its exact dataset row commitments are validated before commit;
+issued attempts and their training reads use their own root snapshots.
+
+The implementation depends on DEE-1203's runtime identity module. Development
+may use its published reviewed head `cf76b113` as an explicit prepared parent;
+this is not an actual-main integration. After736 merges, rebase only this
+issue's own plan/source commits and record exact resulting source identities.
+Native concurrency, rollback, privilege poisoning and lost-COMMIT proof,
+independent final review, full readiness and CI remain outstanding. SQL is an
+unnumbered synthetic draft, and no production data or migration is involved.

@@ -23,6 +23,10 @@ import {
   buildCampaignRunFrontmatter,
   type CampaignRunFrontmatter,
 } from "@/lib/trader/research/campaign-run-frontmatter";
+import { prepareResearchDevelopmentSourcePostgresV1 } from
+  "@/lib/trader/research/research-development-source-owner-postgres-v1";
+import { captureResearchDevelopmentSourceRequestV1 } from
+  "@/lib/trader/research/research-development-source-contract-v1";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 const LOG_PREFIX = "[trader:discovery:run]";
@@ -100,13 +104,121 @@ function parseFlags(argv: string[]): Map<string, string | boolean> {
   return flags;
 }
 
+const SOURCE_PREPARATION_FLAGS = new Set([
+  "prepare-source",
+  "org-id",
+  "command-id",
+  "symbol",
+  "initial-record-index",
+  "observation-bar-count",
+  "gap-bar-count",
+  "training-bar-count",
+]);
+
+function hasSourcePreparationFlag(argv: readonly string[]): boolean {
+  return argv.some((arg) => arg === "--prepare-source" || arg.startsWith("--prepare-source="));
+}
+
+function parseStrictInteger(value: string | boolean | undefined, flag: string): number {
+  if (typeof value !== "string" || !/^(0|[1-9][0-9]*)$/.test(value)) {
+    throw new Error("SOURCE_PREPARATION_ARGUMENTS_INVALID:" + flag);
+  }
+  const number = Number(value);
+  if (!Number.isSafeInteger(number)) {
+    throw new Error("SOURCE_PREPARATION_ARGUMENTS_INVALID:" + flag);
+  }
+  return number;
+}
+
+export function parseDiscoverySourcePreparationArgs(argv: readonly string[]) {
+  if (!hasSourcePreparationFlag(argv)) return null;
+  const seen = new Set<string>();
+  const values = new Map<string, string>();
+  for (const arg of argv) {
+    if (!arg.startsWith("--")) throw new Error("SOURCE_PREPARATION_ARGUMENTS_INVALID:POSITIONAL");
+    const body = arg.slice(2);
+    const equals = body.indexOf("=");
+    if (equals <= 0) throw new Error("SOURCE_PREPARATION_ARGUMENTS_INVALID:FLAG_FORMAT");
+    const name = body.slice(0, equals);
+    const value = body.slice(equals + 1);
+    if (!SOURCE_PREPARATION_FLAGS.has(name)) {
+      throw new Error("SOURCE_PREPARATION_ARGUMENTS_INVALID:UNKNOWN_FLAG");
+    }
+    if (seen.has(name)) throw new Error("SOURCE_PREPARATION_ARGUMENTS_INVALID:DUPLICATE_FLAG");
+    seen.add(name);
+    values.set(name, value);
+  }
+  if (values.get("prepare-source") !== "1") {
+    throw new Error("SOURCE_PREPARATION_ARGUMENTS_INVALID:PREPARE_FLAG");
+  }
+  return captureResearchDevelopmentSourceRequestV1({
+    organizationId: values.get("org-id"),
+    commandId: values.get("command-id"),
+    symbol: values.get("symbol"),
+    initialRecordIndex: parseStrictInteger(values.get("initial-record-index"), "initial-record-index"),
+    observationBarCount: parseStrictInteger(values.get("observation-bar-count"), "observation-bar-count"),
+    gapBarCount: parseStrictInteger(values.get("gap-bar-count"), "gap-bar-count"),
+    trainingBarCount: parseStrictInteger(values.get("training-bar-count"), "training-bar-count"),
+  });
+}
+
+export async function runDiscoverySourcePreparationBranch(
+  argv: readonly string[],
+  input: {
+    cliEnabled: boolean;
+    authorize(): void;
+    prepare(request: ReturnType<typeof captureResearchDevelopmentSourceRequestV1>): Promise<{
+      status: "COMMITTED" | "REPLAYED" | "CONFIRMED_AFTER_UNCERTAINTY" | "COMMIT_UNCERTAIN";
+      issuance: unknown;
+      observation: unknown;
+    }>;
+    print(value: { status: string; issuance: unknown; observation: unknown }): void;
+  },
+): Promise<{ handled: boolean; exitCode: number; error?: string }> {
+  if (!hasSourcePreparationFlag(argv)) return { handled: false, exitCode: 0 };
+  if (!input.cliEnabled) {
+    return { handled: true, exitCode: 1, error: "WAIA_TRADER_CLI_REQUIRED" };
+  }
+  let request: ReturnType<typeof captureResearchDevelopmentSourceRequestV1>;
+  try {
+    request = parseDiscoverySourcePreparationArgs(argv)!;
+  } catch {
+    return { handled: true, exitCode: 1, error: "SOURCE_PREPARATION_ARGUMENTS_INVALID" };
+  }
+  try {
+    input.authorize();
+    const result = await input.prepare(request);
+    input.print({
+      status: result.status,
+      issuance: result.issuance,
+      observation: result.observation,
+    });
+    return { handled: true, exitCode: result.status === "COMMIT_UNCERTAIN" ? 1 : 0 };
+  } catch {
+    return { handled: true, exitCode: 1, error: "SOURCE_PREPARATION_FAILED" };
+  }
+}
+
 async function main(): Promise<void> {
   if (process.env.WAIA_TRADER_CLI !== "1") {
     console.error(`${LOG_PREFIX} WAIA_TRADER_CLI=1 is required`);
     process.exit(1);
   }
 
-  const flags = parseFlags(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (hasSourcePreparationFlag(argv)) {
+    const outcome = await runDiscoverySourcePreparationBranch(argv, {
+      cliEnabled: process.env.WAIA_TRADER_CLI === "1",
+      authorize: () => assertOperatorActionAllowed("authorize_discovery_run"),
+      prepare: prepareResearchDevelopmentSourcePostgresV1,
+      print: (value) => console.log(LOG_PREFIX + " source " + JSON.stringify(value)),
+    });
+    if (outcome.error) console.error(LOG_PREFIX + " " + outcome.error);
+    if (outcome.exitCode !== 0) process.exitCode = outcome.exitCode;
+    return;
+  }
+
+  const flags = parseFlags(argv);
   if (flags.has("help")) {
     printDiscoveryRunUsage();
     return;
@@ -179,7 +291,7 @@ async function main(): Promise<void> {
   }
 }
 
-if (process.env.WAIA_TRADER_CLI === "1") {
+if (process.env.WAIA_TRADER_CLI === "1" || hasSourcePreparationFlag(process.argv.slice(2))) {
   main().catch((error: unknown) => {
     console.error(`${LOG_PREFIX} failed`, error);
     process.exit(1);

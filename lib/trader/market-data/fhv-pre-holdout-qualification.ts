@@ -34,6 +34,7 @@ import {
   type FhvOfficialSymbolCode,
 } from "@/lib/trader/market-data/fhv-partition-boundaries";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import { readJsonFileBoundedSync } from "@/lib/trader/market-data/bounded-json-file";
 
 export const FHV_PRE_HOLDOUT_QUALIFICATION_SCHEMA =
   "fhv-pre-holdout-qualification-receipt/v1" as const;
@@ -537,9 +538,11 @@ export function writeFhvPreHoldoutQualificationReceipt(input: {
 
 export function readFhvPreHoldoutQualificationReceipt(
   path: string,
+  options: Readonly<{ maxReceiptBytes?: number }> = {},
 ): FhvPreHoldoutQualificationReceiptV1 {
   assertPathDoesNotAccessBlindHoldoutPayload(path);
-  const parsed = JSON.parse(readFileSync(path, "utf8")) as FhvPreHoldoutQualificationReceiptV1;
+  const parsed = readJsonFileBoundedSync(path, { maxBytes: options.maxReceiptBytes }) as
+    FhvPreHoldoutQualificationReceiptV1;
   if (parsed.schemaVersion !== FHV_PRE_HOLDOUT_QUALIFICATION_SCHEMA) {
     fail("SCHEMA_UNSUPPORTED", `unsupported ${String(parsed.schemaVersion)}`);
   }

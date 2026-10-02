@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
 import { computePayloadDigest } from "@/lib/trader/backtest/streaming-evidence/streaming-evidence-manifest";
 import { writeFileAtomicExclusive } from "@/lib/trader/backtest/streaming-evidence/atomic-file-write";
+import { readJsonFileBoundedSync } from "@/lib/trader/market-data/bounded-json-file";
 import {
   assertFhvPreHoldoutFilesMatchReceipt,
   readFhvPreHoldoutQualificationReceipt,
@@ -56,8 +56,10 @@ export function writeFhvPreHoldoutRuntimeRequalification(input: {
 
 export function readFhvPreHoldoutRuntimeRequalification(
   path: string,
+  options: Readonly<{ maxReceiptBytes?: number }> = {},
 ): FhvPreHoldoutRuntimeRequalificationV1 {
-  const parsed = JSON.parse(readFileSync(path, "utf8")) as FhvPreHoldoutRuntimeRequalificationV1;
+  const parsed = readJsonFileBoundedSync(path, { maxBytes: options.maxReceiptBytes }) as
+    FhvPreHoldoutRuntimeRequalificationV1;
   const { requalificationReceiptDigest, ...body } = parsed;
   if (
     parsed.schemaVersion !== FHV_PRE_HOLDOUT_RUNTIME_REQUALIFICATION_SCHEMA ||
