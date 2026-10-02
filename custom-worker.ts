@@ -195,11 +195,11 @@ export default {
         }
 
         try {
-          let buildPaperLoopDepsFromEnv;
-          let runPaperLoopCycle;
+          let runScheduledNoncapitalPaperLoopFromEnv;
+          let logScheduledNoncapitalOwnerStatusV1;
           try {
-            ({ buildPaperLoopDepsFromEnv, runPaperLoopCycle } =
-              await import("@/lib/trader/paper/build-worker-deps"));
+            ({ runScheduledNoncapitalPaperLoopFromEnv, logScheduledNoncapitalOwnerStatusV1 } =
+              await import("@/lib/trader/paper/scheduled-noncapital-owner-postgres-v1"));
           } catch (importError) {
             console.error(
               JSON.stringify({
@@ -210,21 +210,14 @@ export default {
             );
             throw importError;
           }
-          const { deps: paperLoopDeps, dispose: paperLoopDispose } =
-            await buildPaperLoopDepsFromEnv(env);
-          console.log(JSON.stringify({ event: "waia_paper_loop", phase: "deps_ok" }));
-          try {
-            await runPaperLoopCycle({ deps: paperLoopDeps });
-          } finally {
-            await paperLoopDispose();
-          }
+          const ownerResult = await runScheduledNoncapitalPaperLoopFromEnv(env);
+          logScheduledNoncapitalOwnerStatusV1(ownerResult);
         } catch (paperLoopError) {
           console.error(
             JSON.stringify({
               event: "waia_paper_loop",
               phase: "cycle_error",
-              error:
-                paperLoopError instanceof Error ? paperLoopError.message : String(paperLoopError),
+              errorClass: paperLoopError instanceof Error ? paperLoopError.name : "UnknownError",
             }),
           );
         }

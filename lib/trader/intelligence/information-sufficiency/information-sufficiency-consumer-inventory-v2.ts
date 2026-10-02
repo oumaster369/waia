@@ -341,6 +341,13 @@ export const INFORMATION_SUFFICIENCY_CONSUMERS_V2 = [
     authorityPurpose: "NEW_OPPORTUNITY",
   },
   {
+    path: "lib/trader/paper/scheduled-noncapital-owner-postgres-v1.ts",
+    symbols: ["runScheduledNoncapitalPaperLoopFromEnv", "runPaperCycleOnce", "runHeldNoTradeCycle"],
+    imports: ["RUN_PAPER_CYCLE_ONCE"],
+    disposition: "OBSERVATIONAL_ONLY_NO_AUTHORITY",
+    authorityPurpose: "NONE",
+  },
+  {
     path: "lib/trader/paper/run-fixture-paper-cycles.ts",
     symbols: ["runFixturePaperCycles"],
     imports: ["RUN_PAPER_CYCLE_ONCE"],

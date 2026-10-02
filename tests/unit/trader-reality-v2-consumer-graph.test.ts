@@ -48,8 +48,9 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         // DEE-1153 adds one observation-only HTX derivatives account-info transport.
         // DEE-1196 adds one fixed Org0 read-only credential account-info probe.
         // DEE-1200 adds one research diagnostic consumer under the existing excluded/lineage-only rule.
-        consumers: 153,
-        consumerDigestHex: "b7a68c9b4fe1e8552a04b86178c38dc379e04e919f7d606761533425826aa855",
+        // DEE-1205 adds the closed scheduled noncapital owner consumer.
+        consumers: 154,
+        consumerDigestHex: "f04cfbd3338d766013e392d186fe99c12e2b29f0265569590457456bb2c9e715",
         // DEE-1099 adds one read of freshly validated account permissions,
         // not a financial observation or a venue effect.
         // DEE-1151 keeps that read on the live connector and does not add placeOrder.

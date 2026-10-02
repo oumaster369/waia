@@ -199,6 +199,13 @@ export const INFORMATION_INQUIRY_DIRECT_CONSUMERS_V1 = [
     createsCapitalAuthority: false,
   },
   {
+    path: "lib/trader/paper/scheduled-noncapital-owner-postgres-v1.ts",
+    symbols: ["deepFreezeInquiry", "pollMandatoryBundleWithDeadline"],
+    imports: ["CONTRACTS"],
+    disposition: "STANDARD_WORKER_DEFAULT_FAIL_CLOSED",
+    createsCapitalAuthority: false,
+  },
+  {
     path: "lib/trader/paper/paper-cycle-runner.ts",
     symbols: ["resolveHtxInformationInquiryCycleV1", "runPaperCycleOnce"],
     imports: ["BARREL"],
