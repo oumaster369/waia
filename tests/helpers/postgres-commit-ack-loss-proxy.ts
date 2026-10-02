@@ -8,6 +8,8 @@ export async function startCommitAckLossProxy(input: {
   targetPort: number;
   /** Test recovery failure independently from actual server commit success. */
   refuseReconnectAfterCommitLoss?: boolean;
+  /** Return an orderly EOF only after a refused client sends its PostgreSQL StartupMessage. */
+  cleanEofOnRefusedReconnect?: boolean;
 }): Promise<{
   port: number;
   stats: () => Readonly<{ connections: number; commitResponsesWithheld: number; protocolErrors: number }>;
@@ -15,12 +17,39 @@ export async function startCommitAckLossProxy(input: {
 }> {
   if (input.targetHost !== "127.0.0.1" || !Number.isInteger(input.targetPort) ||
       input.targetPort < 1 || input.targetPort > 65535) throw new Error("ACK_PROXY_LOOPBACK_REQUIRED");
+  if (input.cleanEofOnRefusedReconnect && !input.refuseReconnectAfterCommitLoss) {
+    throw new Error("ACK_PROXY_CLEAN_EOF_REQUIRES_REFUSED_RECONNECT");
+  }
   const sockets = new Set<net.Socket>();
   const counters = { connections: 0, commitResponsesWithheld: 0, protocolErrors: 0 };
   let claimed = false;
   const server = net.createServer((downstream) => {
     counters.connections++;
     if (input.refuseReconnectAfterCommitLoss && counters.commitResponsesWithheld > 0) {
+      if (input.cleanEofOnRefusedReconnect) {
+        sockets.add(downstream);
+        let startupMessage = Buffer.alloc(0);
+        downstream.on("error", () => downstream.destroy());
+        downstream.on("close", () => sockets.delete(downstream));
+        downstream.on("data", (chunk: Buffer) => {
+          startupMessage = Buffer.concat([startupMessage, chunk]);
+          if (startupMessage.length < 4) return;
+          const length = startupMessage.readInt32BE(0);
+          if (length < 8 || length > 16 * 1024 * 1024) {
+            counters.protocolErrors++;
+            downstream.destroy();
+            return;
+          }
+          if (startupMessage.length < length) return;
+          if (startupMessage.readInt32BE(4) !== 196608) {
+            counters.protocolErrors++;
+            downstream.destroy();
+            return;
+          }
+          downstream.end();
+        });
+        return;
+      }
       downstream.destroy();
       return;
     }

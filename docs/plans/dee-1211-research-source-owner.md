@@ -261,3 +261,47 @@ no connection storm or late network work with the real clean-EOF proxy, and
 validate a normal TLS handshake against an isolated local TLS PostgreSQL
 endpoint if TLS is configured. This adapter grants no source, scientific or
 trading authority. No production connection profile is changed or deployed.
+
+
+## Bounded transport local acceptance (2026-10-02)
+
+The documented custom-socket helper now bounds each private pool to3 TCP
+opens,10s per connect and the existing command AbortSignal. Teardown closes
+the socket factory before ending its pool; the driver retains TLS and
+authentication. Four real loopback tests pass, including silent-handshake
+abort and zero late SQL. Current-source PostgreSQL19/19 passes with zero
+skips and2504 exact source hashes; lost-confirmation cleanEOF returns in
+2.096s with bounded connections and no later opens. Separate owned PG16
+TLS tests pass for IP and DNS with verify-full; an untrusted certificate is
+refused. The disposable TLS endpoint and generated keys were removed.
+Independent source review accepted helperfe5a40df/owner82b365ee and the
+source-bound native proof. Prior two CI failures,30s deterministic RED and
+late-connection RED are preserved. Fresh published-head CI remains required.
+
+### Follow-up local readiness after type-only correction (2026-10-02)
+
+The private pool helper's erased generic was tightened from
+`postgres.Options<{}>` to `postgres.Options<Record<string, never>>` after the
+19-case native run. The current helper TypeScript hash is
+`c031cca520ece667704520f12b69a58b173c65bb4f0b27df72627ed40dd065fc`; an
+esbuild comparison confirmed its emitted JavaScript is byte-identical to the
+native-tested helper. The native result therefore remains valid for runtime
+behavior but is not represented as a source-hash-exact run of the prior
+TypeScript file. Root reran the native suite against this corrected source; the
+current exact-source receipt is `pr738-corrected-ci/final-current-native.json`.
+
+On current worktree `365544f35cfb002798a58af564b3fddf5f942e55`, bounded local
+readiness passed: 68 focused assertions across five files, lint (zero errors;
+331 warnings), typecheck, build, canonical validation (286 files), both
+consumer graphs (163 sources, 154 consumers, 27 connector references; zero
+execution violations), and diff check. Build preceded the erased-only generic
+correction; current typecheck passed and emitted JavaScript equivalence was
+verified. The current-source 19/19 PG16 native proof has zero failures or skips and
+2504 source hashes; its exact result and pin manifest are
+`pr738-corrected-ci/final-current-native.json` and
+`pr738-corrected-ci/final-current-source.json`. TLS positives covered IP and
+DNS with `verify-full`, and the untrusted-certificate negative refused the
+connection; those remain separately bounded transport evidence.
+No result establishes a production connection, source/PIT qualification,
+deployment, or trading authority. See `dee1211-pool-readiness-final.json` for
+the per-check receipt and hashes. Exact published-head CI remains required.

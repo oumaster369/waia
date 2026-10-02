@@ -28,6 +28,9 @@ describe("DEE-1211 executed PostgreSQL proof guard", () => {
   it("triggers the native gate for every distinct proof-pinned source path", () => {
     const workflow = readFileSync(resolve(process.cwd(), ".github/workflows/postgres-integration.yml"), "utf8");
     expect(new Set(sourcePaths).size).toBeGreaterThan(0);
+    expect(sourcePaths).toContain("lib/trader/research/research-owned-postgres-pool-v1.ts");
+    expect(sourcePaths).toContain("package.json");
+    expect(sourcePaths).toContain("pnpm-lock.yaml");
     expect(uncoveredSourcePathsForPullRequestWorkflow(workflow)).toEqual([]);
   });
 

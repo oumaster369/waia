@@ -1,7 +1,8 @@
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 enforceServerOnly();
 
-import postgres from "postgres";
+import type postgres from "postgres";
+import { withResearchOwnedPostgresPoolV1 } from "./research-owned-postgres-pool-v1";
 import { isAbsolute } from "node:path";
 import { realpathSync } from "node:fs";
 import { withPostgresSerializableTransactionRetry, withPostgresSessionTransaction } from "@/db/postgres-session-transaction";
@@ -48,20 +49,6 @@ function captureHost() {
   });
 }
 
-async function ownedPool<T>(url: string, work: (sql: postgres.Sql) => Promise<T>): Promise<T> {
-  // Fresh, owned pool. Never accepts a generic application pool or supplied SQL
-  // callback as authority, and never returns a role-bearing session to one.
-  const pool = postgres(url, { max: 1, prepare: false, connect_timeout: 10,
-    connection: { statement_timeout: LIMITS.deadlineMs, idle_in_transaction_session_timeout: LIMITS.deadlineMs } });
-  try {
-    // The driver owns BEGIN/COMMIT and disconnect recovery. Session validation
-    // runs inside its pinned transaction, before assuming the writer role.
-    return await work(pool);
-  } finally {
-    await pool.end({ timeout: 1 });
-  }
-}
-
 async function assumeLocalRole(tx: postgres.Sql) {
   await tx.unsafe(`SET LOCAL ROLE ${RESEARCH_DEVELOPMENT_SOURCE_ROLE_V1}`);
   const [row] = await tx<{ current_user: string }[]>`SELECT current_user::text AS current_user`;
@@ -80,7 +67,7 @@ export async function prepareResearchDevelopmentSourcePostgresV1(supplied: unkno
   const signal = AbortSignal.timeout(LIMITS.deadlineMs);
   let candidate: ResearchDevelopmentSourceIssuanceV1 | undefined;
   try {
-    return await ownedPool(host.url, async sql => {
+    return await withResearchOwnedPostgresPoolV1(host.url, signal, LIMITS.deadlineMs, async sql => {
       return withPostgresSerializableTransactionRetry(sql, async tx => {
         candidate = undefined;
         signal.throwIfAborted();
@@ -161,7 +148,7 @@ export async function prepareResearchDevelopmentSourcePostgresV1(supplied: unkno
     if (!candidate) throw error;
     const exactCandidate: ResearchDevelopmentSourceIssuanceV1 = candidate;
     try {
-      const recovered = await ownedPool(host.url, pool =>
+      const recovered = await withResearchOwnedPostgresPoolV1(host.url, signal, LIMITS.deadlineMs, pool =>
         withPostgresSessionTransaction(pool, "REPEATABLE READ", async tx => {
           await tx`SET TRANSACTION READ ONLY`;
           await requireResearchDevelopmentSourceLoginV1(tx as unknown as postgres.TransactionSql);

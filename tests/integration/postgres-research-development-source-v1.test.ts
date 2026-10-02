@@ -173,11 +173,18 @@ describe.skipIf(!enabled)("DEE-1211 observed research source PostgreSQL", () => 
   it("returns uncertain without claiming success when post-COMMIT confirmation cannot reconnect", async () => {
     const parsed = new URL(sourceUrl);
     const proxy = await startCommitAckLossProxy({ targetHost: "127.0.0.1",
-      targetPort: Number(parsed.port || 5432), refuseReconnectAfterCommitLoss: true });
+      targetPort: Number(parsed.port || 5432), refuseReconnectAfterCommitLoss: true,
+      cleanEofOnRefusedReconnect: true });
     parsed.port = String(proxy.port); vi.stubEnv("WAIA_RESEARCH_SOURCE_DATABASE_URL", parsed.toString());
     const command = request();
     try {
+      const started = performance.now();
       const uncertain = await prepareResearchDevelopmentSourcePostgresV1(command);
+      expect(performance.now() - started).toBeLessThan(70_000);
+      const settledConnections = proxy.stats().connections;
+      await new Promise(resolve => setTimeout(resolve, 1_000));
+      expect(proxy.stats().connections).toBe(settledConnections);
+      expect(settledConnections).toBeLessThanOrEqual(6);
       expect(uncertain.status).toBe("COMMIT_UNCERTAIN");
       expect(uncertain.issuance).toBeNull(); expect(uncertain.observation).toBeNull();
       expect(proxy.stats().commitResponsesWithheld).toBe(1);
@@ -193,7 +200,7 @@ describe.skipIf(!enabled)("DEE-1211 observed research source PostgreSQL", () => 
       expect(await receipts(command.commandId)).toBe(1);
       expect(await rows(runId)).toBe(6);
     } finally { await proxy.close(); }
-  }, 30_000);
+  }, 90_000);
 
   it("refuses changed selection, deployment and raw source bytes without adding a source", async () => {
     const command = request();
