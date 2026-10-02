@@ -10,9 +10,9 @@ requiredValidation: [targeted-unit, native-postgres, worker-runtime, lint, typec
 approvalGates: [user-authorized-engineering, independent-review, required-ci, no-live-activation]
 state:
   status: in-progress
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3, WP-4]
-  nextAction: "Capture the native clean-EOF counterexample on an isolated local database; prove the Worker TLS/DSN contract before transport implementation."
+  completedWorkPackages: [WP-1, WP-2, WP-3]
+  remainingWorkPackages: [WP-4]
+  nextAction: "Complete exact-head validation and independent review, then publish the single DEE-1213 PR for required CI."
 provenance:
   createdFrom: "DEE1213 contract and independent preimplementation design review, 2026-10-02"
   supersedes: null
@@ -53,6 +53,16 @@ postgres3.4.9 per-attempt timer can restart indefinitely before SQL timeouts app
   otherwise COMMIT_UNCERTAIN/report:null. Never repeat writes. Initial startup
   failure remains refusal/error; preserve verifier integrity refusals.
 
+## Acceptance
+
+Acceptance requires all named native cases with zero skips, the actual Worker
+fault/TLS and established-session cleanup probes, unchanged immediate backend
+absence assertions, bounded physical opens and no late reconnect, preserved
+acknowledged COMMIT and exact-receipt uncertainty behavior. Lint, typecheck,
+build, canonical plans, consumer graphs, independent review and all applicable
+exact-head CI must pass before merge. Evidence remains limited to the supported
+closed owner and runtime profiles; no production or scientific qualification.
+
 ## Work packages and implementation gate
 
 1. Preserve a watchdog-contained native RED after genuine PostgreSQL COMMIT:
@@ -86,6 +96,43 @@ Production0229 prohibited;0230 deferred. Synthetic disposable fixtures may apply
 the existing canonical migration journal and unnumbered proof draft only.
 Rollback is a revert PR. Local capability and RED receipts cannot imply repair,
 Forward Paper qualification, continuous operation or capital authority.
+
+## Cancellation cleanup refinement — frozen 2026-10-02 before repair
+
+The observed abort fixture remains RED: local socket closure and joined JavaScript
+do not attest PostgreSQL backend exit. Capture `(pid, backend_start)` inside the
+primary transaction before its callback/effects. Permit only that one primary
+transaction. After primary teardown, use the sole fresh read-only verifier pool
+to witness exact backend absence; reuse it for any ambiguous-COMMIT receipt read.
+This preserves two pools / three opens each. A separately timed40,000ms cleanup
+allowance starts when primary work settles, before local teardown. It grants only
+cleanup reads, never new effects or extra receipt-confirmation authority: receipt
+confirmation remains within the original60,000ms deadline.
+
+Failure to obtain a valid identity or observe exit is explicitly unconfirmed
+cleanup, never rollback proof. A witnessed backend exit is not COMMIT evidence.
+Preserve acknowledged root results even if cleanup cannot be confirmed, emitting
+a distinct operational cleanup diagnostic. Retain failed work as the cause when
+cleanup is unconfirmed. Join all owned local tasks and verifier shutdown before
+return; no third witness connection and no privileged backend termination.
+The verifier is read-only and its local teardown is joined; this does not claim
+an independently witnessed exit for its own backend. Transaction-pooling DSNs
+cannot be assumed to provide the direct-session backend exit contract.
+
+The actual Worker TLS fixture exposed local close without remote backend exit.
+Only after a successful SQL response proves PostgreSQL protocol admission,
+teardown of that Worker socket sends PostgreSQL Terminate
+(`X`, length4) with a50ms flush allowance before aborting streams/native sockets.
+The write remains in the owned task set and is joined after stream abort even
+when the flush allowance expires. It sends no SQL, cancellation query or new
+connection. Backend absence is still independently witnessed, never inferred
+from flush success. Opening/TLS/authentication-stage sockets skip protocol flush. TLS-open alone
+is never treated as PostgreSQL protocol admission.
+
+This40s allowance is an enforced cancellation budget, not yet a universal finite
+join proof: unresponsive native close or an arbitrary nonsettling callback remains
+an admission limitation. Prove the closed production callbacks and supported
+Worker/Node paths; do not weaken the immediate native PID-absence assertion.
 
 
 ## Worker transport profile — frozen before implementation, 2026-10-02

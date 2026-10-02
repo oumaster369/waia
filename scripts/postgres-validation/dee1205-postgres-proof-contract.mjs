@@ -47,6 +47,7 @@ export const sourcePaths = [
   "scripts/postgres-validation/prepare-dee1205-postgres-proof.mjs",
   "scripts/postgres-validation/assert-dee1205-postgres-results.mjs",
   "scripts/postgres-validation/probe-dee1213-worker-transport.mjs",
+  "scripts/postgres-validation/probe-dee1213-worker-pool.mjs",
   "tests/unit/postgres-dee1205-proof-guard.test.ts",
   "vitest.config.ts",
   "vitest.setup.ts",

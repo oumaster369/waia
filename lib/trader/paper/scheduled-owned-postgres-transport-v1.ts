@@ -19,11 +19,13 @@ type WorkerDriverSocket = EventEmitter & {
   host: string; port: number; readyState: string; destroyed: boolean;
   raw: NativeSocket; reader: ReadableStreamDefaultReader<Uint8Array>;
   writer: WritableStreamDefaultWriter<Uint8Array>;
+  markProtocolActive(): void;
   read(): Promise<void>; write(data: Uint8Array, callback?: () => void): boolean;
   end(data?: Uint8Array): void; destroy(): void;
 };
 
 const CONNECT_MS = 10_000;
+const TERMINATE_FLUSH_MS = 50;
 const MAX_ATTEMPTS = 3;
 const closedError = () => new Error("SCHEDULED_POSTGRES_SCOPE_CLOSED");
 
@@ -47,7 +49,7 @@ export async function createScheduledPostgresTransportV1(endpoint: ScheduledPost
   }
   signal.throwIfAborted();
   let sealed = false, attempts = 0;
-  const owned = new Set<{ destroy(): void }>();
+  const owned = new Set<{ destroy(): void; markProtocolActive?(): void }>();
   const pending = new Set<Promise<unknown>>();
   const track = <T>(promise: Promise<T>): Promise<T | undefined> => {
     const settled = promise.catch(() => undefined);
@@ -88,6 +90,8 @@ export async function createScheduledPostgresTransportV1(endpoint: ScheduledPost
     Object.assign(tcp, { host: endpoint.host, port: endpoint.port, readyState: "opening", destroyed: false });
     const transports = new Set<NativeSocket>();
     let generation = 0, reading = false, first = endpoint.tls, closed = false;
+    let protocolReadyForClose = false;
+    tcp.markProtocolActive = () => { if (!tcp.destroyed) protocolReadyForClose = true; };
     let rejectOpening: (error: Error) => void = () => undefined;
     const emitClosed = () => {
       if (closed) return;
@@ -128,6 +132,7 @@ export async function createScheduledPostgresTransportV1(endpoint: ScheduledPost
         try {
           while (!tcp.destroyed) {
             const item = await tcp.reader.read();
+            if (tcp.destroyed) return;
             if (item.done) { emitClosed(); return; }
             const one = first; first = false;
             if (one) reading = false;
@@ -149,15 +154,30 @@ export async function createScheduledPostgresTransportV1(endpoint: ScheduledPost
     tcp.end = (data) => { if (data) tcp.write(data, () => tcp.destroy()); else tcp.destroy(); };
     tcp.destroy = () => {
       if (tcp.destroyed) return;
+      const protocolReady = protocolReadyForClose && (tcp.readyState === "open" || tcp.readyState === "upgrade");
       tcp.destroyed = true; owned.delete(tcp);
       // Native opened may remain pending after close. Reject our factory now;
       // all native transports/streams are still explicitly closed and joined.
       rejectOpening(closedError());
-      // Native close alone can wait behind a stalled TLS write. Abort both streams first.
-      if (tcp.reader) track(Promise.resolve().then(() => tcp.reader.cancel()));
-      if (tcp.writer) track(Promise.resolve().then(() => tcp.writer.abort()));
-      // A detached pre-TLS socket may throw; never let that skip its successor.
-      for (const raw of transports) track(Promise.resolve().then(() => raw.close()));
+      track((async () => {
+        // Worker close can finish locally while the remote session remains open.
+        // Send only the protocol Terminate frame (never SQL/retry). Its write is
+        // owned even if the short flush budget expires; stream abort joins it.
+        if (protocolReady && tcp.writer) {
+          let flushTimer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await Promise.race([
+              track(Promise.resolve().then(() => tcp.writer.write(new Uint8Array([88, 0, 0, 0, 4])))),
+              new Promise<void>((resolve) => { flushTimer = setTimeout(resolve, TERMINATE_FLUSH_MS); }),
+            ]);
+          } finally { if (flushTimer) clearTimeout(flushTimer); }
+        }
+        // Native close alone can wait behind a stalled TLS write. Abort both streams first.
+        if (tcp.reader) track(Promise.resolve().then(() => tcp.reader.cancel()));
+        if (tcp.writer) track(Promise.resolve().then(() => tcp.writer.abort()));
+        // A detached pre-TLS socket may throw; never let that skip its successor.
+        for (const raw of transports) track(Promise.resolve().then(() => raw.close()));
+      })());
       emitClosed();
     };
     owned.add(tcp);
@@ -187,6 +207,8 @@ export async function createScheduledPostgresTransportV1(endpoint: ScheduledPost
       return worker ? workerSocket() : nodeSocket();
     },
     seal,
+    // The pool calls this only after a SQL result, not merely after TLS opens.
+    markProtocolActive: () => { for (const socket of owned) socket.markProtocolActive?.(); },
     close: async () => {
       seal();
       signal.removeEventListener("abort", seal);

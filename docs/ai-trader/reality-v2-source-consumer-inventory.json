@@ -419,7 +419,7 @@
       {"path": "lib/trader/paper/build-worker-deps.ts","sha256": "95491a0c2c55ae75b0954f49d97723f43c907865b01d4fdd364c9cb36051bee8"},
       {"path": "lib/trader/paper/paper-cycle-runner.ts","sha256": "67f4e2a72dc82b920ba34c4dcb52584fc11e9a8f374aee29bb4dd277b3e78bf9"},
       {"path": "lib/trader/paper/paper-cycle.types.ts","sha256": "2cc6871ebb5e35a5b4d82f83d382dd69b7b790fb8fce0359e9697db72fd58af7"},
-      {"path": "lib/trader/paper/scheduled-noncapital-owner-postgres-v1.ts","sha256": "2e6440af50e26f72321de0fdc055e33c91268ce966fc5b2ce5957fab750ac545"},
+      {"path": "lib/trader/paper/scheduled-noncapital-owner-postgres-v1.ts","sha256": "7f62b2e03ba2b9c1642dc2146ea1a06cf56b2e7c2152aa9e84e2dd34deccfb23"},
       {"path": "lib/trader/positions/sync-handler.ts","sha256": "94a58646ffaade83b2b66c4a55f46724bfba67182ed1078679682a7a2e186c2e"},
       {"path": "lib/trader/positions/types.ts","sha256": "8ec00886cc56e1bae84f25325d5fbe56cbf9051e89f767cfd486d076624d02f7"},
       {"path": "lib/trader/reality/v2/contracts.ts","sha256": "168daae2e15959c970b24b86b09c60e44823d8775420c8b3ebc319bf1b9a7cae"},

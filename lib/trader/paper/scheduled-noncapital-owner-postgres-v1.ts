@@ -6,7 +6,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
-import { withJoinedScheduledTransactionV1, withScheduledOwnedPostgresPoolV1 } from "./scheduled-owned-postgres-pool-v1";
+import { withJoinedScheduledTransactionV1, withScheduledOwnedPostgresOperationV1 } from "./scheduled-owned-postgres-pool-v1";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { emitTraderTelemetry, type WaiaTraderTelemetryPayload } from "@/lib/observability/waia-trader-telemetry";
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
@@ -450,12 +450,13 @@ export async function runScheduledNoncapitalPaperLoopFromEnv(
   let awaitingCommit = false;
   const telemetryLines: string[] = [];
   try {
+    return await withScheduledOwnedPostgresOperationV1(postgresUrl, controller.signal, async (operation): Promise<ScheduledNoncapitalOwnerResultV1> => {
     let outcome:
       | { status: "BUSY"; report: null }
       | { status: "REPLAYED"; report: PaperLoopCycleReport; receiptDigest: string }
       | { status: "COMMITTED"; report: PaperLoopCycleReport; receiptDigest: string; completion: WaiaTraderTelemetryPayload };
     try {
-      outcome = await withScheduledOwnedPostgresPoolV1(postgresUrl, controller.signal, async (client) => {
+      outcome = await operation.primary(async (client) => {
         const db = drizzle(client, { schema: pgSchema });
         return withJoinedScheduledTransactionV1<HeldTx, typeof outcome>((work) => db.transaction(work), async (tx) => {
           await tx.execute(sql`SET LOCAL lock_timeout = '5s'`);
@@ -483,7 +484,7 @@ export async function runScheduledNoncapitalPaperLoopFromEnv(
       // Resolve using a genuinely new connection; absence remains uncertain.
       if (controller.signal.aborted) return { status: "COMMIT_UNCERTAIN", report: null };
       try {
-        const exact = await withScheduledOwnedPostgresPoolV1(postgresUrl, controller.signal,
+        const exact = await operation.verify(
           (verifier) => readReceipt(drizzle(verifier, { schema: pgSchema }), binding));
         if (exact) return { status: "CONFIRMED_AFTER_UNCERTAINTY", report: exact.report, receiptDigest: exact.digest };
       } catch (readError) {
@@ -506,6 +507,7 @@ export async function runScheduledNoncapitalPaperLoopFromEnv(
       return { status: "COMMITTED", report: outcome.report, receiptDigest: outcome.receiptDigest };
     }
     return outcome;
+    });
   } finally {
     clearTimeout(deadline);
   }

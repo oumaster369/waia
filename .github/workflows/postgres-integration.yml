@@ -352,6 +352,8 @@ jobs:
         run: node scripts/postgres-validation/prepare-dee1205-postgres-proof.mjs
       - name: Probe scheduled Worker PostgreSQL transport faults and TLS
         run: node scripts/postgres-validation/probe-dee1213-worker-transport.mjs --output .tmp/dee1213-worker-transport.json
+      - name: Prove scheduled pool cleanup on actual Worker TLS and synthetic PostgreSQL
+        run: node scripts/postgres-validation/probe-dee1213-worker-pool.mjs --output .tmp/dee1213-worker-pool.json
       - name: Execute the closed scheduled-owner native file with zero skips
         env:
           WAIA_PG_INTEGRATION: "1"
@@ -377,6 +379,7 @@ jobs:
             .tmp/dee1205-postgres-source-manifest.json
             .tmp/dee1205-postgres-results.json
             .tmp/dee1213-worker-transport.json
+            .tmp/dee1213-worker-pool.json
           if-no-files-found: warn
 
   dee1200-registered-training-postgres:
