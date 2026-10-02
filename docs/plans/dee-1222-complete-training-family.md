@@ -10,9 +10,9 @@ requiredValidation: [lint, typecheck, build, targeted-unit, native-postgres, val
 approvalGates: [user-authorized-engineering, independent-review, required-ci, no-live-activation]
 state:
   status: in-progress
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1-owner-and-receipt, WP-2-native-proof, WP-3-actual-main-and-ci]
-  nextAction: "Implement the independently reviewed complete-family owner, preserving nonqualifying authority and exact terminal accounting checks."
+  completedWorkPackages: [WP-1-owner-and-receipt, WP-2-native-proof]
+  remainingWorkPackages: [WP-3-actual-main-and-ci]
+  nextAction: "Obtain final independent prepared-source review, then integrate onto actual main after DEE1212 and pass exact-head CI."
 provenance:
   createdFrom: "Oct02 root source audit and Linear duplicate clearance; independent design review before code; prepared on DEE1212 56fa1436 pending mainline"
   supersedes: null
@@ -44,6 +44,15 @@ Receipt has version, DEVELOPMENT_NONQUALIFYING_SELECTION_ONLY authority, false q
 Replay re-verifies all current trial evidence and recomputes full receipt before returning existing result; byte mismatch refuses, no overwrite. One insert and any local owner work are in same txn; no modeled order writes anywhere in this owner.
 Unknown COMMIT only after captured complete candidate may initiate fresh owned READ ONLY confirmation of exact persisted receipt AND complete source/family evidence. No candidate => refuse. Inconclusive=>COMMIT_UNCERTAIN/null. Confirmation never writes or executes trials. Known unique conflict only exact new receipt PK may fresh-read confirm after rollback; no blanket23505 handling/retry. Use same remaining command deadline.
 
-## Required evidence
+## Acceptance
 Unit strict request/canonical immutable receipt; negative/zero/precision/tie cases; missing/extra/reordered/mismatched trial summary rejection, no invented financial policy. Native uses actual source issuance and multiple actual1212 diagnostic runs, complete family vs absent trial, foreign org, current release mismatch, resealed metric, trace/ledger corruption, atomicity, distinct concurrent owners, lost-COMMIT confirmed and inconclusive, no later writes/reconnect after abort. Existing V1/V2 diagnostic proof must remain valid after verifier composition changes. Dedicated strict named-test/source-manifest CI proof and exact consumer inventories; no tests removed/weakened.
 Local focused checks + lint/type/build/canon/graphs/proof guards; full unit only PR CI. Independent design then source review. No deployment or production DB, real market/C3/holdout, live action, new strategy/financial/scientific rule. Root owns critical implementation; Luna can own isolated fixtures and inventories once source shape is frozen.
+
+## Verification record — 2026-10-02
+The design was committed before implementation as a4a5e7a9. The initial native run retained seven passes and three fixture failures. Allowed fixed thresholds were restored and synthetic bar sequences corrected; no runtime or financial rule was weakened. The full corrected run passed ten of ten with zero skips, and the unchanged diagnostic call chain passed sixteen of sixteen on the modified owner. Both receipts capture 4,311 unchanged source pins. These are synthetic local checks, not CI or scientific qualification.
+
+Independent review found the CI bootstrap's fresh-schema precondition inverted; repair and focused proof are required before readiness. Additional native assertions must demonstrate distinct realized economics, terminal orders with residual positions, and foreign-org/current-release/current-ledger refusals through this new owner. The canonical validator also rejected the nonstandard acceptance heading; only its heading was corrected, preserving the pre-code criteria. Exact main integration and published-head CI remain pending.
+
+Those proof refinements are now implemented. The final isolated suite passes thirteen of thirteen, with zero skips and 4,311 unchanged source pins. The fresh-schema guard was repaired and checked against an actual fresh PostgreSQL16 database with the current 230-entry journal and all six drafts. An intermediate run correctly refused the source-writer role after the temporary bootstrap database added cross-database grants in the same disposable cluster; its failed receipt is retained. Removing only that temporary database restored the original restricted environment; neither code nor role checks changed for the successful rerun. Future concurrent bootstraps need separate clusters because this role intentionally rejects extra database grants.
+
+Current targeted units pass105/105 across eight files, including15 proof-guard cases and27 graph assertions; lint has zero errors (331 existing warnings), typecheck/build and both graph validators pass. Canon validation passes after the heading-only fix. The new CI manifest pins150 paths, including the added accounting/order-state authority dependencies and new CLI test; existing jobs are unchanged. Prepared source remains based on DEE1212 56fa1436 until publication dependencies are mainline; final independent review, actual-main binding and all applicable published-head checks remain outstanding. All receipts are synthetic engineering evidence, not profitability, source/PIT qualification, capital eligibility or readiness for live operation.

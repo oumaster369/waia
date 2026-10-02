@@ -2,6 +2,14 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 enforceServerOnly();
 
 import type postgres from "postgres";
+import { createAccountingFrontierRepositoryPostgres } from "@/lib/trader/accounting/accounting-frontier-repository-postgres";
+import { computeAccountingSemanticDigest } from "@/lib/trader/accounting/canonical-cross-backend-accounting-engine";
+import { TERMINAL_ORDER_STATES } from "@/lib/trader/execution/order-state-machine";
+import { compareDecimal } from "@/lib/trader/risk/numeric";
+import { buildResearchTrainingFamilyReceiptV1, captureResearchTrainingFamilyRequestV1,
+  requireCanonicalResearchSelectionDecimalV1,
+  type ResearchTrainingFamilyReceiptV1, type ResearchTrainingFamilyRequestV1,
+  type ResearchTrainingTrialSummaryV1 } from "./research-training-family-contract-v1";
 import { withResearchOwnedPostgresPoolV1 } from "./research-owned-postgres-pool-v1";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { sql as query } from "drizzle-orm";
@@ -78,7 +86,7 @@ async function ownedSession<T>(url: string, signal: AbortSignal, deadline: numbe
   });
 }
 
-async function readInput(tx: postgres.Sql, request: ResearchIssuedTrainingRequestV2,
+async function readIssuedMetadata(tx: postgres.Sql, request: Pick<ResearchIssuedTrainingRequestV2, "organizationId" | "attemptId">,
   runtime: Runtime, readOnly: boolean) {
   const rows = await tx<Attempt[]>`SELECT id::text,organization_id::text,schema_version,
     spec_sha256,source_run_id,source_issuance_digest,command_id
@@ -92,6 +100,12 @@ async function readInput(tx: postgres.Sql, request: ResearchIssuedTrainingReques
   const bound = await readResearchIssuedSourceAndExperimentV2(tx, request.organizationId,
     attempt.spec_sha256, attempt.source_run_id, runtime);
   if (attempt.source_issuance_digest !== bound.issuance.contentDigest) refuse("ISSUANCE_CHANGED");
+  return { attempt, bound };
+}
+
+async function readInput(tx: postgres.Sql, request: ResearchIssuedTrainingRequestV2,
+  runtime: Runtime, readOnly: boolean) {
+  const { attempt, bound } = await readIssuedMetadata(tx, request, runtime, readOnly);
   const parameters = bound.experiment.spec.orderedTrials[request.trialIndex];
   if (!parameters) refuse("TRIAL_NOT_DECLARED");
   const policy = resolveResearchTrainingPolicyV1(bound.experiment.spec);
@@ -233,5 +247,139 @@ export async function runResearchIssuedTrainingDiagnosticPostgresV2(supplied: un
     } catch {
       return Object.freeze({ status: "COMMIT_UNCERTAIN", trace: null });
     }
+  }
+}
+
+type FamilyRow = { organization_id: string; attempt_id: string; experiment_spec_sha256: string;
+  source_run_id: string; source_issuance_digest: string; receipt_canonical_json: string; receipt_sha256: string };
+type FamilyOutcome = Readonly<{ status: "COMMITTED" | "REPLAYED" | "CONFIRMED_AFTER_UNCERTAINTY";
+  receipt: ResearchTrainingFamilyReceiptV1 }> | Readonly<{ status: "COMMIT_UNCERTAIN"; receipt: null }>;
+
+function familyRefuse(reason: string): never { throw new Error(`RESEARCH_FAMILY_SELECTION_REFUSED:${reason}`); }
+
+/** Uses only the existing verification branch: a missing trial cannot cause a
+ * modeled execution. All family evidence is checked in this owned snapshot. */
+async function verifyFamilyAndPersist(tx: postgres.Sql, executor: ReturnType<typeof heldExecutor>["executor"],
+  request: ResearchTrainingFamilyRequestV1, runtime: Runtime, readOnly: boolean,
+  checkDeadline: () => void, expectedDigest?: string) {
+  const { attempt, bound } = await readIssuedMetadata(tx, request, runtime, readOnly);
+  const { spec } = bound.experiment;
+  const policy = resolveResearchTrainingPolicyV1(spec);
+  if (bound.issuance.training.barCount > request.limits.maxBars) familyRefuse("BAR_LIMIT");
+  const metadata = await tx<{ trial_index: number; experiment_spec_sha256: string; source_run_id: string;
+    source_issuance_digest: string; trace_sha256: string; trace_bytes: number; schema_version: string }[]>`
+    SELECT trial_index,experiment_spec_sha256,source_run_id,source_issuance_digest,trace_sha256,
+      octet_length(trace_canonical_json) AS trace_bytes,trace_canonical_json::jsonb->>'schemaVersion' AS schema_version
+    FROM public.trader_research_issued_training_diagnostics_v2
+    WHERE organization_id=${request.organizationId}::uuid AND attempt_id=${request.attemptId}::uuid
+    ORDER BY trial_index`;
+  if (metadata.length !== spec.orderedTrials.length || metadata.some((row, index) =>
+    row.trial_index !== index || row.experiment_spec_sha256 !== attempt.spec_sha256 ||
+    row.source_run_id !== attempt.source_run_id || row.source_issuance_digest !== attempt.source_issuance_digest ||
+    row.schema_version !== RESEARCH_ISSUED_TRAINING_DIAGNOSTIC_V2 || !/^[a-f0-9]{64}$/.test(row.trace_sha256))) {
+    familyRefuse("COMPLETE_ISSUED_FAMILY_REQUIRED");
+  }
+  if (metadata.some(row => !Number.isSafeInteger(row.trace_bytes) || row.trace_bytes < 1) ||
+      metadata.reduce((sum, row) => sum + row.trace_bytes, 0) > request.limits.maxTraceBytes) {
+    familyRefuse("TRACE_BYTE_LIMIT");
+  }
+  const rows = await tx<FamilyRow[]>`SELECT organization_id::text,attempt_id::text,experiment_spec_sha256,
+    source_run_id,source_issuance_digest,receipt_canonical_json,receipt_sha256
+    FROM public.trader_research_training_family_selections_v1
+    WHERE organization_id=${request.organizationId}::uuid AND attempt_id=${request.attemptId}::uuid`;
+  if (rows.length > 1 || (readOnly && rows.length !== 1)) familyRefuse("COMMITTED_SELECTION_REQUIRED");
+  const existing = rows[0];
+  const trials: ResearchTrainingTrialSummaryV1[] = [];
+  for (let trialIndex = 0; trialIndex < spec.orderedTrials.length; trialIndex += 1) {
+    checkDeadline();
+    const { trace } = await executeOrVerify(tx, executor, { ...request, trialIndex }, runtime, undefined, true);
+    if (trace.traceSha256 !== metadata[trialIndex]!.trace_sha256 ||
+        trace.sourceRunId !== attempt.source_run_id || trace.sourceIssuanceDigest !== attempt.source_issuance_digest ||
+        trace.experimentSpecSha256 !== attempt.spec_sha256 || trace.trainPartitionSha256 !== spec.partitions.train.contentSha256 ||
+        trace.policyDigestHex !== policy.guardianResolvedPolicySha256) familyRefuse("TRIAL_BINDING_CHANGED");
+    const accountKey = `research-issued-stage:${trace.stageRunId}`;
+    const frontier = await createAccountingFrontierRepositoryPostgres(executor).loadLatest(
+      { organizationId: request.organizationId }, { accountKey, runId: trace.stageRunId });
+    if (!frontier || frontier.organizationId !== request.organizationId || frontier.accountKey !== accountKey ||
+        frontier.runId !== trace.stageRunId || frontier.accountingSequence !== trace.accountingSequence ||
+        frontier.semanticContentDigest !== trace.finalAccountingDigestHex ||
+        computeAccountingSemanticDigest(frontier) !== frontier.semanticContentDigest) familyRefuse("ACCOUNTING_IDENTITY");
+    const netRealizedPnl = requireCanonicalResearchSelectionDecimalV1(frontier.netRealizedPnl);
+    if (requireCanonicalResearchSelectionDecimalV1(trace.netRealizedPnl) !== netRealizedPnl) familyRefuse("METRIC_MISMATCH");
+    const orders = await tx<{ state: string }[]>`SELECT state FROM public.trader_orders
+      WHERE organization_id=${request.organizationId}::uuid AND historical_run_id=${trace.stageRunId}
+        AND historical_account_key=${accountKey}`;
+    if (orders.length !== trace.orderCount || orders.some(order => !TERMINAL_ORDER_STATES.some(state => state === order.state)) ||
+        Object.values(frontier.positions).some(position => [position.quantity, position.grossPositionBasis,
+          position.netPositionBasis].some(value => compareDecimal(value, "0") !== 0)) ||
+        trace.openPositions.length !== 0 || !Array.isArray(trace.openOrderIds) || trace.openOrderIds.length !== 0 ||
+        compareDecimal(requireCanonicalResearchSelectionDecimalV1(trace.netUnrealizedPnl), "0") !== 0) {
+      familyRefuse("FAMILY_TRIAL_NOT_TERMINAL_FLAT");
+    }
+    trials.push({ trialIndex, stageRunId: trace.stageRunId, traceSha256: trace.traceSha256,
+      scopeDigestHex: trace.scopeDigestHex, ledgerDigestHex: trace.ledgerDigestHex,
+      finalAccountingDigestHex: trace.finalAccountingDigestHex, netRealizedPnl,
+      orderCount: trace.orderCount, fillCount: trace.fillCount });
+  }
+  checkDeadline();
+  const receipt = buildResearchTrainingFamilyReceiptV1({ organizationId: request.organizationId,
+    attemptId: request.attemptId, spec, experimentSpecSha256: attempt.spec_sha256,
+    sourceRunId: attempt.source_run_id, sourceIssuanceDigest: attempt.source_issuance_digest,
+    observedExecutableIdentity: runtime, policyDigestHex: policy.guardianResolvedPolicySha256, trials });
+  const { contentDigest, ...body } = receipt;
+  const canonical = canonicalJsonString(body);
+  if (Buffer.byteLength(canonical, "utf8") > 262144) familyRefuse("RECEIPT_BYTE_LIMIT");
+  if (expectedDigest !== undefined && expectedDigest !== contentDigest) familyRefuse("CONFIRMATION_MISMATCH");
+  if (existing) {
+    if (existing.organization_id !== request.organizationId || existing.attempt_id !== request.attemptId ||
+        existing.experiment_spec_sha256 !== attempt.spec_sha256 || existing.source_run_id !== attempt.source_run_id ||
+        existing.source_issuance_digest !== attempt.source_issuance_digest ||
+        existing.receipt_canonical_json !== canonical || existing.receipt_sha256 !== contentDigest) {
+      familyRefuse("COMMITTED_SELECTION_CHANGED");
+    }
+    return Object.freeze({ status: "REPLAYED" as const, receipt });
+  }
+  if (readOnly) familyRefuse("COMMITTED_SELECTION_REQUIRED");
+  await tx`INSERT INTO public.trader_research_training_family_selections_v1
+    (organization_id,attempt_id,experiment_spec_sha256,source_run_id,source_issuance_digest,receipt_canonical_json,receipt_sha256)
+    VALUES (${request.organizationId}::uuid,${request.attemptId}::uuid,${attempt.spec_sha256},${attempt.source_run_id},
+      ${attempt.source_issuance_digest},${canonical},${contentDigest})`;
+  return Object.freeze({ status: "COMMITTED" as const, receipt });
+}
+
+/** Closed, nonqualifying selection of the entire predeclared DEVELOPMENT family.
+ * It verifies existing diagnostics only; it cannot execute even a missing trial. */
+export async function selectResearchIssuedTrainingFamilyPostgresV1(supplied: unknown): Promise<FamilyOutcome> {
+  const deadline = performance.now() + 180_000;
+  const signal = AbortSignal.timeout(180_000);
+  const request = captureResearchTrainingFamilyRequestV1(supplied);
+  const runtime = resolveCurrentResearchExecutableIdentityV1();
+  const url = process.env.DATABASE_URL_POSTGRES;
+  if (!url) familyRefuse("DATABASE_REQUIRED");
+  let candidate: ResearchTrainingFamilyReceiptV1 | undefined;
+  try {
+    return await ownedSession(url, signal, deadline, false, async (tx, executor, checkDeadline) => {
+      candidate = undefined;
+      const result = await verifyFamilyAndPersist(tx, executor, request, runtime, false, checkDeadline);
+      checkDeadline(); candidate = result.receipt; return result;
+    });
+  } catch (error) {
+    const pg = error as { code?: string; schema_name?: string; table_name?: string; constraint_name?: string } | null;
+    const unique = pg?.code === "23505" && pg.schema_name === "public" &&
+      pg.table_name === "trader_research_training_family_selections_v1" &&
+      pg.constraint_name === "research_training_family_selection_pkey";
+    if (unique) {
+      try { return await ownedSession(url, signal, deadline, true, (tx, executor, checkDeadline) =>
+        verifyFamilyAndPersist(tx, executor, request, runtime, true, checkDeadline)); }
+      catch { throw error; }
+    }
+    const code = pg?.code ?? "";
+    if (!candidate || (/^[0-9A-Z]{5}$/.test(code) && !/^(08|57)/.test(code))) throw error;
+    const expectedDigest = candidate.contentDigest;
+    try {
+      const confirmed = await ownedSession(url, signal, deadline, true, (tx, executor, checkDeadline) =>
+        verifyFamilyAndPersist(tx, executor, request, runtime, true, checkDeadline, expectedDigest));
+      return Object.freeze({ status: "CONFIRMED_AFTER_UNCERTAINTY", receipt: confirmed.receipt });
+    } catch { return Object.freeze({ status: "COMMIT_UNCERTAIN", receipt: null }); }
   }
 }

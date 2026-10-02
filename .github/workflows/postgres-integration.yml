@@ -27,6 +27,14 @@ on:
       - "app/(trader)/admin/**"
       - "scripts/postgres-validation/**"
       - "lib/trader/market-data/**"
+      - "lib/trader/accounting/accounting-frontier-repository-postgres.ts"
+      - "lib/trader/accounting/accounting-frontier-serialization.ts"
+      - "lib/trader/accounting/accounting-frontier.types.ts"
+      - "lib/trader/accounting/canonical-cross-backend-accounting-engine.ts"
+      - "lib/trader/risk/drawdown-policy-evaluator.ts"
+      - "lib/trader/risk/strategy-attribution.ts"
+      - "lib/trader/execution/order-state-machine.ts"
+      - "lib/trader/execution/types.ts"
       - "lib/trader/observability/fhv-partition-receipt.ts"
       - "lib/trader/backtest/historical-execution-profile.ts"
       - "lib/trader/backtest/streaming-evidence/atomic-file-write.ts"
@@ -40,6 +48,7 @@ on:
       - "tests/unit/fhv-bounded-json-file.test.ts"
       - "tests/unit/historical-simulation-bootstrap-source-loader-v2.test.ts"
       - "tests/unit/trader-discovery-source-preparation-cli.test.ts"
+      - "tests/unit/trader-discovery-family-selection-cli.test.ts"
       - "tests/unit/trader-research-executable-runtime-identity-v1.test.ts"
       - "docs/plans/dee-1211-research-source-owner.md"
       - "docs/plans/dee-1203-research-executable-runtime-binding.md"
@@ -232,6 +241,12 @@ on:
       - "tests/unit/trader-discovery-issued-training-cli.test.ts"
       - "tests/unit/trader-research-issued-training-contract-v2.test.ts"
       - "tests/unit/postgres-dee1212-proof-guard.test.ts"
+      - "docs/plans/dee-1222-complete-training-family.md"
+      - "docs/plans/dee-1222-complete-training-family.sql"
+      - "tests/integration/postgres-research-family-selection-v1.test.ts"
+      - "tests/unit/trader-research-training-family-contract-v1.test.ts"
+      - "tests/unit/postgres-dee1222-proof-guard.test.ts"
+      - "lib/trader/risk/numeric.ts"
       - "lib/trader/research/**"
       - "lib/trader/execution/historical-mock-ledger-scope.ts"
       - "lib/trader/execution/historical-mock-order-repository-postgres.ts"
@@ -552,6 +567,73 @@ jobs:
           path: |
             .tmp/dee1212-postgres-source-manifest.json
             .tmp/dee1212-postgres-results.json
+          if-no-files-found: warn
+
+  dee1222-family-selection-postgres:
+    name: DEE-1222 complete research-family selection (executed PostgreSQL proof required)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: waia_it
+          POSTGRES_PASSWORD: waia_it
+          POSTGRES_DB: waia_hsv2_it_dee1222_complete_training_family_v1
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U waia_it -d waia_hsv2_it_dee1222_complete_training_family_v1"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      DATABASE_URL_POSTGRES: postgresql://waia_it:waia_it@127.0.0.1:5432/waia_hsv2_it_dee1222_complete_training_family_v1
+      DATABASE_URL_POSTGRES_SESSION: postgresql://waia_it:waia_it@127.0.0.1:5432/waia_hsv2_it_dee1222_complete_training_family_v1
+      WAIA_DEE1222_POSTGRES_TEST_DATABASE_URL: postgresql://waia_it:waia_it@127.0.0.1:5432/waia_hsv2_it_dee1222_complete_training_family_v1
+      WAIA_DB_BACKEND: postgres
+      WAIA_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Auth prelude and current journal on fresh synthetic PostgreSQL 16
+        env:
+          WAIA_POSTGRES_CLI: "1"
+        run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
+      - name: Apply six research drafts and bind exact source bytes before execution
+        run: node scripts/postgres-validation/prepare-dee1222-family-selection-proof.mjs
+      - name: Execute the complete-family native suite with no skips or extra cases
+        env:
+          WAIA_PG_INTEGRATION: "1"
+          WAIA_TRADER_CLI: "1"
+          WAIA_POSTGRES_CLI: "1"
+        run: |
+          mkdir -p .tmp
+          rm -f .tmp/dee1222-postgres-results.json
+          set +e
+          pnpm test --run --no-file-parallelism --reporter=default --reporter=json --outputFile=.tmp/dee1222-postgres-results.json \
+            tests/integration/postgres-research-family-selection-v1.test.ts
+          test_status=$?
+          node scripts/postgres-validation/assert-dee1222-postgres-results.mjs .tmp/dee1222-postgres-results.json
+          guard_status=$?
+          if [ "$test_status" -ne 0 ]; then exit "$test_status"; fi
+          exit "$guard_status"
+      - name: Retain exact source manifest and Vitest report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dee1222-postgres-proof-${{ github.run_attempt }}
+          path: |
+            .tmp/dee1222-postgres-source-manifest.json
+            .tmp/dee1222-postgres-results.json
           if-no-files-found: warn
 
   capital-authority:
