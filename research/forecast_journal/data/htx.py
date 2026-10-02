@@ -187,6 +187,40 @@ class HtxClient:
             )
         return rows
 
+    def liquidations(self, symbol: str, create_date: int = 7) -> list[dict]:
+        """Recent forced closes. The public v3 route only returns a short buffer, not years.
+
+        `direction` buy/sell is the liquidation order side (buy closes a short).
+        """
+        payload = self._get(
+            "/linear-swap-api/v3/swap_liquidation_orders",
+            {"contract": contract_code(symbol), "trade_type": 0, "create_date": int(create_date)},
+        )
+        if payload.get("code") not in (200, "200") and payload.get("status") not in ("ok", None):
+            message = str(payload.get("msg") or payload.get("err_msg") or payload)
+            raise RuntimeError(f"HTX liquidation {symbol}: {message}")
+        rows = []
+        for item in payload.get("data") or []:
+            created = item.get("created_at")
+            if created is None:
+                continue
+            turnover = item.get("trade_turnover")
+            direction = str(item.get("direction") or "").lower()
+            notion = float(turnover) if turnover not in (None, "") else 0.0
+            rows.append(
+                {
+                    "ts": int(float(created)) // 1000,
+                    "buy_turnover": notion if direction == "buy" else 0.0,
+                    "sell_turnover": notion if direction == "sell" else 0.0,
+                }
+            )
+        if not rows:
+            return []
+        import pandas as pd
+
+        frame = pd.DataFrame(rows).groupby("ts", as_index=False)[["buy_turnover", "sell_turnover"]].sum()
+        return frame.to_dict("records")
+
     def elite_ratio(self, symbol: str, kind: str, htx_period: str = "60min") -> list[dict]:
         path = {
             "account": "/linear-swap-api/v1/swap_elite_account_ratio",

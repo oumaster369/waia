@@ -57,6 +57,14 @@ def main(argv: list[str] | None = None) -> int:
     report = sub.add_parser("report", help="Rebuild the written report from a saved study json if present")
     report.add_argument("--report-dir", default=None)
 
+    sit = sub.add_parser("situations", help="Test S1–S6 situational strategies and regime filters")
+    sit.add_argument("--data-dir", default=str(default_data_dir()))
+    sit.add_argument("--from", dest="from_date", default="2024-01-01")
+    sit.add_argument("--symbols", default="BTC,ETH,SOL")
+    sit.add_argument("--timeframes", default="15m,5m,1m")
+    sit.add_argument("--fee", type=float, default=DEFAULT_TAKER_FEE)
+    sit.add_argument("--report-dir", default=None)
+
     args = parser.parse_args(argv)
     if args.cmd == "backfill":
         start, end = _span(args)
@@ -88,6 +96,8 @@ def main(argv: list[str] | None = None) -> int:
             once=args.once,
         )
         return 0
+    if args.cmd == "situations":
+        return _situations(args)
     if args.cmd == "report":
         report_dir = Path(args.report_dir) if args.report_dir else default_report_dir()
         waia = report_dir / "waia_s.md"
@@ -97,6 +107,25 @@ def main(argv: list[str] | None = None) -> int:
         print(waia.read_text(encoding="utf-8")[:2000])
         return 0
     return 2
+
+
+def _situations(args) -> int:
+    from research.forecast_journal.intraday.reporting import write_situation_reports
+    from research.forecast_journal.intraday.situations import run_situations
+
+    report_dir = Path(args.report_dir) if args.report_dir else default_report_dir()
+    timeframes = tuple(part.strip() for part in args.timeframes.split(",") if part.strip())
+    result = run_situations(
+        Path(args.data_dir),
+        _symbols(args),
+        timeframes=timeframes,
+        start=args.from_date,
+        fee=args.fee,
+    )
+    write_situation_reports(result, report_dir)
+    text = (report_dir / "situations_ru.md").read_text(encoding="utf-8")
+    print(text)
+    return 0
 
 
 def _historical(args) -> int:

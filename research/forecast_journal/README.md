@@ -48,6 +48,23 @@ python -m research.forecast_journal live --interval 15 \
 python -m unittest discover -s research/forecast_journal/tests -v
 ```
 
+## Ситуативные стратегии
+
+Отдельный разбор, не продолжение WAIA-S. Момент классифицируется, и для каждой ситуации проверяется своё правило: снятие ликвидности и возврат (S1), выход из сжатия (S2), откат по тренду (S3), возврат к середине боковика (S4), разворот после каскада объёма (S5), импульс на открытии США и на данных (S6). Каждое правило дополнительно прогоняется только в тренде, только в боковике и только при высокой волатильности.
+
+Живой скор включает ситуацию только если она дала значимый плюс на окне отбора после поправки Бенджамини–Хохберга и повторила плюс на последних 20% времени. Иначе скор молчит. Проход на 15m не включает сделки на 1m.
+
+```bash
+python -m research.forecast_journal situations \
+  --data-dir research/forecast_journal/data_cache \
+  --from 2024-01-01 \
+  --symbols BTC,ETH,SOL \
+  --timeframes 15m,5m,1m \
+  --report-dir research/forecast_journal/reports
+```
+
+Таблица по-русски: `reports/situations_ru.md`. Рядом `situations.md`, `situations.json` и PNG.
+
 ## Откуда цифры
 
 HTX, `api.hbdm.com`, публичные методы:
