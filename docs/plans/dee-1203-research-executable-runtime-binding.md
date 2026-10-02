@@ -9,9 +9,9 @@ executionSurfaces: [local, isolated-postgres, github-pr-ci]
 requiredValidation: [lint, typecheck, build, targeted-unit, native-postgres, validate-canon, consumer-graphs, independent-review, required-ci]
 approvalGates: [user-authorized-engineering, independent-review, required-ci, no-live-activation]
 state:
-  status: implementation
+  status: in-progress
   prNumber: null
-  nextAction: "Prove runtime identity mismatch refusal and exact retries, then integrate after DEE-1200."
+  nextAction: "Obtain independent review and exact-head CI on the actual-main rebase; retain the 94-assertion PostgreSQL result as historical source-bound evidence."
 provenance:
   createdFrom: "Bounded extraction from the pre-implementation DEE-1159 observed executable binding plan"
   supersedes: null
@@ -62,3 +62,7 @@ Parent DEE-1159 remains open for those separate acceptance conditions.
 No real market/holdout/C3 payload, production database migration, financial rule
 change or live activation is part of this child. The diagnostic draft DDL
 remains test-only and is not promoted into the production migration journal.
+
+## Actual-main rebase status — 2026-10-02
+
+DEE-1205/PR735 merged as `07ae1bc3af54027b1acc7e1fc7be9da0ef6641d9`. This child is rebased on that exact main commit at `2f04c956c352fe58fca0e30876ae0025ed57fc43`; the one-commit range-diff is patch-equivalent to the prepared DEE-1203 commit. All seven files from the owned change were byte-identical immediately after the rebase. The earlier 94-assertion PostgreSQL run remains historical and source-bound to its recorded capture; it is not a fresh exact-main native proof. Scoped local readiness passed on this base; independent review and exact-head CI remain required.
