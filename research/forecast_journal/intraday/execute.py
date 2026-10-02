@@ -160,11 +160,22 @@ def simulate_levels(
     fee: float = FEE_PER_SIDE,
     atr_slip: np.ndarray | None = None,
     atr_1h: np.ndarray | None = None,
+    atr_cap: np.ndarray | None = None,
+    max_risk_mult: float = MAX_RISK_ATR,
+    min_rr: float = MIN_REWARD_OVER_RISK,
+    require_atr: bool = False,
+    count_from_ts: int | None = None,
+    stats: dict | None = None,
 ) -> list[dict]:
     """Fill the next open. Stop and target are known at the signal close.
 
     `side` is +1 long, −1 short, 0 flat. Slippage uses `atr_slip` of the
     decision bar (its own ATR), not the hourly ATR.
+
+    `atr_cap` is the ATR that caps the stop, known at the signal close.
+    When it is omitted the cap is the hourly ATR. `stats` counts signals,
+    filter skips, and taken trades. Counts ignore bars before `count_from_ts`,
+    but those bars still occupy the symbol so a later signal can be blocked.
     """
     if frame.empty:
         return []
@@ -184,27 +195,48 @@ def simulate_levels(
         atr_1h = frame["atr_1h"].to_numpy(dtype=float) if "atr_1h" in frame.columns else np.full(len(frame), np.nan)
     else:
         atr_1h = np.asarray(atr_1h, dtype=float)
+    cap = np.asarray(atr_1h if atr_cap is None else atr_cap, dtype=float)
     if side_i.dtype.kind in "iuf":
         indexes = np.flatnonzero(side_i != 0)
     else:
         indexes = np.flatnonzero((side_i == "long") | (side_i == "short"))
+    if stats is not None:
+        stats["signals"] = 0
+        stats["skipped_overlap"] = 0
+        stats["skipped_gate"] = 0
+        stats["taken"] = 0
     trades = []
     busy_until = -1
     symbol = str(frame["symbol"].iloc[0]) if "symbol" in frame.columns and len(frame) else ""
     for idx in indexes:
+        counted = count_from_ts is None or int(ts[idx]) >= count_from_ts
+        if counted and stats is not None:
+            stats["signals"] += 1
         if int(ts[idx]) < busy_until or idx + 1 >= len(frame):
+            if counted and stats is not None:
+                stats["skipped_overlap"] += 1
             continue
         trade_side = "long" if (side_i.dtype.kind in "iuf" and side_i[idx] > 0) or side_i[idx] == "long" else "short"
         stop_px = float(stop_a[idx])
         target_px = float(target_a[idx])
-        atr_h = float(atr_1h[idx]) if idx < len(atr_1h) else float("nan")
+        atr_h = float(cap[idx]) if idx < len(cap) else float("nan")
         slip_plan = slip_amount(float(close[idx]), float(atr_slip[idx]))
         planned = float(close[idx] + slip_plan) if trade_side == "long" else float(close[idx] - slip_plan)
-        if not _geometry_ok(trade_side, planned, stop_px, target_px, atr_h, fee):
+        if not _geometry_ok(
+            trade_side, planned, stop_px, target_px, atr_h, fee,
+            max_risk=max_risk_mult, min_rr=min_rr, require_atr=require_atr,
+        ):
+            if counted and stats is not None:
+                stats["skipped_gate"] += 1
             continue
         slip = slip_amount(float(open_[idx + 1]), float(atr_slip[idx]))
         fill = float(open_[idx + 1] + slip) if trade_side == "long" else float(open_[idx + 1] - slip)
-        if not _geometry_ok(trade_side, fill, stop_px, target_px, atr_h, fee):
+        if not _geometry_ok(
+            trade_side, fill, stop_px, target_px, atr_h, fee,
+            max_risk=max_risk_mult, min_rr=min_rr, require_atr=require_atr,
+        ):
+            if counted and stats is not None:
+                stats["skipped_gate"] += 1
             continue
         result = _walk(trade_side, fill, stop_px, target_px, high, low, close, open_, ts, idx + 1, fee, slip, clock=True)
         reward = (target_px - fill) if trade_side == "long" else (fill - target_px)
@@ -223,10 +255,23 @@ def simulate_levels(
         )
         trades.append(result)
         busy_until = int(result["exit_ts"])
+        if counted and stats is not None:
+            stats["taken"] += 1
     return trades
 
 
-def _geometry_ok(side: str, entry: float, stop: float, target: float, atr_h: float, fee: float) -> bool:
+def _geometry_ok(
+    side: str,
+    entry: float,
+    stop: float,
+    target: float,
+    atr_h: float,
+    fee: float,
+    *,
+    max_risk: float = MAX_RISK_ATR,
+    min_rr: float = MIN_REWARD_OVER_RISK,
+    require_atr: bool = False,
+) -> bool:
     if side == "long":
         risk = entry - stop
         reward = target - entry
@@ -235,15 +280,20 @@ def _geometry_ok(side: str, entry: float, stop: float, target: float, atr_h: flo
         reward = entry - target
     if not np.isfinite(risk) or risk <= 0 or not np.isfinite(reward) or reward <= 0:
         return False
-    if np.isfinite(atr_h) and atr_h > 0 and risk > MAX_RISK_ATR * atr_h:
+    if require_atr and (not np.isfinite(atr_h) or atr_h <= 0):
+        return False
+    if np.isfinite(atr_h) and atr_h > 0 and risk > max_risk * atr_h:
         return False
     net = reward - fee * (entry + target)
-    return bool(net > 0 and net / risk >= MIN_REWARD_OVER_RISK)
+    return bool(net > 0 and net / risk >= min_rr)
 
 
-def _walk(side, fill, stop, target, high, low, close, open_, ts, start, fee, slip, clock: bool = False) -> dict:
-    t_end = int(ts[start - 1]) + MAX_HOLD_MIN * 60
+def _walk(
+    side, fill, stop, target, high, low, close, open_, ts, start, fee, slip,
+    clock: bool = False, hold_until_ts: int | None = None,
+) -> dict:
     decision_ts = int(ts[start - 1])
+    t_end = int(hold_until_ts) if hold_until_ts is not None else decision_ts + MAX_HOLD_MIN * 60
     max_high = -np.inf
     min_low = np.inf
     last_close = fill

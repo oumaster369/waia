@@ -65,6 +65,18 @@ python -m research.forecast_journal situations \
 
 Таблица по-русски: `reports/situations_ru.md`. Рядом `situations.md`, `situations.json` и PNG.
 
+Дополнение к S6 делит релизы США по знаку сюрприза к консенсусу (NFP ±50 тысяч, безработица и CPI ±0.1 п.п., ISM ±1.5 пункта) и проверяет продолжение первых 15–60 минут против отката через 1–4 часа. Отдельно те же карточки S1–S6 прогоняются с порогом 1.8 и стопом от часового ATR против порога 1.3 и стопом от 15-минутного ATR. Опубликованный прогон использовал порог 0.8; это сравнение его не подменяет. Скор по-прежнему молчит, если ячейка не прошла прежнюю строгую проверку.
+
+```bash
+python -m research.forecast_journal followup \
+  --data-dir research/forecast_journal/data_cache \
+  --from 2024-01-01 \
+  --symbols BTC,ETH,SOL \
+  --report-dir research/forecast_journal/reports
+```
+
+Текст: `reports/followup_ru.md`, отдельно `s6_surprise_ru.md` и `gates_ru.md`.
+
 ## Откуда цифры
 
 HTX, `api.hbdm.com`, публичные методы:

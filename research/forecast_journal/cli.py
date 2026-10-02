@@ -65,6 +65,13 @@ def main(argv: list[str] | None = None) -> int:
     sit.add_argument("--fee", type=float, default=DEFAULT_TAKER_FEE)
     sit.add_argument("--report-dir", default=None)
 
+    fol = sub.add_parser("followup", help="Split US releases by surprise sign and compare the two stop filters")
+    fol.add_argument("--data-dir", default=str(default_data_dir()))
+    fol.add_argument("--from", dest="from_date", default="2024-01-01")
+    fol.add_argument("--symbols", default="BTC,ETH,SOL")
+    fol.add_argument("--fee", type=float, default=DEFAULT_TAKER_FEE)
+    fol.add_argument("--report-dir", default=None)
+
     args = parser.parse_args(argv)
     if args.cmd == "backfill":
         start, end = _span(args)
@@ -98,6 +105,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.cmd == "situations":
         return _situations(args)
+    if args.cmd == "followup":
+        return _followup(args)
     if args.cmd == "report":
         report_dir = Path(args.report_dir) if args.report_dir else default_report_dir()
         waia = report_dir / "waia_s.md"
@@ -107,6 +116,21 @@ def main(argv: list[str] | None = None) -> int:
         print(waia.read_text(encoding="utf-8")[:2000])
         return 0
     return 2
+
+
+def _followup(args) -> int:
+    from research.forecast_journal.intraday.followup import run_followup, write_followup_reports
+
+    report_dir = Path(args.report_dir) if args.report_dir else default_report_dir()
+    result = run_followup(
+        Path(args.data_dir),
+        _symbols(args),
+        start=args.from_date,
+        fee=args.fee,
+    )
+    write_followup_reports(result, report_dir)
+    print((report_dir / "followup_ru.md").read_text(encoding="utf-8"))
+    return 0
 
 
 def _situations(args) -> int:
