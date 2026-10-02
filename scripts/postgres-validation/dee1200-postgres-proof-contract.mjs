@@ -27,6 +27,11 @@ export const sourcePaths = [
   "lib/trader/research/research-training-policy-v1.ts",
   "lib/trader/research/research-feature-invocation-v1.ts",
   "lib/trader/research/research-training-diagnostic-postgres-v1.ts",
+  // Shared V1 trace/source components also participate in issued V2 training;
+  // keep the existing V1 proof bound to the common runtime it executes.
+  "lib/trader/research/research-training-trace-internal-v1.ts",
+  "lib/trader/research/research-modeled-stage-source-v1.ts",
+  "lib/trader/research/research-issued-training-contract-v2.ts",
   "lib/trader/research/research-modeled-stage-kernel-v1.ts",
   "lib/trader/research/research-lookback-evaluator-v1.ts",
   "lib/trader/research/dee-540-blind-tail-commit.ts",

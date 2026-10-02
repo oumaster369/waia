@@ -142,6 +142,13 @@ export const INFORMATION_INQUIRY_DIRECT_CONSUMERS_V1 = [
     createsCapitalAuthority: false,
   },
   {
+    path: "lib/trader/research/research-issued-training-diagnostic-postgres-v2.ts",
+    symbols: ["runResearchIssuedTrainingDiagnosticPostgresV2", "deepFreezeInquiry"],
+    imports: ["CONTRACTS"],
+    disposition: "PURE_INTERNAL_COMPOSITION",
+    createsCapitalAuthority: false,
+  },
+  {
     path: "lib/trader/intelligence/information-inquiry/index.ts",
     symbols: ["contracts-v1", "information-inquiry-loop-v1"],
     imports: [

@@ -5,7 +5,6 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { createHistoricalExecutionModelV1 } from "@/lib/trader/execution/historical-execution-model";
-import { addDecimal, compareDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 import { canonicalJsonString, computeStableJsonDigest } from "@/lib/trader/research/digest";
 import { assertResearchRootPostgresDbV1 } from "@/lib/trader/research/research-root-postgres-db-v1";
@@ -15,10 +14,12 @@ import { runOwnedResearchModeledStageV1 } from "@/lib/trader/research/research-m
 import { resolveCurrentResearchExecutableIdentityV1 } from "@/lib/trader/research/research-executable-runtime-identity-v1";
 import { loadResearchTrainingLedgerScopePostgresV1 } from "@/lib/trader/research/research-attempt-registry-postgres-v1";
 import { loadRegisteredResearchExperimentPostgresV1 } from "@/lib/trader/research/research-experiment-registry-postgres-v1";
-import { evaluateResearchFeatureInvocationV1, type ResearchFeatureInvocationReceiptV1 } from "@/lib/trader/research/research-feature-invocation-v1";
+import { evaluateResearchFeatureInvocationV1 } from "@/lib/trader/research/research-feature-invocation-v1";
 
-export const RESEARCH_TRAINING_DIAGNOSTIC_V1 = "waia.research.training-diagnostic.v1" as const;
-export const RESEARCH_TRAINING_DIAGNOSTIC_V2 = "waia.research.training-diagnostic.v2" as const;
+import { bindInputUseReceipt, verifyCommittedTrace, readCurrentTrace, readResearchStageLedgerProofV1, buildResearchTrainingTraceV1,
+  isResearchAccountingFrontierConflictV1,
+  type DiagnosticRow, type VerifiedTrace } from "./research-training-trace-internal-v1";
+export { RESEARCH_TRAINING_DIAGNOSTIC_V1, RESEARCH_TRAINING_DIAGNOSTIC_V2 } from "./research-training-trace-internal-v1";
 const REQUEST = z.object({
   attemptId: z.string().uuid(), trialIndex: z.number().int().min(0).max(31),
   limits: z.object({ maxBars: z.number().int().min(1).max(4096),
@@ -29,108 +30,18 @@ function refuse(reason: string): never {
   throw new Error(`RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:${reason}`);
 }
 
-type DiagnosticRow = Readonly<{
-  organization_id: string; attempt_id: string; trial_index: number;
-  stage_run_id: string; experiment_spec_sha256: string; scope_digest_hex: string;
-  policy_digest_hex: string; trace_canonical_json: string; trace_sha256: string;
-}>;
-type CheckedInput = Awaited<ReturnType<typeof loadRegisteredResearchTrainingExecutionInputPostgresV1>>;
-
-/** Binds actual calls, including NONE, to all checked modeled-execution input.
- * Cycle metadata/volume can affect fills even if the OHLCV bars are unchanged.
- * These hashes establish input use, not historical source or PIT provenance. */
-function bindInputUseReceipt(
-  source: CheckedInput,
-  policy: ReturnType<typeof resolveResearchTrainingPolicyV1>,
-  observedExecutableIdentity: ReturnType<typeof resolveCurrentResearchExecutableIdentityV1>,
-  invocations: readonly ResearchFeatureInvocationReceiptV1[],
-) {
-  if (invocations.length !== source.bars.length) refuse("INPUT_USE_INVOCATION_COUNT");
-  const body = Object.freeze({ schemaVersion: "waia.research.development-input-use.v1" as const,
-    authority: "DEVELOPMENT_INPUT_USE_INTEGRITY_ONLY" as const,
-    sourceQualification: "NOT_ESTABLISHED" as const,
-    organizationId: source.scope.identity.organizationId,
-    experimentSpecSha256: source.scope.identity.experimentSpecSha256,
-    attemptId: source.scope.identity.attemptId, trialIndex: source.scope.identity.trialIndex,
-    scopeDigestHex: source.scope.contentDigest,
-    sourceRunId: source.sourceRunId, sourceClass: source.source,
-    datasetAuthorityDigest: source.datasetAuthorityDigest,
-    partition: "DEVELOPMENT" as const, partitionIdentity: source.partition,
-    symbol: source.experiment.spec.universe.symbol, interval: source.experiment.spec.universe.interval,
-    executionCyclesSha256: computeStableJsonDigest(source.cycles),
-    policyDigestHex: policy.guardianResolvedPolicySha256, observedExecutableIdentity,
-    invocationCount: invocations.length, invocations: Object.freeze([...invocations]) });
-  return Object.freeze({ ...body, contentDigestHex: computeStableJsonDigest(body) });
-}
-type VerifiedTrace = Readonly<Record<string, unknown> & {
-  authority: "TRAINING_ENGINEERING_TRACE_ONLY"; capitalEligible: false; scientificQualified: false;
-  stageRunId: string; scopeDigestHex: string; decisions: readonly unknown[];
-  orders: readonly unknown[]; openPositions: readonly unknown[];
-  equity: string; netUnrealizedPnl: string; strategyGuardianQualification: "UNQUALIFIED";
-  accountGuardianQualification: "UNQUALIFIED";
-  appliedProtectionScope: "ACCOUNT_D20_SIGNAL_ADMISSION_ONLY";
-  orderCount: number; fillCount: number; accountingSequence: number;
-  finalAccountingDigestHex: string; ledgerDigestHex: string; traceSha256: string;
-  inputUseReceipt: ReturnType<typeof bindInputUseReceipt>;
-}>;
-
-function readCurrentTrace(row: Pick<DiagnosticRow, "trace_canonical_json" | "trace_sha256">) {
-  let parsed: Record<string, unknown>;
-  try { parsed = JSON.parse(row.trace_canonical_json) as Record<string, unknown>; }
-  catch { return refuse("COMMITTED_TRACE_INVALID"); }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) ||
-      canonicalJsonString(parsed) !== row.trace_canonical_json ||
-      computeStableJsonDigest(parsed) !== row.trace_sha256) refuse("COMMITTED_TRACE_INVALID");
-  if (parsed.schemaVersion === RESEARCH_TRAINING_DIAGNOSTIC_V1) {
-    refuse("LEGACY_TRACE_REQUIRES_NEW_ATTEMPT");
-  }
-  if (parsed.schemaVersion !== RESEARCH_TRAINING_DIAGNOSTIC_V2) refuse("COMMITTED_TRACE_INVALID");
-  return parsed;
-}
-
-function verifyCommittedTrace(row: DiagnosticRow, expected: Readonly<{
-  organizationId: string; attemptId: string; trialIndex: number; stageRunId: string;
-  specSha256: string; scopeDigest: string; policyDigest: string;
-  observedExecutableIdentity: ReturnType<typeof resolveCurrentResearchExecutableIdentityV1>;
-  inputUseReceipt: ReturnType<typeof bindInputUseReceipt>;
-}>) {
-  if (row.organization_id !== expected.organizationId || row.attempt_id !== expected.attemptId ||
-      row.trial_index !== expected.trialIndex || row.stage_run_id !== expected.stageRunId ||
-      row.experiment_spec_sha256 !== expected.specSha256 || row.scope_digest_hex !== expected.scopeDigest ||
-      row.policy_digest_hex !== expected.policyDigest) refuse("COMMITTED_SCOPE_MISMATCH");
-  const parsed = readCurrentTrace(row);
-  if (parsed.sourceQualification !== "NOT_ESTABLISHED" ||
-      parsed.authority !== "TRAINING_ENGINEERING_TRACE_ONLY" ||
-      parsed.capitalEligible !== false || parsed.scientificQualified !== false ||
-      parsed.organizationId !== expected.organizationId || parsed.attemptId !== expected.attemptId ||
-      parsed.trialIndex !== expected.trialIndex || parsed.stageRunId !== expected.stageRunId ||
-      parsed.scopeDigestHex !== expected.scopeDigest || parsed.policyDigestHex !== expected.policyDigest ||
-      !parsed.observedExecutableIdentity || typeof parsed.observedExecutableIdentity !== "object" ||
-      canonicalJsonString(parsed.observedExecutableIdentity) !==
-        canonicalJsonString(expected.observedExecutableIdentity) ||
-      !Array.isArray(parsed.decisions) || !Array.isArray(parsed.orders) ||
-      !Array.isArray(parsed.openPositions) || typeof parsed.equity !== "string" ||
-      typeof parsed.netUnrealizedPnl !== "string" ||
-      parsed.strategyGuardianQualification !== "UNQUALIFIED" ||
-      parsed.accountGuardianQualification !== "UNQUALIFIED" ||
-      parsed.appliedProtectionScope !== "ACCOUNT_D20_SIGNAL_ADMISSION_ONLY" ||
-      !Number.isSafeInteger(parsed.orderCount) || !Number.isSafeInteger(parsed.fillCount) ||
-      !Number.isSafeInteger(parsed.accountingSequence) ||
-      typeof parsed.finalAccountingDigestHex !== "string" ||
-      typeof parsed.ledgerDigestHex !== "string") {
-    refuse("COMMITTED_TRACE_INVALID");
-  }
-  if (!parsed.inputUseReceipt || canonicalJsonString(parsed.inputUseReceipt) !==
-      canonicalJsonString(expected.inputUseReceipt)) refuse("COMMITTED_INPUT_USE_MISMATCH");
-  return Object.freeze({ ...parsed, traceSha256: row.trace_sha256 }) as VerifiedTrace;
-}
-
 /** A non-qualifying diagnostic of one preregistered DEVELOPMENT trial. The
  * caller supplies no bars, results, policy, scorer, order port or authority
  * callback. All effects and the result share the locked root transaction. */
 export async function runRegisteredResearchTrainingDiagnosticPostgresV1(
   db: WaiaPostgresDb, context: OrgContext, supplied: z.infer<typeof REQUEST>,
 ) {
+  return runRegisteredDiagnosticInternal(db, context, supplied, false);
+}
+
+async function runRegisteredDiagnosticInternal(
+  db: WaiaPostgresDb, context: OrgContext, supplied: z.infer<typeof REQUEST>, verificationOnly: boolean,
+): Promise<VerifiedTrace | (ReturnType<typeof buildResearchTrainingTraceV1> & { traceSha256: string })> {
   assertResearchRootPostgresDbV1(db);
   const organizationId = requireOrgContext(context.organizationId).organizationId.toLowerCase();
   const parsedRequest = REQUEST.parse(supplied);
@@ -158,6 +69,7 @@ export async function runRegisteredResearchTrainingDiagnosticPostgresV1(
     where organization_id=${organizationId}::uuid and attempt_id=${request.attemptId}::uuid
       and trial_index=${request.trialIndex}`);
   if (preflightTrace) readCurrentTrace(preflightTrace);
+  else if (verificationOnly) refuse("COMMITTED_RESULT_REQUIRED");
   const source = await loadRegisteredResearchTrainingExecutionInputPostgresV1(db, captured, request);
   if (source.scope.contentDigest !== preflightScope.contentDigest ||
       source.experiment.specSha256 !== preflightExperiment.specSha256) {
@@ -183,7 +95,8 @@ export async function runRegisteredResearchTrainingDiagnosticPostgresV1(
     await tx.execute(sql`set local time zone 'UTC'`);
     const [attempt] = await tx.execute<{ id: string; spec_sha256: string; source_run_id: string }>(sql`
       select id::text,spec_sha256,source_run_id from public.trader_research_attempts_v1
-      where organization_id=${organizationId}::uuid and id=${request.attemptId}::uuid for update`);
+      where organization_id=${organizationId}::uuid and id=${request.attemptId}::uuid
+        ${verificationOnly ? sql`` : sql`for update`}`);
     if (!attempt || attempt.spec_sha256 !== expected.specSha256 ||
         attempt.source_run_id !== source.sourceRunId) refuse("ATTEMPT_LOCK_IDENTITY");
     const [existing] = await tx.execute<DiagnosticRow>(sql`
@@ -192,52 +105,7 @@ export async function runRegisteredResearchTrainingDiagnosticPostgresV1(
       from public.trader_research_training_diagnostics_v1
       where organization_id=${organizationId}::uuid and attempt_id=${request.attemptId}::uuid
         and trial_index=${request.trialIndex}`);
-    const [ledger] = await tx.execute<{ order_count: string; fill_count: string;
-      frontier_count: string; foreign_order_count: string; foreign_frontier_count: string }>(sql`
-      select
-        (select count(*)::text from public.trader_orders o where o.historical_run_id=${stageRunId}
-          and o.organization_id=${organizationId}::uuid and o.historical_account_key=${accountKey}) as order_count,
-        (select count(*)::text from public.trader_fills f join public.trader_orders o on o.id=f.order_id
-          where o.historical_run_id=${stageRunId} and o.organization_id=${organizationId}::uuid
-            and o.historical_account_key=${accountKey}) as fill_count,
-        (select count(*)::text from public.trader_accounting_frontier a where a.run_id=${stageRunId}
-          and a.organization_id=${organizationId}::uuid and a.account_key=${accountKey}) as frontier_count,
-        (select count(*)::text from public.trader_orders o where o.historical_run_id=${stageRunId}
-          and (o.organization_id<>${organizationId}::uuid or o.historical_account_key<>${accountKey})) as foreign_order_count,
-        (select count(*)::text from public.trader_accounting_frontier a where a.run_id=${stageRunId}
-          and (a.organization_id<>${organizationId}::uuid or a.account_key<>${accountKey})) as foreign_frontier_count`);
-    if (!ledger || ledger.foreign_order_count !== "0" || ledger.foreign_frontier_count !== "0") {
-      refuse("FOREIGN_STAGE_LEDGER");
-    }
-    // Exact durable material, including mutable parent state, lifecycle events,
-    // fill economics and every accounting frontier. Counts alone permit a
-    // same-row alteration to masquerade as the prior committed trace.
-    const readLedgerDigest = async () => {
-      const [value] = await tx.execute<{ digest: string }>(sql`
-        select encode(sha256(convert_to(jsonb_build_object(
-          'orders', (select coalesce(jsonb_agg(to_jsonb(o) order by o.id), '[]'::jsonb)
-            from public.trader_orders o where o.organization_id=${organizationId}::uuid
-              and o.historical_run_id=${stageRunId} and o.historical_account_key=${accountKey}),
-          'events', (select coalesce(jsonb_agg(to_jsonb(e) order by e.order_id,e.seq), '[]'::jsonb)
-            from public.trader_order_events e join public.trader_orders o on o.id=e.order_id
-            where o.organization_id=${organizationId}::uuid and o.historical_run_id=${stageRunId}
-              and o.historical_account_key=${accountKey}),
-          'fills', (select coalesce(jsonb_agg(to_jsonb(f) order by f.order_id,f.id), '[]'::jsonb)
-            from public.trader_fills f join public.trader_orders o on o.id=f.order_id
-            where o.organization_id=${organizationId}::uuid and o.historical_run_id=${stageRunId}
-              and o.historical_account_key=${accountKey}),
-          'economics', (select coalesce(jsonb_agg(to_jsonb(e) order by e.order_id,e.fill_id), '[]'::jsonb)
-            from public.trader_fill_execution_economics e
-            join public.trader_orders o on o.id=e.order_id
-            where o.organization_id=${organizationId}::uuid and o.historical_run_id=${stageRunId}
-              and o.historical_account_key=${accountKey}),
-          'frontiers', (select coalesce(jsonb_agg(to_jsonb(a) order by a.accounting_sequence), '[]'::jsonb)
-            from public.trader_accounting_frontier a where a.organization_id=${organizationId}::uuid
-              and a.run_id=${stageRunId} and a.account_key=${accountKey})
-        )::text, 'UTF8')), 'hex') as digest`);
-      if (!value || !/^[a-f0-9]{64}$/.test(value.digest)) refuse("LEDGER_DIGEST_UNAVAILABLE");
-      return value.digest;
-    };
+    const { ledger, readLedgerDigest } = await readResearchStageLedgerProofV1(tx, { organizationId, stageRunId, accountKey });
     if (existing) {
       // Recompute only pure evaluator calls on retry; never replay order effects.
       const invocations = source.cycles.map((cycle, index) =>
@@ -246,6 +114,17 @@ export async function runRegisteredResearchTrainingDiagnosticPostgresV1(
           index, sourceBarIndex: cycle.barIndex, cycleId: cycle.cycleId }).invocationReceipt);
       const committed = verifyCommittedTrace(existing, { ...expected,
         inputUseReceipt: bindInputUseReceipt(source, policy, observedExecutableIdentity, invocations) });
+      const expectedLineage = {
+        sourceRunId: source.sourceRunId, experimentSpecSha256: source.experiment.specSha256,
+        trainPartitionSha256: source.partition.contentSha256,
+        historicalExecutionModelSha256: policy.historicalExecutionModelSha256,
+        requestedExecutableSourceSha256: policy.requestedExecutableSourceSha256,
+        requestedPointInTimeEvidenceSha256: policy.requestedPointInTimeEvidenceSha256,
+        barCount: source.bars.length,
+      };
+      if (Object.entries(expectedLineage).some(([key, value]) => committed[key] !== value)) {
+        refuse("COMMITTED_TRACE_LINEAGE_MISMATCH");
+      }
       if (ledger.order_count !== String(committed.orderCount) ||
           ledger.fill_count !== String(committed.fillCount) ||
           ledger.frontier_count !== String(committed.accountingSequence)) {
@@ -263,56 +142,16 @@ export async function runRegisteredResearchTrainingDiagnosticPostgresV1(
       }
       return committed;
     }
+    if (verificationOnly) refuse("COMMITTED_RESULT_REQUIRED");
     if (ledger.order_count !== "0" || ledger.fill_count !== "0" || ledger.frontier_count !== "0") {
       refuse("UNCOMMITTED_STAGE_LEDGER_EXISTS");
     }
 
     const { accounting, decisions, advances, fillDetails, orderRows, openOrderIds, invocations } =
       await runOwnedResearchModeledStageV1({ tx, source, request, policy, model });
-    const finalPositions = Object.entries(accounting.positions).filter(([, position]) =>
-      compareDecimal(position.quantity, "0") > 0).map(([symbol, position]) => ({
-      symbol, quantity: position.quantity, netPositionBasis: position.netPositionBasis,
-      markPrice: accounting.marks[symbol]?.price ?? null }));
-    const feePaid = fillDetails.reduce((sum, entry) => {
-      const economics = entry.economics as { feeAmount: string };
-      return addDecimal(sum, economics.feeAmount);
-    }, "0");
-    const remainingNetBasis = Object.values(accounting.positions).reduce((sum, position) =>
-      addDecimal(sum, position.netPositionBasis), "0");
-    const ledgerDigestHex = await readLedgerDigest();
-    const trace = Object.freeze({ schemaVersion: RESEARCH_TRAINING_DIAGNOSTIC_V2,
-      inputUseReceipt: bindInputUseReceipt(source, policy, observedExecutableIdentity, invocations),
-      authority: "TRAINING_ENGINEERING_TRACE_ONLY" as const, capitalEligible: false as const,
-      scientificQualified: false as const, strategyGuardianQualification: "UNQUALIFIED" as const,
-      accountGuardianQualification: "UNQUALIFIED" as const,
-      appliedProtectionScope: "ACCOUNT_D20_SIGNAL_ADMISSION_ONLY" as const,
-      sourceQualification: "NOT_ESTABLISHED" as const,
-      organizationId, attemptId: request.attemptId, trialIndex: request.trialIndex,
-      stageRunId, scopeDigestHex: scope.contentDigest,
-      experimentSpecSha256: expected.specSha256,
-      sourceRunId: source.sourceRunId, trainPartitionSha256: source.partition.contentSha256,
-      policyDigestHex: policy.guardianResolvedPolicySha256,
-      historicalExecutionModelSha256: policy.historicalExecutionModelSha256,
-      requestedExecutableSourceSha256: policy.requestedExecutableSourceSha256,
-      observedExecutableIdentity,
-      requestedPointInTimeEvidenceSha256: policy.requestedPointInTimeEvidenceSha256,
-      barCount: source.bars.length, orderCount: orderRows.length,
-      fillCount: fillDetails.length, accountingSequence: accounting.accountingSequence,
-      ledgerDigestHex,
-      finalAccountingDigestHex: accounting.semanticContentDigest,
-      cash: accounting.cash, grossRealizedPnl: accounting.grossRealizedPnl,
-      netRealizedPnl: accounting.netRealizedPnl,
-      netUnrealizedPnl: subtractDecimal(accounting.markedPositionValue, remainingNetBasis),
-      markedPositionValue: accounting.markedPositionValue, equity: accounting.equity,
-      accountDrawdownBps: accounting.accountDrawdownBps,
-      monthlyDrawdownBps: accounting.monthlyDrawdownBps,
-      feesPaid: feePaid, openPositions: Object.freeze(finalPositions),
-      openOrderIds: Object.freeze(openOrderIds),
-      orders: Object.freeze(orderRows.map(order => Object.freeze({ id: order.id, side: order.side,
-        state: order.state, quantity: order.quantity, filledQuantity: order.filledQuantity,
-        avgFillPrice: order.avgFillPrice, decisionId: order.allocationDecisionId }))),
-      decisions: Object.freeze(decisions), advances: Object.freeze(advances),
-      fillDetails: Object.freeze(fillDetails) });
+    const trace = buildResearchTrainingTraceV1({ source, request, policy, observedExecutableIdentity,
+      stage: { accounting, decisions, advances, fillDetails, orderRows, openOrderIds, invocations },
+      ledgerDigestHex: await readLedgerDigest() });
     const traceCanonicalJson = canonicalJsonString(trace);
     if (Buffer.byteLength(traceCanonicalJson, "utf8") > 16 * 1024 * 1024) refuse("TRACE_BYTE_LIMIT");
     const traceSha256 = computeStableJsonDigest(trace);
@@ -323,8 +162,15 @@ export async function runRegisteredResearchTrainingDiagnosticPostgresV1(
       ${stageRunId}::uuid,${expected.specSha256},${scope.contentDigest},
       ${policy.guardianResolvedPolicySha256},${traceCanonicalJson},${traceSha256})`);
     return Object.freeze({ ...trace, traceSha256 });
-  }, { isolationLevel: "serializable" });
+  }, { isolationLevel: "serializable", ...(verificationOnly ? { accessMode: "read only" as const } : {}) });
   } catch (error) {
+    if (!verificationOnly && isResearchAccountingFrontierConflictV1(error)) {
+      try {
+        // Re-enter only the private read-only route, including a fresh source
+        // read. This cannot enter the stage kernel or mutate any result.
+        return await runRegisteredDiagnosticInternal(db, captured, request, true);
+      } catch { throw error; }
+    }
     const code = (error as { code?: unknown } | null)?.code;
     if (code === "40001") refuse("SERIALIZATION_RETRY_REQUIRED");
     if (code === "55P03") refuse("LOCK_TIMEOUT_RETRY_REQUIRED");

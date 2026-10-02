@@ -189,7 +189,14 @@ export async function loadRegisteredResearchTrainingExecutionInputPostgresV1(
 ) {
   const input = await loadRegisteredTrainingPayload(db, context, supplied);
   const expectedDigest = input.experiment.spec.replay.volumeQualificationSha256;
-  const cycles = input.cycles.map(value => {
+  const cycles = validateResearchTrainingCyclesV1(input.cycles, expectedDigest);
+  return Object.freeze({ ...input, authority: "TRAINING_EXECUTION_INPUT_INTEGRITY_ONLY" as const,
+    cycles: Object.freeze(cycles), volumeQualificationSha256: expectedDigest });
+}
+
+/** Shared strict execution-input check; source issuance alone does not replace volume validation. */
+export function validateResearchTrainingCyclesV1(values: readonly unknown[], expectedDigest: string) {
+  const cycles = values.map(value => {
     const cycle = marketCycleSchema.parse(value);
     const receipt = cycle.htxVolumeAuthorityReceipt;
     assertHtxVolumeAuthorityQualified(receipt);
@@ -209,6 +216,5 @@ export async function loadRegisteredResearchTrainingExecutionInputPostgresV1(
     return Object.freeze({ ...cycle, closedBar: Object.freeze(cycle.closedBar),
       htxVolumeAuthorityReceipt: Object.freeze(receipt), htxVolumeRaw: Object.freeze(cycle.htxVolumeRaw) });
   });
-  return Object.freeze({ ...input, authority: "TRAINING_EXECUTION_INPUT_INTEGRITY_ONLY" as const,
-    cycles: Object.freeze(cycles), volumeQualificationSha256: expectedDigest });
+  return Object.freeze(cycles);
 }
