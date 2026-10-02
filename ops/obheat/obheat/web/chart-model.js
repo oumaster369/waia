@@ -358,6 +358,40 @@
     return out;
   }
 
+  // Rank in [0, 1] among the visible window. Ties share the middle of their
+  // run, so a flat book does not all land on yellow.
+  function percentileRank(sorted, value) {
+    var n = sorted.length;
+    if (!n || !(value > 0)) return 0;
+    var lo = 0;
+    var hi = n;
+    while (lo < hi) {
+      var mid = (lo + hi) >> 1;
+      if (sorted[mid] < value) lo = mid + 1;
+      else hi = mid;
+    }
+    var endLo = lo;
+    var endHi = n;
+    while (endLo < endHi) {
+      var endMid = (endLo + endHi) >> 1;
+      if (sorted[endMid] <= value) endLo = endMid + 1;
+      else endHi = endMid;
+    }
+    return (lo + (endLo - lo) * 0.5) / n;
+  }
+
+  // floor is the brightness slider as a percentile (0.50 → p50 is still dark).
+  // Yellow is the top of the window (p98), not a log dollar cutoff.
+  function heatTone(rank, floor) {
+    var lo = floor == null ? 0.5 : floor;
+    if (!(lo >= 0)) lo = 0;
+    if (lo > 0.95) lo = 0.95;
+    var hi = 0.98;
+    if (!(rank > lo)) return 0;
+    if (rank >= hi) return 1;
+    return (rank - lo) / (hi - lo);
+  }
+
   function usdFromScale(encoded, maxUsd) {
     if (!(encoded > 0)) return 0;
     if (!(maxUsd > 0)) return encoded;
@@ -407,6 +441,23 @@
     var restored = usdFromScale(65535, 1e6);
     check(Math.abs(restored - 1e6) / 1e6 < 1e-6, "usd scale top");
     check(usdFromScale(0, 1e6) === 0, "usd scale zero");
+
+    var ladder = [];
+    for (var s = 1; s <= 100; s++) ladder.push(s);
+    check(heatTone(percentileRank(ladder, 50), 0.5) === 0, "p50 stays dark");
+    check(heatTone(percentileRank(ladder, 98), 0.5) > 0.95, "p98 is yellow");
+    check(heatTone(percentileRank(ladder, 90), 0.5) < 0.9, "p90 is not saturated");
+    var rank90 = percentileRank(ladder, 90);
+    check(heatTone(rank90, 0.85) < heatTone(rank90, 0.5), "slider lifts the dark floor");
+    var flat = [];
+    for (var f = 0; f < 80; f++) flat.push(250000);
+    check(heatTone(percentileRank(flat, 250000), 0.5) === 0, "flat book does not go yellow");
+    var skewed = [];
+    for (var u = 0; u < 98; u++) skewed.push(800000);
+    skewed.push(1.5e8, 1.5e8);
+    skewed.sort(function (a, b) { return a - b; });
+    check(heatTone(percentileRank(skewed, 800000), 0.5) === 0, "typical level stays dark");
+    check(heatTone(percentileRank(skewed, 1.5e8), 0.5) === 1, "wall is yellow");
 
     var dirty = makeCols("ETHUSDT", 2650, 30);
     dirty[2].bids.push([87000, 0, 5e7]);
@@ -512,6 +563,8 @@
     placeWallLabels: placeWallLabels,
     bucketCandles: bucketCandles,
     usdFromScale: usdFromScale,
+    percentileRank: percentileRank,
+    heatTone: heatTone,
     selfTest: selfTest,
   };
 });
