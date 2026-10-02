@@ -26,7 +26,7 @@ import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
-function buildPaperLoopPortfolioContext(
+export function buildPaperLoopPortfolioContext(
   config: PaperLoopWorkerConfig,
   markPrices?: PaperPnLMarkPrices,
 ): PortfolioCycleContext {
@@ -54,7 +54,7 @@ function portfolioExecutionMode(input: RunPaperLoopCycleInput): "mock" | "paper"
   return "mock";
 }
 
-function buildMarkPricesFromSnapshot(bars: readonly Bar[]): PaperPnLMarkPrices | undefined {
+export function buildMarkPricesFromSnapshot(bars: readonly Bar[]): PaperPnLMarkPrices | undefined {
   if (bars.length === 0) {
     return undefined;
   }

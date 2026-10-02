@@ -66,6 +66,27 @@ const UNQUALIFIED_DECISION_DIGEST = createHash("sha256")
   .update("waia.trader.execution_v2.decision_not_qualified")
   .digest("hex");
 
+/** Fixed pre-qualification decision; contains no database or connector capability. */
+export function createUnqualifiedPaperDecisionCapitalAuthorityV2(): CanonicalDecisionCapitalAuthorityV2Deps {
+  return Object.freeze({
+    async decide(request) {
+      return {
+        status: "NO_TRADE" as const,
+        decisionId: "execution-v2-unqualified",
+        decisionContentDigestHex: UNQUALIFIED_DECISION_DIGEST,
+        forecastAuthorityContentDigestHex: request.forecastOutcome.authority.contentDigestHex,
+        reasonCodes: ["EXECUTION_V2_DECISION_NOT_QUALIFIED"],
+      };
+    },
+    async assessRisk() {
+      throw new Error("EXECUTION_V2_RISK_STAGE_UNREACHABLE");
+    },
+    async execute() {
+      throw new Error("EXECUTION_V2_ADMISSION_INPUTS_INCOMPLETE");
+    },
+  });
+}
+
 /**
  * Preliminary live metadata check, not independent execution authorization.
  * Missing signer authority is deferred only to the mandatory direct bind, which
@@ -129,23 +150,7 @@ export function createOrgScopedExecutionV2OrderPath(
     ...(input.assertLiveAuthorized ? { assertLiveAuthorized: input.assertLiveAuthorized } : {}),
   });
 
-  const decisionCapitalAuthorityV2: CanonicalDecisionCapitalAuthorityV2Deps = {
-    async decide(request) {
-      return {
-        status: "NO_TRADE",
-        decisionId: "execution-v2-unqualified",
-        decisionContentDigestHex: UNQUALIFIED_DECISION_DIGEST,
-        forecastAuthorityContentDigestHex: request.forecastOutcome.authority.contentDigestHex,
-        reasonCodes: ["EXECUTION_V2_DECISION_NOT_QUALIFIED"],
-      };
-    },
-    async assessRisk() {
-      throw new Error("EXECUTION_V2_RISK_STAGE_UNREACHABLE");
-    },
-    async execute() {
-      throw new Error("EXECUTION_V2_ADMISSION_INPUTS_INCOMPLETE");
-    },
-  };
+  const decisionCapitalAuthorityV2 = createUnqualifiedPaperDecisionCapitalAuthorityV2();
 
   return Object.freeze({
     service,

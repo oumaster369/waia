@@ -2,7 +2,8 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, is, isNull } from "drizzle-orm";
+import { PostgresJsTransaction } from "drizzle-orm/postgres-js/session";
 
 import * as pgSchema from "@/db/schema.postgres";
 import { runWaiaPostgresTransaction, type WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -28,6 +29,9 @@ import type { PostgresOrderReadScope } from "@/lib/trader/execution/repository-p
 import { requireOrgContext, type OrgContext } from "@/lib/waia-core/scope/org-context";
 
 type OrdinaryWorkerMode = "mock" | "paper";
+type WaiaPostgresTx = Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0];
+type OrdinaryExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
+type RunOrdinaryMutation = <T>(operation: (tx: OrdinaryExecutor) => Promise<T>) => Promise<T>;
 
 function ordinaryPaperRow(row: OrderRow, executionMode: OrdinaryWorkerMode): boolean {
   return row.venue === (executionMode === "mock" ? "mock" : "HTX") &&
@@ -48,6 +52,32 @@ export function createOrdinaryPaperOrderRepositoryPostgres(
   organizationId: string | null,
   executionMode: OrdinaryWorkerMode,
 ): OrderRepository {
+  return createOrdinaryPaperOrderRepositoryCore(
+    db,
+    (operation) => runWaiaPostgresTransaction(db, async (tx) => operation(tx)),
+    organizationId,
+    executionMode,
+  );
+}
+
+/** Scheduled owner only: reads and mutations use its already-held root transaction. */
+export function createOrdinaryPaperOrderRepositoryFromExecutorPostgres(
+  tx: WaiaPostgresTx,
+  organizationId: string,
+  executionMode: OrdinaryWorkerMode,
+): OrderRepository {
+  if (!is(tx, PostgresJsTransaction)) {
+    throw new Error("ORDINARY_PAPER_HELD_TRANSACTION_REQUIRED");
+  }
+  return createOrdinaryPaperOrderRepositoryCore(tx, (operation) => operation(tx), organizationId, executionMode);
+}
+
+function createOrdinaryPaperOrderRepositoryCore(
+  ex: OrdinaryExecutor,
+  runMutation: RunOrdinaryMutation,
+  organizationId: string | null,
+  executionMode: OrdinaryWorkerMode,
+): OrderRepository {
   const readScope: PostgresOrderReadScope = executionMode === "mock" ? "ordinary-mock" : "ordinary-paper";
   const venue = executionMode === "mock" ? "mock" : "HTX";
   // A disabled/incomplete worker may still build and dispose its dependencies.
@@ -63,8 +93,8 @@ export function createOrdinaryPaperOrderRepositoryPostgres(
   const withLockedParent = <T>(
     scoped: OrgContext,
     orderId: string,
-    operation: (tx: Parameters<Parameters<WaiaPostgresDb["transaction"]>[0]>[0]) => Promise<T>,
-  ): Promise<T> => runWaiaPostgresTransaction(db, async (tx) => {
+    operation: (tx: OrdinaryExecutor) => Promise<T>,
+  ): Promise<T> => runMutation(async (tx) => {
     const rows = await tx.select({ id: pgSchema.traderOrders.id })
       .from(pgSchema.traderOrders)
       .where(and(
@@ -99,7 +129,7 @@ export function createOrdinaryPaperOrderRepositoryPostgres(
           captured.historicalRunId != null || captured.historicalAccountKey != null) {
         throw new Error("ORDINARY_PAPER_ORDER_DOMAIN_FORBIDDEN");
       }
-      return runWaiaPostgresTransaction(db, async (tx) => {
+      return runMutation(async (tx) => {
         const existingByClient = await findOrderByClientOrderIdPostgres(tx, scoped, captured.clientOrderId);
         const existingByIdempotency = await findOrderByIdempotencyKeyPostgres(tx, scoped, captured.idempotencyKey);
         if ((existingByClient && !ordinaryPaperRow(existingByClient, executionMode)) ||
@@ -113,14 +143,14 @@ export function createOrdinaryPaperOrderRepositoryPostgres(
         return created;
       });
     },
-    getOrderById: async (context, id) => getOrderByIdPostgres(db, scope(context), id, undefined, readScope),
+    getOrderById: async (context, id) => getOrderByIdPostgres(ex, scope(context), id, undefined, readScope),
     findOrderByClientOrderId: async (context, clientOrderId) =>
-      findOrderByClientOrderIdPostgres(db, scope(context), clientOrderId, undefined, readScope),
+      findOrderByClientOrderIdPostgres(ex, scope(context), clientOrderId, undefined, readScope),
     findOrderByIdempotencyKey: async (context, idempotencyKey) =>
-      findOrderByIdempotencyKeyPostgres(db, scope(context), idempotencyKey, undefined, readScope),
+      findOrderByIdempotencyKeyPostgres(ex, scope(context), idempotencyKey, undefined, readScope),
     listOpenOrders: async (context, filter) =>
-      listOpenOrdersPostgres(db, scope(context), captureFilter(filter), undefined, readScope),
-    listOrders: async (context, filter) => listOrdersPostgres(db, scope(context), captureFilter(filter), undefined, readScope),
+      listOpenOrdersPostgres(ex, scope(context), captureFilter(filter), undefined, readScope),
+    listOrders: async (context, filter) => listOrdersPostgres(ex, scope(context), captureFilter(filter), undefined, readScope),
     transitionOrder: async (context, input) => {
       const scoped = scope(context);
       const captured = captureTransition(input);
@@ -145,8 +175,8 @@ export function createOrdinaryPaperOrderRepositoryPostgres(
     recordFillProgress: async () => {
       throw new Error("ORDINARY_PAPER_HISTORICAL_PROGRESS_FORBIDDEN");
     },
-    listEvents: async (context, orderId) => listEventsPostgres(db, scope(context), orderId, undefined, readScope),
-    listFills: async (context, orderId) => listFillsPostgres(db, scope(context), orderId, undefined, readScope),
+    listEvents: async (context, orderId) => listEventsPostgres(ex, scope(context), orderId, undefined, readScope),
+    listFills: async (context, orderId) => listFillsPostgres(ex, scope(context), orderId, undefined, readScope),
   };
   return Object.freeze(repository);
 }

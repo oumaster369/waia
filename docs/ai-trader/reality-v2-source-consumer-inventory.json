@@ -91,7 +91,7 @@
       {"path": "lib/trader/execution/v2/execution-admission-proof-v2.ts","sha256": "cc82881045d6ce8541a5989b03123ba74a3e4f869251e35d65cecdff0af05370"},
       {"path": "lib/trader/execution/v2/index.ts","sha256": "a0757a20739b461067b4a49950fe9069abf0f2c904d25c3a37ea0182d2582940"},
       {"path": "lib/trader/execution/v2/live-gates.ts","sha256": "41b50ead2681bb732d62657d7bf5b14fbdf7e5a54b9d41b88562dbca12857c17"},
-      {"path": "lib/trader/execution/v2/org-order-path.ts","sha256": "f07f8febc7c902e24dbe4e8a569235eba926c3e945e7bf8bc5efd2133a3e20e2"},
+      {"path": "lib/trader/execution/v2/org-order-path.ts","sha256": "c6e704e13bccb048c98a78ca2dfcc6fb94218d35df8533606e45b5a5efef4f7e"},
       {"path": "lib/trader/execution/v2/pre-post-recheck-v2.ts","sha256": "d8f9a2f7a58bf8a7adfc4b1dea675834287c22315fca6f19b4fc55aa8c968377"},
       {"path": "lib/trader/execution/v2/reality-adapter.ts","sha256": "31327175b9f5d905e4bfcfdce8f4a48c4119149f6628bde2a961f952529d994f"},
       {"path": "lib/trader/execution/v2/recovery-postgres.ts","sha256": "862e0d9093832aee57b9a01dca3eb2598953d480976e53d19819b7bd1ef1e313"},
@@ -304,8 +304,8 @@
       "getTradeHistory",
       "placeOrder"
     ],
-    "expectedFileCount": 153,
-    "sortedPathDigestHex": "b7a68c9b4fe1e8552a04b86178c38dc379e04e919f7d606761533425826aa855",
+    "expectedFileCount": 154,
+    "sortedPathDigestHex": "f04cfbd3338d766013e392d186fe99c12e2b29f0265569590457456bb2c9e715",
     "contentPins": [
       {"path": "lib/trader/account-observation/credential-read-boundary.ts","sha256": "1c302306d59844713198f16cf6b0056eebd03652fd5c24b44deb12a120c541ad"},
       {"path": "lib/trader/account-observation/credential-store.ts","sha256": "77fcab86d72f5636c48f2a4d957f819bd525531013dc39700c8678d3c655ae70"},
@@ -415,6 +415,7 @@
       {"path": "lib/trader/observability/fhv-control-replay-execution.ts","sha256": "78fed280e8db003f2b0c92753ec333c7c089f3370f50ffebf0ab7ba414371d8c"},
       {"path": "lib/trader/observability/fhv-execution-checkpoint-runtime.ts","sha256": "fc32f1f4af3938549c6c52923e8c5a52f36fe8e6fb7df7591a02e2b940f53d49"},
       {"path": "lib/trader/observability/fhv-prelaunch-fixture-e2e.ts","sha256": "0bd9780c216f312481e5ee14f9f37080bd87035e517bcd7481c104a3de4bc2b2"},
+      {"path": "lib/trader/paper/scheduled-noncapital-owner-postgres-v1.ts","sha256": "2e6440af50e26f72321de0fdc055e33c91268ce966fc5b2ce5957fab750ac545"},
       {"path": "lib/trader/paper/build-worker-deps.ts","sha256": "95491a0c2c55ae75b0954f49d97723f43c907865b01d4fdd364c9cb36051bee8"},
       {"path": "lib/trader/paper/paper-cycle-runner.ts","sha256": "67f4e2a72dc82b920ba34c4dcb52584fc11e9a8f374aee29bb4dd277b3e78bf9"},
       {"path": "lib/trader/paper/paper-cycle.types.ts","sha256": "2cc6871ebb5e35a5b4d82f83d382dd69b7b790fb8fce0359e9697db72fd58af7"},
