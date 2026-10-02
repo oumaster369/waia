@@ -170,6 +170,12 @@ describe("configured observation runtime, real local composition with mock persi
   const derivativesResponse = () => Response.json({ status: "ok", ts: Date.now(), data: [{
     margin_account: "USDT", margin_balance: "200.50", withdraw_available: "190.25",
   }] });
+  const derivativesPositionResponse = () => Response.json({ status: "ok", ts: Date.now(), data: [{
+    symbol: "BTC", contract_code: "BTC-USDT", direction: "buy", margin_account: "USDT",
+    margin_mode: "cross", margin_asset: "USDT", volume: "2", available: "1", frozen: "1",
+    cost_open: "100", cost_hold: "99", profit_unreal: "1.25", profit_rate: "0.02",
+    position_margin: "20", lever_rate: "5",
+  }] });
   const derivativesCalls = (f: ReturnType<typeof setup>) => f.fetchImpl.mock.calls.filter(
     ([url]) => new URL(String(url)).hostname === "api.hbdm.com");
   function bindConfiguredRows(f: ReturnType<typeof setup>) {
@@ -191,18 +197,26 @@ describe("configured observation runtime, real local composition with mock persi
     const item = withDerivatives(f.item);
     f.input.configured = [item];
     const spot = f.fetchImpl.getMockImplementation()!;
-    f.fetchImpl.mockImplementation((url, options) => new URL(String(url)).hostname === "api.hbdm.com"
-      ? Promise.resolve(derivativesResponse()) : spot(url, options));
+    f.fetchImpl.mockImplementation((url, options) => {
+      const target = new URL(String(url));
+      if (target.hostname !== "api.hbdm.com") return spot(url, options);
+      return Promise.resolve(target.pathname.endsWith("/swap_cross_position_info")
+        ? derivativesPositionResponse() : derivativesResponse());
+    });
     await stopAfterTick(f);
-    expect(derivativesCalls(f)).toHaveLength(1);
-    const [url, options] = derivativesCalls(f)[0];
-    expect(new URL(String(url)).pathname).toBe("/linear-swap-api/v1/swap_cross_account_info");
-    expect(options).toMatchObject({ method: "POST", body: '{"margin_account":"USDT"}' });
+    expect(derivativesCalls(f)).toHaveLength(2);
+    const [accountCall, positionsCall] = derivativesCalls(f);
+    expect(new URL(String(accountCall[0])).pathname).toBe("/linear-swap-api/v1/swap_cross_account_info");
+    expect(accountCall[1]).toMatchObject({ method: "POST", body: '{"margin_account":"USDT"}' });
+    expect(new URL(String(positionsCall[0])).pathname).toBe("/linear-swap-api/v1/swap_cross_position_info");
+    expect(positionsCall[1]).toMatchObject({ method: "POST", body: "{}" });
     expect(ports.commitIfCurrent).toHaveBeenCalledTimes(1);
     const observation = ports.commitIfCurrent.mock.calls[0][0].observation;
     expect(observation).toMatchObject({ schemaVersion: "account-observation/v2", binding: item.binding,
       derivatives: { families: expect.arrayContaining([expect.objectContaining({ family: "usdt_cross_shared", status: "COMPLETE",
         accounts: expect.arrayContaining([expect.objectContaining({ marginBalance: "200.50", collateralAsset: "USDT" })]),
+        positions: expect.objectContaining({ status: "COMPLETE", values: [expect.objectContaining({
+          symbol: "BTC", contractCode: "BTC-USDT", direction: "buy", unrealizedPnl: "1.25" })] }),
         readStartedAtMs: expect.any(Number), readCompletedAtMs: expect.any(Number), error: null })]) } });
     expect(observation.derivatives.families.filter((family: { status: string }) => family.status === "NOT_CONFIGURED")).toHaveLength(3);
     expect(JSON.stringify(ports.commitIfCurrent.mock.calls)).not.toMatch(/synthetic|Signature|AccessKey/);
@@ -221,7 +235,8 @@ describe("configured observation runtime, real local composition with mock persi
       const account = accessKey.endsWith("124") ? 124 : 123;
       if (target.hostname === "api.hbdm.com") {
         expect(account).toBe(124);
-        return derivativesResponse();
+        return target.pathname.endsWith("/swap_cross_position_info")
+          ? derivativesPositionResponse() : derivativesResponse();
       }
       if (target.pathname === "/v1/account/accounts") return Response.json({ status: "ok",
         data: [{ id: account, type: "spot", state: "working" }] });
@@ -235,8 +250,15 @@ describe("configured observation runtime, real local composition with mock persi
     expect(ports.commitIfCurrent).toHaveBeenCalledTimes(2);
     const observations = ports.commitIfCurrent.mock.calls.map(([value]) => value.observation);
     expect(observations.find(value => value.binding.exchangeAccountId === "123")).toMatchObject({ schemaVersion: "account-observation/v1" });
-    expect(observations.find(value => value.binding.exchangeAccountId === "124")).toMatchObject({ schemaVersion: "account-observation/v2" });
-    expect(derivativesCalls(f)).toHaveLength(1);
+    const secondObservation = observations.find(value => value.binding.exchangeAccountId === "124");
+    expect(secondObservation).toMatchObject({ schemaVersion: "account-observation/v2" });
+    expect(secondObservation.derivatives.families.find((family: { family: string }) => family.family === "usdt_cross_shared"))
+      .toMatchObject({ positions: { status: "COMPLETE", values: [expect.objectContaining({
+        symbol: "BTC", contractCode: "BTC-USDT", direction: "buy", unrealizedPnl: "1.25" })] } });
+    expect(derivativesCalls(f)).toHaveLength(2);
+    expect(derivativesCalls(f).map(([url]) => new URL(String(url)).pathname)).toEqual([
+      "/linear-swap-api/v1/swap_cross_account_info", "/linear-swap-api/v1/swap_cross_position_info",
+    ]);
   });
   it("does not let an extra verifier grant a derivatives read for a trading key", async () => {
     const f = setup();
@@ -250,7 +272,7 @@ describe("configured observation runtime, real local composition with mock persi
     expect(derivativesCalls(f)).toHaveLength(0);
     expect(ports.commitIfCurrent).not.toHaveBeenCalled();
   });
-  it("discards futures values if fresh venue permission changes during the read", async () => {
+  it("fences the tick if fresh venue permission changes during the balance read", async () => {
     const f = setup();
     f.input.configured = [withDerivatives(f.item)];
     const spot = f.fetchImpl.getMockImplementation()!;
@@ -264,10 +286,12 @@ describe("configured observation runtime, real local composition with mock persi
     });
     await stopAfterTick(f);
     expect(derivativesCalls(f)).toHaveLength(1);
-    expect(ports.commitIfCurrent).toHaveBeenCalledTimes(1);
-    expect(ports.commitIfCurrent.mock.calls[0][0].observation.derivatives.families).toContainEqual(
-      expect.objectContaining({ family: "usdt_cross_shared", status: "ERROR", accounts: null, error: "PERMISSION_DENIED" }));
-    expect(JSON.stringify(ports.commitIfCurrent.mock.calls)).not.toContain("200.50");
+    expect(new URL(String(derivativesCalls(f)[0][0])).pathname).toBe("/linear-swap-api/v1/swap_cross_account_info");
+    expect(ports.commitIfCurrent).not.toHaveBeenCalled();
+    expect(ports.release).toHaveBeenCalledTimes(1);
+    expect(f.report).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(derivativesCalls(f).some(([url]) => new URL(String(url)).pathname.endsWith("/swap_cross_position_info"))).toBe(false);
   });
   it("fences the whole commit when the persisted assignment is revoked during a futures read", async () => {
     const f = setup();
