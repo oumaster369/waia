@@ -572,7 +572,7 @@ def _surprise_md(result: dict) -> str:
         "",
         "«Первый час растёт» — закрытие через 60 минут выше последней цены до релиза. «Через 4 часа выше» — то же на отметке +4 часа. Считаются только релизы, у которых в кэше есть обе отметки.",
         "",
-        _weak_md(surprise["weak_nfp"]),
+        _weak_md(surprise["weak_nfp"], surprise.get("paths") or []),
         "",
         "## Продолжение, 15–60 минут",
         "",
@@ -590,7 +590,7 @@ def _surprise_md(result: dict) -> str:
     return "\n".join(lines)
 
 
-def _weak_md(block: dict) -> str:
+def _weak_md(block: dict, paths: list[dict] | None = None) -> str:
     lines = [
         "| монета | n с обеими отметками | первый час выше | через 4 часа выше | последние 7, час | последние 7, +4ч |",
         "|---|---:|---:|---:|---:|---:|",
@@ -599,26 +599,45 @@ def _weak_md(block: dict) -> str:
         row = block.get(symbol) or {}
         n = int(row.get("n") or 0)
         last_n = int(row.get("last7_n") or 0)
+        if symbol == "ALL":
+            last_hour = "—"
+            last_4h = "—"
+        else:
+            last_hour = f"{int(row.get('last7_up_1h') or 0)} из {last_n}"
+            last_4h = f"{int(row.get('last7_up_4h') or 0)} из {last_n}"
         lines.append(
-            "| {sym} | {n} | {a} из {n} | {b} из {n} | {c} из {last_n} | {d} из {last_n} |".format(
+            "| {sym} | {n} | {a} из {n} | {b} из {n} | {hour} | {h4} |".format(
                 sym="все три" if symbol == "ALL" else symbol,
                 n=n,
                 a=int(row.get("up_1h") or 0),
                 b=int(row.get("up_4h") or 0),
-                c=int(row.get("last7_up_1h") or 0),
-                d=int(row.get("last7_up_4h") or 0),
-                last_n=last_n,
+                hour=last_hour,
+                h4=last_4h,
             )
         )
     btc = block.get("BTC") or {}
     lines.append("")
     lines.append(
         "Наблюдение «при слабом NFP первый час растёт в 6 из 7, а через 4 часа выше только в 2 из 7» "
-        f"сверялось с BTC. На всей выборке с обеими отметками первый час выше в {int(btc.get('up_1h') or 0)} из {int(btc.get('n') or 0)}, "
+        f"сверялось с BTC. Полных релизов, где |факт − консенсус| ≥ 50 тысяч и в кэше есть обе отметки, "
+        f"{int(btc.get('n') or 0)}. Первый час выше в {int(btc.get('up_1h') or 0)} из {int(btc.get('n') or 0)}, "
         f"через 4 часа выше в {int(btc.get('up_4h') or 0)} из {int(btc.get('n') or 0)}. "
-        f"Последние {int(btc.get('last7_n') or 0)} таких релизов: час {int(btc.get('last7_up_1h') or 0)} из {int(btc.get('last7_n') or 0)}, "
-        f"+4ч {int(btc.get('last7_up_4h') or 0)} из {int(btc.get('last7_n') or 0)}."
+        "Отдельного окна «последние 7» нет: семёрка и есть вся выборка. "
+        "На ETH и SOL то же правило не повторяется один в один. Строка «все три» — это релиз × монета, не семь общих случаев."
     )
+    partial = [
+        row for row in (paths or [])
+        if row.get("indicator") == "nfp" and row.get("sign") == -1 and row.get("symbol") == "BTC"
+        and row.get("up_1h") is not None and row.get("up_4h") is None
+    ]
+    if partial:
+        bits = ", ".join(
+            f"{iso_utc(row['release_ts'])} (сюрприз {row['surprise']:.0f} тысяч, первый час {'выше' if row['up_1h'] else 'не выше'})"
+            for row in partial
+        )
+        lines.append(
+            f"Ещё {len(partial)} слабый NFP на BTC не вошёл в семёрку, потому что отметки +4 часа в минутном кэше нет: {bits}."
+        )
     lines.append("")
     lines.append("| дата UTC | сюрприз, тыс. | час выше | +4ч выше |")
     lines.append("|---|---:|---|---|")
@@ -694,6 +713,19 @@ def _gates_md(result: dict) -> str:
                 )
             )
         lines.append("")
+    wide = next((frame for frame in result["gates"]["frames"] if frame["decision_tf"] == "15m"), None)
+    if wide is not None:
+        by_key = {(row["setup_id"], row["gate"]): row for row in wide["rows"]}
+        s1s, s1l = by_key.get(("S1", "strict")), by_key.get(("S1", "loose"))
+        s2s, s2l = by_key.get(("S2", "strict")), by_key.get(("S2", "loose"))
+        if s1s and s1l and s2s and s2l:
+            lines.append(
+                f"На 15m строгий фильтр пропускает у S1 {s1s['skipped_gate']} сигналов и берёт {s1s['taken']}, "
+                f"ослабленный пропускает {s1l['skipped_gate']} и берёт {s1l['taken']}: более мягкий порог 1.3 добавляет сделки. "
+                f"У S2 наоборот: пропущено {s2s['skipped_gate']} против {s2l['skipped_gate']}, взято {s2s['taken']} против {s2l['taken']}. "
+                "Здесь более узкий ценовой допуск 2.5×ATR 15 минут перевешивает порог 1.3. Средний R в обоих случаях остаётся отрицательным."
+            )
+            lines.append("")
     return "\n".join(lines)
 
 
