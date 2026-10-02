@@ -136,3 +136,12 @@ refusal. This separates the concurrency experiment from its recovery proof;
 it changes no runtime retry budget, error or transaction behavior and accepts
 no new failure class. Run the affected native V1/V2/payload suites, source-bind
 the result and obtain independent narrow review before pushing a new head.
+
+The bounded recovery-test repair passed fresh source-bound isolated PostgreSQL
+53/53 (21 V1 diagnostic,16 issued V2,16 payload), zero failed/skipped/todo;
+2510 pinned inputs were unchanged during execution. Evidence:
+`dee1212-native-v2/{source,results,execution}-ci-v1-sequential-recovery.json`.
+Both inherited/current proof-guard suites passed25/25; changed-test lint passed.
+Independent narrow review accepted the two-path delta in
+`pr739-v1-concurrency-test-delta-review.md`. All original runtime/SQL/guards are
+unchanged; published exact-head CI and fresh final admission remain required.

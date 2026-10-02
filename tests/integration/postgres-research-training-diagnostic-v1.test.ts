@@ -747,10 +747,15 @@ describe.skipIf(!enabled || !url)("DEE-1159 registered training diagnostic Postg
     const simultaneous = await Promise.all(concurrent.map(f => Promise.allSettled([run(f, 0), run(f, 0)])));
     for (const [index, outcomes] of simultaneous.entries()) {
       const f = concurrent[index]!;
-      const results = await Promise.all(outcomes.map(async outcome =>
-        outcome.status === "fulfilled" ? outcome.value :
-          /SERIALIZATION_RETRY_REQUIRED|LOCK_TIMEOUT_RETRY_REQUIRED/.test(String(outcome.reason))
-            ? run(f, 0) : Promise.reject(outcome.reason)));
+      // Original owners have all settled. Explicit recovery is sequential so
+      // two truthful initial refusals do not start a second contention race.
+      const results = [];
+      for (const outcome of outcomes) {
+        if (outcome.status === "fulfilled") results.push(outcome.value);
+        else if (/SERIALIZATION_RETRY_REQUIRED|LOCK_TIMEOUT_RETRY_REQUIRED/.test(String(outcome.reason))) {
+          results.push(await run(f, 0));
+        } else throw outcome.reason;
+      }
       expect(results[0]).toEqual(results[1]);
       const rows = await ownerSql`select count(*)::int as n from public.trader_research_training_diagnostics_v1
         where organization_id=${f.orgId}::uuid and attempt_id=${f.attempt.id}::uuid and trial_index=0`;
