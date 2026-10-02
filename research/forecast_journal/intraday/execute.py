@@ -271,6 +271,7 @@ def _geometry_ok(
     max_risk: float = MAX_RISK_ATR,
     min_rr: float = MIN_REWARD_OVER_RISK,
     require_atr: bool = False,
+    flat_bp: float | None = None,
 ) -> bool:
     if side == "long":
         risk = entry - stop
@@ -284,7 +285,10 @@ def _geometry_ok(
         return False
     if np.isfinite(atr_h) and atr_h > 0 and risk > max_risk * atr_h:
         return False
-    net = reward - fee * (entry + target)
+    if flat_bp is not None:
+        net = reward - abs(entry) * (float(flat_bp) / 10000.0)
+    else:
+        net = reward - fee * (entry + target)
     return bool(net > 0 and net / risk >= min_rr)
 
 

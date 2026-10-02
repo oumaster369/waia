@@ -72,6 +72,13 @@ def main(argv: list[str] | None = None) -> int:
     fol.add_argument("--fee", type=float, default=DEFAULT_TAKER_FEE)
     fol.add_argument("--report-dir", default=None)
 
+    costs = sub.add_parser("costs", help="Gross and net R for S1–S6 and the T+30 surprise baseline")
+    costs.add_argument("--data-dir", default=str(default_data_dir()))
+    costs.add_argument("--from", dest="from_date", default="2024-01-01")
+    costs.add_argument("--symbols", default="BTC,ETH,SOL")
+    costs.add_argument("--report-dir", default=None)
+    costs.add_argument("--trades", default="research/boss_bt/trades.csv")
+
     args = parser.parse_args(argv)
     if args.cmd == "backfill":
         start, end = _span(args)
@@ -107,6 +114,8 @@ def main(argv: list[str] | None = None) -> int:
         return _situations(args)
     if args.cmd == "followup":
         return _followup(args)
+    if args.cmd == "costs":
+        return _costs(args)
     if args.cmd == "report":
         report_dir = Path(args.report_dir) if args.report_dir else default_report_dir()
         waia = report_dir / "waia_s.md"
@@ -116,6 +125,21 @@ def main(argv: list[str] | None = None) -> int:
         print(waia.read_text(encoding="utf-8")[:2000])
         return 0
     return 2
+
+
+def _costs(args) -> int:
+    from research.forecast_journal.intraday.costs import run_cost_study, write_cost_reports
+
+    report_dir = Path(args.report_dir) if args.report_dir else default_report_dir()
+    result = run_cost_study(
+        Path(args.data_dir),
+        _symbols(args),
+        start=args.from_date,
+        trades_path=Path(args.trades),
+    )
+    write_cost_reports(result, report_dir)
+    print((report_dir / "costs_ru.md").read_text(encoding="utf-8"))
+    return 0
 
 
 def _followup(args) -> int:

@@ -77,6 +77,17 @@ python -m research.forecast_journal followup \
 
 Текст: `reports/followup_ru.md`, отдельно `s6_surprise_ru.md` и `gates_ru.md`.
 
+Отдельный проход считает R и до издержек, и после. Издержки здесь плоские: 10 б.п. за круг, это комиссия вместе с проскальзыванием, плюс те же сделки при 5 и 15 б.п. Рядом видно, сколько R эти б.п. съедают при стопе в один 15-минутный ATR и при стопе 2.5×ATR часа. Для S6 есть база: вход по знаку сюрприза в T+30 и выход через 1, 2 и 4 часа. Сделки построчно пишутся в `research/boss_bt/trades.csv`.
+
+```bash
+python -m research.forecast_journal costs \
+  --data-dir research/forecast_journal/data_cache \
+  --from 2024-01-01 \
+  --symbols BTC,ETH,SOL \
+  --report-dir research/forecast_journal/reports \
+  --trades research/boss_bt/trades.csv
+```
+
 ## Откуда цифры
 
 HTX, `api.hbdm.com`, публичные методы:
