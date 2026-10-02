@@ -245,3 +245,19 @@ without payload or automatic write retry. The test allowance may cover that
 existing command deadline; runtime budget must not be raised. Independently
 review cancellation races and run all19 actual source scenarios plus focused
 abort/connection behavior. Fresh published-head CI remains mandatory.
+
+The first60s abort implementation returned but the native proxy caught a late
+connection; its retained log also records41,405 pre-deadline reconnects. A time
+bound alone is insufficient. Add a private research pool using Postgres.js's
+documented custom-socket API with at most3 TCP opens per owned pool and an
+independent10s connect bound plus the shared command signal. Close the factory
+before teardown, so queued reconnects cannot open a new socket; await callback
+settlement. Keep authentication and TLS negotiation in Postgres.js and retain
+socket host metadata for SNI. The admitted default-off connection profile is
+one TCP host/port (including IPv6); refuse Unix/multihost/routing extensions
+explicitly. No silent fallback or certificate-policy relaxation. Include the
+lockfile/dependency metadata and new helper in CI source pins/triggers, prove
+no connection storm or late network work with the real clean-EOF proxy, and
+validate a normal TLS handshake against an isolated local TLS PostgreSQL
+endpoint if TLS is configured. This adapter grants no source, scientific or
+trading authority. No production connection profile is changed or deployed.
