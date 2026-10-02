@@ -168,7 +168,7 @@ describe.skipIf(!enabled)("DEE-1211 observed research source PostgreSQL", () => 
       expect(proxy.stats().commitResponsesWithheld).toBe(1); expect(proxy.stats().protocolErrors).toBe(0);
       expect(await receipts(command.commandId)).toBe(1); expect(await rows(researchDevelopmentSourceRunIdV1(command))).toBe(6);
     } finally { await proxy.close(); }
-  });
+  }, 30_000);
 
   it("returns uncertain without claiming success when post-COMMIT confirmation cannot reconnect", async () => {
     const parsed = new URL(sourceUrl);
@@ -193,7 +193,7 @@ describe.skipIf(!enabled)("DEE-1211 observed research source PostgreSQL", () => 
       expect(await receipts(command.commandId)).toBe(1);
       expect(await rows(runId)).toBe(6);
     } finally { await proxy.close(); }
-  });
+  }, 30_000);
 
   it("refuses changed selection, deployment and raw source bytes without adding a source", async () => {
     const command = request();

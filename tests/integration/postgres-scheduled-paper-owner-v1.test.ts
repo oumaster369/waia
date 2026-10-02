@@ -78,10 +78,11 @@ describe.skipIf(!enabled || !url)("DEE-1205 closed scheduled noncapital owner on
     alteredLatestClose?: number;
     waitForTwoKlineRequests?: boolean;
     timeOffsetMs?: number;
+    fixedNowMs?: number;
     freezeClock?: boolean;
     requests?: string[];
   }> = {}): void {
-    const fixedNow = Date.now() + (options.timeOffsetMs ?? 0);
+    const fixedNow = (options.fixedNowMs ?? Date.now()) + (options.timeOffsetMs ?? 0);
     const routes: string[] = options.requests ?? [];
     const recorded = recordedPublicTransport(() => fixedNow, (path) => routes.push(path), { closedBarsOnly: true });
     const waiting = new Map<string, { count: number; promise: Promise<void>; release: () => void }>();
@@ -334,11 +335,12 @@ describe.skipIf(!enabled || !url)("DEE-1205 closed scheduled noncapital owner on
   }, 45_000);
 
   it("refuses changed same-bar input and does not create a second receipt or execution effect", async () => {
-    installPublicPoll();
+    const fixedNowMs = Date.now();
+    installPublicPoll({ fixedNowMs });
     const first = await runScheduledNoncapitalPaperLoopFromEnv(envFor(currentOrg));
     expect(first.status).toBe("COMMITTED");
     for (const restore of mockedGlobals.splice(0)) restore();
-    installPublicPoll({ alteredLatestClose: 103 });
+    installPublicPoll({ alteredLatestClose: 103, fixedNowMs });
     await expect(runScheduledNoncapitalPaperLoopFromEnv(envFor(currentOrg))).rejects.toMatchObject({
       name: "ScheduledNoncapitalOwnerRefusedError",
       reason: "SCHEDULED_PAPER_SAME_BAR_CONFLICT",

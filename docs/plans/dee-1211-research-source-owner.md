@@ -212,3 +212,17 @@ under the October audit directory. Independent current-base review and exact
 published-head required CI remain outstanding. This is not source/PIT or
 scientific qualification and does not authorize production migration,
 deployment or trading.
+
+
+## Initial published CI corrections (2026-10-02)
+
+PR738 first-head CI retained two failures: source-owner18/19 hit Vitest's
+default5s timeout in the lost-COMMIT/no-reconnect test; scheduled-owner8/9
+captured two wall-clock instants for a supposed same-bar retry. The source
+owner's private connection timeout is10s. Only the two COMMIT-fault test
+deadlines are now30s; both scheduled retry polls now share one captured
+clock. Runtime and refusal/ledger assertions are unchanged. Independent
+review accepted these test-only corrections. The local source-owner suite
+passed19/19 with zero skips; affected lint/typecheck passed. Fresh published
+head CI, including scheduled-owner9/9, is still required. Earlier failed
+results remain retained and are not described as passed.
