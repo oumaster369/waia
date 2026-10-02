@@ -2,7 +2,7 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
 
-import { and, eq, exists, max, notInArray } from "drizzle-orm";
+import { and, eq, exists, inArray, isNull, max, notInArray } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
@@ -56,6 +56,34 @@ export type HistoricalMockWriteRuntime = Readonly<{
 type PgReadExecutor = Pick<WaiaPostgresDb, "select">;
 type PgWriteExecutor = Pick<WaiaPostgresDb, "select" | "insert" | "update">;
 type PgDeleteExecutor = Pick<WaiaPostgresDb, "delete">;
+
+/** A narrowing query scope used only by the scheduled ordinary-paper repository. */
+export type PostgresOrderReadScope = "ordinary-mock" | "ordinary-paper";
+
+function ordinaryWorkerOrderConditions(scope: PostgresOrderReadScope) {
+  return and(
+    eq(pgSchema.traderOrders.venue, scope === "ordinary-mock" ? "mock" : "HTX"),
+    eq(pgSchema.traderOrders.executionMode, scope === "ordinary-mock" ? "mock" : "paper"),
+    isNull(pgSchema.traderOrders.historicalRunId),
+    isNull(pgSchema.traderOrders.historicalAccountKey),
+  );
+}
+
+function orderReadConditions(
+  context: OrgContext,
+  ledgerScope?: HistoricalMockLedgerScope,
+  workerScope?: PostgresOrderReadScope,
+) {
+  return and(
+    orgOrderConditions(context, ledgerScope),
+    workerScope ? ordinaryWorkerOrderConditions(workerScope) : undefined,
+  );
+}
+
+function scopedOrderIds(ex: PgReadExecutor, context: OrgContext, scope: PostgresOrderReadScope) {
+  return ex.select({ id: pgSchema.traderOrders.id }).from(pgSchema.traderOrders)
+    .where(orderReadConditions(context, undefined, scope));
+}
 
 function mapOrderRow(row: typeof pgSchema.traderOrders.$inferSelect): OrderRow {
   return {
@@ -163,11 +191,12 @@ export async function getOrderByIdPostgres(
   context: OrgContext,
   id: string,
   ledgerScope?: HistoricalMockLedgerScope,
+  workerScope?: PostgresOrderReadScope,
 ): Promise<OrderRow | null> {
   const rows = await ex
     .select()
     .from(pgSchema.traderOrders)
-    .where(and(eq(pgSchema.traderOrders.id, id), orgOrderConditions(context, ledgerScope)))
+    .where(and(eq(pgSchema.traderOrders.id, id), orderReadConditions(context, ledgerScope, workerScope)))
     .limit(1);
 
   return rows[0] ? mapOrderRow(rows[0]) : null;
@@ -178,11 +207,12 @@ export async function findOrderByClientOrderIdPostgres(
   context: OrgContext,
   clientOrderId: string,
   ledgerScope?: HistoricalMockLedgerScope,
+  workerScope?: PostgresOrderReadScope,
 ): Promise<OrderRow | null> {
   const rows = await ex
     .select()
     .from(pgSchema.traderOrders)
-    .where(and(eq(pgSchema.traderOrders.clientOrderId, clientOrderId), orgOrderConditions(context, ledgerScope)))
+    .where(and(eq(pgSchema.traderOrders.clientOrderId, clientOrderId), orderReadConditions(context, ledgerScope, workerScope)))
     .limit(1);
 
   return rows[0] ? mapOrderRow(rows[0]) : null;
@@ -193,12 +223,13 @@ export async function findOrderByIdempotencyKeyPostgres(
   context: OrgContext,
   idempotencyKey: string,
   ledgerScope?: HistoricalMockLedgerScope,
+  workerScope?: PostgresOrderReadScope,
 ): Promise<OrderRow | null> {
   const rows = await ex
     .select()
     .from(pgSchema.traderOrders)
     .where(
-      and(eq(pgSchema.traderOrders.idempotencyKey, idempotencyKey), orgOrderConditions(context, ledgerScope)),
+      and(eq(pgSchema.traderOrders.idempotencyKey, idempotencyKey), orderReadConditions(context, ledgerScope, workerScope)),
     )
     .limit(1);
 
@@ -210,9 +241,10 @@ export async function listOpenOrdersPostgres(
   context: OrgContext,
   filter?: OpenOrdersFilter,
   ledgerScope?: HistoricalMockLedgerScope,
+  workerScope?: PostgresOrderReadScope,
 ): Promise<OrderRow[]> {
   const conditions = [
-    orgOrderConditions(context, ledgerScope),
+    orderReadConditions(context, ledgerScope, workerScope),
     notInArray(pgSchema.traderOrders.state, [...TERMINAL_ORDER_STATES]),
   ];
 
@@ -236,8 +268,9 @@ export async function listOrdersPostgres(
   context: OrgContext,
   filter?: OpenOrdersFilter,
   ledgerScope?: HistoricalMockLedgerScope,
+  workerScope?: PostgresOrderReadScope,
 ): Promise<OrderRow[]> {
-  const conditions = [orgOrderConditions(context, ledgerScope)];
+  const conditions = [orderReadConditions(context, ledgerScope, workerScope)];
 
   if (filter?.executionMode) {
     conditions.push(eq(pgSchema.traderOrders.executionMode, filter.executionMode));
@@ -259,6 +292,7 @@ export async function listEventsPostgres(
   context: OrgContext,
   orderId: string,
   ledgerScope?: HistoricalMockLedgerScope,
+  workerScope?: PostgresOrderReadScope,
 ): Promise<OrderEventRow[]> {
   const scoped = requireOrgContext(context.organizationId);
   const rows = await ex
@@ -269,6 +303,9 @@ export async function listEventsPostgres(
         eq(pgSchema.traderOrderEvents.orderId, orderId),
         scopedParentExists(ex, context, orderId, ledgerScope),
         orgScopedWhere(pgSchema.traderOrderEvents.organizationId, scoped),
+        ...(workerScope
+          ? [inArray(pgSchema.traderOrderEvents.orderId, scopedOrderIds(ex, context, workerScope))]
+          : []),
       ),
     )
     .orderBy(pgSchema.traderOrderEvents.seq);
@@ -281,6 +318,7 @@ export async function listFillsPostgres(
   context: OrgContext,
   orderId: string,
   ledgerScope?: HistoricalMockLedgerScope,
+  workerScope?: PostgresOrderReadScope,
 ): Promise<FillRow[]> {
   const scoped = requireOrgContext(context.organizationId);
   const rows = await ex
@@ -291,6 +329,9 @@ export async function listFillsPostgres(
         eq(pgSchema.traderFills.orderId, orderId),
         scopedParentExists(ex, context, orderId, ledgerScope),
         orgScopedWhere(pgSchema.traderFills.organizationId, scoped),
+        ...(workerScope
+          ? [inArray(pgSchema.traderFills.orderId, scopedOrderIds(ex, context, workerScope))]
+          : []),
       ),
     );
 
