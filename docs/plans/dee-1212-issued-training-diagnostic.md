@@ -71,3 +71,18 @@ work and no changed bytes for a valid historical trace. Preserve a synthetic
 PostgreSQL RED with deliberately resealed labels before implementation, then
 run the affected full native set and independent review. This is engineering
 trace integrity, not source/PIT/scientific or financial-policy qualification.
+
+## Bounded contention proof clarification (2026-10-02)
+
+The instrumented eight-owner/four-attempt RED records actual SQLSTATE40001
+read/write dependency refusal after the existing three-attempt budget, not
+source-environment mismatch. Preserve this honest bounded behavior; do not
+raise the retry limit or turn contention into success. Repeated same-attempt
+proof uses four separate pairs, with two actual concurrent connections per
+pair. A distinct cross-attempt stress case retains all eight simultaneous
+requests, accepts only40001 for rejected requests, then makes explicit
+sequential requests and replays each attempt. Every returned trace must match
+the one verified committed trace and each attempt must have exactly one
+complete result/ledger. Unknown errors/uncertainty still fail the test. This
+proves safe recovery after bounded refusal, not guaranteed completion under
+unbounded concurrency or production capacity.
