@@ -86,3 +86,42 @@ Production0229 prohibited;0230 deferred. Synthetic disposable fixtures may apply
 the existing canonical migration journal and unnumbered proof draft only.
 Rollback is a revert PR. Local capability and RED receipts cannot imply repair,
 Forward Paper qualification, continuous operation or capital authority.
+
+
+## Worker transport profile — frozen before implementation, 2026-10-02
+
+The compatibility spike uses the normal postgres3.4.9 workerd export and public
+cloudflare:sockets API. Separate Node and Worker transport implementations stay
+private to this owner; the public env-only entrypoint cannot select a factory,
+supply a callback or override limits. Runtime selection must be proved in the
+actual bundled Worker and Node native fixture, with no forced driver export.
+
+Supported DSN is one explicit postgres/postgresql TCP host/port/database with
+no fragment, duplicate query keys, socket/path/host/port overrides or multi-host
+fallback. Initially accept only the sslmode query parameter: remote endpoints
+require verify-full; insecure/ambiguous remote profiles refuse before dialing.
+Explicit disable (or existing omitted local SSL mode) is confined to literal
+loopback synthetic fixtures, never a remote fallback. Do not copy production
+secrets into tests or rewrite production configuration. A deployment must check
+its actual DSN profile separately; this document does not assert it matches.
+The Node driver retains its certificate verification and authentication. The
+Worker adapter retains verified native TLS, hostname binding and the normal
+postgres authentication/protocol. No ssl:false shortcut for remote connections.
+
+The private pool seals before cancellation/teardown, caps actual physical opens
+at three, tracks initial and upgraded transports plus every reader/writer task,
+and cancels/aborts owned streams before closing. A detached old socket's close
+failure must never skip the upgraded socket. Synchronous startTls failure must
+close the owned native transport and converge through bounded pool termination.
+A late opened resolution after abort must never hand a usable socket to postgres.
+A fulfilled transaction result is latched before cleanup and cannot be relabeled
+uncertain solely because cancellation occurs during cleanup.
+
+The audit-only spike now proves trusted/untrusted/wrong-host TLS and clean EOF,
+silent startup, silent TLS-upgrade, early TLS EOF and injected synchronous TLS
+refusal against actual workerd. The initial stalled TLS cleanup counterexample
+is retained; force-aborting the pending reader/writer repairs that tested path.
+This is transport feasibility only. Deterministic deferred-open proof paired
+with actual Worker connect-refusal evidence remains pending, and actual scheduled
+owner composition, Node PG transactions, immutable exact receipts and acknowledged
+commit/cleanup races require fresh evidence on the final application source.
