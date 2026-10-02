@@ -33,14 +33,6 @@ export const draftSql = [
 
 export const databaseName = "waia_hsv2_it_dee1211_source_owner_v1";
 
-export const requiredPullRequestPaths = [
-  "lib/trader/market-data/bounded-json-file.ts",
-  "lib/trader/market-data/fhv-pre-holdout-qualification.ts",
-  "lib/trader/market-data/fhv-pre-holdout-runtime-requalification.ts",
-  "lib/trader/market-data/volume-qualification/htx-volume-qualification.ts",
-  "lib/trader/market-data/volume-qualification/htx-volume-qualification-receipt-service.ts",
-];
-
 export const sourcePaths = [
   "db/schema.postgres.ts",
   "db/postgres-client.ts",
@@ -111,6 +103,47 @@ export const sourcePaths = [
   ...requiredSuites,
   ...draftSql,
 ];
+
+function pullRequestPathFilters(workflowText) {
+  const pullRequestStart = workflowText.indexOf("\n  pull_request:");
+  const envStart = workflowText.indexOf("\nenv:", pullRequestStart);
+  if (pullRequestStart < 0 || envStart < 0) return [];
+
+  const trigger = workflowText.slice(pullRequestStart, envStart);
+  const pathsStart = trigger.indexOf("\n    paths:");
+  if (pathsStart < 0) return [];
+  const pathLines = trigger.slice(pathsStart).match(/^      -\s+(?:"[^"]+"|'[^']+'|[^\s#]+)\s*$/gm) ?? [];
+  return pathLines.map((line) => {
+    const scalar = line.replace(/^      -\s+/, "").trim();
+    return scalar.startsWith('"') || scalar.startsWith("'") ? scalar.slice(1, -1) : scalar;
+  });
+}
+
+export function githubPathPatternMatches(pattern, path) {
+  let expression = "^";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index];
+    if (character === "*" && pattern[index + 1] === "*") {
+      if (pattern[index + 2] === "/") {
+        expression += "(?:.*/)?";
+        index += 2;
+      } else {
+        expression += ".*";
+        index += 1;
+      }
+    } else if (character === "*") {
+      expression += "[^/]*";
+    } else {
+      expression += character.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+    }
+  }
+  return new RegExp(`${expression}$`).test(path);
+}
+
+export function uncoveredSourcePathsForPullRequestWorkflow(workflowText, paths = sourcePaths) {
+  const patterns = pullRequestPathFilters(workflowText);
+  return [...new Set(paths)].filter((path) => !patterns.some((pattern) => githubPathPatternMatches(pattern, path)));
+}
 
 export function assertSourceHashes(paths, sha256ByPath, readBytes, hashBytes) {
   const refuse = (reason) => { throw new Error(`DEE1211_POSTGRES_SOURCE_REFUSED:${reason}`); };

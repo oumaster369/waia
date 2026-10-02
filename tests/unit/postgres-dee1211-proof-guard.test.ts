@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { assertSourceHashes, assertVitestProofReport, requiredAssertionTitles, requiredPullRequestPaths, requiredSuites } from "@/scripts/postgres-validation/dee1211-postgres-proof-contract.mjs";
+import { assertSourceHashes, assertVitestProofReport, githubPathPatternMatches, requiredAssertionTitles, requiredSuites, sourcePaths, uncoveredSourcePathsForPullRequestWorkflow } from "@/scripts/postgres-validation/dee1211-postgres-proof-contract.mjs";
 
 function report() {
   const assertions = requiredAssertionTitles.map(title => ({ title, status: "passed" }));
@@ -25,12 +25,25 @@ describe("DEE-1211 executed PostgreSQL proof guard", () => {
     expect(() => assertVitestProofReport(value)).not.toThrow();
   });
 
-  it("triggers the native gate when any pinned bounded-source or qualification reader changes", () => {
+  it("triggers the native gate for every distinct proof-pinned source path", () => {
     const workflow = readFileSync(resolve(process.cwd(), ".github/workflows/postgres-integration.yml"), "utf8");
-    const pullRequestPathFilter = workflow.slice(workflow.indexOf("  pull_request:"), workflow.indexOf("\nenv:"));
-    for (const path of requiredPullRequestPaths) {
-      expect(pullRequestPathFilter).toContain(`- "${path}"`);
-    }
+    expect(new Set(sourcePaths).size).toBeGreaterThan(0);
+    expect(uncoveredSourcePathsForPullRequestWorkflow(workflow)).toEqual([]);
+  });
+
+  it("models GitHub single-star and double-star path coverage without crossing rules", () => {
+    expect(githubPathPatternMatches("lib/trader/market-data/*", "lib/trader/market-data/a.ts")).toBe(true);
+    expect(githubPathPatternMatches("lib/trader/market-data/*", "lib/trader/market-data/nested/a.ts")).toBe(false);
+    expect(githubPathPatternMatches("lib/trader/market-data/**", "lib/trader/market-data/nested/a.ts")).toBe(true);
+    expect(githubPathPatternMatches("**/dee-1211-*.md", "docs/plans/dee-1211-research-source-owner.md")).toBe(true);
+  });
+
+  it("detects a missing recursive market-data trigger", () => {
+    const workflow = readFileSync(resolve(process.cwd(), ".github/workflows/postgres-integration.yml"), "utf8");
+    const withoutRecursiveMarketData = workflow.replace('      - "lib/trader/market-data/**"\n', "");
+    expect(uncoveredSourcePathsForPullRequestWorkflow(withoutRecursiveMarketData)).toContain(
+      "lib/trader/market-data/fhv-acquisition-evidence-class.ts",
+    );
   });
 
   it("uses only the isolated source-owner service for passwordless restricted-role proof", () => {
