@@ -17,8 +17,10 @@ export const draftSql = [
 
 export const sourcePaths = [
   "docs/plans/dee-1159-research-executable-identity.md",
+  "docs/plans/dee-1203-research-executable-runtime-binding.md",
   "db/schema.postgres.ts",
   "lib/trader/research/research-experiment-contract-v1.ts",
+  "lib/trader/research/research-executable-runtime-identity-v1.ts",
   "lib/trader/research/research-experiment-registry-postgres-v1.ts",
   "lib/trader/research/research-attempt-registry-postgres-v1.ts",
   "lib/trader/research/research-training-payload-postgres-v1.ts",
@@ -44,6 +46,7 @@ export const sourcePaths = [
   "lib/trader/portfolio/stop-based-sizing.ts",
   "tests/helpers/research-experiment-fixture.ts",
   "tests/unit/trader-research-experiment-contract-v1.test.ts",
+  "tests/unit/trader-research-executable-runtime-identity-v1.test.ts",
   "tests/unit/trader-research-lookback-evaluator-v1.test.ts",
   "tests/unit/trader-research-stop-based-sizing.test.ts",
   "tests/unit/trader-research-training-policy-v1.test.ts",

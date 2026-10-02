@@ -12,6 +12,9 @@ import { assertResearchRootPostgresDbV1 } from "@/lib/trader/research/research-r
 import { loadRegisteredResearchTrainingExecutionInputPostgresV1 } from "@/lib/trader/research/research-training-payload-postgres-v1";
 import { resolveResearchTrainingPolicyV1 } from "@/lib/trader/research/research-training-policy-v1";
 import { runOwnedResearchModeledStageV1 } from "@/lib/trader/research/research-modeled-stage-kernel-v1";
+import { resolveCurrentResearchExecutableIdentityV1 } from "@/lib/trader/research/research-executable-runtime-identity-v1";
+import { loadResearchTrainingLedgerScopePostgresV1 } from "@/lib/trader/research/research-attempt-registry-postgres-v1";
+import { loadRegisteredResearchExperimentPostgresV1 } from "@/lib/trader/research/research-experiment-registry-postgres-v1";
 
 export const RESEARCH_TRAINING_DIAGNOSTIC_V1 = "waia.research.training-diagnostic.v1" as const;
 const REQUEST = z.object({
@@ -43,6 +46,7 @@ type VerifiedTrace = Readonly<Record<string, unknown> & {
 function verifyCommittedTrace(row: DiagnosticRow, expected: Readonly<{
   organizationId: string; attemptId: string; trialIndex: number; stageRunId: string;
   specSha256: string; scopeDigest: string; policyDigest: string;
+  observedExecutableIdentity: ReturnType<typeof resolveCurrentResearchExecutableIdentityV1>;
 }>) {
   if (row.organization_id !== expected.organizationId || row.attempt_id !== expected.attemptId ||
       row.trial_index !== expected.trialIndex || row.stage_run_id !== expected.stageRunId ||
@@ -59,6 +63,9 @@ function verifyCommittedTrace(row: DiagnosticRow, expected: Readonly<{
       parsed.organizationId !== expected.organizationId || parsed.attemptId !== expected.attemptId ||
       parsed.trialIndex !== expected.trialIndex || parsed.stageRunId !== expected.stageRunId ||
       parsed.scopeDigestHex !== expected.scopeDigest || parsed.policyDigestHex !== expected.policyDigest ||
+      !parsed.observedExecutableIdentity || typeof parsed.observedExecutableIdentity !== "object" ||
+      canonicalJsonString(parsed.observedExecutableIdentity) !==
+        canonicalJsonString(expected.observedExecutableIdentity) ||
       !Array.isArray(parsed.decisions) || !Array.isArray(parsed.orders) ||
       !Array.isArray(parsed.openPositions) || typeof parsed.equity !== "string" ||
       typeof parsed.netUnrealizedPnl !== "string" ||
@@ -86,14 +93,31 @@ export async function runRegisteredResearchTrainingDiagnosticPostgresV1(
   const request = Object.freeze({ ...parsedRequest,
     attemptId: parsedRequest.attemptId.toLowerCase() });
   const captured = Object.freeze({ organizationId });
+  const observedExecutableIdentity = resolveCurrentResearchExecutableIdentityV1();
+  // Only committed attempt/spec metadata is read before the executable matches.
+  // Requested identity never substitutes for the deployment owner's assertion.
+  const preflightScope = await loadResearchTrainingLedgerScopePostgresV1(db, captured, {
+    attemptId: request.attemptId, trialIndex: request.trialIndex,
+  });
+  const preflightExperiment = await loadRegisteredResearchExperimentPostgresV1(
+    db, captured, preflightScope.identity.experimentSpecSha256,
+  );
+  if (preflightExperiment.spec.executable.sourceSha256 !== observedExecutableIdentity.sourceSha256) {
+    refuse("EXECUTABLE_IDENTITY_MISMATCH");
+  }
   const source = await loadRegisteredResearchTrainingExecutionInputPostgresV1(db, captured, request);
+  if (source.scope.contentDigest !== preflightScope.contentDigest ||
+      source.experiment.specSha256 !== preflightExperiment.specSha256) {
+    refuse("PREFLIGHT_SOURCE_IDENTITY_CHANGED");
+  }
   const policy = resolveResearchTrainingPolicyV1(source.experiment.spec);
   const { scope } = source;
   const stageRunId = scope.ledgerScope.historicalRunId;
   const accountKey = scope.ledgerScope.historicalAccountKey;
   const expected = Object.freeze({ organizationId, attemptId: request.attemptId,
     trialIndex: request.trialIndex, stageRunId, specSha256: scope.identity.experimentSpecSha256,
-    scopeDigest: scope.contentDigest, policyDigest: policy.guardianResolvedPolicySha256 });
+    scopeDigest: scope.contentDigest, policyDigest: policy.guardianResolvedPolicySha256,
+    observedExecutableIdentity });
   const model = createHistoricalExecutionModelV1();
   if (computeStableJsonDigest(model) !== policy.historicalExecutionModelSha256 ||
       source.bars.length > request.limits.maxBars || source.cycles.length !== source.bars.length) {
@@ -211,6 +235,7 @@ export async function runRegisteredResearchTrainingDiagnosticPostgresV1(
       policyDigestHex: policy.guardianResolvedPolicySha256,
       historicalExecutionModelSha256: policy.historicalExecutionModelSha256,
       requestedExecutableSourceSha256: policy.requestedExecutableSourceSha256,
+      observedExecutableIdentity,
       requestedPointInTimeEvidenceSha256: policy.requestedPointInTimeEvidenceSha256,
       barCount: source.bars.length, orderCount: orderRows.length,
       fillCount: fillDetails.length, accountingSequence: accounting.accountingSequence,
