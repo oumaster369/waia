@@ -91,6 +91,16 @@ describe("descriptive observation synthesis as-of context", () => {
     }]);
   });
 
+  it("accepts explicit ISO offsets without changing the represented instants", () => {
+    const input = inputFor(flatBars(20));
+    input.barWindow.start = "2026-01-01T02:00:00.000+02:00";
+    input.barWindow.end = "2026-01-01T02:20:00.000+02:00";
+
+    const result = synthesizeObservations(input, "observation-offset");
+
+    expect(result.tradeRefs[0]?.regimeLabel).toBe("CHOP");
+  });
+
   it.each([
     ["malformed start", (input: ObservationSynthesizerInput) => { input.barWindow.start = "not-a-time"; }],
     ["reversed window", (input: ObservationSynthesizerInput) => {
@@ -102,6 +112,12 @@ describe("descriptive observation synthesis as-of context", () => {
     ["malformed bar time", (input: ObservationSynthesizerInput) => { input.bars[4]!.barCloseTime = "bad"; }],
     ["impossible calendar date", (input: ObservationSynthesizerInput) => {
       input.bars[4]!.barCloseTime = "2026-02-30T00:00:00.000Z";
+    }],
+    ["timezone-less datetime", (input: ObservationSynthesizerInput) => {
+      input.barWindow.start = "2026-01-01T00:00:00.000";
+    }],
+    ["normalized 24-hour time", (input: ObservationSynthesizerInput) => {
+      input.barWindow.end = "2026-01-01T24:00:00.000Z";
     }],
     ["bar outside declared window", (input: ObservationSynthesizerInput) => {
       input.bars[0]!.barOpenTime = new Date(BASE - 60_000).toISOString();

@@ -9,9 +9,9 @@ requiredValidation: [targeted-unit, lint, typecheck, build, validate-canon, cons
 approvalGates: [user-authorized-engineering, independent-review, required-ci, no-production-data, no-live-activation]
 state:
   status: in-progress
-  completedWorkPackages: [WP-1-plan-and-baseline, WP-2-causal-validation-and-regression]
-  remainingWorkPackages: [WP-3-readiness]
-  nextAction: "Complete bounded readiness, obtain independent review, then satisfy required exact-head CI before merge."
+  completedWorkPackages: [WP-1-plan-and-baseline, WP-2-causal-validation-and-regression, WP-3-readiness]
+  remainingWorkPackages: [WP-4-review-and-exact-head-ci]
+  nextAction: "Obtain independent review and satisfy required exact-head CI before merge."
 provenance:
   createdFrom: "DEE-1209 Linear contract and Oct 2 source review"
   supersedes: null
@@ -61,8 +61,9 @@ not empirical research completion.
   trade preservation, and input immutability.
 - **WP-3 — readiness:** run targeted observation/consumer tests, lint,
   typecheck, build, canonical validation and affected consumer graphs; preserve
-  source/evidence receipts and request independent review. Exact-head CI remains
-  required before merge.
+  source/evidence receipts.
+- **WP-4 — review and CI:** obtain independent review and pass the required
+  exact-head CI before merge.
 
 ## Acceptance
 
@@ -81,8 +82,8 @@ not empirical research completion.
 
 ## Current evidence
 
-The original-source regression and valid-input baseline are preserved in the
-Oct 2 audit evidence directory. The focused synthetic unit file passes 17/17;
+The original-source regressions and valid-input baseline are preserved in the
+Oct 2 audit evidence directory. The focused synthetic unit file passes 20/20;
 file-scoped lint, repository lint, typecheck, production build, canonical
 validation, and both consumer-graph validators passed on the working tree.
 Full exact-head CI and independent review remain outstanding.

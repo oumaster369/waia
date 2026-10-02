@@ -19,14 +19,22 @@ function timestampMs(value: unknown, field: string): number {
   if (typeof value !== "string" || value.trim() !== value || value.length === 0) {
     refuseInput(`TIMESTAMP:${field}`);
   }
-  const datePart = /^(\d{4})-(\d{2})-(\d{2})(?:T|$)/.exec(value);
-  if (!datePart) refuseInput(`TIMESTAMP:${field}`);
-  const year = Number(datePart[1]);
-  const month = Number(datePart[2]);
-  const day = Number(datePart[3]);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|([+-])(\d{2}):(\d{2}))$/.exec(value);
+  if (!match) refuseInput(`TIMESTAMP:${field}`);
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
   const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
   const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ?? 0;
-  if (day < 1 || day > daysInMonth) refuseInput(`TIMESTAMP:${field}`);
+  if (day < 1 || day > daysInMonth || hour > 23 || minute > 59 || second > 59) {
+    refuseInput(`TIMESTAMP:${field}`);
+  }
+  if (match[8] !== "Z" && (Number(match[10]) > 23 || Number(match[11]) > 59)) {
+    refuseInput(`TIMESTAMP:${field}`);
+  }
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) refuseInput(`TIMESTAMP:${field}`);
   return timestamp;
