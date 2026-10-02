@@ -1,3 +1,5 @@
+import type { StructureClusterV2 } from "@/lib/trader/discovery/structure.types";
+
 export type ResearchCampaignRow = {
   id: string;
   organizationId: string;
@@ -73,6 +75,12 @@ export type StructureClusterRow = {
 };
 
 export type InsertStructureClusterRow = Omit<StructureClusterRow, "createdAt"> & {
+  createdAt?: Date;
+};
+
+/** New append path for strictly validated V2 payloads; legacy scalar rows stay supported. */
+export type InsertStructureClusterV2Row = {
+  cluster: StructureClusterV2;
   createdAt?: Date;
 };
 

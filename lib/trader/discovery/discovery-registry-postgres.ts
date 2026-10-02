@@ -19,7 +19,10 @@ import type {
   InsertRetirementRecordRow,
   InsertStrategySynthesisRow,
   InsertStructureClusterRow,
+  InsertStructureClusterV2Row,
 } from "@/lib/trader/discovery/discovery-record.types";
+import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
+import { assertValidStructureClusterV2 } from "@/lib/trader/discovery/structure-cluster-v2";
 import {
   orgScopedWhere,
   requireOrgContext,
@@ -167,25 +170,49 @@ export async function insertDiscoveryObservationPostgres(
 export async function insertDiscoveryStructureClusterPostgres(
   ex: PgWriteExecutor,
   context: OrgContext,
-  row: InsertStructureClusterRow,
+  row: InsertStructureClusterRow | InsertStructureClusterV2Row,
 ) {
   const scoped = requireOrgContext(context.organizationId);
-  await ex.insert(pgSchema.traderDiscoveryStructureCluster).values({
-    id: row.id,
-    organizationId: scoped.organizationId,
-    campaignId: row.campaignId,
-    signatureKey: row.signatureKey,
-    payloadJson: row.payloadJson,
-    contentDigest: row.contentDigest,
-    createdAt: row.createdAt,
-  });
+  let values: {
+    id: string;
+    organizationId: string;
+    campaignId: string;
+    signatureKey: string;
+    payloadJson: string;
+    contentDigest: string;
+    createdAt: Date | undefined;
+  };
+  if ("cluster" in row) {
+    const structureCluster = row.cluster;
+    assertValidStructureClusterV2(structureCluster);
+    values = {
+      id: structureCluster.clusterId,
+      organizationId: scoped.organizationId,
+      campaignId: structureCluster.campaignRef.campaignId,
+      signatureKey: structureCluster.signature.signatureKey,
+      payloadJson: canonicalJsonString(structureCluster),
+      contentDigest: structureCluster.contentDigest,
+      createdAt: row.createdAt,
+    };
+  } else {
+    values = {
+      id: row.id,
+      organizationId: scoped.organizationId,
+      campaignId: row.campaignId,
+      signatureKey: row.signatureKey,
+      payloadJson: row.payloadJson,
+      contentDigest: row.contentDigest,
+      createdAt: row.createdAt,
+    };
+  }
+  await ex.insert(pgSchema.traderDiscoveryStructureCluster).values(values);
   return assertInserted(
     await ex
       .select()
       .from(pgSchema.traderDiscoveryStructureCluster)
       .where(
         and(
-          eq(pgSchema.traderDiscoveryStructureCluster.id, row.id),
+          eq(pgSchema.traderDiscoveryStructureCluster.id, values.id),
           orgScopedWhere(pgSchema.traderDiscoveryStructureCluster.organizationId, scoped),
         ),
       )
