@@ -1,0 +1,2017 @@
+{
+  "kind": "situations",
+  "fee_per_side": 0.0005,
+  "timeframes": [
+    {
+      "decision_tf": "15m",
+      "symbols": [
+        "BTC",
+        "ETH",
+        "SOL"
+      ],
+      "start": "2024-01-01T00:00:00Z",
+      "end": "2026-10-02T15:00:00Z",
+      "holdout_cut": "2026-03-15T12:00:00Z",
+      "rank_start": "2024-01-21T00:00:00Z",
+      "path": "15m",
+      "slippage": "max(2 bp of price, 0.10 * decision-bar ATR) per fill, entry and exit. Not 10% of the hourly ATR.",
+      "n_trials": 24,
+      "leader": "S4_highvol",
+      "passes": false,
+      "deflated_sharpe_ranking": {
+        "sharpe": -0.14829704971743185,
+        "sr_star": 0.10946672684374599,
+        "dsr": 0.0004366314504591351,
+        "n": 199,
+        "n_trials": 24,
+        "skew": 1.1780252791832737,
+        "kurtosis": 3.322381964117626
+      },
+      "notes": [],
+      "setups": [
+        {
+          "setup_id": "S1",
+          "base": "S1",
+          "filter": "base",
+          "name_ru": "Снятие ликвидности и возврат",
+          "formula": "Swing high/low confirmed with a 30-minute wing on each side, or two such swings within 0.15·ATR_1h (equal highs/lows). A later bar trades through that level and, one to three bars after the sweep — not on the sweep bar itself — closes back through it. Entry is the next open. Stop is the sweep extreme ± 0.3·ATR_1h. Target is the nearer opposite pool (last opposite swing or the prior 24h extreme) at least 0.25·ATR away.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 4994,
+            "hit_rate": 0.38205847016419703,
+            "expectancy_r": -0.27325617405977526,
+            "p_value": 1.0,
+            "t": -16.1531099591119,
+            "sharpe": -0.22857665895067344,
+            "trades_per_day": 6.365838113448056,
+            "max_drawdown_r": 1370.329256766791
+          },
+          "holdout": {
+            "n": 1197,
+            "hit_rate": 0.3508771929824561,
+            "expectancy_r": -0.3487572319999283,
+            "p_value": 1.0,
+            "t": -10.233349075641474,
+            "sharpe": -0.29578130017030535,
+            "trades_per_day": 5.9515223424071575,
+            "max_drawdown_r": 418.0553954035949
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 1242,
+              "hit_rate": 0.38727858293075684,
+              "expectancy_r": -0.2555183927583124,
+              "p_value": 0.9999999999999687,
+              "t": -7.589691640709941,
+              "sharpe": -0.21535915251998067,
+              "trades_per_day": 6.332695984703633,
+              "max_drawdown_r": 326.4025644843674
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 1268,
+              "hit_rate": 0.4022082018927445,
+              "expectancy_r": -0.2400071468770426,
+              "p_value": 0.9999999999988807,
+              "t": -7.088956278187867,
+              "sharpe": -0.1990777258803381,
+              "trades_per_day": 6.465264499681326,
+              "max_drawdown_r": 311.6205804430629
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 1263,
+              "hit_rate": 0.3586698337292161,
+              "expectancy_r": -0.31810352605229325,
+              "p_value": 1.0,
+              "t": -9.40740123954019,
+              "sharpe": -0.26470856422868405,
+              "trades_per_day": 6.4397705544933075,
+              "max_drawdown_r": 415.26593185378806
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 1221,
+              "hit_rate": 0.38001638001638,
+              "expectancy_r": -0.27943789828383075,
+              "p_value": 0.9999999999999998,
+              "t": -8.222702124630754,
+              "sharpe": -0.23531885460724722,
+              "trades_per_day": 6.225621414913958,
+              "max_drawdown_r": 344.59253985373823
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S2",
+          "base": "S2",
+          "filter": "base",
+          "name_ru": "Выход из сжатия",
+          "formula": "ATR_1h is at or below its own trailing 20-day 20th percentile. Close breaks the prior 24h high or low, the previous close had not, and volume z-score on the break bar is at least 1. Stop is 0.3·ATR_1h back through the broken level. Target is a measured move of one 24h-range height.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 877,
+            "hit_rate": 0.2451539338654504,
+            "expectancy_r": -0.33906661920815906,
+            "p_value": 0.9999992158149739,
+            "t": -4.835497462916516,
+            "sharpe": -0.16328314738141927,
+            "trades_per_day": 1.1179094964945826,
+            "max_drawdown_r": 296.0283977014059
+          },
+          "holdout": {
+            "n": 219,
+            "hit_rate": 0.2237442922374429,
+            "expectancy_r": -0.5570981847198905,
+            "p_value": 0.999995843205941,
+            "t": -4.565862846211474,
+            "sharpe": -0.3085324189830557,
+            "trades_per_day": 1.0888750150268733,
+            "max_drawdown_r": 140.6200252212368
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 206,
+              "hit_rate": 0.2524271844660194,
+              "expectancy_r": -0.23416599126761245,
+              "p_value": 0.9342803896450699,
+              "t": -1.5145005481378102,
+              "sharpe": -0.10552025320503637,
+              "trades_per_day": 1.0503505417463352,
+              "max_drawdown_r": 72.1017469338516
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 214,
+              "hit_rate": 0.21962616822429906,
+              "expectancy_r": -0.39907319604436087,
+              "p_value": 0.9969608527471915,
+              "t": -2.7712432208249513,
+              "sharpe": -0.1894382866118438,
+              "trades_per_day": 1.0911408540471639,
+              "max_drawdown_r": 102.3470115578028
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 217,
+              "hit_rate": 0.2672811059907834,
+              "expectancy_r": -0.3772982767369392,
+              "p_value": 0.9982604516581765,
+              "t": -2.954479624229165,
+              "sharpe": -0.20056314553166146,
+              "trades_per_day": 1.1064372211599744,
+              "max_drawdown_r": 91.5311399047961
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 240,
+              "hit_rate": 0.24166666666666667,
+              "expectancy_r": -0.3410326701625761,
+              "p_value": 0.9937169750586339,
+              "t": -2.5148456247488213,
+              "sharpe": -0.16233258704891287,
+              "trades_per_day": 1.2237093690248566,
+              "max_drawdown_r": 80.66165539542617
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S3",
+          "base": "S3",
+          "filter": "base",
+          "name_ru": "Откат по тренду",
+          "formula": "4h trend: EMA20 vs EMA50, slope in the same direction, price beyond EMA50. The decision bar tags 1h EMA20 or 1h VWAP (24h) and closes back with the trend. Stop is 0.3·ATR_1h beyond the pullback extreme. Target is the nearer pool in the trend direction.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 3365,
+            "hit_rate": 0.32838038632986627,
+            "expectancy_r": -0.31566175904505855,
+            "p_value": 1.0,
+            "t": -13.404441616267608,
+            "sharpe": -0.23107671937245577,
+            "trades_per_day": 4.289356277884003,
+            "max_drawdown_r": 1065.0892213167426
+          },
+          "holdout": {
+            "n": 770,
+            "hit_rate": 0.287012987012987,
+            "expectancy_r": -0.4543377175328419,
+            "p_value": 1.0,
+            "t": -9.366954843038881,
+            "sharpe": -0.3375616211788531,
+            "trades_per_day": 3.8284646647063587,
+            "max_drawdown_r": 356.30696856437487
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 857,
+              "hit_rate": 0.3278879813302217,
+              "expectancy_r": -0.28111268302899883,
+              "p_value": 0.9999999975694651,
+              "t": -5.9126316309038955,
+              "sharpe": -0.2019716490691967,
+              "trades_per_day": 4.369662205226259,
+              "max_drawdown_r": 245.56052740533153
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 893,
+              "hit_rate": 0.3337066069428891,
+              "expectancy_r": -0.3399831363038697,
+              "p_value": 0.9999999999999798,
+              "t": -7.6844117572945505,
+              "sharpe": -0.2571490346903087,
+              "trades_per_day": 4.553218610579988,
+              "max_drawdown_r": 311.16386170350074
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 804,
+              "hit_rate": 0.3333333333333333,
+              "expectancy_r": -0.285650580305803,
+              "p_value": 0.999999991249674,
+              "t": -5.69302220939902,
+              "sharpe": -0.20077741281926148,
+              "trades_per_day": 4.09942638623327,
+              "max_drawdown_r": 235.86539638773837
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 811,
+              "hit_rate": 0.31812577065351416,
+              "expectancy_r": -0.3551420993163365,
+              "p_value": 0.9999999999999616,
+              "t": -7.608882344938751,
+              "sharpe": -0.26718399646009944,
+              "trades_per_day": 4.135117909496494,
+              "max_drawdown_r": 290.42876658172196
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S4",
+          "base": "S4",
+          "filter": "base",
+          "name_ru": "Возврат к середине боковика",
+          "formula": "4h regime is range: ADX14 < 20, or |EMA20−EMA50| < 0.50·ATR and |slope| < 0.08. Fade a wick through the prior 24h extreme that closes back inside. Stop is 0.3·ATR_1h beyond that extreme. Target is the range mid.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 1124,
+            "hit_rate": 0.29804270462633453,
+            "expectancy_r": -0.3859470783367162,
+            "p_value": 1.0,
+            "t": -9.855071183560694,
+            "sharpe": -0.2939521289630833,
+            "trades_per_day": 1.4327597195666029,
+            "max_drawdown_r": 438.3474464889241
+          },
+          "holdout": {
+            "n": 255,
+            "hit_rate": 0.3058823529411765,
+            "expectancy_r": -0.39813654589380715,
+            "p_value": 0.999998833317477,
+            "t": -4.8326659214944145,
+            "sharpe": -0.30263327907392,
+            "trades_per_day": 1.267868168181976,
+            "max_drawdown_r": 110.35870001566946
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 212,
+              "hit_rate": 0.33490566037735847,
+              "expectancy_r": -0.2519662014582479,
+              "p_value": 0.996432896564417,
+              "t": -2.7170192440341534,
+              "sharpe": -0.18660564780998604,
+              "trades_per_day": 1.0809432759719566,
+              "max_drawdown_r": 52.759372517867874
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 330,
+              "hit_rate": 0.3,
+              "expectancy_r": -0.3518487110136285,
+              "p_value": 0.9999988220589988,
+              "t": -4.805029386026579,
+              "sharpe": -0.26450816221913137,
+              "trades_per_day": 1.6826003824091778,
+              "max_drawdown_r": 123.54099580927897
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 311,
+              "hit_rate": 0.2379421221864952,
+              "expectancy_r": -0.6020628061733408,
+              "p_value": 1.0,
+              "t": -9.026096390805778,
+              "sharpe": -0.5118229699730332,
+              "trades_per_day": 1.58572339069471,
+              "max_drawdown_r": 186.7435234206558
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 271,
+              "hit_rate": 0.33579335793357934,
+              "expectancy_r": -0.2842659556712697,
+              "p_value": 0.9995790783195437,
+              "t": -3.376592690771355,
+              "sharpe": -0.20511339856464758,
+              "trades_per_day": 1.3817718291905672,
+              "max_drawdown_r": 87.52788468390413
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S5",
+          "base": "S5",
+          "filter": "base",
+          "name_ru": "Разворот после каскада",
+          "formula": "Previous bar has volume z-score ≥ 2.5 (liquidation prints are not a 2024 history on the public API, so they are not required) and price is more than 2·ATR_1h from the 1h EMA20. This bar is the first reversal bar. Stop is 0.3·ATR_1h beyond the spike extreme. Target is the EMA or the next pool.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 1379,
+            "hit_rate": 0.350253807106599,
+            "expectancy_r": -0.2649958496990233,
+            "p_value": 0.9999999999999739,
+            "t": -7.605877464719275,
+            "sharpe": -0.20481756152384661,
+            "trades_per_day": 1.7578075207138304,
+            "max_drawdown_r": 369.91377720927716
+          },
+          "holdout": {
+            "n": 399,
+            "hit_rate": 0.37092731829573933,
+            "expectancy_r": -0.2598045821848281,
+            "p_value": 0.9999907958563595,
+            "t": -4.335988053051727,
+            "sharpe": -0.2170709110904138,
+            "trades_per_day": 1.9838407808023857,
+            "max_drawdown_r": 104.40073940444576
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 359,
+              "hit_rate": 0.34540389972144847,
+              "expectancy_r": -0.283995629098353,
+              "p_value": 0.999990257150034,
+              "t": -4.328766482477635,
+              "sharpe": -0.2284635568838412,
+              "trades_per_day": 1.8304652644996813,
+              "max_drawdown_r": 103.9325059965783
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 330,
+              "hit_rate": 0.3878787878787879,
+              "expectancy_r": -0.2116465112275891,
+              "p_value": 0.9982369401892882,
+              "t": -2.9389430869270488,
+              "sharpe": -0.16178349232376463,
+              "trades_per_day": 1.6826003824091778,
+              "max_drawdown_r": 85.5563550580349
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 348,
+              "hit_rate": 0.33045977011494254,
+              "expectancy_r": -0.2864896810045273,
+              "p_value": 0.9999574697460866,
+              "t": -3.9767211784673364,
+              "sharpe": -0.21317463114948793,
+              "trades_per_day": 1.774378585086042,
+              "max_drawdown_r": 104.21521419563442
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 342,
+              "hit_rate": 0.3391812865497076,
+              "expectancy_r": -0.27465815261393134,
+              "p_value": 0.9999534144852547,
+              "t": -3.9548317862117717,
+              "sharpe": -0.2138528108974619,
+              "trades_per_day": 1.7437858508604207,
+              "max_drawdown_r": 107.10303518928414
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S6",
+          "base": "S6",
+          "filter": "base",
+          "name_ru": "Импульс на открытии США и данных",
+          "formula": "Clock is 13:30–15:30 UTC, or a weekday 12:25–13:05 UTC data slot, or 18:00–18:30 UTC on a pre-listed FOMC date. Close breaks the prior 30-minute high or low with volume z-score ≥ 1. Stop is 0.3·ATR_1h beyond the broken level. Target is the next 24h or swing pool, else one 30-minute range beyond the break.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 1894,
+            "hit_rate": 0.3167898627243928,
+            "expectancy_r": -0.3275323832876911,
+            "p_value": 1.0,
+            "t": -9.027004147229535,
+            "sharpe": -0.2074214446207102,
+            "trades_per_day": 2.41427660930529,
+            "max_drawdown_r": 623.7821095500012
+          },
+          "holdout": {
+            "n": 478,
+            "hit_rate": 0.3054393305439331,
+            "expectancy_r": -0.44746759760305777,
+            "p_value": 0.9999999999851564,
+            "t": -6.808834778852522,
+            "sharpe": -0.3114288539265015,
+            "trades_per_day": 2.376631311337194,
+            "max_drawdown_r": 212.37868070489074
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 455,
+              "hit_rate": 0.3384615384615385,
+              "expectancy_r": -0.2549355157101346,
+              "p_value": 0.9997303858219483,
+              "t": -3.485356895474238,
+              "sharpe": -0.16339605149996686,
+              "trades_per_day": 2.319949012109624,
+              "max_drawdown_r": 135.13408695430232
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 472,
+              "hit_rate": 0.3029661016949153,
+              "expectancy_r": -0.3968679080067626,
+              "p_value": 0.9999999968250912,
+              "t": -5.916027842815657,
+              "sharpe": -0.27230725354379326,
+              "trades_per_day": 2.4066284257488846,
+              "max_drawdown_r": 211.75210523172055
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 529,
+              "hit_rate": 0.30623818525519847,
+              "expectancy_r": -0.3715538272593706,
+              "p_value": 0.9999999347864996,
+              "t": -5.351232115530442,
+              "sharpe": -0.2326622658926279,
+              "trades_per_day": 2.697259400892288,
+              "max_drawdown_r": 208.48091881190115
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 438,
+              "hit_rate": 0.3219178082191781,
+              "expectancy_r": -0.27506175136843986,
+              "p_value": 0.9996171904438468,
+              "t": -3.3888080050455183,
+              "sharpe": -0.1619235098683435,
+              "trades_per_day": 2.2332695984703634,
+              "max_drawdown_r": 122.60919424673182
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S1_trend",
+          "base": "S1",
+          "filter": "trend",
+          "name_ru": "Снятие ликвидности и возврат",
+          "formula": "Swing high/low confirmed with a 30-minute wing on each side, or two such swings within 0.15·ATR_1h (equal highs/lows). A later bar trades through that level and, one to three bars after the sweep — not on the sweep bar itself — closes back through it. Entry is the next open. Stop is the sweep extreme ± 0.3·ATR_1h. Target is the nearer opposite pool (last opposite swing or the prior 24h extreme) at least 0.25·ATR away.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 2028,
+            "hit_rate": 0.3742603550295858,
+            "expectancy_r": -0.28383328130519675,
+            "p_value": 1.0,
+            "t": -10.6230504945726,
+            "sharpe": -0.23589311779447997,
+            "trades_per_day": 2.5850860420650097,
+            "max_drawdown_r": 585.2425244442999
+          },
+          "holdout": {
+            "n": 462,
+            "hit_rate": 0.37445887445887444,
+            "expectancy_r": -0.27375431446297427,
+            "p_value": 0.9999991552513023,
+            "t": -4.850215698876376,
+            "sharpe": -0.2256524562415626,
+            "trades_per_day": 2.297078798823815,
+            "max_drawdown_r": 131.44760731971908
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 496,
+              "hit_rate": 0.4032258064516129,
+              "expectancy_r": -0.19099905627140382,
+              "p_value": 0.9994885510627931,
+              "t": -3.303806441947319,
+              "sharpe": -0.1483452884609882,
+              "trades_per_day": 2.5289993626513705,
+              "max_drawdown_r": 109.47369352667643
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 508,
+              "hit_rate": 0.36220472440944884,
+              "expectancy_r": -0.33201565003487266,
+              "p_value": 0.9999999998860969,
+              "t": -6.472457885458827,
+              "sharpe": -0.28716888182917727,
+              "trades_per_day": 2.590184831102613,
+              "max_drawdown_r": 174.77007128449839
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 509,
+              "hit_rate": 0.381139489194499,
+              "expectancy_r": -0.26207219541255694,
+              "p_value": 0.9999992598444565,
+              "t": -4.871741967087857,
+              "sharpe": -0.21593616622934025,
+              "trades_per_day": 2.5952836201402167,
+              "max_drawdown_r": 140.1480444126346
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 515,
+              "hit_rate": 0.35145631067961164,
+              "expectancy_r": -0.3472226502788657,
+              "p_value": 0.9999999999893712,
+              "t": -6.849353039236231,
+              "sharpe": -0.3018185562314229,
+              "trades_per_day": 2.6258763543658383,
+              "max_drawdown_r": 179.04253248370395
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S1_range",
+          "base": "S1",
+          "filter": "range",
+          "name_ru": "Снятие ликвидности и возврат",
+          "formula": "Swing high/low confirmed with a 30-minute wing on each side, or two such swings within 0.15·ATR_1h (equal highs/lows). A later bar trades through that level and, one to three bars after the sweep — not on the sweep bar itself — closes back through it. Entry is the next open. Stop is the sweep extreme ± 0.3·ATR_1h. Target is the nearer opposite pool (last opposite swing or the prior 24h extreme) at least 0.25·ATR away.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 1690,
+            "hit_rate": 0.3834319526627219,
+            "expectancy_r": -0.28048633080840346,
+            "p_value": 1.0,
+            "t": -9.568368236326862,
+            "sharpe": -0.2327525932153935,
+            "trades_per_day": 2.154238368387508,
+            "max_drawdown_r": 478.71735882087904
+          },
+          "holdout": {
+            "n": 453,
+            "hit_rate": 0.3443708609271523,
+            "expectancy_r": -0.3512711813362436,
+            "p_value": 0.9999999993154549,
+            "t": -6.187750263456583,
+            "sharpe": -0.29072586832640734,
+            "trades_per_day": 2.2523305105350393,
+            "max_drawdown_r": 160.48786328347865
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 368,
+              "hit_rate": 0.4076086956521739,
+              "expectancy_r": -0.22057960421724015,
+              "p_value": 0.9998170866173378,
+              "t": -3.5971187094781816,
+              "sharpe": -0.18751277500014601,
+              "trades_per_day": 1.8763543658381134,
+              "max_drawdown_r": 87.10037843098276
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 440,
+              "hit_rate": 0.3931818181818182,
+              "expectancy_r": -0.2561391684892254,
+              "p_value": 0.9999901560550725,
+              "t": -4.31557266946041,
+              "sharpe": -0.20573685457506175,
+              "trades_per_day": 2.2434671765455705,
+              "max_drawdown_r": 114.2522138939699
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 459,
+              "hit_rate": 0.3355119825708061,
+              "expectancy_r": -0.37959309212358744,
+              "p_value": 0.999999999959573,
+              "t": -6.655530290323178,
+              "sharpe": -0.3106535504728235,
+              "trades_per_day": 2.3403441682600383,
+              "max_drawdown_r": 186.82833805739926
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 423,
+              "hit_rate": 0.40425531914893614,
+              "expectancy_r": -0.250388040884803,
+              "p_value": 0.9999935682927924,
+              "t": -4.414727148549843,
+              "sharpe": -0.21465137932958236,
+              "trades_per_day": 2.1567877629063097,
+              "max_drawdown_r": 113.04650967967218
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S1_highvol",
+          "base": "S1",
+          "filter": "highvol",
+          "name_ru": "Снятие ликвидности и возврат",
+          "formula": "Swing high/low confirmed with a 30-minute wing on each side, or two such swings within 0.15·ATR_1h (equal highs/lows). A later bar trades through that level and, one to three bars after the sweep — not on the sweep bar itself — closes back through it. Entry is the next open. Stop is the sweep extreme ± 0.3·ATR_1h. Target is the nearer opposite pool (last opposite swing or the prior 24h extreme) at least 0.25·ATR away.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 1836,
+            "hit_rate": 0.3861655773420479,
+            "expectancy_r": -0.24411107716317496,
+            "p_value": 1.0,
+            "t": -9.02494325836459,
+            "sharpe": -0.21062413840284652,
+            "trades_per_day": 2.3403441682600383,
+            "max_drawdown_r": 449.17394875561837
+          },
+          "holdout": {
+            "n": 352,
+            "hit_rate": 0.3494318181818182,
+            "expectancy_r": -0.322548310880004,
+            "p_value": 0.9999999844385494,
+            "t": -5.662181580807196,
+            "sharpe": -0.3017952922909092,
+            "trades_per_day": 1.7501552752943352,
+            "max_drawdown_r": 118.8554012538284
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 469,
+              "hit_rate": 0.39445628997867804,
+              "expectancy_r": -0.22220971694564504,
+              "p_value": 0.9999852985686633,
+              "t": -4.219595061412828,
+              "sharpe": -0.19484279641308655,
+              "trades_per_day": 2.391332058636074,
+              "max_drawdown_r": 112.04850300264481
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 477,
+              "hit_rate": 0.42348008385744235,
+              "expectancy_r": -0.16065891194402954,
+              "p_value": 0.9980128350403026,
+              "t": -2.8943171735940445,
+              "sharpe": -0.13252167973708454,
+              "trades_per_day": 2.4321223709369026,
+              "max_drawdown_r": 95.85730276579686
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 463,
+              "hit_rate": 0.38660907127429806,
+              "expectancy_r": -0.2463373089667744,
+              "p_value": 0.9999972032518528,
+              "t": -4.594883393157998,
+              "sharpe": -0.21354234079078688,
+              "trades_per_day": 2.3607393244104524,
+              "max_drawdown_r": 115.2961516473417
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 427,
+              "hit_rate": 0.33489461358313816,
+              "expectancy_r": -0.35897682757649424,
+              "p_value": 0.99999999995034,
+              "t": -6.6341275175122165,
+              "sharpe": -0.3210479325350682,
+              "trades_per_day": 2.1771829190567242,
+              "max_drawdown_r": 155.76101878507308
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S2_trend",
+          "base": "S2",
+          "filter": "trend",
+          "name_ru": "Выход из сжатия",
+          "formula": "ATR_1h is at or below its own trailing 20-day 20th percentile. Close breaks the prior 24h high or low, the previous close had not, and volume z-score on the break bar is at least 1. Stop is 0.3·ATR_1h back through the broken level. Target is a measured move of one 24h-range height.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 392,
+            "hit_rate": 0.2193877551020408,
+            "expectancy_r": -0.4154667076318769,
+            "p_value": 0.9999702363954949,
+            "t": -4.059046732826686,
+            "sharpe": -0.20501281928106072,
+            "trades_per_day": 0.4996813256851498,
+            "max_drawdown_r": 161.52992204754653
+          },
+          "holdout": {
+            "n": 98,
+            "hit_rate": 0.22448979591836735,
+            "expectancy_r": -0.5906925349147581,
+            "p_value": 0.9980461956780367,
+            "t": -2.9564530619791682,
+            "sharpe": -0.29864685834074317,
+            "trades_per_day": 0.48725913914444563,
+            "max_drawdown_r": 73.39631467569251
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 91,
+              "hit_rate": 0.23076923076923078,
+              "expectancy_r": -0.3234787059722769,
+              "p_value": 0.9199906917319338,
+              "t": -1.4167143595662939,
+              "sharpe": -0.14851201810995496,
+              "trades_per_day": 0.4639898024219248,
+              "max_drawdown_r": 43.25375128493734
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 95,
+              "hit_rate": 0.17894736842105263,
+              "expectancy_r": -0.5608149753304515,
+              "p_value": 0.995775809218557,
+              "t": -2.6903070394212785,
+              "sharpe": -0.27601967829085333,
+              "trades_per_day": 0.4843849585723391,
+              "max_drawdown_r": 62.94143874959789
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 104,
+              "hit_rate": 0.25,
+              "expectancy_r": -0.35729378828066705,
+              "p_value": 0.9704792706520444,
+              "t": -1.9090292629737036,
+              "sharpe": -0.18719572046004937,
+              "trades_per_day": 0.5302740599107711,
+              "max_drawdown_r": 47.172158744821644
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 102,
+              "hit_rate": 0.21568627450980393,
+              "expectancy_r": -0.4214746128493753,
+              "p_value": 0.9811840898310447,
+              "t": -2.1065804624460305,
+              "sharpe": -0.20858254689736033,
+              "trades_per_day": 0.5200764818355641,
+              "max_drawdown_r": 46.016206233281686
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S2_range",
+          "base": "S2",
+          "filter": "range",
+          "name_ru": "Выход из сжатия",
+          "formula": "ATR_1h is at or below its own trailing 20-day 20th percentile. Close breaks the prior 24h high or low, the previous close had not, and volume z-score on the break bar is at least 1. Stop is 0.3·ATR_1h back through the broken level. Target is a measured move of one 24h-range height.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 479,
+            "hit_rate": 0.25260960334029225,
+            "expectancy_r": -0.3000617972488519,
+            "p_value": 0.9989975780535556,
+            "t": -3.10663957440668,
+            "sharpe": -0.14194598523730415,
+            "trades_per_day": 0.6105799872530274,
+            "max_drawdown_r": 143.63296508986
+          },
+          "holdout": {
+            "n": 122,
+            "hit_rate": 0.23770491803278687,
+            "expectancy_r": -0.39280102330314953,
+            "p_value": 0.9843527352903118,
+            "t": -2.178670496162234,
+            "sharpe": -0.19724755875087185,
+            "trades_per_day": 0.606587907914514,
+            "max_drawdown_r": 60.063368480937214
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 81,
+              "hit_rate": 0.24691358024691357,
+              "expectancy_r": -0.2617485747227081,
+              "p_value": 0.8531125193630095,
+              "t": -1.056819332042129,
+              "sharpe": -0.11742437022690323,
+              "trades_per_day": 0.4130019120458891,
+              "max_drawdown_r": 29.313590864230665
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 127,
+              "hit_rate": 0.23622047244094488,
+              "expectancy_r": -0.300516404692465,
+              "p_value": 0.9374741754775093,
+              "t": -1.5441841069879867,
+              "sharpe": -0.1370241819072699,
+              "trades_per_day": 0.6475462077756533,
+              "max_drawdown_r": 66.64129023439892
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 131,
+              "hit_rate": 0.3053435114503817,
+              "expectancy_r": -0.2430815835094831,
+              "p_value": 0.9199415938158084,
+              "t": -1.412757090130834,
+              "sharpe": -0.12343316007239533,
+              "trades_per_day": 0.6679413639260675,
+              "max_drawdown_r": 41.59237337636111
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 140,
+              "hit_rate": 0.22142857142857142,
+              "expectancy_r": -0.37513353924268134,
+              "p_value": 0.9807799921628713,
+              "t": -2.0899944066024765,
+              "sharpe": -0.17663676650988847,
+              "trades_per_day": 0.7138304652644997,
+              "max_drawdown_r": 53.71298213271756
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S2_highvol",
+          "base": "S2",
+          "filter": "highvol",
+          "name_ru": "Выход из сжатия",
+          "formula": "ATR_1h is at or below its own trailing 20-day 20th percentile. Close breaks the prior 24h high or low, the previous close had not, and volume z-score on the break bar is at least 1. Stop is 0.3·ATR_1h back through the broken level. Target is a measured move of one 24h-range height.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 0,
+            "hit_rate": null,
+            "expectancy_r": null,
+            "p_value": null,
+            "t": null,
+            "sharpe": null,
+            "trades_per_day": 0.0,
+            "max_drawdown_r": null
+          },
+          "holdout": {
+            "n": 0,
+            "hit_rate": null,
+            "expectancy_r": null,
+            "p_value": null,
+            "t": null,
+            "sharpe": null,
+            "trades_per_day": 0.0,
+            "max_drawdown_r": null
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 0,
+              "hit_rate": null,
+              "expectancy_r": null,
+              "p_value": null,
+              "t": null,
+              "sharpe": null,
+              "trades_per_day": 0.0,
+              "max_drawdown_r": null
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 0,
+              "hit_rate": null,
+              "expectancy_r": null,
+              "p_value": null,
+              "t": null,
+              "sharpe": null,
+              "trades_per_day": 0.0,
+              "max_drawdown_r": null
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 0,
+              "hit_rate": null,
+              "expectancy_r": null,
+              "p_value": null,
+              "t": null,
+              "sharpe": null,
+              "trades_per_day": 0.0,
+              "max_drawdown_r": null
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 0,
+              "hit_rate": null,
+              "expectancy_r": null,
+              "p_value": null,
+              "t": null,
+              "sharpe": null,
+              "trades_per_day": 0.0,
+              "max_drawdown_r": null
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S3_trend",
+          "base": "S3",
+          "filter": "trend",
+          "name_ru": "Откат по тренду",
+          "formula": "4h trend: EMA20 vs EMA50, slope in the same direction, price beyond EMA50. The decision bar tags 1h EMA20 or 1h VWAP (24h) and closes back with the trend. Stop is 0.3·ATR_1h beyond the pullback extreme. Target is the nearer pool in the trend direction.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 3365,
+            "hit_rate": 0.32838038632986627,
+            "expectancy_r": -0.31566175904505855,
+            "p_value": 1.0,
+            "t": -13.404441616267608,
+            "sharpe": -0.23107671937245577,
+            "trades_per_day": 4.289356277884003,
+            "max_drawdown_r": 1065.0892213167426
+          },
+          "holdout": {
+            "n": 770,
+            "hit_rate": 0.287012987012987,
+            "expectancy_r": -0.4543377175328419,
+            "p_value": 1.0,
+            "t": -9.366954843038881,
+            "sharpe": -0.3375616211788531,
+            "trades_per_day": 3.8284646647063587,
+            "max_drawdown_r": 356.30696856437487
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 857,
+              "hit_rate": 0.3278879813302217,
+              "expectancy_r": -0.28111268302899883,
+              "p_value": 0.9999999975694651,
+              "t": -5.9126316309038955,
+              "sharpe": -0.2019716490691967,
+              "trades_per_day": 4.369662205226259,
+              "max_drawdown_r": 245.56052740533153
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 893,
+              "hit_rate": 0.3337066069428891,
+              "expectancy_r": -0.3399831363038697,
+              "p_value": 0.9999999999999798,
+              "t": -7.6844117572945505,
+              "sharpe": -0.2571490346903087,
+              "trades_per_day": 4.553218610579988,
+              "max_drawdown_r": 311.16386170350074
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 804,
+              "hit_rate": 0.3333333333333333,
+              "expectancy_r": -0.285650580305803,
+              "p_value": 0.999999991249674,
+              "t": -5.69302220939902,
+              "sharpe": -0.20077741281926148,
+              "trades_per_day": 4.09942638623327,
+              "max_drawdown_r": 235.86539638773837
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 811,
+              "hit_rate": 0.31812577065351416,
+              "expectancy_r": -0.3551420993163365,
+              "p_value": 0.9999999999999616,
+              "t": -7.608882344938751,
+              "sharpe": -0.26718399646009944,
+              "trades_per_day": 4.135117909496494,
+              "max_drawdown_r": 290.42876658172196
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S3_range",
+          "base": "S3",
+          "filter": "range",
+          "name_ru": "Откат по тренду",
+          "formula": "4h trend: EMA20 vs EMA50, slope in the same direction, price beyond EMA50. The decision bar tags 1h EMA20 or 1h VWAP (24h) and closes back with the trend. Stop is 0.3·ATR_1h beyond the pullback extreme. Target is the nearer pool in the trend direction.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 1020,
+            "hit_rate": 0.33431372549019606,
+            "expectancy_r": -0.33054082839900556,
+            "p_value": 0.9999999999999951,
+            "t": -7.859883011292799,
+            "sharpe": -0.24610248333795215,
+            "trades_per_day": 1.3001912045889101,
+            "max_drawdown_r": 336.849791967985
+          },
+          "holdout": {
+            "n": 241,
+            "hit_rate": 0.2987551867219917,
+            "expectancy_r": -0.43101132414537513,
+            "p_value": 0.9999990841506178,
+            "t": -4.891857615025822,
+            "sharpe": -0.3151122498128248,
+            "trades_per_day": 1.1982597197327693,
+            "max_drawdown_r": 108.56555350676392
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 224,
+              "hit_rate": 0.32142857142857145,
+              "expectancy_r": -0.3373477271950766,
+              "p_value": 0.999882411321218,
+              "t": -3.7386638467455096,
+              "sharpe": -0.2497999856935717,
+              "trades_per_day": 1.1421287444231996,
+              "max_drawdown_r": 75.32652233651719
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 286,
+              "hit_rate": 0.32867132867132864,
+              "expectancy_r": -0.3551448466310878,
+              "p_value": 0.9999957685987149,
+              "t": -4.535818814359077,
+              "sharpe": -0.26820858908910256,
+              "trades_per_day": 1.4582536647546207,
+              "max_drawdown_r": 102.51856111179227
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 245,
+              "hit_rate": 0.3673469387755102,
+              "expectancy_r": -0.2401796542600678,
+              "p_value": 0.9963432712395217,
+              "t": -2.7049209429072194,
+              "sharpe": -0.1728110600600963,
+              "trades_per_day": 1.2492033142128744,
+              "max_drawdown_r": 66.69129091060765
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 265,
+              "hit_rate": 0.32075471698113206,
+              "expectancy_r": -0.381774764698418,
+              "p_value": 0.9999980896066439,
+              "t": -4.720550033867672,
+              "sharpe": -0.2899810834575254,
+              "trades_per_day": 1.3511790949649458,
+              "max_drawdown_r": 100.99487940890883
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S3_highvol",
+          "base": "S3",
+          "filter": "highvol",
+          "name_ru": "Откат по тренду",
+          "formula": "4h trend: EMA20 vs EMA50, slope in the same direction, price beyond EMA50. The decision bar tags 1h EMA20 or 1h VWAP (24h) and closes back with the trend. Stop is 0.3·ATR_1h beyond the pullback extreme. Target is the nearer pool in the trend direction.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 1150,
+            "hit_rate": 0.31565217391304345,
+            "expectancy_r": -0.29853201476686114,
+            "p_value": 0.9999999999999124,
+            "t": -7.455950063119234,
+            "sharpe": -0.2198639724599057,
+            "trades_per_day": 1.4659018483110262,
+            "max_drawdown_r": 342.0978574036529
+          },
+          "holdout": {
+            "n": 227,
+            "hit_rate": 0.27312775330396477,
+            "expectancy_r": -0.42860166961650875,
+            "p_value": 0.9999994668604449,
+            "t": -5.016126826528293,
+            "sharpe": -0.33293203087088163,
+            "trades_per_day": 1.1286512712835628,
+            "max_drawdown_r": 96.11756293587136
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 303,
+              "hit_rate": 0.30363036303630364,
+              "expectancy_r": -0.24400117996819717,
+              "p_value": 0.9984544807210424,
+              "t": -2.982601173369274,
+              "sharpe": -0.17134596041279002,
+              "trades_per_day": 1.5449330783938815,
+              "max_drawdown_r": 77.13232919342576
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 296,
+              "hit_rate": 0.3277027027027027,
+              "expectancy_r": -0.34532937963212745,
+              "p_value": 0.9999983356753184,
+              "t": -4.740052068179806,
+              "sharpe": -0.2755099302243298,
+              "trades_per_day": 1.5092415551306564,
+              "max_drawdown_r": 105.42176931231731
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 282,
+              "hit_rate": 0.3262411347517731,
+              "expectancy_r": -0.2610566239124462,
+              "p_value": 0.9989458691231956,
+              "t": -3.1033793263397453,
+              "sharpe": -0.18480354954944514,
+              "trades_per_day": 1.4378585086042066,
+              "max_drawdown_r": 85.19469467384215
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 269,
+              "hit_rate": 0.3048327137546468,
+              "expectancy_r": -0.34774719381824176,
+              "p_value": 0.9999861664919729,
+              "t": -4.265610989056414,
+              "sharpe": -0.26007889216263946,
+              "trades_per_day": 1.3715742511153601,
+              "max_drawdown_r": 92.25686822140322
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S4_trend",
+          "base": "S4",
+          "filter": "trend",
+          "name_ru": "Возврат к середине боковика",
+          "formula": "4h regime is range: ADX14 < 20, or |EMA20−EMA50| < 0.50·ATR and |slope| < 0.08. Fade a wick through the prior 24h extreme that closes back inside. Stop is 0.3·ATR_1h beyond that extreme. Target is the range mid.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 130,
+            "hit_rate": 0.27692307692307694,
+            "expectancy_r": -0.463085502227116,
+            "p_value": 0.999975045577821,
+            "t": -4.1974383919669975,
+            "sharpe": -0.3681397002221857,
+            "trades_per_day": 0.165710643722116,
+            "max_drawdown_r": 61.27162544728005
+          },
+          "holdout": {
+            "n": 33,
+            "hit_rate": 0.24242424242424243,
+            "expectancy_r": -0.5884426746337303,
+            "p_value": 0.9964506970895195,
+            "t": -2.8766057019418936,
+            "sharpe": -0.5007527777028395,
+            "trades_per_day": 0.16407705705884393,
+            "max_drawdown_r": 18.12127010686997
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 25,
+              "hit_rate": 0.28,
+              "expectancy_r": -0.44520621536875393,
+              "p_value": 0.961595224304058,
+              "t": -1.8490280097898772,
+              "sharpe": -0.3698056019579754,
+              "trades_per_day": 0.12746972594008923,
+              "max_drawdown_r": 14.0429914012145
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 42,
+              "hit_rate": 0.30952380952380953,
+              "expectancy_r": -0.28495327797617165,
+              "p_value": 0.894597048784859,
+              "t": -1.271246605500327,
+              "sharpe": -0.19615760985663835,
+              "trades_per_day": 0.21414913957934992,
+              "max_drawdown_r": 14.297333969300748
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 32,
+              "hit_rate": 0.28125,
+              "expectancy_r": -0.5945134936903265,
+              "p_value": 0.9974351518307549,
+              "t": -3.0120373777071707,
+              "sharpe": -0.5324580137410216,
+              "trades_per_day": 0.1631612492033142,
+              "max_drawdown_r": 21.811808173579855
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 31,
+              "hit_rate": 0.22580645161290322,
+              "expectancy_r": -0.5831771107166637,
+              "p_value": 0.9949982939059601,
+              "t": -2.749855064057076,
+              "sharpe": -0.49388854930982756,
+              "trades_per_day": 0.15806246016571066,
+              "max_drawdown_r": 16.896000476744632
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S4_range",
+          "base": "S4",
+          "filter": "range",
+          "name_ru": "Возврат к середине боковика",
+          "formula": "4h regime is range: ADX14 < 20, or |EMA20−EMA50| < 0.50·ATR and |slope| < 0.08. Fade a wick through the prior 24h extreme that closes back inside. Stop is 0.3·ATR_1h beyond that extreme. Target is the range mid.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 1124,
+            "hit_rate": 0.29804270462633453,
+            "expectancy_r": -0.3859470783367162,
+            "p_value": 1.0,
+            "t": -9.855071183560694,
+            "sharpe": -0.2939521289630833,
+            "trades_per_day": 1.4327597195666029,
+            "max_drawdown_r": 438.3474464889241
+          },
+          "holdout": {
+            "n": 255,
+            "hit_rate": 0.3058823529411765,
+            "expectancy_r": -0.39813654589380715,
+            "p_value": 0.999998833317477,
+            "t": -4.8326659214944145,
+            "sharpe": -0.30263327907392,
+            "trades_per_day": 1.267868168181976,
+            "max_drawdown_r": 110.35870001566946
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 212,
+              "hit_rate": 0.33490566037735847,
+              "expectancy_r": -0.2519662014582479,
+              "p_value": 0.996432896564417,
+              "t": -2.7170192440341534,
+              "sharpe": -0.18660564780998604,
+              "trades_per_day": 1.0809432759719566,
+              "max_drawdown_r": 52.759372517867874
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 330,
+              "hit_rate": 0.3,
+              "expectancy_r": -0.3518487110136285,
+              "p_value": 0.9999988220589988,
+              "t": -4.805029386026579,
+              "sharpe": -0.26450816221913137,
+              "trades_per_day": 1.6826003824091778,
+              "max_drawdown_r": 123.54099580927897
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 311,
+              "hit_rate": 0.2379421221864952,
+              "expectancy_r": -0.6020628061733408,
+              "p_value": 1.0,
+              "t": -9.026096390805778,
+              "sharpe": -0.5118229699730332,
+              "trades_per_day": 1.58572339069471,
+              "max_drawdown_r": 186.7435234206558
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 271,
+              "hit_rate": 0.33579335793357934,
+              "expectancy_r": -0.2842659556712697,
+              "p_value": 0.9995790783195437,
+              "t": -3.376592690771355,
+              "sharpe": -0.20511339856464758,
+              "trades_per_day": 1.3817718291905672,
+              "max_drawdown_r": 87.52788468390413
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S4_highvol",
+          "base": "S4",
+          "filter": "highvol",
+          "name_ru": "Возврат к середине боковика",
+          "formula": "4h regime is range: ADX14 < 20, or |EMA20−EMA50| < 0.50·ATR and |slope| < 0.08. Fade a wick through the prior 24h extreme that closes back inside. Stop is 0.3·ATR_1h beyond that extreme. Target is the range mid.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 199,
+            "hit_rate": 0.36180904522613067,
+            "expectancy_r": -0.20484948916010315,
+            "p_value": 0.9811427111445502,
+            "t": -2.0919873269271965,
+            "sharpe": -0.14829704971743185,
+            "trades_per_day": 0.2536647546207776,
+            "max_drawdown_r": 44.89201165270045
+          },
+          "holdout": {
+            "n": 45,
+            "hit_rate": 0.28888888888888886,
+            "expectancy_r": -0.4281072800707554,
+            "p_value": 0.9933741339616051,
+            "t": -2.581320675982722,
+            "sharpe": -0.3848005668815383,
+            "trades_per_day": 0.2237414414438781,
+            "max_drawdown_r": 21.004628168936
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 33,
+              "hit_rate": 0.30303030303030304,
+              "expectancy_r": -0.28272942986292404,
+              "p_value": 0.8939218012584595,
+              "t": -1.2730931341806826,
+              "sharpe": -0.22161706861146593,
+              "trades_per_day": 0.1682600382409178,
+              "max_drawdown_r": 12.215151983075815
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 56,
+              "hit_rate": 0.4107142857142857,
+              "expectancy_r": -0.09688819861784341,
+              "p_value": 0.6990100126408052,
+              "t": -0.5245847072167935,
+              "sharpe": -0.07010058016951289,
+              "trades_per_day": 0.2855321861057999,
+              "max_drawdown_r": 12.910660279394563
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 50,
+              "hit_rate": 0.38,
+              "expectancy_r": -0.12035341190397625,
+              "p_value": 0.7049645594920625,
+              "t": -0.5422984527326133,
+              "sharpe": -0.07669258267084067,
+              "trades_per_day": 0.25493945188017847,
+              "max_drawdown_r": 12.675561372485518
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 60,
+              "hit_rate": 0.3333333333333333,
+              "expectancy_r": -0.3331927906597664,
+              "p_value": 0.9752050714795687,
+              "t": -2.0047094631446862,
+              "sharpe": -0.2588068788247927,
+              "trades_per_day": 0.30592734225621415,
+              "max_drawdown_r": 21.284974427724066
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S5_trend",
+          "base": "S5",
+          "filter": "trend",
+          "name_ru": "Разворот после каскада",
+          "formula": "Previous bar has volume z-score ≥ 2.5 (liquidation prints are not a 2024 history on the public API, so they are not required) and price is more than 2·ATR_1h from the 1h EMA20. This bar is the first reversal bar. Stop is 0.3·ATR_1h beyond the spike extreme. Target is the EMA or the next pool.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 159,
+            "hit_rate": 0.36477987421383645,
+            "expectancy_r": -0.2133358335779302,
+            "p_value": 0.9758412436179477,
+            "t": -1.9899880773903496,
+            "sharpe": -0.15781632003346174,
+            "trades_per_day": 0.20267686424474188,
+            "max_drawdown_r": 42.97510641792928
+          },
+          "holdout": {
+            "n": 63,
+            "hit_rate": 0.31746031746031744,
+            "expectancy_r": -0.334319306675433,
+            "p_value": 0.9898582074470852,
+            "t": -2.3823420241663054,
+            "sharpe": -0.3001468825639177,
+            "trades_per_day": 0.3132380180214293,
+            "max_drawdown_r": 19.90514359581574
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 48,
+              "hit_rate": 0.3958333333333333,
+              "expectancy_r": -0.17641376855356547,
+              "p_value": 0.828604655799617,
+              "t": -0.9583494383720852,
+              "sharpe": -0.13832582655546252,
+              "trades_per_day": 0.2447418738049713,
+              "max_drawdown_r": 14.579136550508718
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 34,
+              "hit_rate": 0.4117647058823529,
+              "expectancy_r": -0.04198913852760614,
+              "p_value": 0.5636873125835282,
+              "t": -0.16157547455317495,
+              "sharpe": -0.027709965279598944,
+              "trades_per_day": 0.17335882727852134,
+              "max_drawdown_r": 8.458343416508548
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 39,
+              "hit_rate": 0.3333333333333333,
+              "expectancy_r": -0.37542004730935735,
+              "p_value": 0.9546703067418641,
+              "t": -1.7360418330402758,
+              "sharpe": -0.2779891736531387,
+              "trades_per_day": 0.1988527724665392,
+              "max_drawdown_r": 20.30467176584733
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 38,
+              "hit_rate": 0.3157894736842105,
+              "expectancy_r": -0.24693484456095338,
+              "p_value": 0.8708054932570448,
+              "t": -1.147872469520209,
+              "sharpe": -0.1862095032824462,
+              "trades_per_day": 0.19375398342893563,
+              "max_drawdown_r": 13.15046591209322
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S5_range",
+          "base": "S5",
+          "filter": "range",
+          "name_ru": "Разворот после каскада",
+          "formula": "Previous bar has volume z-score ≥ 2.5 (liquidation prints are not a 2024 history on the public API, so they are not required) and price is more than 2·ATR_1h from the 1h EMA20. This bar is the first reversal bar. Stop is 0.3·ATR_1h beyond the spike extreme. Target is the EMA or the next pool.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 469,
+            "hit_rate": 0.3368869936034115,
+            "expectancy_r": -0.3112731002038068,
+            "p_value": 0.9999998780218139,
+            "t": -5.239515503711393,
+            "sharpe": -0.24193834662680463,
+            "trades_per_day": 0.5978330146590185,
+            "max_drawdown_r": 151.98383572372592
+          },
+          "holdout": {
+            "n": 150,
+            "hit_rate": 0.36666666666666664,
+            "expectancy_r": -0.36758773016773294,
+            "p_value": 0.9999559346555715,
+            "t": -4.031557634308452,
+            "sharpe": -0.32917530242259224,
+            "trades_per_day": 0.745804804812927,
+            "max_drawdown_r": 57.08746698561989
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 85,
+              "hit_rate": 0.3176470588235294,
+              "expectancy_r": -0.4084206982978489,
+              "p_value": 0.9995642917733562,
+              "t": -3.4527692550921096,
+              "sharpe": -0.37450540762465595,
+              "trades_per_day": 0.43339706819630336,
+              "max_drawdown_r": 41.00617137853597
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 126,
+              "hit_rate": 0.30952380952380953,
+              "expectancy_r": -0.35943593794762635,
+              "p_value": 0.9985051642445979,
+              "t": -3.028136492888063,
+              "sharpe": -0.26976783992319897,
+              "trades_per_day": 0.6424474187380497,
+              "max_drawdown_r": 58.843571335848075
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 134,
+              "hit_rate": 0.34328358208955223,
+              "expectancy_r": -0.3039716530685667,
+              "p_value": 0.995549903048825,
+              "t": -2.6549669184682214,
+              "sharpe": -0.22935420918277377,
+              "trades_per_day": 0.6832377310388783,
+              "max_drawdown_r": 45.214725690345574
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 124,
+              "hit_rate": 0.3709677419354839,
+              "expectancy_r": -0.20363060441676928,
+              "p_value": 0.9549498657525299,
+              "t": -1.7083154202053774,
+              "sharpe": -0.15341125350149187,
+              "trades_per_day": 0.6322498406628426,
+              "max_drawdown_r": 34.560170641893244
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S5_highvol",
+          "base": "S5",
+          "filter": "highvol",
+          "name_ru": "Разворот после каскада",
+          "formula": "Previous bar has volume z-score ≥ 2.5 (liquidation prints are not a 2024 history on the public API, so they are not required) and price is more than 2·ATR_1h from the 1h EMA20. This bar is the first reversal bar. Stop is 0.3·ATR_1h beyond the spike extreme. Target is the EMA or the next pool.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 497,
+            "hit_rate": 0.358148893360161,
+            "expectancy_r": -0.23891141862145446,
+            "p_value": 0.9999919064920213,
+            "t": -4.354836298510462,
+            "sharpe": -0.19534110488371811,
+            "trades_per_day": 0.6335245379222435,
+            "max_drawdown_r": 121.20726605864249
+          },
+          "holdout": {
+            "n": 123,
+            "hit_rate": 0.3089430894308943,
+            "expectancy_r": -0.3880936932592919,
+            "p_value": 0.9999514905534251,
+            "t": -4.031184517803856,
+            "sharpe": -0.36347966714452123,
+            "trades_per_day": 0.6115599399466002,
+            "max_drawdown_r": 52.61959175304633
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 138,
+              "hit_rate": 0.391304347826087,
+              "expectancy_r": -0.14471517336396095,
+              "p_value": 0.9183633836209899,
+              "t": -1.4016769328575676,
+              "sharpe": -0.11931866431088964,
+              "trades_per_day": 0.7036328871892925,
+              "max_drawdown_r": 22.276337411804466
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 114,
+              "hit_rate": 0.4473684210526316,
+              "expectancy_r": -0.08438424719032417,
+              "p_value": 0.7596819185369876,
+              "t": -0.7076232636526482,
+              "sharpe": -0.06627499086822025,
+              "trades_per_day": 0.5812619502868069,
+              "max_drawdown_r": 29.82099056901529
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 131,
+              "hit_rate": 0.26717557251908397,
+              "expectancy_r": -0.45057517002294856,
+              "p_value": 0.9999911424390382,
+              "t": -4.457596391864809,
+              "sharpe": -0.38946200505298884,
+              "trades_per_day": 0.6679413639260675,
+              "max_drawdown_r": 58.05987955352214
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 114,
+              "hit_rate": 0.3333333333333333,
+              "expectancy_r": -0.2642379796309916,
+              "p_value": 0.9876950589480809,
+              "t": -2.277951283574967,
+              "sharpe": -0.21334968516706218,
+              "trades_per_day": 0.5812619502868069,
+              "max_drawdown_r": 30.545321393422654
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S6_trend",
+          "base": "S6",
+          "filter": "trend",
+          "name_ru": "Импульс на открытии США и данных",
+          "formula": "Clock is 13:30–15:30 UTC, or a weekday 12:25–13:05 UTC data slot, or 18:00–18:30 UTC on a pre-listed FOMC date. Close breaks the prior 30-minute high or low with volume z-score ≥ 1. Stop is 0.3·ATR_1h beyond the broken level. Target is the next 24h or swing pool, else one 30-minute range beyond the break.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 633,
+            "hit_rate": 0.2764612954186414,
+            "expectancy_r": -0.4502453183227099,
+            "p_value": 0.999999999999969,
+            "t": -7.677388754764565,
+            "sharpe": -0.305148807590252,
+            "trades_per_day": 0.8068833652007649,
+            "max_drawdown_r": 284.1308678217203
+          },
+          "holdout": {
+            "n": 157,
+            "hit_rate": 0.36942675159235666,
+            "expectancy_r": -0.2556369522927116,
+            "p_value": 0.9811712164289345,
+            "t": -2.0964332795705256,
+            "sharpe": -0.16731359045866803,
+            "trades_per_day": 0.7806090290375303,
+            "max_drawdown_r": 38.51622035757326
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 139,
+              "hit_rate": 0.2805755395683453,
+              "expectancy_r": -0.4020078636682614,
+              "p_value": 0.9988980566030089,
+              "t": -3.1198083983674025,
+              "sharpe": -0.2646186946217831,
+              "trades_per_day": 0.7087316762268961,
+              "max_drawdown_r": 57.811399429596854
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 163,
+              "hit_rate": 0.2883435582822086,
+              "expectancy_r": -0.46831526133504714,
+              "p_value": 0.9999851369736806,
+              "t": -4.297390581875982,
+              "sharpe": -0.33659760809341915,
+              "trades_per_day": 0.8311026131293817,
+              "max_drawdown_r": 91.50472810192021
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 189,
+              "hit_rate": 0.2698412698412698,
+              "expectancy_r": -0.481243209098951,
+              "p_value": 0.9999964720064428,
+              "t": -4.6216820317043945,
+              "sharpe": -0.3361779007667093,
+              "trades_per_day": 0.9636711281070746,
+              "max_drawdown_r": 96.7163893067419
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 142,
+              "hit_rate": 0.2676056338028169,
+              "expectancy_r": -0.43546365726107517,
+              "p_value": 0.9992940300613434,
+              "t": -3.2566964053332077,
+              "sharpe": -0.2732958912987466,
+              "trades_per_day": 0.7240280433397068,
+              "max_drawdown_r": 60.77192653793759
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S6_range",
+          "base": "S6",
+          "filter": "range",
+          "name_ru": "Импульс на открытии США и данных",
+          "formula": "Clock is 13:30–15:30 UTC, or a weekday 12:25–13:05 UTC data slot, or 18:00–18:30 UTC on a pre-listed FOMC date. Close breaks the prior 30-minute high or low with volume z-score ≥ 1. Stop is 0.3·ATR_1h beyond the broken level. Target is the next 24h or swing pool, else one 30-minute range beyond the break.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 634,
+            "hit_rate": 0.30914826498422715,
+            "expectancy_r": -0.37513468795591765,
+            "p_value": 0.9999999982257644,
+            "t": -5.988611261692768,
+            "sharpe": -0.23783813665746767,
+            "trades_per_day": 0.8081580624601657,
+            "max_drawdown_r": 237.4991117375389
+          },
+          "holdout": {
+            "n": 189,
+            "hit_rate": 0.31216931216931215,
+            "expectancy_r": -0.4110754409885526,
+            "p_value": 0.9999239326509471,
+            "t": -3.8662768520321165,
+            "sharpe": -0.2812302592395675,
+            "trades_per_day": 0.939714054064288,
+            "max_drawdown_r": 78.30303093936101
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 147,
+              "hit_rate": 0.3741496598639456,
+              "expectancy_r": -0.21174981138504267,
+              "p_value": 0.9518019360537906,
+              "t": -1.6733679815253573,
+              "sharpe": -0.13801706494099508,
+              "trades_per_day": 0.7495219885277247,
+              "max_drawdown_r": 36.70311618761351
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 158,
+              "hit_rate": 0.2848101265822785,
+              "expectancy_r": -0.4521141416217348,
+              "p_value": 0.9999099966260534,
+              "t": -3.8371249781765355,
+              "sharpe": -0.30526527266809816,
+              "trades_per_day": 0.8056086679413639,
+              "max_drawdown_r": 72.39037401448212
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 191,
+              "hit_rate": 0.25654450261780104,
+              "expectancy_r": -0.5501580763060946,
+              "p_value": 0.9999996801634362,
+              "t": -5.152881841918601,
+              "sharpe": -0.37284944448847385,
+              "trades_per_day": 0.9738687061822817,
+              "max_drawdown_r": 114.94791596150013
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 138,
+              "hit_rate": 0.34057971014492755,
+              "expectancy_r": -0.2187966879692201,
+              "p_value": 0.9187515063481134,
+              "t": -1.4042850714023836,
+              "sharpe": -0.11954068380782946,
+              "trades_per_day": 0.7036328871892925,
+              "max_drawdown_r": 47.001477461189886
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        },
+        {
+          "setup_id": "S6_highvol",
+          "base": "S6",
+          "filter": "highvol",
+          "name_ru": "Импульс на открытии США и данных",
+          "formula": "Clock is 13:30–15:30 UTC, or a weekday 12:25–13:05 UTC data slot, or 18:00–18:30 UTC on a pre-listed FOMC date. Close breaks the prior 30-minute high or low with volume z-score ≥ 1. Stop is 0.3·ATR_1h beyond the broken level. Target is the next 24h or swing pool, else one 30-minute range beyond the break.",
+          "decision_tf": "15m",
+          "ranking": {
+            "n": 551,
+            "hit_rate": 0.294010889292196,
+            "expectancy_r": -0.4280746937627876,
+            "p_value": 0.999999999999358,
+            "t": -7.264998004950672,
+            "sharpe": -0.3094993205529757,
+            "trades_per_day": 0.7023581899298916,
+            "max_drawdown_r": 238.08621991142044
+          },
+          "holdout": {
+            "n": 101,
+            "hit_rate": 0.27722772277227725,
+            "expectancy_r": -0.4859371573309135,
+            "p_value": 0.9998356291201951,
+            "t": -3.7203170326098265,
+            "sharpe": -0.37018538068184464,
+            "trades_per_day": 0.5021752352407042,
+            "max_drawdown_r": 49.02449804530701
+          },
+          "blocks": [
+            {
+              "start": "2024-01-21T00:00:00Z",
+              "end": "2024-08-04T03:00:00Z",
+              "n": 139,
+              "hit_rate": 0.2302158273381295,
+              "expectancy_r": -0.5663586221502345,
+              "p_value": 0.999998301083952,
+              "t": -4.842157741344839,
+              "sharpe": -0.4107064591972865,
+              "trades_per_day": 0.7087316762268961,
+              "max_drawdown_r": 79.06580522345092
+            },
+            {
+              "start": "2024-08-04T03:00:00Z",
+              "end": "2025-02-16T06:00:00Z",
+              "n": 148,
+              "hit_rate": 0.30405405405405406,
+              "expectancy_r": -0.43349723149868624,
+              "p_value": 0.9999614423470878,
+              "t": -4.06784576764523,
+              "sharpe": -0.33437486235762975,
+              "trades_per_day": 0.7546207775653282,
+              "max_drawdown_r": 79.55301472027753
+            },
+            {
+              "start": "2025-02-16T06:00:00Z",
+              "end": "2025-08-31T09:00:00Z",
+              "n": 145,
+              "hit_rate": 0.31724137931034485,
+              "expectancy_r": -0.35255434338164493,
+              "p_value": 0.9978999573090817,
+              "t": -2.9091137152714497,
+              "sharpe": -0.24158874443381378,
+              "trades_per_day": 0.7393244104525175,
+              "max_drawdown_r": 53.18494530264932
+            },
+            {
+              "start": "2025-08-31T09:00:00Z",
+              "end": "2026-03-15T12:00:00Z",
+              "n": 119,
+              "hit_rate": 0.3277310924369748,
+              "expectancy_r": -0.3518263674980611,
+              "p_value": 0.9964322218083027,
+              "t": -2.738187338502835,
+              "sharpe": -0.2510092217787227,
+              "trades_per_day": 0.6067558954748248,
+              "max_drawdown_r": 43.776012916316404
+            }
+          ],
+          "bh_reject_0.05": false,
+          "q_value": 1.0,
+          "bh_reject_family": false,
+          "q_value_family": 1.0
+        }
+      ]
+    }
+  ],
+  "family_n_trials": 24,
+  "armed": {
+    "15m": []
+  },
+  "by_timeframe": {
+    "15m": {
+      "armed_ids": [],
+      "leader": "S4_highvol",
+      "reason_ru": "Лучшая строка на отборе — S4_highvol. Это не отобранный победитель: после поправки на число проверок и на нетронутом хвосте ни одна ситуация не подтвердилась. В скор ничего не включено.",
+      "passes_leader": false
+    }
+  },
+  "headline_ru": "Ни одна ситуация не прошла строгую проверку. Живой скор не включает ни одну из них.",
+  "liquidation_note": "Публичные ликвидации HTX — это короткий недавний буфер, не история с 2024 года. S5 поэтому смотрит на всплеск объёма и перерастяжение больше 2 ATR, а не на ленту ликвидаций."
+}
