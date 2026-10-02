@@ -1,5 +1,6 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, renameSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -64,6 +65,28 @@ describe("Historical Simulation V2 bootstrap source loader", () => {
       initialRecordIndex: 1, cycleCount: 2,
     } };
   }
+
+  it.each(["file", "directory"])("bounded source refuses a %s symlink with otherwise valid bytes", async kind => {
+    const { raw, input } = fixture();
+    const original = join(root, kind === "file" ? "partitions/development/BTCUSDT/bars.v2.ndjson" : "partitions/development/BTCUSDT");
+    const moved = join(root, "substituted-source");
+    renameSync(original, moved);
+    symlinkSync(moved, original, kind === "file" ? "file" : "dir");
+    await expect(loadHistoricalSimulationBootstrapSourceSnapshotV2({ ...input,
+      maxSourceBytes: Buffer.byteLength(raw), maxReceiptBytes: 1024 * 1024,
+    })).rejects.toThrow("SOURCE_PATH_SYMLINK");
+  });
+
+  it.each(["FIFO", "directory"])("bounded source refuses a nonregular %s without waiting for payload", async kind => {
+    const { input } = fixture();
+    const file = join(root, "partitions/development/BTCUSDT/bars.v2.ndjson");
+    rmSync(file);
+    if (kind === "FIFO") execFileSync("mkfifo", [file]);
+    else mkdirSync(file);
+    await expect(loadHistoricalSimulationBootstrapSourceSnapshotV2({ ...input,
+      maxSourceBytes: 1024 * 1024,
+    })).rejects.toThrow("SOURCE_NOT_REGULAR");
+  });
 
   function writeRequalification(input: Readonly<{
     sourceQualificationReceiptDigest: string; sourceReleaseSha: string; targetReleaseSha: string;

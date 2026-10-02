@@ -10,9 +10,9 @@ requiredValidation: [lint, typecheck, build, targeted-unit, native-postgres, val
 approvalGates: [user-authorized-engineering, independent-review, required-ci, no-production-migration, no-live-activation]
 state:
   status: in-progress
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1, WP-2, WP-3, WP-4]
-  nextAction: "Implement the closed source issuer and its synthetic transaction proof; preserve prior diagnostic-only readers."
+  completedWorkPackages: [WP-1, WP-2, WP-3]
+  remainingWorkPackages: [WP-4]
+  nextAction: "Finish independent proof/gate review, bind the actual-main integration, then publish after DEE-1207. Preserve prior diagnostic-only readers."
 provenance:
   createdFrom: "Root design and independent source-owner review, 2026-10-02; explicit autonomous engineering authorization"
   supersedes: null
@@ -58,7 +58,7 @@ byte bounds are operational limits, never scientific sample thresholds.
   fixed Org0 `3c50b4e9-1138-43a5-a29f-e65088124cfc`; other organizations refuse.
   This first internal-research scope changes neither trading allowlists nor
   the existing historical runner role. Browser/general roles receive no grants.
-  One reserved owned root SERIALIZABLE transaction binds the existing dataset
+  One driver-pinned owned root SERIALIZABLE transaction binds the existing dataset
   service to that same handle. The existing AsyncLocalStorage transaction helper
   joins nested same-handle operations without committing/retrying independently;
   prove that fact by native rollback rather than introducing a second commit.
@@ -133,18 +133,38 @@ open after this bounded source boundary until their own acceptance is proved.
 
 ## Implementation checkpoint (2026-10-02)
 
-WP-1–3 implementation and targeted synthetic helpers are in progress. Pure
-contract24, CLI18, bounded receipt4 and loader6 checks are separate bounded
-results, not native owner acceptance. The source owner now reserves a private
-backend, verifies the authenticated login and exact role ACL, uses SET LOCAL
-ROLE within the owned transaction, and closes the private pool. The source
-record and its exact dataset row commitments are validated before commit;
-issued attempts and their training reads use their own root snapshots.
+WP-1–3 implementation is complete on a prepared dependency tree; WP-4 remains
+open for final source/gate acceptance, actual-base integration and exact-head CI.
+Contract24, bounded receipt4 and final loader/CLI28 assertions passed. Typecheck,
+lint (0 errors; existing warnings), build and canon passed. These are bounded
+engineering checks, not scientific qualification.
 
-The implementation depends on DEE-1203's runtime identity module. Development
-may use its published reviewed head `cf76b113` as an explicit prepared parent;
-this is not an actual-main integration. After736 merges, rebase only this
-issue's own plan/source commits and record exact resulting source identities.
-Native concurrency, rollback, privilege poisoning and lost-COMMIT proof,
-independent final review, full readiness and CI remain outstanding. SQL is an
-unnumbered synthetic draft, and no production data or migration is involved.
+The first native runs exposed JSON-string encoding and a disconnected reserved
+COMMIT rollback. Both RED reports are retained. The private driver-managed root
+transaction now validates its authenticated login and exact role ACL before
+SET LOCAL ROLE, and existing ALS bindings keep nested dataset writes in that
+transaction. An actual fresh-connection lookup handles uncertain COMMIT; when
+that lookup is unavailable, no issuance or observation payload is returned.
+
+The expanded actual PostgreSQL16 suite passed19/19 with no skipped/pending/todo
+or failed tests, including six privilege poisons, real concurrent connections,
+write rollback, lost COMMIT and unavailable recovery, caller mutation, invalid
+volume/cutoff/cross-source bindings and an internally resealed dataset row.
+All1826 captured functional source pins remained unchanged during this run.
+This is source-bound proof from a dirty prepared worktree, not exact-head CI.
+Native artifacts and earlier failures are in the October audit directory under
+`dee1211-native-v1`. The mandatory CI gate must verify actual file identities
+and named cases without confusing Vitest nested-suite counters with file count.
+
+Independent source review also reproduced final/intermediate file symlink
+substitution. The new capped loader refuses symlink components and nonregular
+files, opens a checked file descriptor and preserves legacy uncapped behavior.
+This structural check assumes a trusted host; it does not claim an OS sandbox
+against a malicious process racing directory replacement.
+
+Development used reviewed DEE-1203 head `cf76b113` as an explicit prepared parent.
+PR736 subsequently merged as7b0a9b72; only this issue's owned commits may rebase
+to actual main, retaining source and evidence identities. DEE-1207 still
+precedes publication. Graph inventories, CI-trigger coverage and final
+independent review remain to be closed. SQL remains an unnumbered synthetic
+draft; no real payload, production migration, release or trading is involved.

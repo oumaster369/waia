@@ -27,7 +27,8 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         status: "PASS",
         // DEE-1126 extracts passive interval durations and the replay minimum.
         // DEE-1151 adds Execution V2 order-path modules plus the credential kill helper.
-        sources: 163,
+        // DEE-1211 adds one bounded-JSON market-data source helper; its research owner remains excluded.
+        sources: 164,
         // DEE-1015 adds exactly one observation-only consumer: the assignment-bound
         // credential read boundary that replaces the generic repository on that path.
         // DEE-1050 adds three public-read consumers: RSS news, Alternative.me, and

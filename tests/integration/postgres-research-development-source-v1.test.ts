@@ -1,6 +1,6 @@
 /** Synthetic-only proof of the actual restricted source owner and issued reader. */
 import { randomUUID } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { afterAll, beforeAll, beforeEach, afterEach, describe, expect, it, vi } from "vitest";
@@ -14,6 +14,12 @@ import { requireResearchDevelopmentSourceLoginV1 } from "@/lib/trader/research/r
 import { createResearchDevelopmentSourceFixtureV1, type ResearchDevelopmentSourceFixtureV1 } from "@/tests/helpers/research-development-source-fixture-v1";
 import { buildResearchExperimentProposalV1 } from "@/tests/helpers/research-experiment-fixture";
 import { startCommitAckLossProxy } from "@/tests/helpers/postgres-commit-ack-loss-proxy";
+import { computeBarContentDigest } from "@/lib/trader/market-data/bar-content-digest";
+import { sealHistoricalMarketCycleV2 } from "@/lib/trader/historical-simulation-v2/modeled-execution-advance-v2";
+import { computeSemanticSha256Hex } from "@/lib/trader/intelligence/htr-semantic-canonical-json";
+import { computeStableJsonDigest } from "@/lib/trader/research/digest";
+import { htxVolumeRawFromClosedBar } from "@/lib/trader/backtest/historical-execution-profile";
+import { assertHistoricalDatasetAuthorityRowV2 } from "@/lib/trader/historical-simulation-v2/production-next-cycle-authority-v2";
 
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 const enabled = process.env.WAIA_PG_INTEGRATION === "1" && !!url;
@@ -30,9 +36,11 @@ describe.skipIf(!enabled)("DEE-1211 observed research source PostgreSQL", () => 
     FROM public.trader_historical_dataset_authority_v2 WHERE organization_id=${ORG}::uuid AND run_id=${runId}`)[0]!.n;
   const receipts = async (commandId: string) => (await admin`SELECT count(*)::int AS n
     FROM public.trader_research_development_source_runs_v1 WHERE organization_id=${ORG}::uuid AND command_id=${commandId}`)[0]!.n;
+  const attemptRows = async (commandId: string) => (await admin`SELECT count(*)::int AS n
+    FROM public.trader_research_issued_attempts_v2 WHERE organization_id=${ORG}::uuid AND command_id=${commandId}`)[0]!.n;
   beforeAll(async () => {
     const parsed = new URL(url!);
-    if (parsed.hostname !== "127.0.0.1" || !/^\/waia_dee1211_[a-z0-9_]+$/.test(parsed.pathname)) {
+    if (parsed.hostname !== "127.0.0.1" || parsed.pathname !== "/waia_hsv2_it_dee1211_source_owner_v1") {
       throw new Error("DEE1211_DISPOSABLE_LOOPBACK_DATABASE_REQUIRED");
     }
     admin = postgres(url!, { max: 2, prepare: false, onnotice: () => {} });
@@ -40,10 +48,10 @@ describe.skipIf(!enabled)("DEE-1211 observed research source PostgreSQL", () => 
     await admin`INSERT INTO auth.users(id) VALUES (${ownerId}::uuid)`;
     await admin`INSERT INTO public.users(id,identity_label,email) VALUES (${ownerId}::uuid,'DEE1211 synthetic',${`${ownerId}@waia.invalid`})`;
     await admin`INSERT INTO public.organizations(id,owner_user_id,kind,name)
-      VALUES (${ORG}::uuid,${ownerId}::uuid,'internal','DEE1211 synthetic Org0') ON CONFLICT(id) DO NOTHING`;
+      VALUES (${ORG}::uuid,${ownerId}::uuid,'business','DEE1211 synthetic Org0') ON CONFLICT(id) DO NOTHING`;
     parsed.username = LOGIN; parsed.password = "";
     sourceUrl = parsed.toString();
-    await admin`CREATE TABLE public.dee1211_acl_probe(id integer)`;
+    await admin`CREATE TABLE IF NOT EXISTS public.dee1211_acl_probe(id integer)`;
   });
   beforeEach(() => {
     // Different source/runtime versions exercise the actual receipt read and
@@ -59,6 +67,28 @@ describe.skipIf(!enabled)("DEE-1211 observed research source PostgreSQL", () => 
   afterEach(() => { fixture?.cleanup(); vi.unstubAllEnvs(); });
   afterAll(async () => { await admin?.end({ timeout: 2 }); });
 
+  const registerExperimentForIssuance = async (issuance: NonNullable<Awaited<ReturnType<typeof prepareResearchDevelopmentSourcePostgresV1>>["issuance"]>,
+    observationCutoffMs = issuance.observation.lastCloseMs) => {
+    const proposal = buildResearchExperimentProposalV1(ORG, randomUUID());
+    proposal.executable.sourceSha256 = resolveCurrentResearchExecutableIdentityV1().sourceSha256;
+    proposal.hypothesis.observationEvidenceSha256 = [issuance.observation.contentSha256];
+    proposal.hypothesis.observationCutoffMs = observationCutoffMs;
+    proposal.universe.datasetSourceSha256 = issuance.qualificationReceiptDigest;
+    proposal.universe.knownAtMs = issuance.observation.firstOpenMs;
+    proposal.replay.volumeQualificationSha256 = issuance.volumeQualificationDigest;
+    proposal.partitions.train = { contentSha256: issuance.training.contentSha256,
+      firstOpenMs: issuance.training.firstOpenMs, lastCloseMs: issuance.training.lastCloseMs,
+      barCount: issuance.training.barCount };
+    const after = issuance.training.lastCloseMs;
+    proposal.partitions.validation = { contentSha256: "2".repeat(64), firstOpenMs: after,
+      lastCloseMs: after + 600000, barCount: 10 };
+    proposal.partitions.blind = { contentSha256: "3".repeat(64), firstOpenMs: after + 600000,
+      lastCloseMs: after + 1200000, barCount: 10 };
+    proposal.partitions.walkForward = [{ contentSha256: "4".repeat(64), firstOpenMs: after,
+      lastCloseMs: after + 600000, barCount: 10 }];
+    return registerResearchExperimentPostgresV1(drizzle(admin, { schema }), { organizationId: ORG }, proposal);
+  };
+
   it("issues from loaded bytes, commits exact rows and returns the same result on retry", async () => {
     const command = request();
     const first = await prepareResearchDevelopmentSourcePostgresV1(command);
@@ -72,10 +102,10 @@ describe.skipIf(!enabled)("DEE-1211 observed research source PostgreSQL", () => 
     expect(await rows(first.issuance!.sourceRunId)).toBe(6); expect(await receipts(command.commandId)).toBe(1);
   });
 
-  it("refuses generic owner login, wrong Org0 and a pool masquerading as a reserved backend before issuance", async () => {
+  it("refuses generic owner login, wrong Org0 and a pool masquerading as a pinned transaction before issuance", async () => {
     const command = request();
-    await expect(requireResearchDevelopmentSourceLoginV1(admin as unknown as postgres.ReservedSql))
-      .rejects.toThrow("RESERVED_SESSION_REQUIRED");
+    await expect(requireResearchDevelopmentSourceLoginV1(admin as unknown as postgres.TransactionSql))
+      .rejects.toThrow("TRANSACTION_SESSION_REQUIRED");
     vi.stubEnv("WAIA_RESEARCH_SOURCE_DATABASE_URL", url!);
     await expect(prepareResearchDevelopmentSourcePostgresV1(command)).rejects.toThrow("DEDICATED_LOGIN_REQUIRED");
     vi.stubEnv("WAIA_RESEARCH_SOURCE_DATABASE_URL", sourceUrl);
@@ -83,7 +113,7 @@ describe.skipIf(!enabled)("DEE-1211 observed research source PostgreSQL", () => 
     expect(await receipts(command.commandId)).toBe(0);
   });
 
-  it.each(["table grant", "table owner", "schema grant option", "role admin option"])(
+  it.each(["table grant", "table owner", "schema grant option", "role admin option", "disabled RLS", "public definer"])(
     "rejects a poisoned writer capability: %s", async poison => {
       const command = request();
       try {
@@ -91,6 +121,8 @@ describe.skipIf(!enabled)("DEE-1211 observed research source PostgreSQL", () => 
         if (poison === "table owner") await admin.unsafe(`ALTER TABLE public.dee1211_acl_probe OWNER TO ${ROLE}`);
         if (poison === "schema grant option") await admin.unsafe(`GRANT USAGE ON SCHEMA public TO ${ROLE} WITH GRANT OPTION`);
         if (poison === "role admin option") await admin.unsafe(`GRANT ${ROLE} TO ${LOGIN} WITH ADMIN OPTION`);
+        if (poison === "disabled RLS") await admin`ALTER TABLE public.trader_research_development_source_runs_v1 DISABLE ROW LEVEL SECURITY`;
+        if (poison === "public definer") await admin.unsafe(`CREATE FUNCTION public.dee1211_acl_definer() RETURNS integer LANGUAGE sql SECURITY DEFINER AS 'SELECT 1'`);
         await expect(prepareResearchDevelopmentSourcePostgresV1(command)).rejects.toThrow("WRITER_LOGIN_REFUSED");
         expect(await receipts(command.commandId)).toBe(0); expect(await rows(researchDevelopmentSourceRunIdV1(command))).toBe(0);
       } finally {
@@ -98,6 +130,8 @@ describe.skipIf(!enabled)("DEE-1211 observed research source PostgreSQL", () => 
         await admin.unsafe(`REVOKE ALL ON public.dee1211_acl_probe FROM ${ROLE}`);
         await admin.unsafe(`REVOKE GRANT OPTION FOR USAGE ON SCHEMA public FROM ${ROLE}`);
         await admin.unsafe(`REVOKE ADMIN OPTION FOR ${ROLE} FROM ${LOGIN}`);
+        await admin`ALTER TABLE public.trader_research_development_source_runs_v1 ENABLE ROW LEVEL SECURITY`;
+        if (poison === "public definer") await admin`DROP FUNCTION public.dee1211_acl_definer()`;
       }
     });
 
@@ -136,6 +170,31 @@ describe.skipIf(!enabled)("DEE-1211 observed research source PostgreSQL", () => 
     } finally { await proxy.close(); }
   });
 
+  it("returns uncertain without claiming success when post-COMMIT confirmation cannot reconnect", async () => {
+    const parsed = new URL(sourceUrl);
+    const proxy = await startCommitAckLossProxy({ targetHost: "127.0.0.1",
+      targetPort: Number(parsed.port || 5432), refuseReconnectAfterCommitLoss: true });
+    parsed.port = String(proxy.port); vi.stubEnv("WAIA_RESEARCH_SOURCE_DATABASE_URL", parsed.toString());
+    const command = request();
+    try {
+      const uncertain = await prepareResearchDevelopmentSourcePostgresV1(command);
+      expect(uncertain.status).toBe("COMMIT_UNCERTAIN");
+      expect(uncertain.issuance).toBeNull(); expect(uncertain.observation).toBeNull();
+      expect(proxy.stats().commitResponsesWithheld).toBe(1);
+      expect(proxy.stats().connections).toBeGreaterThanOrEqual(2);
+      expect(proxy.stats().protocolErrors).toBe(0);
+      const runId = researchDevelopmentSourceRunIdV1(command);
+      expect(await receipts(command.commandId)).toBe(1);
+      expect(await rows(runId)).toBe(6);
+      vi.stubEnv("WAIA_RESEARCH_SOURCE_DATABASE_URL", sourceUrl);
+      const later = await prepareResearchDevelopmentSourcePostgresV1(command);
+      expect(later.status).toBe("REPLAYED");
+      expect(later.issuance).not.toBeNull();
+      expect(await receipts(command.commandId)).toBe(1);
+      expect(await rows(runId)).toBe(6);
+    } finally { await proxy.close(); }
+  });
+
   it("refuses changed selection, deployment and raw source bytes without adding a source", async () => {
     const command = request();
     await prepareResearchDevelopmentSourcePostgresV1(command);
@@ -148,23 +207,43 @@ describe.skipIf(!enabled)("DEE-1211 observed research source PostgreSQL", () => 
     expect(await receipts(command.commandId)).toBe(1); expect(await rows(researchDevelopmentSourceRunIdV1(command))).toBe(6);
   });
 
+  it("rejects a mutated volume qualification receipt before creating dataset or issuance rows", async () => {
+    const command = request();
+    const receipt = JSON.parse(readFileSync(fixture.htxVolumeQualificationReceiptPath, "utf8"));
+    receipt.qualificationReceiptDigest = "0".repeat(64);
+    writeFileSync(fixture.htxVolumeQualificationReceiptPath, `${JSON.stringify(receipt)}\n`);
+    await expect(prepareResearchDevelopmentSourcePostgresV1(command)).rejects.toThrow();
+    expect(await receipts(command.commandId)).toBe(0);
+    expect(await rows(researchDevelopmentSourceRunIdV1(command))).toBe(0);
+  });
+
+  it("captures the original command before the first await when the caller mutates immediately", async () => {
+    const command = request();
+    const originalCommandId = command.commandId;
+    const originalRunId = researchDevelopmentSourceRunIdV1(command);
+    const blocker = await admin.reserve();
+    const lockKey = `research-source-v1:${ORG}:${originalCommandId}`;
+    await blocker`SELECT pg_advisory_lock(hashtextextended(${lockKey},0))`;
+    try {
+      const pending = prepareResearchDevelopmentSourcePostgresV1(command);
+      command.commandId = randomUUID();
+      await blocker`SELECT pg_advisory_unlock(hashtextextended(${lockKey},0))`;
+      const result = await pending;
+      expect(result.status).toBe("COMMITTED");
+      expect(result.issuance?.request.commandId).toBe(originalCommandId);
+      expect(await receipts(originalCommandId)).toBe(1);
+      expect(await receipts(command.commandId)).toBe(0);
+      expect(await rows(originalRunId)).toBe(6);
+    } finally {
+      await blocker`SELECT pg_advisory_unlock(hashtextextended(${lockKey},0))`;
+      blocker.release();
+    }
+  });
+
   it("registers only an exact source-bound experiment and rereads its issued training snapshot", async () => {
     const prepared = await prepareResearchDevelopmentSourcePostgresV1(request());
     const issuance = prepared.issuance!;
-    const proposal = buildResearchExperimentProposalV1(ORG, randomUUID());
-    proposal.executable.sourceSha256 = resolveCurrentResearchExecutableIdentityV1().sourceSha256;
-    proposal.hypothesis.observationEvidenceSha256 = [issuance.observation.contentSha256];
-    proposal.hypothesis.observationCutoffMs = issuance.observation.lastCloseMs;
-    proposal.universe.datasetSourceSha256 = issuance.qualificationReceiptDigest;
-    proposal.universe.knownAtMs = issuance.observation.firstOpenMs;
-    proposal.replay.volumeQualificationSha256 = issuance.volumeQualificationDigest;
-    proposal.partitions.train = { contentSha256: issuance.training.contentSha256,
-      firstOpenMs: issuance.training.firstOpenMs,lastCloseMs: issuance.training.lastCloseMs,barCount: issuance.training.barCount };
-    const after = issuance.training.lastCloseMs;
-    proposal.partitions.validation = { contentSha256: "2".repeat(64),firstOpenMs: after,lastCloseMs: after+600000,barCount: 10 };
-    proposal.partitions.blind = { contentSha256: "3".repeat(64),firstOpenMs: after+600000,lastCloseMs: after+1200000,barCount: 10 };
-    proposal.partitions.walkForward = [{ contentSha256: "4".repeat(64),firstOpenMs: after,lastCloseMs: after+600000,barCount: 10 }];
-    const experiment = await registerResearchExperimentPostgresV1(drizzle(admin, { schema }), { organizationId: ORG }, proposal);
+    const experiment = await registerExperimentForIssuance(issuance);
     const command = { organizationId: ORG,specSha256: experiment.specSha256,sourceRunId: issuance.sourceRunId,commandId: randomUUID() };
     const attempt = await registerResearchIssuedAttemptPostgresV2(command);
     expect(await registerResearchIssuedAttemptPostgresV2(command)).toEqual(attempt);
@@ -173,5 +252,83 @@ describe.skipIf(!enabled)("DEE-1211 observed research source PostgreSQL", () => 
     expect(input.issuance).toEqual(issuance); expect(input.attempt.capitalEligible).toBe(false);
     await expect(loadResearchIssuedTrainingInputPostgresV2({ organizationId: ORG,attemptId: randomUUID() })).rejects.toThrow("ATTEMPT_REQUIRED");
     await expect(registerResearchIssuedAttemptPostgresV2({ ...command, sourceRunId: `research-source-v1:${"0".repeat(64)}` })).rejects.toThrow("ISSUED_SOURCE_REQUIRED");
+  });
+
+  it("refuses an experiment whose observation cutoff does not match the issued source before attempt insertion", async () => {
+    const prepared = await prepareResearchDevelopmentSourcePostgresV1(request());
+    const issuance = prepared.issuance!;
+    const experiment = await registerExperimentForIssuance(issuance, issuance.observation.lastCloseMs + 1);
+    const command = { organizationId: ORG, specSha256: experiment.specSha256,
+      sourceRunId: issuance.sourceRunId, commandId: randomUUID() };
+    await expect(registerResearchIssuedAttemptPostgresV2(command))
+      .rejects.toThrow("RESEARCH_ISSUED_EXPERIMENT_SOURCE_BINDING_MISMATCH");
+    expect(await attemptRows(command.commandId)).toBe(0);
+  });
+
+  it("detects a self-consistent resealed source row against the immutable issuance rowset", async () => {
+    const prepared = await prepareResearchDevelopmentSourcePostgresV1(request());
+    const issuance = prepared.issuance!;
+    const experiment = await registerExperimentForIssuance(issuance);
+    const attempt = await registerResearchIssuedAttemptPostgresV2({ organizationId: ORG,
+      specSha256: experiment.specSha256, sourceRunId: issuance.sourceRunId, commandId: randomUUID() });
+    const [stored] = await admin<Parameters<typeof assertHistoricalDatasetAuthorityRowV2>[0][]>`SELECT id::text,cycle_id,dataset_authority_class,dataset_authority_digest_hex,
+      membership_content_digest_hex,sealed_cycle_content_digest_hex,authority_content_digest_hex,
+      membership_json,sealed_cycle_json
+      FROM public.trader_historical_dataset_authority_v2
+      WHERE organization_id=${ORG}::uuid AND run_id=${issuance.sourceRunId}
+      ORDER BY (membership_json->>'recordIndex')::integer LIMIT 1`;
+    const { schemaVersion: discardedSchema, contentDigestHex: discardedCycleDigest, ...cycleBody } = stored!.sealed_cycle_json;
+    void discardedSchema; void discardedCycleDigest;
+    const closedBar = { ...cycleBody.closedBar, high: String(Number(cycleBody.closedBar.high) + 0.25) };
+    const resealedCycle = sealHistoricalMarketCycleV2({ ...cycleBody, closedBar,
+      htxVolumeRaw: htxVolumeRawFromClosedBar(closedBar) });
+    const { contentDigestHex: discardedMembershipDigest, ...membershipBody } = stored!.membership_json;
+    void discardedMembershipDigest;
+    const resealedMembershipBody = { ...membershipBody,
+      barContentDigestHex: computeBarContentDigest(closedBar),
+      sealedCycleContentDigestHex: resealedCycle.contentDigestHex };
+    const resealedMembership = { ...resealedMembershipBody,
+      contentDigestHex: computeSemanticSha256Hex(resealedMembershipBody) };
+    const resealedAuthorityDigest = computeStableJsonDigest({ organizationId: ORG,
+      runId: issuance.sourceRunId, membership: resealedMembership, sealedCycle: resealedCycle });
+    expect(() => assertHistoricalDatasetAuthorityRowV2({ ...stored!,
+      membership_content_digest_hex: resealedMembership.contentDigestHex,
+      sealed_cycle_content_digest_hex: resealedCycle.contentDigestHex,
+      authority_content_digest_hex: resealedAuthorityDigest,
+      membership_json: resealedMembership, sealed_cycle_json: resealedCycle,
+    }, { organizationId: ORG, runId: issuance.sourceRunId, partition: "DEVELOPMENT", symbol: "BTCUSDT",
+      recordIndex: 0, datasetAuthorityDigestHex: issuance.qualificationReceiptDigest })).not.toThrow();
+    try {
+      await admin.unsafe(`ALTER TABLE public.trader_historical_dataset_authority_v2
+        DISABLE TRIGGER historical_dataset_authority_v2_append_only`);
+      await admin`UPDATE public.trader_historical_dataset_authority_v2 SET
+        membership_content_digest_hex=${resealedMembership.contentDigestHex},
+        sealed_cycle_content_digest_hex=${resealedCycle.contentDigestHex},
+        membership_json=${JSON.stringify(resealedMembership)}::text::jsonb,
+        sealed_cycle_json=${JSON.stringify(resealedCycle)}::text::jsonb,
+        authority_content_digest_hex=${resealedAuthorityDigest}
+        WHERE organization_id=${ORG}::uuid AND run_id=${issuance.sourceRunId} AND cycle_id=${stored!.cycle_id}`;
+    } finally {
+      await admin.unsafe(`ALTER TABLE public.trader_historical_dataset_authority_v2
+        ENABLE TRIGGER historical_dataset_authority_v2_append_only`);
+    }
+    await expect(loadResearchIssuedTrainingInputPostgresV2({ organizationId: ORG, attemptId: attempt.id }))
+      .rejects.toThrow("RESEARCH_DEVELOPMENT_SOURCE_ROWSET_MISMATCH");
+  });
+
+  it("does not reuse an attempt command across two independently valid source bindings", async () => {
+    const first = (await prepareResearchDevelopmentSourcePostgresV1(request())).issuance!;
+    const second = (await prepareResearchDevelopmentSourcePostgresV1(request())).issuance!;
+    expect(second.sourceRunId).not.toBe(first.sourceRunId);
+    const firstExperiment = await registerExperimentForIssuance(first);
+    const secondExperiment = await registerExperimentForIssuance(second);
+    const commandId = randomUUID();
+    const firstCommand = { organizationId: ORG, specSha256: firstExperiment.specSha256,
+      sourceRunId: first.sourceRunId, commandId };
+    await registerResearchIssuedAttemptPostgresV2(firstCommand);
+    await expect(registerResearchIssuedAttemptPostgresV2({ organizationId: ORG,
+      specSha256: secondExperiment.specSha256, sourceRunId: second.sourceRunId, commandId }))
+      .rejects.toThrow("RESEARCH_ISSUED_ATTEMPT_COMMAND_CONFLICT");
+    expect(await attemptRows(commandId)).toBe(1);
   });
 });

@@ -84,6 +84,18 @@ Environment:
   WAIA_TRADER_CLI=1
   WAIA_DB_BACKEND=postgres
   DATABASE_URL_POSTGRES=...
+
+Separate source preparation (returns observation and stops before research execution):
+  pnpm trader:discovery:run -- --prepare-source=1 --org-id=<Org0 uuid>
+    --command-id=<stable command> --symbol=<BTCUSDT|ETHUSDT>
+    --initial-record-index=<integer> --observation-bar-count=<integer>
+    --gap-bar-count=<integer> --training-bar-count=<integer>
+  Supply every flag in one invocation. Ordinary campaign flags cannot be mixed in.
+  Host configuration: WAIA_RELEASE_SHA, WAIA_RESEARCH_SOURCE_DATABASE_URL,
+    WAIA_RESEARCH_SOURCE_DATASET_ROOT, WAIA_RESEARCH_SOURCE_QUALIFICATION_PATH,
+    WAIA_RESEARCH_SOURCE_VOLUME_PATH; WAIA_RESEARCH_SOURCE_REQUALIFICATION_PATH
+    is required when source and runtime releases differ.
+  The dedicated database login and current CLI/Org0 allowlist checks are required.
 `);
 }
 

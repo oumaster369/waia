@@ -31,6 +31,10 @@ describe("bounded receipt JSON file reads", () => {
       /JSON_FILE_TOO_LARGE/,
     );
     expect(readJsonFileBoundedSync(path)).toEqual(value);
+    const legacyLink = join(root, "legacy-link.json");
+    symlinkSync(path, legacyLink);
+    expect(readJsonFileBoundedSync(legacyLink)).toEqual(value);
+    expect(() => readJsonFileBoundedSync(legacyLink, { maxBytes: bytes })).toThrow();
   });
 
   it("refuses invalid limits, malformed JSON, directories and symlinks", () => {

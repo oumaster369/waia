@@ -6,6 +6,8 @@ import net from "node:net";
 export async function startCommitAckLossProxy(input: {
   targetHost: "127.0.0.1";
   targetPort: number;
+  /** Test recovery failure independently from actual server commit success. */
+  refuseReconnectAfterCommitLoss?: boolean;
 }): Promise<{
   port: number;
   stats: () => Readonly<{ connections: number; commitResponsesWithheld: number; protocolErrors: number }>;
@@ -18,6 +20,10 @@ export async function startCommitAckLossProxy(input: {
   let claimed = false;
   const server = net.createServer((downstream) => {
     counters.connections++;
+    if (input.refuseReconnectAfterCommitLoss && counters.commitResponsesWithheld > 0) {
+      downstream.destroy();
+      return;
+    }
     const upstream = net.connect({ host: input.targetHost, port: input.targetPort });
     sockets.add(downstream); sockets.add(upstream);
     let frontend = Buffer.alloc(0), backend = Buffer.alloc(0);

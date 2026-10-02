@@ -42,23 +42,22 @@ function captureHost() {
     releaseSha: resolveCurrentResearchExecutableIdentityV1().releaseSha,
     datasetRoot: hostPath("WAIA_RESEARCH_SOURCE_DATASET_ROOT"),
     qualificationReceiptPath: hostPath("WAIA_RESEARCH_SOURCE_QUALIFICATION_PATH"),
-    runtimeRequalificationReceiptPath: hostPath("WAIA_RESEARCH_SOURCE_REQUALIFICATION_PATH"),
+    runtimeRequalificationReceiptPath: process.env.WAIA_RESEARCH_SOURCE_REQUALIFICATION_PATH
+      ? hostPath("WAIA_RESEARCH_SOURCE_REQUALIFICATION_PATH") : "",
     htxVolumeQualificationReceiptPath: hostPath("WAIA_RESEARCH_SOURCE_VOLUME_PATH"),
   });
 }
 
-async function reserved<T>(url: string, work: (sql: postgres.ReservedSql) => Promise<T>): Promise<T> {
+async function ownedPool<T>(url: string, work: (sql: postgres.Sql) => Promise<T>): Promise<T> {
   // Fresh, owned pool. Never accepts a generic application pool or supplied SQL
   // callback as authority, and never returns a role-bearing session to one.
   const pool = postgres(url, { max: 1, prepare: false, connect_timeout: 10,
     connection: { statement_timeout: LIMITS.deadlineMs, idle_in_transaction_session_timeout: LIMITS.deadlineMs } });
-  let connection: postgres.ReservedSql | undefined;
   try {
-    connection = await pool.reserve();
-    await requireResearchDevelopmentSourceLoginV1(connection);
-    return await work(connection);
+    // The driver owns BEGIN/COMMIT and disconnect recovery. Session validation
+    // runs inside its pinned transaction, before assuming the writer role.
+    return await work(pool);
   } finally {
-    connection?.release();
     await pool.end({ timeout: 1 });
   }
 }
@@ -81,11 +80,11 @@ export async function prepareResearchDevelopmentSourcePostgresV1(supplied: unkno
   const signal = AbortSignal.timeout(LIMITS.deadlineMs);
   let candidate: ResearchDevelopmentSourceIssuanceV1 | undefined;
   try {
-    return await reserved(host.url, async connection => {
-      const sql = connection as unknown as postgres.Sql;
+    return await ownedPool(host.url, async sql => {
       return withPostgresSerializableTransactionRetry(sql, async tx => {
         candidate = undefined;
         signal.throwIfAborted();
+        await requireResearchDevelopmentSourceLoginV1(tx as unknown as postgres.TransactionSql);
         await assumeLocalRole(tx);
         await tx`SELECT pg_advisory_xact_lock(hashtextextended(${`research-source-v1:${request.organizationId}:${request.commandId}`},0))`;
         const existing = await readResearchDevelopmentSourceIssuanceV1(tx, request.organizationId, sourceRunId);
@@ -143,7 +142,7 @@ export async function prepareResearchDevelopmentSourcePostgresV1(supplied: unkno
           await tx`INSERT INTO public.trader_research_development_source_runs_v1
             (organization_id,source_run_id,command_id,content_digest,issuance_json,issued_at)
             VALUES (${request.organizationId}::uuid,${sourceRunId},${request.commandId},
-              ${issuance.contentDigest},${encoded}::jsonb,${issuance.issuedAt}::timestamptz)`;
+              ${issuance.contentDigest},${encoded}::text::jsonb,${issuance.issuedAt}::timestamptz)`;
         }
         const persisted = await readResearchDevelopmentSourceIssuanceV1(tx, request.organizationId, sourceRunId);
         if (!persisted || persisted.contentDigest !== issuance.contentDigest) {
@@ -162,9 +161,10 @@ export async function prepareResearchDevelopmentSourcePostgresV1(supplied: unkno
     if (!candidate) throw error;
     const exactCandidate: ResearchDevelopmentSourceIssuanceV1 = candidate;
     try {
-      const recovered = await reserved(host.url, connection =>
-        withPostgresSessionTransaction(connection as unknown as postgres.Sql, "REPEATABLE READ", async tx => {
+      const recovered = await ownedPool(host.url, pool =>
+        withPostgresSessionTransaction(pool, "REPEATABLE READ", async tx => {
           await tx`SET TRANSACTION READ ONLY`;
+          await requireResearchDevelopmentSourceLoginV1(tx as unknown as postgres.TransactionSql);
           await assumeLocalRole(tx);
           const persisted = await readResearchDevelopmentSourceIssuanceV1(tx, request.organizationId, sourceRunId);
           if (!persisted || persisted.contentDigest !== exactCandidate.contentDigest) return null;

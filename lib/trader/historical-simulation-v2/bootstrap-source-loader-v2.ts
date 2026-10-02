@@ -1,7 +1,7 @@
 import { readJsonFileBoundedSync } from "@/lib/trader/market-data/bounded-json-file";
 import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { resolve, sep } from "node:path";
+import { createReadStream, closeSync, constants, fstatSync, lstatSync, openSync, realpathSync } from "node:fs";
+import { join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
 
@@ -65,6 +65,40 @@ export async function loadHistoricalSimulationBootstrapSourceCyclesV2(input: Rea
 }>): Promise<readonly HistoricalSimulationBootstrapSourceCycleV2[]> {
   const snapshot = await loadHistoricalSimulationBootstrapSourceSnapshotV2(input);
   return snapshot.sources;
+}
+
+function openBoundedSource(root: string, filePath: string, maxBytes: number, signal?: AbortSignal) {
+  // The source owner opts in to this structural guard. Legacy callers retain
+  // their previous path behavior; this does not claim a sandbox against a
+  // malicious host concurrently replacing parent directories.
+  const canonicalRoot = realpathSync(root);
+  assertPathDoesNotAccessBlindHoldoutPayload(canonicalRoot);
+  const components = relative(root, filePath).split(sep);
+  let checked = canonicalRoot;
+  for (const [index, component] of components.entries()) {
+    checked = join(checked, component);
+    const entry = lstatSync(checked);
+    if (entry.isSymbolicLink()) throw new Error("HISTORICAL_SIMULATION_V2_BOOTSTRAP_REFUSED:SOURCE_PATH_SYMLINK");
+    if (index < components.length - 1 && !entry.isDirectory()) {
+      throw new Error("HISTORICAL_SIMULATION_V2_BOOTSTRAP_REFUSED:SOURCE_PATH_PARENT");
+    }
+  }
+  const canonicalFile = realpathSync(checked);
+  assertPathDoesNotAccessBlindHoldoutPayload(canonicalFile);
+  if (canonicalFile !== checked || !canonicalFile.startsWith(`${canonicalRoot}${sep}`)) {
+    throw new Error("HISTORICAL_SIMULATION_V2_BOOTSTRAP_REFUSED:FILE_PATH_ESCAPE");
+  }
+  const fd = openSync(canonicalFile, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile()) throw new Error("HISTORICAL_SIMULATION_V2_BOOTSTRAP_REFUSED:SOURCE_NOT_REGULAR");
+    if (stat.size > maxBytes) throw new Error("HISTORICAL_SIMULATION_V2_BOOTSTRAP_REFUSED:SOURCE_BYTE_LIMIT");
+    signal?.throwIfAborted();
+    return createReadStream(canonicalFile, { fd, autoClose: true, signal });
+  } catch (error) {
+    closeSync(fd);
+    throw error;
+  }
 }
 
 /**
@@ -140,7 +174,9 @@ export async function loadHistoricalSimulationBootstrapSourceSnapshotV2(input: R
   }
   assertPathDoesNotAccessBlindHoldoutPayload(filePath);
   const rawHasher = createHash("sha256");
-  const source = createReadStream(filePath, { signal: input.signal });
+  const source = input.maxSourceBytes === undefined
+    ? createReadStream(filePath, { signal: input.signal })
+    : openBoundedSource(root, filePath, input.maxSourceBytes, input.signal);
   async function* authenticatedBytes(): AsyncGenerator<Buffer> {
     let byteCount = 0;
     for await (const chunk of source) {
@@ -156,23 +192,30 @@ export async function loadHistoricalSimulationBootstrapSourceSnapshotV2(input: R
   }
   const cycles: HistoricalSealedMarketCycleV2[] = [];
   let index = 0;
-  const lines = createInterface({ input: Readable.from(authenticatedBytes()), crlfDelay: Infinity });
-  for await (const line of lines) {
-    const bar = fhvBarsV2RecordToBar(parseFhvBarsV2Line(line, index + 1));
-    if (bar.symbol.replace("/", "") !== input.symbol) {
-      throw new Error("HISTORICAL_SIMULATION_V2_BOOTSTRAP_REFUSED:SOURCE_SYMBOL");
+  const bytes = Readable.from(authenticatedBytes());
+  const lines = createInterface({ input: bytes, crlfDelay: Infinity });
+  try {
+    for await (const line of lines) {
+      const bar = fhvBarsV2RecordToBar(parseFhvBarsV2Line(line, index + 1));
+      if (bar.symbol.replace("/", "") !== input.symbol) {
+        throw new Error("HISTORICAL_SIMULATION_V2_BOOTSTRAP_REFUSED:SOURCE_SYMBOL");
+      }
+      if (
+        index >= input.initialRecordIndex &&
+        index < input.initialRecordIndex + input.cycleCount
+      ) {
+        cycles.push(sealHistoricalMarketCycleV2({
+          cycleId: cycleId(input.runId, input.partition, input.symbol, index), barIndex: index,
+          closedBar: bar, htxVolumeAuthorityReceipt: receipt,
+          htxVolumeRaw: htxVolumeRawFromClosedBar(bar),
+        }));
+      }
+      index += 1;
     }
-    if (
-      index >= input.initialRecordIndex &&
-      index < input.initialRecordIndex + input.cycleCount
-    ) {
-      cycles.push(sealHistoricalMarketCycleV2({
-        cycleId: cycleId(input.runId, input.partition, input.symbol, index), barIndex: index,
-        closedBar: bar, htxVolumeAuthorityReceipt: receipt,
-        htxVolumeRaw: htxVolumeRawFromClosedBar(bar),
-      }));
-    }
-    index += 1;
+  } finally {
+    lines.close();
+    bytes.destroy();
+    source.destroy();
   }
   const rawSha256Hex = rawHasher.digest("hex");
   if (

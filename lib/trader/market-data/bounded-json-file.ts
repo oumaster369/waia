@@ -1,4 +1,4 @@
-import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readSync, readFileSync } from "node:fs";
 
 const READ_CHUNK_BYTES = 64 * 1024;
 
@@ -22,6 +22,10 @@ export function readJsonFileBoundedSync(
   if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes < 1)) {
     throw new BoundedJsonFileError("JSON_FILE_BYTE_LIMIT_INVALID");
   }
+
+  // Existing callers which did not opt into a cap keep their prior file/symlink
+  // behavior as well as their size policy. The new source owner always opts in.
+  if (maxBytes === undefined) return JSON.parse(readFileSync(path, "utf8")) as unknown;
 
   // O_NONBLOCK prevents a FIFO from hanging before fstat can reject it.
   // O_NOFOLLOW refuses a symlink rather than following it to another file.

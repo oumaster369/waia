@@ -8,11 +8,12 @@ import {
 } from "./research-development-source-contract-v1";
 
 /** Verify the authenticated session, not merely the ability of an owner URI to
- * SET ROLE. The owner uses this on its one reserved backend before any payload. */
-export async function requireResearchDevelopmentSourceLoginV1(sql: postgres.ReservedSql): Promise<void> {
+ * SET ROLE. The owner uses this inside its driver-pinned root transaction before any payload. */
+export async function requireResearchDevelopmentSourceLoginV1(sql: postgres.TransactionSql): Promise<void> {
   const handle = sql as unknown as Record<string, unknown>;
-  if (typeof handle.release !== "function" || typeof handle.reserve === "function" || typeof handle.begin === "function") {
-    throw new Error("RESEARCH_DEVELOPMENT_SOURCE_RESERVED_SESSION_REQUIRED");
+  if (typeof handle.savepoint !== "function" || typeof handle.reserve === "function" ||
+      typeof handle.begin === "function" || typeof handle.release === "function" || typeof handle.end === "function") {
+    throw new Error("RESEARCH_DEVELOPMENT_SOURCE_TRANSACTION_SESSION_REQUIRED");
   }
   const rows = await sql<Readonly<{
     session_user: string; current_user: string;
@@ -25,7 +26,7 @@ export async function requireResearchDevelopmentSourceLoginV1(sql: postgres.Rese
         AND NOT login.rolcreatedb AND NOT login.rolcreaterole
         AND NOT login.rolreplication AND NOT login.rolbypassrls
         AND login.rolconnlimit=2) AS login_valid,
-      (NOT writer.rolcanlogin AND NOT writer.rolsuper AND NOT writer.rolcreatedb
+      (NOT writer.rolcanlogin AND NOT writer.rolinherit AND NOT writer.rolsuper AND NOT writer.rolcreatedb
         AND NOT writer.rolcreaterole AND NOT writer.rolreplication
         AND NOT writer.rolbypassrls) AS role_valid,
       database.datdba IN (login.oid,writer.oid) AS owns_database,
@@ -48,7 +49,16 @@ export async function requireResearchDevelopmentSourceLoginV1(sql: postgres.Rese
         AND NOT EXISTS (SELECT 1 FROM pg_namespace n CROSS JOIN LATERAL aclexplode(n.nspacl) a
           WHERE n.oid='public'::regnamespace AND a.grantee=writer.oid
             AND (a.privilege_type<>'USAGE' OR a.is_grantable))
-        AND NOT EXISTS (SELECT 1 FROM pg_auth_members m WHERE m.member=login.oid AND m.admin_option)
+        AND NOT EXISTS (SELECT 1 FROM pg_auth_members m WHERE m.member=login.oid
+          AND (m.admin_option OR m.inherit_option OR NOT m.set_option))
+        AND NOT has_database_privilege(login.oid,current_database(),'CREATE')
+        AND NOT has_database_privilege(writer.oid,current_database(),'CREATE')
+        AND (SELECT count(*)=2 AND bool_and(c.relrowsecurity) FROM pg_class c
+          WHERE c.oid IN ('public.trader_research_development_source_runs_v1'::regclass,
+            'public.trader_historical_dataset_authority_v2'::regclass))
+        AND NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+          WHERE n.nspname='public' AND p.prosecdef AND p.prorettype<>'trigger'::regtype
+            AND has_function_privilege(writer.oid,p.oid,'EXECUTE'))
         AND NOT EXISTS (SELECT 1 FROM pg_class c
           CROSS JOIN LATERAL aclexplode(c.relacl) a
           WHERE c.oid IN ('public.trader_research_development_source_runs_v1'::regclass,
