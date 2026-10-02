@@ -81,27 +81,150 @@ function assertObservedAtOrBeforeCutoff(observedAtUtc: string, evidenceCutoffUtc
   }
 }
 
+const CLOSED_TRADE_OUTCOME_RECORD_V2_KEYS = [
+  "causalContextDigestHex",
+  "closedTradeRef",
+  "evaluationRole",
+  "netEconomicResult",
+  "observedAtUtc",
+  "outcomeId",
+  "polarity",
+] as const;
+
+const CLOSED_TRADE_OUTCOME_EVIDENCE_PACKAGE_V2_KEYS = [
+  "campaignId",
+  "capitalAuthority",
+  "contentDigestHex",
+  "evidenceCutoffUtc",
+  "organizationId",
+  "polaritiesPresent",
+  "records",
+  "schemaVersion",
+  "symbol",
+] as const;
+
+function assertExactKeys(
+  value: unknown,
+  keys: readonly string[],
+  code: string,
+): asserts value is Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new StrategyEvolutionResearchError(code);
+  }
+  const actual = Reflect.ownKeys(value);
+  if (
+    actual.some((key) => typeof key !== "string") ||
+    actual.length !== keys.length ||
+    !keys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+  ) {
+    throw new StrategyEvolutionResearchError(code);
+  }
+}
+
+export function assertClosedTradeOutcomeRecordV2Integrity(
+  value: unknown,
+  evidenceCutoffUtc: string,
+  code = "RESEARCH_EVIDENCE_PACKAGE_INVALID",
+): asserts value is ClosedTradeOutcomeRecordV2 {
+  assertExactKeys(value, CLOSED_TRADE_OUTCOME_RECORD_V2_KEYS, code);
+  if (
+    typeof value.outcomeId !== "string" ||
+    typeof value.closedTradeRef !== "string" ||
+    typeof value.observedAtUtc !== "string" ||
+    typeof value.netEconomicResult !== "string" ||
+    typeof value.causalContextDigestHex !== "string" ||
+    typeof value.polarity !== "string" ||
+    typeof value.evaluationRole !== "string"
+  ) {
+    throw new StrategyEvolutionResearchError(code);
+  }
+  requireResearchV2NonEmpty(value.outcomeId, code);
+  requireResearchV2NonEmpty(value.closedTradeRef, code);
+  assertObservedAtOrBeforeCutoff(value.observedAtUtc, evidenceCutoffUtc);
+  requireResearchV2DigestHex(value.causalContextDigestHex, code);
+
+  let amount: ReturnType<typeof parseDecimal>;
+  try {
+    amount = parseDecimal(value.netEconomicResult);
+    if (formatDecimal(amount) !== value.netEconomicResult) {
+      throw new Error("noncanonical decimal");
+    }
+  } catch {
+    throw new StrategyEvolutionResearchError(code);
+  }
+  if (!(CLOSED_TRADE_OUTCOME_POLARITIES_V2 as readonly string[]).includes(value.polarity)) {
+    throw new StrategyEvolutionResearchError(code);
+  }
+  if (
+    (value.polarity === "PROFIT" && compareDecimal(value.netEconomicResult, "0") <= 0) ||
+    (value.polarity === "LOSS" && compareDecimal(value.netEconomicResult, "0") >= 0) ||
+    (value.polarity === "FLAT" && compareDecimal(value.netEconomicResult, "0") !== 0)
+  ) {
+    throw new StrategyEvolutionResearchError(code);
+  }
+  const expectedRole = evaluationRole(value.polarity as ClosedTradeOutcomePolarityV2);
+  if (value.evaluationRole !== expectedRole) {
+    throw new StrategyEvolutionResearchError(code);
+  }
+}
+
 /**
  * Revalidates an untrusted/deserialized package's content consistency and temporal boundary.
  * A matching digest proves byte consistency only; it does not authenticate issuance or provenance.
  */
 export function assertClosedTradeOutcomeEvidencePackageV2Integrity(
-  value: ClosedTradeOutcomeEvidencePackageV2,
-): void {
-  assertResearchV2ContentDigest(value, "RESEARCH_EVIDENCE_PACKAGE_INVALID");
+  value: unknown,
+): asserts value is ClosedTradeOutcomeEvidencePackageV2 {
+  assertExactKeys(value, CLOSED_TRADE_OUTCOME_EVIDENCE_PACKAGE_V2_KEYS, "RESEARCH_EVIDENCE_PACKAGE_INVALID");
+  if (typeof value.contentDigestHex !== "string") {
+    throw new StrategyEvolutionResearchError("RESEARCH_EVIDENCE_PACKAGE_INVALID");
+  }
+  assertResearchV2ContentDigest(
+    value as Readonly<{ contentDigestHex: string }>,
+    "RESEARCH_EVIDENCE_PACKAGE_INVALID",
+  );
   if (
     value.schemaVersion !== CLOSED_TRADE_OUTCOME_EVIDENCE_PACKAGE_V2_SCHEMA ||
     value.capitalAuthority !== "NONE" ||
-    !Array.isArray(value.records)
+    typeof value.organizationId !== "string" ||
+    typeof value.campaignId !== "string" ||
+    typeof value.symbol !== "string" ||
+    typeof value.evidenceCutoffUtc !== "string" ||
+    !Array.isArray(value.records) ||
+    !Array.isArray(value.polaritiesPresent)
   ) {
     throw new StrategyEvolutionResearchError("RESEARCH_EVIDENCE_PACKAGE_INVALID");
   }
+  requireResearchV2NonEmpty(value.organizationId, "RESEARCH_EVIDENCE_PACKAGE_INVALID");
+  requireResearchV2NonEmpty(value.campaignId, "RESEARCH_EVIDENCE_PACKAGE_INVALID");
+  requireResearchV2NonEmpty(value.symbol, "RESEARCH_EVIDENCE_PACKAGE_INVALID");
   requireResearchV2IsoUtc(value.evidenceCutoffUtc, "RESEARCH_EVIDENCE_CUTOFF_INVALID");
-  for (const record of value.records) {
-    if (record === null || typeof record !== "object") {
+  const ids = new Set<string>();
+  const validRecords: ClosedTradeOutcomeRecordV2[] = [];
+  const records: unknown[] = value.records;
+  const polaritiesPresent: unknown[] = value.polaritiesPresent;
+  let previousOutcomeId: string | undefined;
+  for (const rawRecord of records) {
+    const record = rawRecord;
+    assertClosedTradeOutcomeRecordV2Integrity(record, value.evidenceCutoffUtc);
+    if (ids.has(record.outcomeId) || (previousOutcomeId !== undefined && previousOutcomeId >= record.outcomeId)) {
       throw new StrategyEvolutionResearchError("RESEARCH_EVIDENCE_PACKAGE_INVALID");
     }
-    assertObservedAtOrBeforeCutoff(record.observedAtUtc, value.evidenceCutoffUtc);
+    ids.add(record.outcomeId);
+    previousOutcomeId = record.outcomeId;
+    validRecords.push(record);
+  }
+  if (validRecords.length === 0) {
+    throw new StrategyEvolutionResearchError("RESEARCH_EVIDENCE_PACKAGE_INVALID");
+  }
+  const expectedPolarities = CLOSED_TRADE_OUTCOME_POLARITIES_V2.filter((polarity) =>
+    validRecords.some((record) => record.polarity === polarity),
+  );
+  if (
+    polaritiesPresent.length !== expectedPolarities.length ||
+    polaritiesPresent.some((polarity, index) => polarity !== expectedPolarities[index])
+  ) {
+    throw new StrategyEvolutionResearchError("RESEARCH_EVIDENCE_PACKAGE_INVALID");
   }
 }
 

@@ -6,11 +6,14 @@ import type {
 } from "@/lib/trader/research-v2/closed-trade-outcome-evidence-v2";
 import {
   assertClosedTradeOutcomeEvidencePackageV2Integrity,
+  assertClosedTradeOutcomeRecordV2Integrity,
   discardLosingOutcomesFromEvidencePackageV2,
 } from "@/lib/trader/research-v2/closed-trade-outcome-evidence-v2";
 import {
   assertResearchV2ContentDigest,
+  requireResearchV2DigestHex,
   requireResearchV2IsoUtc,
+  requireResearchV2NonEmpty,
   StrategyEvolutionResearchError,
 } from "@/lib/trader/research-v2/research-v2-guards";
 
@@ -29,28 +32,90 @@ export type ResearchMemoryV2 = Readonly<{
   contentDigestHex: string;
 }>;
 
+const RESEARCH_MEMORY_V2_KEYS = [
+  "authority",
+  "campaignId",
+  "capitalAuthority",
+  "contentDigestHex",
+  "contradictingCount",
+  "evidencePackageDigestHex",
+  "organizationId",
+  "records",
+  "schemaVersion",
+  "supportingCount",
+] as const;
+
+function assertExactMemoryKeys(value: unknown): asserts value is Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new StrategyEvolutionResearchError("RESEARCH_MEMORY_INVALID");
+  }
+  const actual = Reflect.ownKeys(value);
+  if (
+    actual.some((key) => typeof key !== "string") ||
+    actual.length !== RESEARCH_MEMORY_V2_KEYS.length ||
+    !RESEARCH_MEMORY_V2_KEYS.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+  ) {
+    throw new StrategyEvolutionResearchError("RESEARCH_MEMORY_INVALID");
+  }
+}
+
 function assertPriorMemoryIntegrityV2(prior: ResearchMemoryV2, evidenceCutoffUtc: string): void {
-  assertResearchV2ContentDigest(prior, "RESEARCH_MEMORY_INVALID");
+  assertExactMemoryKeys(prior);
+  if (
+    typeof prior.contentDigestHex !== "string" ||
+    typeof prior.evidencePackageDigestHex !== "string" ||
+    typeof prior.organizationId !== "string" ||
+    typeof prior.campaignId !== "string" ||
+    typeof prior.supportingCount !== "number" ||
+    !Number.isSafeInteger(prior.supportingCount) ||
+    typeof prior.contradictingCount !== "number" ||
+    !Number.isSafeInteger(prior.contradictingCount)
+  ) {
+    throw new StrategyEvolutionResearchError("RESEARCH_MEMORY_INVALID");
+  }
+  assertResearchV2ContentDigest(
+    prior as Readonly<{ contentDigestHex: string }>,
+    "RESEARCH_MEMORY_INVALID",
+  );
   if (
     prior.schemaVersion !== RESEARCH_MEMORY_V2_SCHEMA ||
     prior.capitalAuthority !== "NONE" ||
     prior.authority !== "APPEND_ONLY_RESEARCH_MEMORY" ||
-    !Array.isArray(prior.records)
+    !Array.isArray(prior.records) ||
+    prior.records.length === 0
   ) {
     throw new StrategyEvolutionResearchError("RESEARCH_MEMORY_INVALID");
   }
+  requireResearchV2NonEmpty(prior.organizationId, "RESEARCH_MEMORY_INVALID");
+  requireResearchV2NonEmpty(prior.campaignId, "RESEARCH_MEMORY_INVALID");
+  requireResearchV2DigestHex(prior.evidencePackageDigestHex, "RESEARCH_MEMORY_INVALID");
   requireResearchV2IsoUtc(evidenceCutoffUtc, "RESEARCH_EVIDENCE_CUTOFF_INVALID");
-  for (const record of prior.records) {
-    if (record === null || typeof record !== "object") {
+  let supportingCount = 0;
+  let contradictingCount = 0;
+  for (let index = 0; index < prior.records.length; index += 1) {
+    const record = prior.records[index];
+    try {
+      assertClosedTradeOutcomeRecordV2Integrity(record, evidenceCutoffUtc, "RESEARCH_MEMORY_INVALID");
+    } catch (error) {
+      if (error instanceof StrategyEvolutionResearchError && error.code === "RESEARCH_OUTCOME_AFTER_CUTOFF") {
+        throw new StrategyEvolutionResearchError(
+          "RESEARCH_MEMORY_OUTCOME_AFTER_CUTOFF",
+          "Prior memory contains an outcome later than the incoming evidence cutoff",
+        );
+      }
+      throw error;
+    }
+    if (index > 0 && prior.records[index - 1]!.outcomeId >= record.outcomeId) {
       throw new StrategyEvolutionResearchError("RESEARCH_MEMORY_INVALID");
     }
-    requireResearchV2IsoUtc(record.observedAtUtc, "RESEARCH_OUTCOME_TIME_INVALID");
-    if (Date.parse(record.observedAtUtc) > Date.parse(evidenceCutoffUtc)) {
-      throw new StrategyEvolutionResearchError(
-        "RESEARCH_MEMORY_OUTCOME_AFTER_CUTOFF",
-        "Prior memory contains an outcome later than the incoming evidence cutoff",
-      );
-    }
+    if (record.evaluationRole === "SUPPORTING") supportingCount += 1;
+    if (record.evaluationRole === "CONTRADICTING") contradictingCount += 1;
+  }
+  if (
+    prior.supportingCount !== supportingCount ||
+    prior.contradictingCount !== contradictingCount
+  ) {
+    throw new StrategyEvolutionResearchError("RESEARCH_MEMORY_INVALID");
   }
 }
 

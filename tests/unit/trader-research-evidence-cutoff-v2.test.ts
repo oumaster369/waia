@@ -217,6 +217,76 @@ describe("DEE-1208 research evidence cutoff", () => {
     }
   });
 
+  it("refuses noncanonical outcome records and package summaries after re-sealing", () => {
+    const validPackage = packageAt(CUTOFF, BEFORE, "shape");
+    const withNestedMetadata = resealUnknown({
+      ...validPackage,
+      records: [{ ...validPackage.records[0], extra: { mutable: "before" } }],
+    }) as unknown as ClosedTradeOutcomeEvidencePackageV2;
+    expect(() => appendResearchMemoryV2(withNestedMetadata)).toThrow(
+      "RESEARCH_EVIDENCE_PACKAGE_INVALID",
+    );
+
+    const withInvalidPolaritySummary = resealUnknown({
+      ...validMixedPackage(),
+      polaritiesPresent: ["PROFIT"],
+    }) as unknown as ClosedTradeOutcomeEvidencePackageV2;
+    expect(() => appendResearchMemoryV2(withInvalidPolaritySummary)).toThrow(
+      "RESEARCH_EVIDENCE_PACKAGE_INVALID",
+    );
+
+    const withMismatchedRole = resealUnknown({
+      ...validPackage,
+      records: [{ ...validPackage.records[0], evaluationRole: "CONTRADICTING" }],
+    }) as unknown as ClosedTradeOutcomeEvidencePackageV2;
+    expect(() => appendResearchMemoryV2(withMismatchedRole)).toThrow(
+      "RESEARCH_EVIDENCE_PACKAGE_INVALID",
+    );
+
+    const withMismatchedClassification = resealUnknown({
+      ...validPackage,
+      records: [{ ...validPackage.records[0], polarity: "LOSS", evaluationRole: "CONTRADICTING" }],
+      polaritiesPresent: ["LOSS"],
+    }) as unknown as ClosedTradeOutcomeEvidencePackageV2;
+    expect(() => appendResearchMemoryV2(withMismatchedClassification)).toThrow(
+      "RESEARCH_EVIDENCE_PACKAGE_INVALID",
+    );
+
+    for (const update of [
+      { organizationId: { id: "org-cutoff" } },
+      { campaignId: ["campaign-cutoff"] },
+      { symbol: { value: "BTCUSDT" } },
+      { evidenceCutoffUtc: { value: CUTOFF } },
+    ]) {
+      const invalidIdentity = resealUnknown({ ...validPackage, ...update }) as unknown as
+        ClosedTradeOutcomeEvidencePackageV2;
+      expect(() => appendResearchMemoryV2(invalidIdentity)).toThrow(
+        "RESEARCH_EVIDENCE_PACKAGE_INVALID",
+      );
+    }
+  });
+
+  it("refuses noncanonical prior-memory records, identities, and derived counts", () => {
+    const validPackage = packageAt(CUTOFF, BEFORE, "prior-shape");
+    const validMemory = appendResearchMemoryV2(validPackage);
+    const variants = [
+      resealUnknown({
+        ...validMemory,
+        records: [{ ...validMemory.records[0], extra: { mutable: "before" } }],
+      }),
+      resealUnknown({
+        ...validMemory,
+        organizationId: { id: "org-cutoff" },
+      }),
+      resealUnknown({ ...validMemory, supportingCount: 0 }),
+    ];
+    const nextPackage = packageAt(CUTOFF, BEFORE, "another-record");
+    for (const variant of variants) {
+      expect(() => appendResearchMemoryV2(nextPackage, variant as unknown as ResearchMemoryV2))
+        .toThrow("RESEARCH_MEMORY_INVALID");
+    }
+  });
+
   it("snapshots mutable deserialized package and prior-memory records before returning", () => {
     const mutablePackage = JSON.parse(JSON.stringify(packageAt(CUTOFF, BEFORE, "mutable-package"))) as
       ClosedTradeOutcomeEvidencePackageV2;
