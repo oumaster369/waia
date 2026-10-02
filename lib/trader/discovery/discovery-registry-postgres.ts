@@ -20,6 +20,7 @@ import type {
   InsertStrategySynthesisRow,
   InsertStructureClusterRow,
 } from "@/lib/trader/discovery/discovery-record.types";
+import { assertStructureClusterV2AppendRow } from "@/lib/trader/discovery/structure-cluster-contract";
 import {
   orgScopedWhere,
   requireOrgContext,
@@ -170,6 +171,14 @@ export async function insertDiscoveryStructureClusterPostgres(
   row: InsertStructureClusterRow,
 ) {
   const scoped = requireOrgContext(context.organizationId);
+  assertStructureClusterV2AppendRow({
+    id: row.id,
+    organizationId: scoped.organizationId,
+    campaignId: row.campaignId,
+    signatureKey: row.signatureKey,
+    payloadJson: row.payloadJson,
+    contentDigest: row.contentDigest,
+  });
   await ex.insert(pgSchema.traderDiscoveryStructureCluster).values({
     id: row.id,
     organizationId: scoped.organizationId,

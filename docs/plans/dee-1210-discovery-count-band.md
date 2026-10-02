@@ -10,9 +10,9 @@ requiredValidation: [targeted-unit, lint, typecheck, build, validate-canon, inde
 approvalGates: [user-authorized-engineering, independent-review, required-ci, no-production-data, no-live-activation]
 state:
   status: in-progress
-  completedWorkPackages: [WP-1-plan]
-  remainingWorkPackages: [WP-2-v2-contract, WP-3-regime-wording, WP-4-review-and-exact-head-ci]
-  nextAction: "Land the V2 count-band contract and regime-label question wording, then obtain independent review and exact-head CI before merge."
+  completedWorkPackages: [WP-1-plan, WP-2-v2-contract, WP-3-regime-wording]
+  remainingWorkPackages: [WP-4-review-and-exact-head-ci]
+  nextAction: "Obtain independent review and exact-head CI on this head before merge."
 provenance:
   createdFrom: "DEE-1210 Linear contract, admitted 2026-10-02 regime-wording follow-up, and current main 520672258014ca4600b2343eef530a65dc38d769"
   supersedes: null

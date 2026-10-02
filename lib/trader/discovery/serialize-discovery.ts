@@ -3,7 +3,10 @@ import { createHash } from "node:crypto";
 import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
 import type { ResearchCampaignCharter } from "@/lib/trader/discovery/research-campaign.types";
 import type { ObservationRecord } from "@/lib/trader/discovery/observation.types";
-import type { StructureCluster } from "@/lib/trader/discovery/structure.types";
+import type {
+  StructureClusterV1,
+  StructureClusterV2,
+} from "@/lib/trader/discovery/structure.types";
 import type { ResearchQuestion } from "@/lib/trader/discovery/research-question.types";
 import type { HypothesisProposalArtifact } from "@/lib/trader/discovery/hypothesis-proposal.types";
 import type { EpistemicEvidenceRecord } from "@/lib/trader/discovery/evidence.types";
@@ -58,8 +61,9 @@ export function buildObservationContentDigest(
     .digest("hex");
 }
 
+/** Legacy V1 digest. Field set is frozen so stored fixture bytes stay stable. */
 export function buildStructureClusterContentDigest(
-  cluster: Omit<StructureCluster, "contentDigest">,
+  cluster: Omit<StructureClusterV1, "contentDigest">,
 ): string {
   return createHash("sha256")
     .update(
@@ -72,6 +76,32 @@ export function buildStructureClusterContentDigest(
       "utf8",
     )
     .digest("hex");
+}
+
+export function serializeStructureClusterV1(cluster: StructureClusterV1): string {
+  return canonicalJsonString(cluster);
+}
+
+/** V2 content identity includes the schema version so a relabeled V1 body cannot collide. */
+export function buildStructureClusterV2ContentDigest(
+  cluster: Omit<StructureClusterV2, "contentDigest">,
+): string {
+  return createHash("sha256")
+    .update(
+      canonicalJsonString({
+        schemaVersion: cluster.schemaVersion,
+        clusterId: cluster.clusterId,
+        campaignRef: cluster.campaignRef,
+        signature: cluster.signature,
+        memberObservationRefs: cluster.memberObservationRefs,
+      }),
+      "utf8",
+    )
+    .digest("hex");
+}
+
+export function serializeStructureClusterV2(cluster: StructureClusterV2): string {
+  return canonicalJsonString(cluster);
 }
 
 export function buildResearchQuestionContentDigest(

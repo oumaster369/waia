@@ -1,54 +1,43 @@
 import {
-  STRUCTURE_CLUSTER_SCHEMA_VERSION,
-  type StructureCluster,
+  MEASURED_VOLATILITY_UNAVAILABLE,
+  STRUCTURE_CLUSTER_SCHEMA_VERSION_V2,
+  TRADE_REFERENCE_COUNT_METRIC,
+  type StructureClusterV2,
   type StructureClustererInput,
-  type StructureSignature,
+  type StructureSignatureV2,
 } from "@/lib/trader/discovery/structure.types";
-import { buildStructureClusterContentDigest } from "@/lib/trader/discovery/serialize-discovery";
-
-function volBucketFromObservation(
-  observation: StructureClustererInput["observations"][number],
-): "low" | "medium" | "high" {
-  const count = observation.tradeRefs.length;
-  if (count <= 1) {
-    return "low";
-  }
-  if (count <= 5) {
-    return "medium";
-  }
-  return "high";
-}
-
-function buildSignatureKey(
-  regimeLabel: string,
-  volBucket: StructureSignature["volBucket"],
-): string {
-  return `${regimeLabel}::${volBucket}`;
-}
+import {
+  buildStructureSignatureKeyV2,
+  tradeReferenceCountBandForCount,
+} from "@/lib/trader/discovery/structure-cluster-contract";
+import { buildStructureClusterV2ContentDigest } from "@/lib/trader/discovery/serialize-discovery";
 
 export function clusterStructureSignatures(
   input: StructureClustererInput,
   newId: () => string = crypto.randomUUID.bind(crypto),
   createdAt = new Date().toISOString(),
-): StructureCluster[] {
-  const groups = new Map<string, { signature: StructureSignature; refs: string[] }>();
+): StructureClusterV2[] {
+  const groups = new Map<string, { signature: StructureSignatureV2; refs: string[] }>();
 
   for (const observation of input.observations) {
     for (const regimeLabel of observation.observedRegimes) {
-      const volBucket = volBucketFromObservation(observation);
-      const signatureKey = buildSignatureKey(regimeLabel, volBucket);
+      const tradeReferenceCount = observation.tradeRefs.length;
+      const tradeReferenceCountBand = tradeReferenceCountBandForCount(tradeReferenceCount);
+      const signatureKey = buildStructureSignatureKeyV2(regimeLabel, tradeReferenceCountBand);
       const existing = groups.get(signatureKey);
       if (existing) {
         existing.refs.push(observation.observationId);
         existing.signature.observationCount += 1;
-        existing.signature.tradeCount += observation.tradeRefs.length;
+        existing.signature.tradeCount += tradeReferenceCount;
       } else {
         groups.set(signatureKey, {
           signature: {
             signatureKey,
             regimeLabel,
-            volBucket,
-            tradeCount: observation.tradeRefs.length,
+            metric: TRADE_REFERENCE_COUNT_METRIC,
+            tradeReferenceCountBand,
+            measuredVolatility: MEASURED_VOLATILITY_UNAVAILABLE,
+            tradeCount: tradeReferenceCount,
             observationCount: 1,
           },
           refs: [observation.observationId],
@@ -61,8 +50,8 @@ export function clusterStructureSignatures(
     .sort((a, b) => b.signature.tradeCount - a.signature.tradeCount)
     .map(({ signature, refs }) => {
       const clusterId = newId();
-      const draft: Omit<StructureCluster, "contentDigest"> = {
-        schemaVersion: STRUCTURE_CLUSTER_SCHEMA_VERSION,
+      const draft: Omit<StructureClusterV2, "contentDigest"> = {
+        schemaVersion: STRUCTURE_CLUSTER_SCHEMA_VERSION_V2,
         clusterId,
         campaignRef: input.campaignRef,
         signature,
@@ -71,7 +60,7 @@ export function clusterStructureSignatures(
       };
       return {
         ...draft,
-        contentDigest: buildStructureClusterContentDigest(draft),
+        contentDigest: buildStructureClusterV2ContentDigest(draft),
       };
     });
 }
