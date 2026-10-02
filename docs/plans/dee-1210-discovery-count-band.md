@@ -10,8 +10,8 @@ approvalGates: [issue-contract, independent-review, required-ci, no-production-d
 state:
   status: in-progress
   completedWorkPackages: [WP-1-plan-and-baseline, WP-2-versioned-trade-count-band, WP-3-readiness]
-  remainingWorkPackages: [WP-4-review-and-ci]
-  nextAction: "Obtain independent review and exact-head CI; do not claim scientific qualification."
+  remainingWorkPackages: [WP-3-rejection-context-wording, WP-4-review-and-ci]
+  nextAction: "Implement and verify the bounded rejection-context wording extension, then obtain independent review and exact-head CI; do not claim scientific qualification."
 provenance:
   createdFrom: "DEE-1210 Linear contract and root implementation contract"
   supersedes: null
@@ -98,6 +98,16 @@ rules, historical V1 artifacts, or question text already persisted.
   check pass. These 38 tests overlap the earlier 62-test batch and are not
   added to it. The final follow-up evidence is in
   `audit-ai-trader-2026-10-01/dee1210/caller-mutation-followup/`.
+- **WP-3 follow-up — rejection-context regime wording (2026-10-02):** the
+  validated V2 question builder still hardcodes `TREND_BEAR or STRESS` in its
+  rejection-context branch. Use only the already-validated
+  `cluster.signature.regimeLabel` in that branch so every supported regime,
+  including `CHOP` and `RANGE`, is represented truthfully. Add synthetic
+  counterexamples for those labels and controls for `TREND_BEAR`/`STRESS`, and
+  verify the content digest over the resulting text. Preserve the count-band,
+  question-kind/program selection, digest algorithm, all V1 bytes and stored
+  text. No hypothesis-studio, executable mapping, financial rule, scoring or
+  source/PIT behavior is included.
 - **WP-4 — review and CI:** obtain independent review and pass exact-head CI
   before merge.
 
@@ -122,7 +132,11 @@ rules, historical V1 artifacts, or question text already persisted.
    with matching stored digest/state, and inserts the exact validated snapshot
    even if caller-owned input is mutated while lookup is pending, while
    retaining legacy V1 insert behavior.
-6. Focused and adjacent checks, independent review, and required exact-head CI
+6. Rejection-context question text renders the validated cluster's exact
+   `regimeLabel` for all tested regimes, including `CHOP`, `RANGE`,
+   `TREND_BEAR`, and `STRESS`, and its canonical question digest matches that
+   text. Previously persisted question text remains immutable.
+7. Focused and adjacent checks, independent review, and required exact-head CI
    pass. This establishes artifact labeling/integrity only, not volatility
    measurement, provenance, scientific validity, or production use.
 
