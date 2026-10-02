@@ -10,6 +10,9 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "."),
       "server-only": path.resolve(__dirname, "tests/stubs/server-only.ts"),
+      // Node tests need to resolve the Workerd built-in import but must never
+      // simulate Worker behavior or open a socket through this test-only stub.
+      "cloudflare:sockets": path.resolve(__dirname, "tests/stubs/cloudflare-sockets.ts"),
     },
   },
   // Skip the project's PostCSS config (Tailwind v4 string-syntax breaks Vite),

@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import net from "node:net";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -16,10 +17,12 @@ import {
 } from "@/lib/trader/paper/scheduled-noncapital-owner-postgres-v1";
 import { startCommitAckLossProxy } from "../helpers/postgres-commit-ack-loss-proxy";
 import { recordedPublicTransport } from "../helpers/recorded-paper-public-transport";
+import { withScheduledOwnedPostgresPoolV1 } from "@/lib/trader/paper/scheduled-owned-postgres-pool-v1";
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 const REQUIRED_DATABASE = "waia_hsv2_it_oct01_mock_ledger_scope_1205_v1";
+const DEE1213_DATABASE = "waia_hsv2_it_dee1213_scheduled_deadline_v1";
 const CI_DATABASE = "waia_dee1205";
 const RECEIPT_TABLE = "trader_scheduled_noncapital_cycle_receipts_v1";
 
@@ -29,13 +32,15 @@ function assertExactDisposableDatabase(raw: string | undefined): asserts raw is 
   if (!raw) throw new Error("DEE1205_ISOLATED_POSTGRES_REQUIRED");
   let parsed: URL;
   try { parsed = new URL(raw); } catch { throw new Error("DEE1205_ISOLATED_POSTGRES_REQUIRED"); }
-  const localTarget = new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsed.hostname) &&
-    parsed.port === "54329" && parsed.username === "waia_validate" &&
+  const localHost = new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsed.hostname);
+  const localTarget1205 = localHost && parsed.port === "54329" && parsed.username === "waia_validate" &&
     parsed.pathname === `/${REQUIRED_DATABASE}` && !parsed.searchParams.has("ssl");
+  const localTarget1213 = localHost && parsed.port === "54338" && parsed.username === "waia_validate" &&
+    parsed.pathname === `/${DEE1213_DATABASE}` && !parsed.searchParams.has("ssl");
   const ciTarget = process.env.CI === "true" && process.env.GITHUB_ACTIONS === "true" &&
     parsed.hostname === "127.0.0.1" && parsed.port === "5432" && parsed.username === "waia_it" &&
     parsed.password === "waia_it" && parsed.pathname === "/waia_dee1205" && !parsed.search && !parsed.hash;
-  if (!localTarget && !ciTarget) {
+  if (!localTarget1205 && !localTarget1213 && !ciTarget) {
     throw new Error("DEE1205_EXACT_DISPOSABLE_DATABASE_REQUIRED");
   }
 }
@@ -231,7 +236,7 @@ describe.skipIf(!enabled || !url)("DEE-1205 closed scheduled noncapital owner on
     assertExactDisposableDatabase(url);
     const expectedDatabase = process.env.CI === "true" && process.env.GITHUB_ACTIONS === "true"
       ? CI_DATABASE
-      : REQUIRED_DATABASE;
+      : new URL(url!).port === "54338" ? DEE1213_DATABASE : REQUIRED_DATABASE;
     ownerSql = postgres(url, { max: 6, prepare: false });
     witnessSql = postgres(url, { max: 4, prepare: false });
     db = drizzle(ownerSql, { schema: pgSchema }) as unknown as WaiaPostgresDb;
@@ -388,6 +393,155 @@ describe.skipIf(!enabled || !url)("DEE-1205 closed scheduled noncapital owner on
       await proxy.close();
     }
   }, 45_000);
+
+  it("bounds post-COMMIT uncertainty when verifier startups receive repeated clean EOF (DEE-1213)", async () => {
+    installPublicPoll();
+    const direct = new URL(url!);
+    const proxy = await startCommitAckLossProxy({
+      targetHost: "127.0.0.1",
+      targetPort: Number(direct.port),
+      refuseReconnectAfterCommitLoss: true,
+      cleanEofOnRefusedReconnect: true,
+    });
+    direct.hostname = "127.0.0.1";
+    direct.port = String(proxy.port);
+    direct.searchParams.set("sslmode", "disable");
+    const telemetry = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    type OwnerOutcome =
+      | { readonly kind: "resolved"; readonly result: Awaited<ReturnType<typeof runScheduledNoncapitalPaperLoopFromEnv>> }
+      | { readonly kind: "rejected"; readonly error: unknown };
+    type GuardOutcome = { readonly kind: "attempt-limit" | "watchdog" };
+    let interval: ReturnType<typeof setInterval> | undefined;
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    let ownerOutcome: Promise<OwnerOutcome> | undefined;
+    let observed: { readonly outcome: OwnerOutcome | GuardOutcome; readonly proxy: ReturnType<typeof proxy.stats>; readonly durable: Counts } | undefined;
+    try {
+      ownerOutcome = runScheduledNoncapitalPaperLoopFromEnv(envFor(currentOrg, direct.toString())).then(
+        (result): OwnerOutcome => ({ kind: "resolved", result }),
+        (error): OwnerOutcome => ({ kind: "rejected", error }),
+      );
+      const attemptLimit = new Promise<GuardOutcome>((resolve) => {
+        interval = setInterval(() => {
+          if (proxy.stats().connections > 6) resolve({ kind: "attempt-limit" });
+        }, 10);
+      });
+      const outerWatchdog = new Promise<GuardOutcome>((resolve) => {
+        watchdog = setTimeout(() => resolve({ kind: "watchdog" }), 65_000);
+      });
+      const outcome = await Promise.race([ownerOutcome, attemptLimit, outerWatchdog]);
+      observed = { outcome, proxy: proxy.stats(), durable: await counts() };
+      // Synthetic witness facts survive an externally contained pre-fix RED.
+      console.log(JSON.stringify({ event: "dee1213_native_observation", ...observed,
+        outcome: { kind: outcome.kind } }));
+
+      // Capture the facts demonstrating the real upstream commit before the
+      // attempt-bound assertion can fail on the original retry loop.
+      expect(observed.proxy.commitResponsesWithheld).toBe(1);
+      expect(observed.proxy.protocolErrors).toBe(0);
+      expect(observed.durable.receipts).toBe(1);
+      expect(observed.durable.limits).toBe(1);
+      await expectNoExecutionEffects();
+
+      expect(observed.outcome.kind).toBe("resolved");
+      expect(observed.proxy.connections).toBeLessThanOrEqual(6);
+      if (observed.outcome.kind !== "resolved") return;
+      expect(observed.outcome.result).toMatchObject({ status: "COMMIT_UNCERTAIN", report: null });
+      expect(telemetry.mock.calls.some(([line]) => String(line).includes('"phase":"cycle_complete"'))).toBe(false);
+
+      const settledAttempts = proxy.stats().connections;
+      await new Promise<void>((resolve) => setTimeout(resolve, 250));
+      expect(proxy.stats().connections).toBe(settledAttempts);
+      const retry = await runScheduledNoncapitalPaperLoopFromEnv(envFor(currentOrg));
+      expect(retry.status).toBe("REPLAYED");
+      expect(await counts()).toEqual(observed.durable);
+      await expectNoExecutionEffects();
+    } finally {
+      if (interval) clearInterval(interval);
+      if (watchdog) clearTimeout(watchdog);
+      await proxy.close();
+      // GREEN requires the owned work to have actually settled. An external
+      // process watchdog contains the known pre-fix RED; it is never PASS.
+      if (ownerOutcome) await ownerOutcome;
+    }
+  }, 70_000);
+
+  it.each(["clean EOF", "silent"] as const)("bounds initial %s startup without durable effects (DEE-1213)", async (mode) => {
+    installPublicPoll();
+    const sockets = new Set<net.Socket>();
+    let connections = 0;
+    const server = net.createServer((socket) => {
+      connections++; sockets.add(socket);
+      socket.on("error", () => socket.destroy());
+      socket.on("close", () => sockets.delete(socket));
+      let startup = Buffer.alloc(0);
+      socket.on("data", (chunk) => {
+        startup = Buffer.concat([startup, chunk]);
+        if (mode === "clean EOF" && startup.length >= 4 && startup.length >= startup.readInt32BE(0)) socket.end();
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("DEE1213_STARTUP_FIXTURE_ADDRESS");
+    const endpoint = new URL(url!); endpoint.hostname = "127.0.0.1"; endpoint.port = String(address.port);
+    endpoint.searchParams.set("sslmode", "disable");
+    const before = await counts();
+    try {
+      await expect(runScheduledNoncapitalPaperLoopFromEnv(envFor(currentOrg, endpoint.toString()))).rejects.toThrow();
+      expect(connections).toBeGreaterThan(0);
+      expect(connections).toBeLessThanOrEqual(3);
+      const attemptsAtReturn = connections;
+      await new Promise<void>((resolve) => setTimeout(resolve, 250));
+      expect(connections).toBe(attemptsAtReturn);
+      expect(sockets.size).toBe(0);
+      expect(await counts()).toEqual(before);
+      await expectNoExecutionEffects();
+    } finally {
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }, 40_000);
+
+  it("joins an aborted in-flight transaction and proves rollback (DEE-1213)", async () => {
+    const controller = new AbortController();
+    const id = randomUUID();
+    let pid = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await expect(withScheduledOwnedPostgresPoolV1(url!, controller.signal, async (client) => {
+        await client.begin(async (tx) => {
+          const rows = await tx`SELECT pg_backend_pid() AS pid`;
+          pid = Number(rows[0]!.pid);
+          await tx`INSERT INTO auth.users (id) VALUES (${id}::uuid)`;
+          timer = setTimeout(() => controller.abort(new Error("DEE1213_TEST_CANCEL")), 100);
+          await tx`SELECT pg_sleep(5)`;
+        });
+      })).rejects.toThrow();
+      expect(pid).toBeGreaterThan(0);
+      expect((await witnessSql`SELECT id FROM auth.users WHERE id=${id}::uuid`).length).toBe(0);
+      expect((await witnessSql`SELECT pid FROM pg_stat_activity WHERE pid=${pid}`).length).toBe(0);
+    } finally { if (timer) clearTimeout(timer); }
+  }, 15_000);
+
+  it("preserves an acknowledged native COMMIT when cancellation starts before pool cleanup (DEE-1213)", async () => {
+    const controller = new AbortController();
+    const id = randomUUID();
+    let pid = 0;
+    const result = await withScheduledOwnedPostgresPoolV1(url!, controller.signal, async (client) => {
+      const acknowledged = await client.begin(async (tx) => {
+        const rows = await tx`SELECT pg_backend_pid() AS pid`;
+        pid = Number(rows[0]!.pid);
+        await tx`INSERT INTO auth.users (id) VALUES (${id}::uuid)`;
+        return "ACKNOWLEDGED";
+      });
+      // begin() resolved only after the actual server COMMIT acknowledgement.
+      controller.abort(new Error("DEE1213_TEST_AFTER_ACK"));
+      return acknowledged;
+    });
+    expect(result).toBe("ACKNOWLEDGED");
+    expect((await witnessSql`SELECT id FROM auth.users WHERE id=${id}::uuid`).length).toBe(1);
+    expect((await witnessSql`SELECT pid FROM pg_stat_activity WHERE pid=${pid}`).length).toBe(0);
+  }, 15_000);
 
   it("preserves full historical rows, rejects half-tagged writes, and refuses ordinary paper orders", async () => {
     const historicalId = await insertOrder({ venue: "mock", executionMode: "mock", state: "ACCEPTED",

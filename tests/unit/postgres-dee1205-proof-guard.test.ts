@@ -6,6 +6,7 @@ import {
   assertSourceHashes,
   assertVitestProofReport,
   exactCiDatabaseUrl,
+  requiredCaseTitles,
   requiredSuites,
   sourcePaths,
 } from "@/scripts/postgres-validation/dee1205-postgres-proof-contract.mjs";
@@ -16,15 +17,15 @@ function passingReport() {
     numPassedTestSuites: 2,
     numFailedTestSuites: 0,
     numPendingTestSuites: 0,
-    numTotalTests: 2,
-    numPassedTests: 2,
+    numTotalTests: requiredCaseTitles.length,
+    numPassedTests: requiredCaseTitles.length,
     numFailedTests: 0,
     numPendingTests: 0,
     numTodoTests: 0,
     testResults: [{
       name: `/workspace/${requiredSuites[0]}`,
       status: "passed",
-      assertionResults: [{ status: "passed" }, { status: "passed" }],
+      assertionResults: requiredCaseTitles.map((title) => ({ title, status: "passed" })),
     }],
   };
 }
@@ -61,6 +62,8 @@ describe("DEE-1205 executed PostgreSQL proof guard", () => {
   it("requires one real executed file with all exact passing assertions", () => {
     expect(sourcePaths).toContain("tests/helpers/postgres-commit-ack-loss-proxy.ts");
     expect(sourcePaths).toContain("docs/plans/dee-1205-scheduled-noncapital-owner.sql");
+    expect(sourcePaths).toContain("lib/trader/paper/scheduled-owned-postgres-transport-v1.ts");
+    expect(sourcePaths).toContain("scripts/postgres-validation/probe-dee1213-worker-transport.mjs");
     expect(() => assertVitestProofReport(passingReport())).not.toThrow();
     const skipped = passingReport();
     skipped.testResults[0]!.assertionResults[0]!.status = "pending";
@@ -72,9 +75,20 @@ describe("DEE-1205 executed PostgreSQL proof guard", () => {
     missing.testResults = [];
     expect(() => assertVitestProofReport(missing)).toThrow();
     const failed = passingReport();
-    failed.numPassedTests = 1;
+    failed.numPassedTests = requiredCaseTitles.length - 1;
     failed.numFailedTests = 1;
     expect(() => assertVitestProofReport(failed)).toThrow();
+    const omittedCase = passingReport();
+    omittedCase.testResults[0]!.assertionResults.pop();
+    omittedCase.numTotalTests -= 1;
+    omittedCase.numPassedTests -= 1;
+    expect(() => assertVitestProofReport(omittedCase)).toThrow("ASSERTION_TITLE_ROSTER_MISMATCH");
+    const duplicateCase = passingReport();
+    duplicateCase.testResults[0]!.assertionResults[13]!.title = requiredCaseTitles[0]!;
+    expect(() => assertVitestProofReport(duplicateCase)).toThrow("ASSERTION_TITLE_ROSTER_MISMATCH");
+    const substitutedCase = passingReport();
+    substitutedCase.testResults[0]!.assertionResults[0]!.title = "different case with same count";
+    expect(() => assertVitestProofReport(substitutedCase)).toThrow("ASSERTION_TITLE_ROSTER_MISMATCH");
   });
 
   it("refuses a missing or byte-changed reviewed source", () => {
