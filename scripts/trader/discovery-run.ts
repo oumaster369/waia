@@ -26,7 +26,8 @@ import {
 import { prepareResearchDevelopmentSourcePostgresV1 } from "@/lib/trader/research/research-development-source-owner-postgres-v1";
 import { captureResearchDevelopmentSourceRequestV1 } from "@/lib/trader/research/research-development-source-contract-v1";
 import { captureResearchIssuedTrainingRequestV2 } from "@/lib/trader/research/research-issued-training-contract-v2";
-import { runResearchIssuedTrainingDiagnosticPostgresV2 } from "@/lib/trader/research/research-issued-training-diagnostic-postgres-v2";
+import { runResearchIssuedTrainingDiagnosticPostgresV2, selectResearchIssuedTrainingFamilyPostgresV1 } from "@/lib/trader/research/research-issued-training-diagnostic-postgres-v2";
+import { captureResearchTrainingFamilyRequestV1 } from "@/lib/trader/research/research-training-family-contract-v1";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 
 const LOG_PREFIX = "[trader:discovery:run]";
@@ -103,6 +104,14 @@ Separate issued-source DEVELOPMENT diagnostic (does not register an experiment o
     --max-bars=<1..4096> --max-bytes=<1..33554432>
   Requires WAIA_TRADER_CLI=1 and operator authorization. Prints only the
   diagnostic status and immutable identifiers/digests; uncertain commit exits nonzero.
+
+Separate complete-family DEVELOPMENT selection (does not qualify a strategy):
+  pnpm trader:discovery:run -- --select-issued-training=1 --org-id=<Org0 uuid>
+    --attempt-id=<issued V2 attempt uuid> --max-bars=<1..4096>
+    --max-bytes=<1..33554432> --max-trace-bytes=<1..33554432>
+  Requires every declared trial to have a committed, verified, terminal-flat result.
+  Missing or unfinished trials refuse the entire selection; this mode runs no trials.
+  Requires WAIA_TRADER_CLI=1 and operator authorization; uncertain commit exits nonzero.
 `);
 }
 
@@ -343,6 +352,45 @@ export async function runDiscoveryIssuedTrainingBranch(
   }
 }
 
+function hasTrainingFamilySelectionFlag(argv: readonly string[]): boolean {
+  return argv.some(arg => arg === "--select-issued-training" || arg.startsWith("--select-issued-training="));
+}
+
+export function parseDiscoveryTrainingFamilySelectionArgs(argv: readonly string[]) {
+  if (!hasTrainingFamilySelectionFlag(argv)) return null;
+  const allowed = new Set(["select-issued-training", "org-id", "attempt-id", "max-bars", "max-bytes", "max-trace-bytes"]);
+  const values = new Map<string, string>();
+  for (const arg of argv) {
+    const match = /^--([^=]+)=(.+)$/.exec(arg);
+    if (!match || !allowed.has(match[1]!) || values.has(match[1]!)) throw new Error("FAMILY_SELECTION_ARGUMENTS_INVALID");
+    values.set(match[1]!, match[2]!);
+  }
+  if (values.get("select-issued-training") !== "1") throw new Error("FAMILY_SELECTION_ARGUMENTS_INVALID");
+  return captureResearchTrainingFamilyRequestV1({ organizationId: values.get("org-id"), attemptId: values.get("attempt-id"),
+    limits: { maxBars: parseIssuedTrainingInteger(values.get("max-bars")), maxBytes: parseIssuedTrainingInteger(values.get("max-bytes")),
+      maxTraceBytes: parseIssuedTrainingInteger(values.get("max-trace-bytes")) } });
+}
+
+export async function runDiscoveryTrainingFamilySelectionBranch(argv: readonly string[], input: {
+  cliEnabled: boolean; authorize(): void;
+  run: typeof selectResearchIssuedTrainingFamilyPostgresV1;
+  print(value: Readonly<{ status: string; receiptDigest: string | null; selectedIndex: number | null;
+    scientificQualified: false; capitalEligible: false }>): void;
+}): Promise<{ handled: boolean; exitCode: number; error?: string }> {
+  if (!hasTrainingFamilySelectionFlag(argv)) return { handled: false, exitCode: 0 };
+  if (!input.cliEnabled) return { handled: true, exitCode: 1, error: "WAIA_TRADER_CLI_REQUIRED" };
+  let request: NonNullable<ReturnType<typeof parseDiscoveryTrainingFamilySelectionArgs>>;
+  try { request = parseDiscoveryTrainingFamilySelectionArgs(argv)!; }
+  catch { return { handled: true, exitCode: 1, error: "FAMILY_SELECTION_ARGUMENTS_INVALID" }; }
+  try {
+    input.authorize();
+    const result = await input.run(request);
+    input.print({ status: result.status, receiptDigest: result.receipt?.contentDigest ?? null,
+      selectedIndex: result.receipt?.selectedIndex ?? null, scientificQualified: false, capitalEligible: false });
+    return { handled: true, exitCode: result.status === "COMMIT_UNCERTAIN" ? 1 : 0 };
+  } catch { return { handled: true, exitCode: 1, error: "FAMILY_SELECTION_FAILED" }; }
+}
+
 async function main(): Promise<void> {
   if (process.env.WAIA_TRADER_CLI !== "1") {
     console.error(`${LOG_PREFIX} WAIA_TRADER_CLI=1 is required`);
@@ -350,6 +398,17 @@ async function main(): Promise<void> {
   }
 
   const argv = process.argv.slice(2);
+  if (hasTrainingFamilySelectionFlag(argv)) {
+    const outcome = await runDiscoveryTrainingFamilySelectionBranch(argv, {
+      cliEnabled: process.env.WAIA_TRADER_CLI === "1",
+      authorize: () => assertOperatorActionAllowed("authorize_discovery_run"),
+      run: selectResearchIssuedTrainingFamilyPostgresV1,
+      print: summary => console.log(`${LOG_PREFIX} training-family ${JSON.stringify(summary)}`),
+    });
+    if (outcome.error) console.error(`${LOG_PREFIX} ${outcome.error}`);
+    if (outcome.exitCode !== 0) process.exitCode = outcome.exitCode;
+    return;
+  }
   if (hasIssuedTrainingFlag(argv)) {
     const outcome = await runDiscoveryIssuedTrainingBranch(argv, {
       cliEnabled: process.env.WAIA_TRADER_CLI === "1",
