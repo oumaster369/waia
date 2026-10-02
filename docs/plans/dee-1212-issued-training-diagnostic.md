@@ -164,3 +164,10 @@ Run the exact failed closure test plus relevant inquiry/graph and proof-guard
 checks, scoped lint/typecheck and independent delta review, then publish a new
 head. Runtime, SQL, financial/scientific gates and prior native test bytes must
 remain unchanged; fresh exact-head CI and admission remain required.
+
+The exact closure failure was reproduced locally before the inventory edit.
+After adding only the missing importer entry, all76 targeted assertions pass
+across closure, inquiry contracts, both source/diagnostic proof guards and the
+two consumer graphs. Scoped lint and typecheck pass. No runtime, native test or
+test assertion was changed. Independent narrow review and the next published
+head's required CI remain before merge.
