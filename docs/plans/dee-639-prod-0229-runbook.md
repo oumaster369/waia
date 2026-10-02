@@ -9,12 +9,12 @@ executionSurfaces: [local, github-pr-ci]
 requiredValidation: [validate-canon, pr-governance, lint, typecheck, build]
 approvalGates: [human-review, backup-restore-verified, no-0230, no-live-activation, no-merge-by-agent]
 state:
-  status: in-progress
+  status: in-review
   currentWorkPackage: WP-1
   completedWorkPackages: []
   remainingWorkPackages: [WP-1]
-  prNumber: null
-  prUrl: null
+  prNumber: 753
+  prUrl: https://github.com/oumaster369/waia/pull/753
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
