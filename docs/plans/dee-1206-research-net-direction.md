@@ -12,7 +12,7 @@ state:
   status: in-progress
   completedWorkPackages: [WP-1, WP-2, WP-3]
   remainingWorkPackages: [WP-4]
-  nextAction: "Complete bounded readiness on actual main 98a591c8, then prepare publication and require published-head CI."
+  nextAction: "After the prepared DEE1212 dependency chain merges, rebase onto exact main; complete admission and require published-head CI."
 provenance:
   createdFrom: "Independent October 1 code audit and explicit user authorization for technical fixes"
   supersedes: null
@@ -21,7 +21,7 @@ provenance:
 # DEE-1206 — research net convention correction
 
 Plan frozen before source changes. Original implementation base: main `31c78cba`.
-Prepared local rebase base: actual main `98a591c8`. Parent: DEE-1152.
+Prepared integration base: DEE1212 prepared head `818d63246fa89841d6151c4772ce468310ea1592`; this is not merged authority. Actual main remains `98a591c8`. Parent: DEE-1152.
 The user authorizes technical corrections, tests, independent audits and PR
 integration after required checks. This implements existing after-cost return
 meaning; it changes no financial threshold, cost constant, strategy or live gate.
@@ -94,3 +94,25 @@ No migrations, source payload reads, C3/holdout access, production deployment,
 strategy promotion or live activation. Do not rewrite old records or claim that
 caller-supplied metrics are qualified. All new records are research-only. A revert
 PR is the code rollback; old or unsupported receipts fail qualification reuse.
+
+
+## Prepared dependency integration evidence (2026-10-02)
+
+For queue preparation only, the two DEE1206-owned commits were rebased onto
+prepared DEE1212 head `818d63246fa89841d6151c4772ce468310ea1592`. This is not a
+merged dependency or an actual-main rebase: actual main remains `98a591c8`,
+and DEE1212 itself still waits for its DEE1211 dependency and exact-head CI.
+The five implementation/test/fixture blobs match the pre-rebase commit exactly;
+this plan’s metadata alone was updated to name the prepared parent. The previous
+actual-main native/synthetic records remain bound to their recorded source; this
+rebase ran no database/native suite.
+
+On the prepared combined tree, the six-file research regression set passed
+98/98 with zero failures/skips, full lint passed (0 errors;331 warnings),
+typecheck/build/canonical validation (288 docs) passed, and both whole-repository
+graph validators passed (Reality V2 164 sources/154 consumers/27 connector
+references; Execution V2 zero violations). The two graph unit files added27
+passing tests. Logs and exact hashes are in external
+`dee1206-after1212-readiness`. Exact-main rebase, independent review and
+published-head CI remain. This work does not qualify a strategy or alter
+financial thresholds, cost inputs, production state, or trading authority.
