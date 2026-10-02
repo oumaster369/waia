@@ -12,7 +12,7 @@ state:
   status: in-progress
   completedWorkPackages: [WP-1]
   remainingWorkPackages: [WP-2, WP-3]
-  nextAction: "Complete final native regression proof, then integrate after DEE-1203 with independent review and exact-head CI."
+  nextAction: "Obtain independent review and complete applicable exact-head CI, including native PostgreSQL; no native rerun is claimed on this rebased head."
 provenance:
   createdFrom: "October 2 root/independent source audit; explicit user autonomous engineering authorization"
   supersedes: null
@@ -20,10 +20,9 @@ provenance:
 
 # DEE-1207 — actual DEVELOPMENT input use
 
-Frozen before source implementation on prepared DEE-1203 head
-`38eb7aa6e59e8329bde720e82260e28ce7f653ac`. DEE-1203 must merge first;
-only this child's diff will be rebased onto its actual main result.
-Root owns semantics/source; independent test author and adversarial reviewer.
+Implementation was prepared against `38eb7aa6e59e8329bde720e82260e28ce7f653ac`, then rebased as the single owned commit onto actual `main` `7b0a9b720c9411c6cafb976935b3210e79d14e2f` after DEE-1203 / PR736 merged. The rebase range-diff is one-to-one; no 1203 or 1205 commit was replayed. The exact-head native proof and CI remain pending. Root owns semantics/source; independent test author and adversarial reviewer.
+
+Rebased local readiness on `fced9ee46f3eacba6f5b0d23f54c208ebe6b60ac`: 32 focused research/proof-guard unit assertions and 27 consumer-graph assertions passed; lint passed with 0 errors/331 warnings; typecheck, build, canonical validation, both graph validators, and `git diff --check` passed. The 99-assertion PostgreSQL16.14 proof in `dee1207-final-eight-native-v4` is bound to the pre-rebase prepared bytes, not this actual-main head. It is historical evidence only; fresh exact-head native proof and applicable CI remain pending.
 
 ## Scope and compatibility decision
 
@@ -98,10 +97,7 @@ required suites or accept skips. No production journal change or 0229/0230 use.
 
 ## WP-3 — integration
 
-Targeted units, isolated PostgreSQL, scoped lint/type/build/canon/consumer graphs,
-independent whole-diff review, actual-main rebase and all applicable exact-head CI.
-Avoid duplicate full local unit suites. Code rollback is a revert PR; preserve
-versioned recorded evidence. Update Linear and checkpoint with exact proof limits.
+The actual-main rebase completed from the single DEE-1207 commit; this plan now records that base. The inherited eight-suite PostgreSQL proof is not being attributed to this rebased head. Run focused unit/proof-guard tests and local lint/typecheck/build/canonical/consumer-graph validation; independent review and all applicable exact-head CI, including native PostgreSQL, remain required before publication/merge. Avoid duplicate full local unit suites. Code rollback is a revert PR; preserve versioned recorded evidence. Update Linear and checkpoint with exact proof limits.
 
 ## Boundaries
 
