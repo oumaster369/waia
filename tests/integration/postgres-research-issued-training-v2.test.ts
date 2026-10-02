@@ -534,20 +534,27 @@ describe.skipIf(!enabled)("DEE-1212 issued DEVELOPMENT diagnostic PostgreSQL", (
     const f = await fixture("issued-commit-ack-no-reconnect");
     const direct = new URL(url!);
     const proxy = await startCommitAckLossProxy({ targetHost: "127.0.0.1", targetPort: Number(direct.port),
-      refuseReconnectAfterCommitLoss: true });
+      refuseReconnectAfterCommitLoss: true, cleanEofOnRefusedReconnect: true });
     direct.port = String(proxy.port);
     direct.searchParams.set("sslmode", "disable");
     try {
+      const startedAt = performance.now();
       const uncertain = await run(f, direct.toString());
+      expect(performance.now() - startedAt).toBeLessThan(190_000);
       expect(uncertain).toMatchObject({ status: "COMMIT_UNCERTAIN", trace: null });
       expect(proxy.stats().commitResponsesWithheld).toBe(1);
+      const settledConnections = proxy.stats().connections;
+      expect(settledConnections).toBeLessThanOrEqual(6);
+      await new Promise(resolve => setTimeout(resolve, 1_000));
+      expect(proxy.stats().connections).toBe(settledConnections);
+      expect(proxy.stats().protocolErrors).toBe(0);
       const replay = await run(f);
       expect(replay.status).toBe("REPLAYED");
       if (!replay.trace) throw new Error("DEE1212_RETRY_TRACE_MISSING");
       expect(replay.trace.fillCount).toBeGreaterThan(0);
       expect((await stageCounts(f.attempt.id, replay.trace.stageRunId))[0]).toBe(1);
     } finally { await proxy.close(); f.source.cleanup(); }
-  }, 180_000);
+  }, 210_000);
 
   it("refuses an exact frontier primary-key 23505 when no committed V2 result exists", async () => {
     const f = await fixture("issued-frontier-pkey-conflict");

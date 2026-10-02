@@ -10,11 +10,11 @@ requiredValidation: [lint, typecheck, build, targeted-unit, native-postgres, val
 approvalGates: [user-authorized-engineering, independent-review, required-ci, no-live-activation]
 state:
   status: in-progress
-  completedWorkPackages: []
-  remainingWorkPackages: [WP-1-owned-diagnostic, WP-2-explicit-cli, WP-3-native-fault-proof, WP-4-independent-review-and-ci]
-  nextAction: "Implement the same-transaction V2 source diagnostic with source receipt and full ledger binding; preserve V1 behavior."
+  completedWorkPackages: [WP-1-owned-diagnostic, WP-2-explicit-cli, WP-3-native-fault-proof]
+  remainingWorkPackages: [WP-4-dependency-mainline-and-required-ci]
+  nextAction: "After the DEE1211 dependency is merged, rebase onto main and complete exact-head admission and required CI; retain engineering-only limits."
 provenance:
-  createdFrom: "Oct02 cumulative source audit; prepared dependencies DEE1211 4986eefb and DEE1207 b6c39819; actual-main rebind required before publication"
+  createdFrom: "Oct02 cumulative source audit; prepared on PR738 source-owner head 6df89d59 with DEE1207 already merged; PR738 remains a pending dependency, so this branch is not yet mainline-integrated"
   supersedes: null
 ---
 
@@ -104,3 +104,14 @@ protocol-clean EOF, finite total connections and no post-return reconnects;
 rerun all53 affected native scenarios and scoped readiness after actual-parent
 integration. The helper and dependency files must be source-pinned by the
 1212 CI proof contract.
+
+
+## Prepared-parent transport and final bounded readiness (2026-10-02)
+
+This branch was rebased onto the current DEE1211 source-owner PR head `6df89d59262bc098901ffb47e70ec055a5570a24`; that parent is published but has not yet passed all current checks or merged. DEE1207 is already merged. The V2 owner now uses the same inherited private bounded Postgres.js pool as DEE1211 and captures one180-second command deadline across its SERIALIZABLE transaction and any fresh READ ONLY confirmation. It caps three TCP opens per pool, uses a10-second connection bound, closes its socket factory during abort/teardown, and returns no unconfirmed trace. No payload, scientific, capital or live authority was added.
+
+The fresh synthetic PG16 run passed53/53 assertions across the required V2 issued-training and V1 diagnostic/loader suites, with zero failures, skips or todos. Its 2,510-path manifest matches the captured prepared tree; in particular the inherited `research-owned-postgres-pool-v1.ts`, `package.json` and `pnpm-lock.yaml` hashes are included. The exact receipts are `dee1212-native-v2/results-bounded-pool53.json`, `source-bounded-pool53.json` and `execution-bounded-pool53.json`. Independent review accepted the bounded change.
+
+On prepared worktree `8b9fa353697191f86f77734732a788399c6fb014` plus the two captured V2 runtime/native files, local readiness passed187 focused tests across14 files, full lint (zero errors;331 warnings), typecheck, build, canonical validation (287 documents), and both whole-repository consumer graph validators. The 187 focused tests include27 graph-unit tests. The Reality V2 graph reports164 sources,154 consumers and27 connector references; the Execution V2 graph reports zero violations. Detailed logs and hashes are in `dee1212-final-readiness`. The proof guard includes all inherited1211 pool/package/lock paths and confirms workflow trigger coverage.
+
+This remains a prepared branch, not a published PR or mainline result. Exact-main rebase and published-head CI/admission remain. The 53-case proof demonstrates synthetic DEVELOPMENT execution integrity only: it does not establish source/PIT availability, empirical qualification, strategy performance, production readiness or trading authority. Production migration0229 remains prohibited;0230 remains deferred. No real market/C3/holdout payload, production database, venue, live account or deployment was used.

@@ -1,7 +1,8 @@
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 enforceServerOnly();
 
-import postgres from "postgres";
+import type postgres from "postgres";
+import { withResearchOwnedPostgresPoolV1 } from "./research-owned-postgres-pool-v1";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { sql as query } from "drizzle-orm";
 import * as schema from "@/db/schema.postgres";
@@ -37,9 +38,12 @@ function refuse(reason: string): never { throw new Error(`RESEARCH_ISSUED_TRAINI
 
 /** Construct codecs before BEGIN. The transport has no root-pool dispatch,
  * transaction, reserve, or close method: every statement uses the held backend. */
-function heldExecutor(pool: postgres.Sql, deadline: number) {
+function heldExecutor(pool: postgres.Sql, signal: AbortSignal, deadline: number) {
   let held: postgres.Sql | undefined;
-  const checkDeadline = () => { if (performance.now() > deadline) refuse("DEADLINE"); };
+  const checkDeadline = () => {
+    signal.throwIfAborted();
+    if (performance.now() > deadline) refuse("DEADLINE");
+  };
   const transport = { options: pool.options, unsafe: (...args: Parameters<postgres.Sql["unsafe"]>) => {
     checkDeadline();
     if (!held) refuse("HELD_TRANSACTION_REQUIRED");
@@ -55,24 +59,23 @@ function heldExecutor(pool: postgres.Sql, deadline: number) {
   }, unbind() { held = undefined; } };
 }
 
-async function ownedSession<T>(url: string, readOnly: boolean,
+async function ownedSession<T>(url: string, signal: AbortSignal, deadline: number, readOnly: boolean,
   work: (tx: postgres.Sql, executor: ReturnType<typeof heldExecutor>["executor"], checkDeadline: () => void) => Promise<T>) {
-  const pool = postgres(url, { max: 1, prepare: false, connect_timeout: 10,
-    connection: { statement_timeout: 180_000, lock_timeout: 30_000,
-      idle_in_transaction_session_timeout: 180_000, timezone: "UTC" } });
-  const held = heldExecutor(pool, performance.now() + 180_000);
-  const enter = async (tx: postgres.Sql) => {
-    held.checkDeadline(); held.bind(tx);
-    try {
-      if (readOnly) await tx`SET TRANSACTION READ ONLY`;
-      const result = await work(tx, held.executor, held.checkDeadline);
-      held.checkDeadline(); return result;
-    } finally { held.unbind(); }
-  };
-  try {
+  signal.throwIfAborted();
+  if (performance.now() > deadline) refuse("DEADLINE");
+  return withResearchOwnedPostgresPoolV1(url, signal, 180_000, async pool => {
+    const held = heldExecutor(pool, signal, deadline);
+    const enter = async (tx: postgres.Sql) => {
+      held.checkDeadline(); held.bind(tx);
+      try {
+        if (readOnly) await tx`SET TRANSACTION READ ONLY`;
+        const result = await work(tx, held.executor, held.checkDeadline);
+        held.checkDeadline(); return result;
+      } finally { held.unbind(); }
+    };
     return await (readOnly ? withPostgresSessionTransaction(pool, "REPEATABLE READ", enter)
       : withPostgresSerializableTransactionRetry(pool, enter));
-  } finally { await pool.end({ timeout: 1 }); }
+  });
 }
 
 async function readInput(tx: postgres.Sql, request: ResearchIssuedTrainingRequestV2,
@@ -197,13 +200,15 @@ async function executeOrVerify(tx: postgres.Sql, executor: ReturnType<typeof hel
 /** Owned noncapital DEVELOPMENT diagnostic. No public callback can replace its
  * source, transaction, evaluator or qualification result. */
 export async function runResearchIssuedTrainingDiagnosticPostgresV2(supplied: unknown): Promise<Outcome> {
+  const deadline = performance.now() + 180_000;
+  const signal = AbortSignal.timeout(180_000);
   const request = captureResearchIssuedTrainingRequestV2(supplied);
   const runtime = resolveCurrentResearchExecutableIdentityV1();
   const url = process.env.DATABASE_URL_POSTGRES;
   if (!url) refuse("DATABASE_REQUIRED");
   let candidate: IssuedTrace | undefined;
   try {
-    return await ownedSession(url, false, async (tx, executor, checkDeadline) => {
+    return await ownedSession(url, signal, deadline, false, async (tx, executor, checkDeadline) => {
       candidate = undefined; // A known serialization retry never carries its predecessor's trace.
       const result = await executeOrVerify(tx, executor, request, runtime);
       checkDeadline(); candidate = result.trace;
@@ -214,7 +219,7 @@ export async function runResearchIssuedTrainingDiagnosticPostgresV2(supplied: un
       // The driver has rolled back a known uniqueness failure. A concurrently
       // committed identical result may be verified, but no fresh effects run.
       try {
-        return await ownedSession(url, true, (tx, executor) =>
+        return await ownedSession(url, signal, deadline, true, (tx, executor) =>
           executeOrVerify(tx, executor, request, runtime, undefined, true));
       } catch { throw error; }
     }
@@ -222,7 +227,7 @@ export async function runResearchIssuedTrainingDiagnosticPostgresV2(supplied: un
     if (!candidate || (/^[0-9A-Z]{5}$/.test(code) && !/^(08|57)/.test(code))) throw error;
     const expected = candidate;
     try {
-      const confirmed = await ownedSession(url, true, (tx, executor) =>
+      const confirmed = await ownedSession(url, signal, deadline, true, (tx, executor) =>
         executeOrVerify(tx, executor, request, runtime, expected.traceSha256));
       return Object.freeze({ status: "CONFIRMED_AFTER_UNCERTAINTY", trace: confirmed.trace });
     } catch {
