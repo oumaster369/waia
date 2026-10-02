@@ -1,0 +1,87 @@
+---
+integrationIssue: DEE-1200
+integrationTitle: "AI-TRADER: execute registered DEVELOPMENT training diagnostics safely"
+parentIssue: DEE-1159
+branch: dee-1200-registered-training-diagnostic
+riskTier: T3
+prPolicy: one-integration-pr
+executionSurfaces: [local, isolated-postgres, github-pr-ci]
+requiredValidation: [lint, typecheck, build, targeted-unit, native-postgres, validate-canon, consumer-graphs, independent-review, required-ci]
+approvalGates: [user-authorized-engineering, independent-review, required-ci, no-live-activation, no-production-migration]
+state:
+  status: in-progress
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: [WP-2]
+  nextAction: "Reconcile the maintained saved-application command manifests after the schema extension, preserve capability and legacy parity gates, and require all exact-head CI checks before merge; keep parent DEE-1159 open."
+provenance:
+  createdFrom: "2026-10-01 bounded DEE-1159 engineering decomposition"
+  supersedes: null
+---
+
+# DEE-1200 — registered DEVELOPMENT training diagnostic
+
+## Scope
+
+This child extracts one bounded, registered DEVELOPMENT diagnostic stage from the broader DEE-1159 research-executable program. The slice includes the immutable experiment/attempt identities, bounded training input, isolated mock ledger, shared stop-sizing and lookback kernel, a private modeled stage loop, and one atomic actual-runner diagnostic with append-only trace. The staged source remains a non-qualifying engineering trace: it does not pick a family winner, score validation/walk-forward/blind partitions, establish scientific evidence, provide production readiness, or enable capital/live execution. The parent plan [DEE-1159](dee-1159-research-executable-identity.md) retains the broader same-executable train/validation/walk-forward/blind acceptance.
+
+The current base is `31c78cba` (merged DEE-1196). After withdrawing unrelated legacy evaluator-selection changes, fresh synthetic PostgreSQL 16.14 proof `pr732-dee1200-native-v3/receipt.json` passed all 89 assertions across eight files with zero failures/skips. Its 49 contract source pins match published `fce141cd`; the capture correctly records the earlier HEAD with the reviewed working-tree correction. Another 116 focused unit assertions include the unchanged WP21 parity check, and independent review accepted the bounded source. Earlier 88/89-assertion receipts remain historical evidence tied to their own source.
+
+Full CI on `fce141cd` passed the native jobs and unit shard2, but unit shard1 found three failures in the saved-application capability inventory. The schema extension changed one source pin in each of two 95-path command closures. The checked-in generator must reconcile those maintained command declarations while retaining the exact closed allowlists, pure-policy digest, generator and behavioral tests. New command identities describe new executions; historical stored evidence is neither rewritten nor admitted by alias. The existing exact historical828 compatibility rule remains unchanged. Passing the native diagnostic does not override the failed full-unit gate.
+
+CI uses a fresh PostgreSQL 16 service database, applies the checked-in migration journal normally to that disposable database, and applies only the three unnumbered DEE-1159 draft SQL payloads needed by these tests. The draft payloads remain outside the canonical migration journal; this is not a production migration or rollout.
+
+The runner must reject any non-CI, non-loopback, unexpected database, wrong PostgreSQL major, missing draft/test file, failed suite, skipped suite, empty suite, or incomplete report. It must emit a bounded receipt identifying the exact source manifest and suite counts without exposing database credentials. The blind-ingress suite is owned by the separate DEE-1183 work and is a dependency; this child must not copy or recreate that test.
+
+## WP-1 — registered DEVELOPMENT diagnostic slice
+
+Keep registration-before-execution, exact organization/attempt/trial scope, DEVELOPMENT-only source input, bounded records, and actual selected lookback execution bound to the real signal/evaluation and isolated mock-order accounting path. Persist the result atomically with orders, fills, events and economics; matching retries must verify the immutable committed trace, while failures leave no partial stage ledger. Preserve explicit `TRAINING_ENGINEERING_TRACE_ONLY`, `scientificQualified:false`, `capitalEligible:false`, requested executable/PIT/source digests unverified, and both full Guardian qualifications `UNQUALIFIED`.
+
+The recorded old-code counterexample had six passing assertions and one failure; corrected native behavior passed seven assertions with zero failures/skips. Combined evidence must include all seven neighboring registry, input, ledger, blind-boundary and provenance suites as well as the diagnostic suite. This is engineering verification only.
+
+The diagnostic request boundary canonicalizes the PostgreSQL UUID spelling before using it in the immutable stage identity. PostgreSQL returns UUID text in lowercase even when a syntactically valid uppercase UUID was supplied; accepting uppercase on the initial call but persisting that spelling in the trace made an identical uppercase retry disagree with the committed row. The public-runner native regression first reproduced `COMMITTED_SCOPE_MISMATCH` on an uppercase retry, then passed with uppercase initial, uppercase retry, and lowercase retry calls returning byte-equal traces, one diagnostic row, and ledger counts matching the trace. This is idempotency normalization only; it does not change registration identity or tenant scope.
+
+### Private modeled loop within the same child
+
+The bounded child also extracts the diagnostic's unchanged signal → sizing/D20/Risk → D5 order/fill → accounting loop into `research-modeled-stage-kernel-v1.ts`. The DEVELOPMENT owner retains its strict public request, registered source/policy checks, locked serializable transaction, complete ledger verification and atomic result insert. The internal kernel receives only that owner's executor, verified source, parsed identity and resolved policy/model; it is not a public arbitrary-bars, callback, stage-access or authority API. The current public reader remains DEVELOPMENT-only. A strict-request native case proves that caller-supplied bars, cycles, blind stage, scores, result, repository and policy are refused before any DB query. Same-executable validation, walk-forward, blind and full Guardian qualification remain parent DEE-1159 work.
+
+Independent review caught and corrected a UUID-spelling difference introduced by extraction. The final loop retains the normalized identity from the owner. The fresh combined pre-rebase proof (`dee1200-kernel-combined-native/receipt.json`, captured at `83f2e2a2`) passed all 89 assertions across eight exact files, with zero failures/skips, on PostgreSQL 16.14; its source pins were unchanged during that run. The final commit binding to `ebec2e22` records 534 of 536 source pins identical, with only the two plan documents differing. The earlier `dee1200-final-rebase-native-final/receipt.json` is a distinct historical 88-assertion run. That pre-rebase receipt remains historical. The later current-base 89-assertion receipt is identified separately above; neither receipt is scientific qualification or a substitute for final published-head CI.
+
+## WP-2 — required isolated PostgreSQL CI gate
+
+Append a dedicated workflow job using a fresh PostgreSQL 16 service and a test-only database URL. Bootstrap the ordinary current-main schema through the repository auth prelude and official migrator, then apply the three exact staged SQL files directly to this ephemeral test database. Run the eight exact native suites serially with PostgreSQL integration enabled and validate Vitest JSON so every expected file executes, each has at least one passing assertion, and there are zero failed, skipped, or todo assertions. Preserve all behavioral assertions and production migration/journal files; the scoped-ledger test receives only the explicit CI target allowance described below.
+
+The independent CI review found that the scoped-ledger suite's existing local-only database guard rejects the dedicated CI service tuple. Preserve that exact local allowance and add only the exact disposable CI tuple when both CI indicators and the paired database URLs match. Explicitly set the PostgreSQL backend for the proof job. A missing PR730 blind-ingress suite remains a refusal until the real base contains it.
+
+## Acceptance
+
+- The extracted diagnostic preserves its registered DEVELOPMENT scope, atomic ledger behavior, and explicit non-qualification limits; the current-base native receipt is 89/89 assertions across all eight files on PostgreSQL 16.14. Any subsequent change must explicitly identify unchanged proof inputs; final published-head CI is still required.
+- The canonical plan and CI wiring clearly identify this as synthetic PostgreSQL-only proof, not scientific qualification or production readiness.
+- A dedicated PostgreSQL 16 CI job runs the exact eight DEE-1159 suites on an isolated fresh database and fails closed on missing inputs, wrong endpoint/version, skips, failures, or empty reports.
+- The three staged DDL payloads are applied only to the disposable CI test database; the canonical migration journal is untouched.
+- Existing registered diagnostic behavior and assertions are unchanged; no live capability, holdout authority, financial policy, or claim of scientific qualification is added.
+- The UUID normalization counterexample, corrected regression and rebased eight-suite native run are source-bound in the DEE-1200 readiness receipt. Independent review of the rebased source is recorded; the maintained-manifest correction requires its own delta review and final exact published-head CI.
+
+
+## PR732 scope correction — preserve legacy evaluation semantics
+
+The first published head f233 rejected an actionability sentinel in the PG17
+Forecast polling proof. The intermediate correction d828 restored that case but
+full CI then detected a changed sealed WP21 zero-fill signal/decision projection:
+legacy non-MI evaluation had begun applying an explicit strategy filter that
+main previously ignored. The sealed parity test and parent artifact are retained
+unchanged; their failure is evidence of a real compatibility change.
+
+The registered diagnostic uses its dedicated lookback executable and closed
+modeled kernel. It does not call the legacy MVP evaluator or need new fixture/poll
+selection forwarding. Remove those unrelated evaluation/registry/paper changes
+from this child and restore their exact current-main bytes, including the prior
+PIT-context fixture. Remove only the two new tests for that excluded feature and
+their source-manifest entries; retain every existing parity/regression test.
+Earlier selection-specific tests and reviews describe abandoned intermediate
+heads, not current acceptance. The planned registered source/ledger/kernel,
+sizing, diagnostic and eight-suite executed CI remain in scope.
+
+The final correction requires the unchanged WP21 structural parity suite, legacy
+PIT context, the registered research focused tests, a fresh eight-suite PG16
+proof, independent delta review and all applicable exact-head CI. No strategy,
+financial rule, sealed golden or production authority is changed.

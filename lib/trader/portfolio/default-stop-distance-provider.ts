@@ -17,7 +17,9 @@ export class InvalidStopDistancePctError extends Error {
  * M2 provisional stop distance: `entryPrice × defaultStopDistancePct`.
  * Not a placed stop order — risk-sizing assumption until M4/M5 providers replace this.
  */
-export function resolveDefaultStopDistance(input: StopDistanceProviderInput): StopDistanceResult {
+export function resolveDefaultStopDistance(
+  input: Pick<StopDistanceProviderInput, "entryPrice" | "runConfig"> | StopDistanceProviderInput,
+): StopDistanceResult {
   const { entryPrice, runConfig } = input;
   if (
     compareDecimal(runConfig.defaultStopDistancePct, "0") <= 0 ||

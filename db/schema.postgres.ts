@@ -9762,7 +9762,38 @@ export const traderStrategyAdmissionFamily = pgTable("trader_strategy_admission_
   specSha256: text("spec_sha256").primaryKey(),
   familySize: integer("family_size").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
-});
+}, t => [uniqueIndex("trader_admission_family_spec_size_uq").on(t.specSha256, t.familySize)]);
+
+/** DEE-1159 immutable proposal registration, never a scientific/execute grant. */
+export const traderResearchExperimentsV1 = pgTable("trader_research_experiments_v1", {
+  specSha256: text("spec_sha256").primaryKey(),
+  organizationId: uuid("organization_id").notNull()
+    .references(() => organizations.id, { onDelete: "restrict" }),
+  familySize: integer("family_size").notNull(),
+  specCanonicalJson: text("spec_canonical_json").notNull(),
+  registeredAt: timestamp("registered_at", { withTimezone: true, mode: "date" })
+    .notNull().default(sql`clock_timestamp()`),
+}, t => [
+  unique("research_experiment_org_identity_uq").on(t.organizationId, t.specSha256),
+  foreignKey({ name: "research_experiment_family_fk", columns: [t.specSha256, t.familySize],
+    foreignColumns: [traderStrategyAdmissionFamily.specSha256, traderStrategyAdmissionFamily.familySize] }),
+]);
+
+/** Durable retry identity only; no execution lease, score or holdout authority. */
+export const traderResearchAttemptsV1 = pgTable("trader_research_attempts_v1", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
+  specSha256: text("spec_sha256").notNull(),
+  sourceRunId: text("source_run_id").notNull(),
+  commandId: text("command_id").notNull(),
+  registeredAt: timestamp("registered_at", { withTimezone: true, mode: "date" })
+    .notNull().default(sql`clock_timestamp()`),
+}, t => [
+  unique("research_attempt_org_command_uq").on(t.organizationId, t.commandId),
+  unique("research_attempt_org_id_uq").on(t.organizationId, t.id),
+  foreignKey({ name: "research_attempt_experiment_fk", columns: [t.organizationId, t.specSha256],
+    foreignColumns: [traderResearchExperimentsV1.organizationId, traderResearchExperimentsV1.specSha256] }),
+]);
 
 export const traderStrategyAdmissionJournal = pgTable(
   "trader_strategy_admission_journal",

@@ -89,6 +89,10 @@ function validateDatasetRow(
   }
 }
 
+// The same stored-authority verification is reused by the closed DEVELOPMENT
+// research reader. Exporting validation issues no execution or data authority.
+export { validateDatasetRow as assertHistoricalDatasetAuthorityRowV2 };
+
 /**
  * Produces the authenticated source authority for a non-initial cycle.
  *

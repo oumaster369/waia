@@ -1,0 +1,264 @@
+{
+  "sourceReceipt": "dee1159-combined-pg16-v1/results.json",
+  "sourceResultsSha256": "de64798a0d7d643ef0d630afb123413022d292803d19d0cb7bd2ec86f26aa4b8",
+  "numTotalTestSuites": 15,
+  "numPassedTestSuites": 15,
+  "numFailedTestSuites": 0,
+  "numPendingTestSuites": 0,
+  "numTotalTests": 69,
+  "numPassedTests": 69,
+  "numFailedTests": 0,
+  "numPendingTests": 0,
+  "numTodoTests": 0,
+  "testResults": [
+    {
+      "name": "/workspace/tests/integration/postgres-dee540-blind-tail-max-pool.test.ts",
+      "status": "passed",
+      "assertionResults": [
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "/workspace/tests/integration/postgres-research-attempt-registry-v1.test.ts",
+      "status": "passed",
+      "assertionResults": [
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "/workspace/tests/integration/postgres-research-blind-ingress-v1.test.ts",
+      "status": "passed",
+      "assertionResults": [
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "/workspace/tests/integration/postgres-research-experiment-registry-v1.test.ts",
+      "status": "passed",
+      "assertionResults": [
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "/workspace/tests/integration/postgres-research-intelligence-parity.test.ts",
+      "status": "passed",
+      "assertionResults": [
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "/workspace/tests/integration/postgres-research-mock-ledger-scope.test.ts",
+      "status": "passed",
+      "assertionResults": [
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "/workspace/tests/integration/postgres-research-training-payload-v1.test.ts",
+      "status": "passed",
+      "assertionResults": [
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        },
+        {
+          "status": "passed"
+        }
+      ]
+    }
+  ]
+}
