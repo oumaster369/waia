@@ -1,0 +1,1274 @@
+{
+  "provenance": {
+    "baselineCommit": "fcf4c19c8953dd7a57716c45c8b8f8635d226bac",
+    "qualificationWriterPath": "lib/trader/research-v2/qualification-records-v2.ts",
+    "qualificationWriterSha256": "577185d428efce8d469df6effe6f186be00e6758425eadc540c05fed2e19556a",
+    "strategyAdmissionPath": "lib/trader/research/strategy-admission-v1.ts",
+    "strategyAdmissionSha256": "8e2c57a95b477cd09231abf7d11e43007d56171fd9c2987e3b6d75028d0950bd",
+    "candidateWriterPath": "lib/trader/research-v2/strategy-candidate-generation-v2.ts",
+    "candidateWriterSha256": "fd481ec259c7bca283bbf216f630ffc237a9e879f88c6a1ffe6b3afb0e6bcf94",
+    "generatedBy": "temporary Vitest generator using baseline source; no hand-built assessments"
+  },
+  "candidate": {
+    "schemaVersion": "waia.trader.strategy_evolution_candidate.v2",
+    "capitalAuthority": "RESEARCH_ONLY",
+    "promotionAuthority": "NONE",
+    "accountAssignmentAuthority": "NONE",
+    "venueWriteAuthority": "NONE",
+    "candidateId": "legacy-funded-long-fixture",
+    "strategyId": "legacy-funded-long-research",
+    "strategyVersion": "1",
+    "params": {
+      "lookback": "11"
+    },
+    "lineage": {
+      "generationKind": "PARAMETER_MUTATION",
+      "parents": [
+        {
+          "strategyId": "legacy-funded-long-research",
+          "strategyVersion": "0",
+          "artifactDigestHex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ],
+      "hypothesisDigestHex": "f554243d3ef79fb9890671c2a94bf212c92a2c832c53b2068b2ddc45e5e60182",
+      "evidenceCutoffUtc": "2026-02-01T11:00:00.000Z",
+      "researchCodeIdentity": "baseline-writer-fcf4c19c",
+      "costModelIdentity": "baseline-writer-fcf4c19c",
+      "generatorVersion": "strategy-evolution-research/v2"
+    },
+    "assignedAccountIds": [],
+    "contentDigestHex": "2fa01c133f5f5b1f1e0ae207325c099fcdc75ecbb71d6cf356e52ee7fe2bc37f"
+  },
+  "positiveFunding": {
+    "development": {
+      "schemaVersion": "waia.trader.strategy_evolution_qualification.v2",
+      "capitalAuthority": "RESEARCH_ONLY",
+      "candidateDigestHex": "2fa01c133f5f5b1f1e0ae207325c099fcdc75ecbb71d6cf356e52ee7fe2bc37f",
+      "partition": "DEVELOPMENT",
+      "fittingAllowed": true,
+      "evaluation": {
+        "netEconomicResult": "0.176",
+        "maxDrawdown": "-0.02",
+        "tailEventCount": 0,
+        "sampleSize": 32,
+        "distinctDayCount": 32,
+        "positiveTradeCount": 24,
+        "nonZeroTradeCount": 32,
+        "incumbentComparisonDigestHex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "dateNets": [
+          {
+            "utcDate": "2022-01-10",
+            "net": "0.021"
+          },
+          {
+            "utcDate": "2022-01-11",
+            "net": "0.004"
+          },
+          {
+            "utcDate": "2022-01-12",
+            "net": "-0.011"
+          },
+          {
+            "utcDate": "2022-01-13",
+            "net": "0.016"
+          },
+          {
+            "utcDate": "2022-01-14",
+            "net": "0.002"
+          },
+          {
+            "utcDate": "2022-01-15",
+            "net": "-0.008"
+          },
+          {
+            "utcDate": "2022-01-16",
+            "net": "0.013"
+          },
+          {
+            "utcDate": "2022-01-17",
+            "net": "0.007"
+          },
+          {
+            "utcDate": "2022-04-10",
+            "net": "0.021"
+          },
+          {
+            "utcDate": "2022-04-11",
+            "net": "0.004"
+          },
+          {
+            "utcDate": "2022-04-12",
+            "net": "-0.011"
+          },
+          {
+            "utcDate": "2022-04-13",
+            "net": "0.016"
+          },
+          {
+            "utcDate": "2022-04-14",
+            "net": "0.002"
+          },
+          {
+            "utcDate": "2022-04-15",
+            "net": "-0.008"
+          },
+          {
+            "utcDate": "2022-04-16",
+            "net": "0.013"
+          },
+          {
+            "utcDate": "2022-04-17",
+            "net": "0.007"
+          },
+          {
+            "utcDate": "2022-07-10",
+            "net": "0.021"
+          },
+          {
+            "utcDate": "2022-07-11",
+            "net": "0.004"
+          },
+          {
+            "utcDate": "2022-07-12",
+            "net": "-0.011"
+          },
+          {
+            "utcDate": "2022-07-13",
+            "net": "0.016"
+          },
+          {
+            "utcDate": "2022-07-14",
+            "net": "0.002"
+          },
+          {
+            "utcDate": "2022-07-15",
+            "net": "-0.008"
+          },
+          {
+            "utcDate": "2022-07-16",
+            "net": "0.013"
+          },
+          {
+            "utcDate": "2022-07-17",
+            "net": "0.007"
+          },
+          {
+            "utcDate": "2022-10-10",
+            "net": "0.021"
+          },
+          {
+            "utcDate": "2022-10-11",
+            "net": "0.004"
+          },
+          {
+            "utcDate": "2022-10-12",
+            "net": "-0.011"
+          },
+          {
+            "utcDate": "2022-10-13",
+            "net": "0.016"
+          },
+          {
+            "utcDate": "2022-10-14",
+            "net": "0.002"
+          },
+          {
+            "utcDate": "2022-10-15",
+            "net": "-0.008"
+          },
+          {
+            "utcDate": "2022-10-16",
+            "net": "0.013"
+          },
+          {
+            "utcDate": "2022-10-17",
+            "net": "0.007"
+          }
+        ]
+      },
+      "multipleTesting": {
+        "method": "holm",
+        "familySize": 1,
+        "alpha": "0.05",
+        "confirmatory": true,
+        "trialIndex": 0,
+        "familyPositiveCounts": [
+          24
+        ],
+        "familyNonZeroCounts": [
+          32
+        ],
+        "familySampleSizes": [
+          32
+        ],
+        "familyDistinctDayCounts": [
+          32
+        ],
+        "rawPValue": "0.00398059",
+        "adjustedPValue": "0.00398059"
+      },
+      "admission": {
+        "specSha256": "abababababababababababababababababababababababababababababababab",
+        "declaredFamilySize": 1,
+        "hypothesisId": "71a71ff26dab3cde3370679493c502e894522aabc9d5eeaa2b99367ee11923e2",
+        "kind": "continuous",
+        "intraday": false,
+        "sideDeclared": "long",
+        "horizonBars": 1,
+        "barIntervalMinutes": 1,
+        "usedForDiscovery": false,
+        "signalBarCloseUtc": "2026-02-01T11:00:00.000Z",
+        "entryTimeUtc": "2026-02-01T11:01:00.000Z",
+        "symbol": "BTC-PERP",
+        "fundingMean": "0.001",
+        "scored": true,
+        "familyObservationNets": [
+          [
+            {
+              "utcDate": "2022-01-10",
+              "net": "0.021"
+            },
+            {
+              "utcDate": "2022-01-11",
+              "net": "0.004"
+            },
+            {
+              "utcDate": "2022-01-12",
+              "net": "-0.011"
+            },
+            {
+              "utcDate": "2022-01-13",
+              "net": "0.016"
+            },
+            {
+              "utcDate": "2022-01-14",
+              "net": "0.002"
+            },
+            {
+              "utcDate": "2022-01-15",
+              "net": "-0.008"
+            },
+            {
+              "utcDate": "2022-01-16",
+              "net": "0.013"
+            },
+            {
+              "utcDate": "2022-01-17",
+              "net": "0.007"
+            },
+            {
+              "utcDate": "2022-04-10",
+              "net": "0.021"
+            },
+            {
+              "utcDate": "2022-04-11",
+              "net": "0.004"
+            },
+            {
+              "utcDate": "2022-04-12",
+              "net": "-0.011"
+            },
+            {
+              "utcDate": "2022-04-13",
+              "net": "0.016"
+            },
+            {
+              "utcDate": "2022-04-14",
+              "net": "0.002"
+            },
+            {
+              "utcDate": "2022-04-15",
+              "net": "-0.008"
+            },
+            {
+              "utcDate": "2022-04-16",
+              "net": "0.013"
+            },
+            {
+              "utcDate": "2022-04-17",
+              "net": "0.007"
+            },
+            {
+              "utcDate": "2022-07-10",
+              "net": "0.021"
+            },
+            {
+              "utcDate": "2022-07-11",
+              "net": "0.004"
+            },
+            {
+              "utcDate": "2022-07-12",
+              "net": "-0.011"
+            },
+            {
+              "utcDate": "2022-07-13",
+              "net": "0.016"
+            },
+            {
+              "utcDate": "2022-07-14",
+              "net": "0.002"
+            },
+            {
+              "utcDate": "2022-07-15",
+              "net": "-0.008"
+            },
+            {
+              "utcDate": "2022-07-16",
+              "net": "0.013"
+            },
+            {
+              "utcDate": "2022-07-17",
+              "net": "0.007"
+            },
+            {
+              "utcDate": "2022-10-10",
+              "net": "0.021"
+            },
+            {
+              "utcDate": "2022-10-11",
+              "net": "0.004"
+            },
+            {
+              "utcDate": "2022-10-12",
+              "net": "-0.011"
+            },
+            {
+              "utcDate": "2022-10-13",
+              "net": "0.016"
+            },
+            {
+              "utcDate": "2022-10-14",
+              "net": "0.002"
+            },
+            {
+              "utcDate": "2022-10-15",
+              "net": "-0.008"
+            },
+            {
+              "utcDate": "2022-10-16",
+              "net": "0.013"
+            },
+            {
+              "utcDate": "2022-10-17",
+              "net": "0.007"
+            }
+          ]
+        ],
+        "trialIndex": 0,
+        "assessment": {
+          "verdict": "passed_is",
+          "reasons": [],
+          "flags": [],
+          "nEvents": 32,
+          "nDates": 32,
+          "netMeanEvent": "0.00450000",
+          "netMeanDate": "0.00450000",
+          "seMethod": "newey_west",
+          "nwLag": 1,
+          "t": "2.83678453",
+          "pRaw": "0.00398059",
+          "pHolm": "0.00398059",
+          "ci95Low": "0.00139090",
+          "ci95High": "0.00760910",
+          "withoutBestDate": "0.00400000",
+          "bestDate": "2022-01-10",
+          "byQuarter": {
+            "2022-Q1": "0.00450000",
+            "2022-Q2": "0.00450000",
+            "2022-Q3": "0.00450000",
+            "2022-Q4": "0.00450000"
+          },
+          "familySize": 1,
+          "dsr": null,
+          "familyTrials": [
+            {
+              "trialIndex": 0,
+              "hypothesisId": "71a71ff26dab3cde3370679493c502e894522aabc9d5eeaa2b99367ee11923e2",
+              "rawPValue": "0.00398059",
+              "adjustedPValue": "0.00398059",
+              "holmRank": 0
+            }
+          ]
+        }
+      },
+      "verdict": "QUALIFIED",
+      "failureReasons": [],
+      "contentDigestHex": "fda54f1e483342cab3a3b54be062333becba4b6946b01b8436d48a6a49c9a111"
+    },
+    "walkForward": {
+      "schemaVersion": "waia.trader.strategy_evolution_qualification.v2",
+      "capitalAuthority": "RESEARCH_ONLY",
+      "candidateDigestHex": "2fa01c133f5f5b1f1e0ae207325c099fcdc75ecbb71d6cf356e52ee7fe2bc37f",
+      "partition": "WALK_FORWARD",
+      "fittingAllowed": false,
+      "evaluation": {
+        "netEconomicResult": "0.4",
+        "maxDrawdown": "-0.02",
+        "tailEventCount": 0,
+        "sampleSize": 20,
+        "distinctDayCount": 20,
+        "positiveTradeCount": 20,
+        "nonZeroTradeCount": 20,
+        "incumbentComparisonDigestHex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "dateNets": [
+          {
+            "utcDate": "2023-01-10",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-01-11",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-01-12",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-01-13",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-01-14",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-04-10",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-04-11",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-04-12",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-04-13",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-04-14",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-07-10",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-07-11",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-07-12",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-07-13",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-07-14",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-10-10",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-10-11",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-10-12",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-10-13",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-10-14",
+            "net": "0.02"
+          }
+        ]
+      },
+      "multipleTesting": {
+        "method": "holm",
+        "familySize": 1,
+        "alpha": "0.05",
+        "confirmatory": false,
+        "trialIndex": 0,
+        "familyPositiveCounts": [
+          20
+        ],
+        "familyNonZeroCounts": [
+          20
+        ],
+        "familySampleSizes": [
+          20
+        ],
+        "familyDistinctDayCounts": [
+          20
+        ],
+        "rawPValue": "0.00000000",
+        "adjustedPValue": "0.00000000"
+      },
+      "admission": {
+        "specSha256": "abababababababababababababababababababababababababababababababab",
+        "declaredFamilySize": 1,
+        "hypothesisId": "71a71ff26dab3cde3370679493c502e894522aabc9d5eeaa2b99367ee11923e2",
+        "kind": "continuous",
+        "intraday": false,
+        "sideDeclared": "long",
+        "horizonBars": 1,
+        "barIntervalMinutes": 1,
+        "usedForDiscovery": false,
+        "signalBarCloseUtc": "2026-02-01T11:00:00.000Z",
+        "entryTimeUtc": "2026-02-01T11:01:00.000Z",
+        "symbol": "BTC-PERP",
+        "fundingMean": "0.001",
+        "scored": true,
+        "familyObservationNets": [
+          [
+            {
+              "utcDate": "2023-01-10",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-01-11",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-01-12",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-01-13",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-01-14",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-04-10",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-04-11",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-04-12",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-04-13",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-04-14",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-07-10",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-07-11",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-07-12",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-07-13",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-07-14",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-10-10",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-10-11",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-10-12",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-10-13",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-10-14",
+              "net": "0.02"
+            }
+          ]
+        ],
+        "trialIndex": 0,
+        "assessment": {
+          "verdict": "passed_validation",
+          "reasons": [],
+          "flags": [],
+          "nEvents": 20,
+          "nDates": 20,
+          "netMeanEvent": "0.01900000",
+          "netMeanDate": "0.01900000",
+          "seMethod": "newey_west",
+          "nwLag": 1,
+          "t": "17538443241413380.00000000",
+          "pRaw": "0.00000000",
+          "pHolm": "0.00000000",
+          "ci95Low": "0.01900000",
+          "ci95High": "0.01900000",
+          "withoutBestDate": "0.01900000",
+          "bestDate": "2023-01-10",
+          "byQuarter": {
+            "2023-Q1": "0.01900000",
+            "2023-Q2": "0.01900000",
+            "2023-Q3": "0.01900000",
+            "2023-Q4": "0.01900000"
+          },
+          "familySize": 1,
+          "dsr": null,
+          "familyTrials": [
+            {
+              "trialIndex": 0,
+              "hypothesisId": "71a71ff26dab3cde3370679493c502e894522aabc9d5eeaa2b99367ee11923e2",
+              "rawPValue": "0.00000000",
+              "adjustedPValue": "0.00000000",
+              "holmRank": 0
+            }
+          ]
+        }
+      },
+      "verdict": "QUALIFIED",
+      "failureReasons": [],
+      "contentDigestHex": "c63daea73882d29cbdf3d4bbf0e36fa25450285e0746cf5dd7909b369cc7ccf1"
+    }
+  },
+  "negativeFunding": {
+    "development": {
+      "schemaVersion": "waia.trader.strategy_evolution_qualification.v2",
+      "capitalAuthority": "RESEARCH_ONLY",
+      "candidateDigestHex": "2fa01c133f5f5b1f1e0ae207325c099fcdc75ecbb71d6cf356e52ee7fe2bc37f",
+      "partition": "DEVELOPMENT",
+      "fittingAllowed": true,
+      "evaluation": {
+        "netEconomicResult": "0.176",
+        "maxDrawdown": "-0.02",
+        "tailEventCount": 0,
+        "sampleSize": 32,
+        "distinctDayCount": 32,
+        "positiveTradeCount": 24,
+        "nonZeroTradeCount": 32,
+        "incumbentComparisonDigestHex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "dateNets": [
+          {
+            "utcDate": "2022-01-10",
+            "net": "0.021"
+          },
+          {
+            "utcDate": "2022-01-11",
+            "net": "0.004"
+          },
+          {
+            "utcDate": "2022-01-12",
+            "net": "-0.011"
+          },
+          {
+            "utcDate": "2022-01-13",
+            "net": "0.016"
+          },
+          {
+            "utcDate": "2022-01-14",
+            "net": "0.002"
+          },
+          {
+            "utcDate": "2022-01-15",
+            "net": "-0.008"
+          },
+          {
+            "utcDate": "2022-01-16",
+            "net": "0.013"
+          },
+          {
+            "utcDate": "2022-01-17",
+            "net": "0.007"
+          },
+          {
+            "utcDate": "2022-04-10",
+            "net": "0.021"
+          },
+          {
+            "utcDate": "2022-04-11",
+            "net": "0.004"
+          },
+          {
+            "utcDate": "2022-04-12",
+            "net": "-0.011"
+          },
+          {
+            "utcDate": "2022-04-13",
+            "net": "0.016"
+          },
+          {
+            "utcDate": "2022-04-14",
+            "net": "0.002"
+          },
+          {
+            "utcDate": "2022-04-15",
+            "net": "-0.008"
+          },
+          {
+            "utcDate": "2022-04-16",
+            "net": "0.013"
+          },
+          {
+            "utcDate": "2022-04-17",
+            "net": "0.007"
+          },
+          {
+            "utcDate": "2022-07-10",
+            "net": "0.021"
+          },
+          {
+            "utcDate": "2022-07-11",
+            "net": "0.004"
+          },
+          {
+            "utcDate": "2022-07-12",
+            "net": "-0.011"
+          },
+          {
+            "utcDate": "2022-07-13",
+            "net": "0.016"
+          },
+          {
+            "utcDate": "2022-07-14",
+            "net": "0.002"
+          },
+          {
+            "utcDate": "2022-07-15",
+            "net": "-0.008"
+          },
+          {
+            "utcDate": "2022-07-16",
+            "net": "0.013"
+          },
+          {
+            "utcDate": "2022-07-17",
+            "net": "0.007"
+          },
+          {
+            "utcDate": "2022-10-10",
+            "net": "0.021"
+          },
+          {
+            "utcDate": "2022-10-11",
+            "net": "0.004"
+          },
+          {
+            "utcDate": "2022-10-12",
+            "net": "-0.011"
+          },
+          {
+            "utcDate": "2022-10-13",
+            "net": "0.016"
+          },
+          {
+            "utcDate": "2022-10-14",
+            "net": "0.002"
+          },
+          {
+            "utcDate": "2022-10-15",
+            "net": "-0.008"
+          },
+          {
+            "utcDate": "2022-10-16",
+            "net": "0.013"
+          },
+          {
+            "utcDate": "2022-10-17",
+            "net": "0.007"
+          }
+        ]
+      },
+      "multipleTesting": {
+        "method": "holm",
+        "familySize": 1,
+        "alpha": "0.05",
+        "confirmatory": true,
+        "trialIndex": 0,
+        "familyPositiveCounts": [
+          24
+        ],
+        "familyNonZeroCounts": [
+          32
+        ],
+        "familySampleSizes": [
+          32
+        ],
+        "familyDistinctDayCounts": [
+          32
+        ],
+        "rawPValue": "0.00013916",
+        "adjustedPValue": "0.00013916"
+      },
+      "admission": {
+        "specSha256": "abababababababababababababababababababababababababababababababab",
+        "declaredFamilySize": 1,
+        "hypothesisId": "71a71ff26dab3cde3370679493c502e894522aabc9d5eeaa2b99367ee11923e2",
+        "kind": "continuous",
+        "intraday": false,
+        "sideDeclared": "long",
+        "horizonBars": 1,
+        "barIntervalMinutes": 1,
+        "usedForDiscovery": false,
+        "signalBarCloseUtc": "2026-02-01T11:00:00.000Z",
+        "entryTimeUtc": "2026-02-01T11:01:00.000Z",
+        "symbol": "BTC-PERP",
+        "fundingMean": "-0.001",
+        "scored": true,
+        "familyObservationNets": [
+          [
+            {
+              "utcDate": "2022-01-10",
+              "net": "0.021"
+            },
+            {
+              "utcDate": "2022-01-11",
+              "net": "0.004"
+            },
+            {
+              "utcDate": "2022-01-12",
+              "net": "-0.011"
+            },
+            {
+              "utcDate": "2022-01-13",
+              "net": "0.016"
+            },
+            {
+              "utcDate": "2022-01-14",
+              "net": "0.002"
+            },
+            {
+              "utcDate": "2022-01-15",
+              "net": "-0.008"
+            },
+            {
+              "utcDate": "2022-01-16",
+              "net": "0.013"
+            },
+            {
+              "utcDate": "2022-01-17",
+              "net": "0.007"
+            },
+            {
+              "utcDate": "2022-04-10",
+              "net": "0.021"
+            },
+            {
+              "utcDate": "2022-04-11",
+              "net": "0.004"
+            },
+            {
+              "utcDate": "2022-04-12",
+              "net": "-0.011"
+            },
+            {
+              "utcDate": "2022-04-13",
+              "net": "0.016"
+            },
+            {
+              "utcDate": "2022-04-14",
+              "net": "0.002"
+            },
+            {
+              "utcDate": "2022-04-15",
+              "net": "-0.008"
+            },
+            {
+              "utcDate": "2022-04-16",
+              "net": "0.013"
+            },
+            {
+              "utcDate": "2022-04-17",
+              "net": "0.007"
+            },
+            {
+              "utcDate": "2022-07-10",
+              "net": "0.021"
+            },
+            {
+              "utcDate": "2022-07-11",
+              "net": "0.004"
+            },
+            {
+              "utcDate": "2022-07-12",
+              "net": "-0.011"
+            },
+            {
+              "utcDate": "2022-07-13",
+              "net": "0.016"
+            },
+            {
+              "utcDate": "2022-07-14",
+              "net": "0.002"
+            },
+            {
+              "utcDate": "2022-07-15",
+              "net": "-0.008"
+            },
+            {
+              "utcDate": "2022-07-16",
+              "net": "0.013"
+            },
+            {
+              "utcDate": "2022-07-17",
+              "net": "0.007"
+            },
+            {
+              "utcDate": "2022-10-10",
+              "net": "0.021"
+            },
+            {
+              "utcDate": "2022-10-11",
+              "net": "0.004"
+            },
+            {
+              "utcDate": "2022-10-12",
+              "net": "-0.011"
+            },
+            {
+              "utcDate": "2022-10-13",
+              "net": "0.016"
+            },
+            {
+              "utcDate": "2022-10-14",
+              "net": "0.002"
+            },
+            {
+              "utcDate": "2022-10-15",
+              "net": "-0.008"
+            },
+            {
+              "utcDate": "2022-10-16",
+              "net": "0.013"
+            },
+            {
+              "utcDate": "2022-10-17",
+              "net": "0.007"
+            }
+          ]
+        ],
+        "trialIndex": 0,
+        "assessment": {
+          "verdict": "passed_is",
+          "reasons": [],
+          "flags": [],
+          "nEvents": 32,
+          "nDates": 32,
+          "netMeanEvent": "0.00650000",
+          "netMeanDate": "0.00650000",
+          "seMethod": "newey_west",
+          "nwLag": 1,
+          "t": "4.09757765",
+          "pRaw": "0.00013916",
+          "pHolm": "0.00013916",
+          "ci95Low": "0.00339090",
+          "ci95High": "0.00960910",
+          "withoutBestDate": "0.00600000",
+          "bestDate": "2022-01-10",
+          "byQuarter": {
+            "2022-Q1": "0.00650000",
+            "2022-Q2": "0.00650000",
+            "2022-Q3": "0.00650000",
+            "2022-Q4": "0.00650000"
+          },
+          "familySize": 1,
+          "dsr": null,
+          "familyTrials": [
+            {
+              "trialIndex": 0,
+              "hypothesisId": "71a71ff26dab3cde3370679493c502e894522aabc9d5eeaa2b99367ee11923e2",
+              "rawPValue": "0.00013916",
+              "adjustedPValue": "0.00013916",
+              "holmRank": 0
+            }
+          ]
+        }
+      },
+      "verdict": "QUALIFIED",
+      "failureReasons": [],
+      "contentDigestHex": "974c4fef4adc8dc8f280fa12fff0f6c60b66bb1c6acc830c89e7a45d87ed9a20"
+    },
+    "walkForward": {
+      "schemaVersion": "waia.trader.strategy_evolution_qualification.v2",
+      "capitalAuthority": "RESEARCH_ONLY",
+      "candidateDigestHex": "2fa01c133f5f5b1f1e0ae207325c099fcdc75ecbb71d6cf356e52ee7fe2bc37f",
+      "partition": "WALK_FORWARD",
+      "fittingAllowed": false,
+      "evaluation": {
+        "netEconomicResult": "0.4",
+        "maxDrawdown": "-0.02",
+        "tailEventCount": 0,
+        "sampleSize": 20,
+        "distinctDayCount": 20,
+        "positiveTradeCount": 20,
+        "nonZeroTradeCount": 20,
+        "incumbentComparisonDigestHex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "dateNets": [
+          {
+            "utcDate": "2023-01-10",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-01-11",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-01-12",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-01-13",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-01-14",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-04-10",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-04-11",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-04-12",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-04-13",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-04-14",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-07-10",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-07-11",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-07-12",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-07-13",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-07-14",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-10-10",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-10-11",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-10-12",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-10-13",
+            "net": "0.02"
+          },
+          {
+            "utcDate": "2023-10-14",
+            "net": "0.02"
+          }
+        ]
+      },
+      "multipleTesting": {
+        "method": "holm",
+        "familySize": 1,
+        "alpha": "0.05",
+        "confirmatory": false,
+        "trialIndex": 0,
+        "familyPositiveCounts": [
+          20
+        ],
+        "familyNonZeroCounts": [
+          20
+        ],
+        "familySampleSizes": [
+          20
+        ],
+        "familyDistinctDayCounts": [
+          20
+        ],
+        "rawPValue": "0.00000000",
+        "adjustedPValue": "0.00000000"
+      },
+      "admission": {
+        "specSha256": "abababababababababababababababababababababababababababababababab",
+        "declaredFamilySize": 1,
+        "hypothesisId": "71a71ff26dab3cde3370679493c502e894522aabc9d5eeaa2b99367ee11923e2",
+        "kind": "continuous",
+        "intraday": false,
+        "sideDeclared": "long",
+        "horizonBars": 1,
+        "barIntervalMinutes": 1,
+        "usedForDiscovery": false,
+        "signalBarCloseUtc": "2026-02-01T11:00:00.000Z",
+        "entryTimeUtc": "2026-02-01T11:01:00.000Z",
+        "symbol": "BTC-PERP",
+        "fundingMean": "-0.001",
+        "scored": true,
+        "familyObservationNets": [
+          [
+            {
+              "utcDate": "2023-01-10",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-01-11",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-01-12",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-01-13",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-01-14",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-04-10",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-04-11",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-04-12",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-04-13",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-04-14",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-07-10",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-07-11",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-07-12",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-07-13",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-07-14",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-10-10",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-10-11",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-10-12",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-10-13",
+              "net": "0.02"
+            },
+            {
+              "utcDate": "2023-10-14",
+              "net": "0.02"
+            }
+          ]
+        ],
+        "trialIndex": 0,
+        "assessment": {
+          "verdict": "passed_validation",
+          "reasons": [],
+          "flags": [],
+          "nEvents": 20,
+          "nDates": 20,
+          "netMeanEvent": "0.02100000",
+          "netMeanDate": "0.02100000",
+          "seMethod": "newey_west",
+          "nwLag": 1,
+          "t": "19384595161562160.00000000",
+          "pRaw": "0.00000000",
+          "pHolm": "0.00000000",
+          "ci95Low": "0.02100000",
+          "ci95High": "0.02100000",
+          "withoutBestDate": "0.02100000",
+          "bestDate": "2023-01-10",
+          "byQuarter": {
+            "2023-Q1": "0.02100000",
+            "2023-Q2": "0.02100000",
+            "2023-Q3": "0.02100000",
+            "2023-Q4": "0.02100000"
+          },
+          "familySize": 1,
+          "dsr": null,
+          "familyTrials": [
+            {
+              "trialIndex": 0,
+              "hypothesisId": "71a71ff26dab3cde3370679493c502e894522aabc9d5eeaa2b99367ee11923e2",
+              "rawPValue": "0.00000000",
+              "adjustedPValue": "0.00000000",
+              "holmRank": 0
+            }
+          ]
+        }
+      },
+      "verdict": "QUALIFIED",
+      "failureReasons": [],
+      "contentDigestHex": "ccd81ec4ddfd939d0f06a2b7ecf02f9d7615d5594b3cf444a8ba1eb5ab45da71"
+    }
+  }
+}

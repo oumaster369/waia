@@ -33,6 +33,8 @@ export const STRATEGY_ADMISSION_AUDIT_P_RAW = 1e-6 as const;
 export const STRATEGY_ADMISSION_AUDIT_IS_SHARPE = 3 as const;
 export const STRATEGY_ADMISSION_QUARTER_POSITIVE_FRACTION = 0.75 as const;
 export const STRATEGY_ADMISSION_YEAR_POSITIVE_FRACTION = 2 / 3;
+/** Direction, trading costs and funding are already represented in each net. */
+export const STRATEGY_ADMISSION_NET_CONVENTION_V2 = "signed-net-after-all-costs/v2" as const;
 /** Spec §7 year arm is “2 of 3 years”, so a single year cannot satisfy it. */
 export const STRATEGY_ADMISSION_MIN_POSITIVE_YEAR_SPAN = 3 as const;
 /**
@@ -86,6 +88,7 @@ export type StrategyAdmissionVerdict =
 
 export type StrategyAdmissionObservation = Readonly<{
   utcDate: string;
+  /** Signed strategy net under observationConvention; never a raw price return. */
   net: string;
 }>;
 
@@ -100,6 +103,9 @@ export type StrategyAdmissionInput = Readonly<{
   kind: StrategyAdmissionKind;
   intraday: boolean;
   sideDeclared: StrategyAdmissionSide;
+  /** New qualification uses V2. Omission retains only the legacy long calculator
+   * contract, where recorded funding is still deducted separately. */
+  observationConvention?: typeof STRATEGY_ADMISSION_NET_CONVENTION_V2;
   horizonBars: number;
   split: Exclude<StrategyAdmissionSplit, "holdout">;
   trials: readonly StrategyAdmissionTrial[];
@@ -167,6 +173,8 @@ export type StrategyAdmissionJournalRow = Readonly<{
   nEvents: number;
   nDates: number;
   netMeanDate: string;
+  /** Absent only on historical journal rows whose convention was not recorded. */
+  observationConvention?: typeof STRATEGY_ADMISSION_NET_CONVENTION_V2;
   seMethod: "newey_west";
   nwLag: number;
   t: string;
@@ -763,17 +771,6 @@ function deflatedSharpe(input: {
   return standardNormalCdf(z);
 }
 
-function signedObservations(
-  observations: readonly StrategyAdmissionObservation[],
-  side: StrategyAdmissionSide,
-): StrategyAdmissionObservation[] {
-  if (side !== "short") return [...observations];
-  return observations.map((observation) => ({
-    utcDate: observation.utcDate,
-    net: formatStat(-parseNet(observation.net)),
-  }));
-}
-
 export function assessStrategyAdmission(
   input: StrategyAdmissionInput,
 ): StrategyAdmissionAssessment {
@@ -806,6 +803,17 @@ function assessStrategyAdmissionBody(
   input: StrategyAdmissionInput,
   readOnly: boolean,
 ): StrategyAdmissionAssessment {
+  if (!["long", "short", "two_sided"].includes(input.sideDeclared)) {
+    throw new StrategyAdmissionError("admission_side_invalid");
+  }
+  if (input.observationConvention !== undefined &&
+      input.observationConvention !== STRATEGY_ADMISSION_NET_CONVENTION_V2) {
+    throw new StrategyAdmissionError("net_observation_convention_invalid");
+  }
+  const signedAllCostNets = input.observationConvention === STRATEGY_ADMISSION_NET_CONVENTION_V2;
+  if (!signedAllCostNets && input.sideDeclared !== "long") {
+    throw new StrategyAdmissionError("net_observation_convention_required");
+  }
   if (!SPEC_SHA256.test(input.specSha256)) {
     throw new StrategyAdmissionError(
       "spec_sha256_required",
@@ -870,18 +878,18 @@ function assessStrategyAdmissionBody(
     flags.push("used_for_discovery");
   }
 
+  // V2 observations are actual directional net returns, including funding.
+  // Funding metadata is still validated above but must not be charged again.
+  // Retain the separately funded arithmetic only for legacy long callers.
   const fundedTrials = input.trials.map((trial) =>
-    fundingDebit === 0
+    signedAllCostNets || fundingDebit === 0
       ? trial.observations
       : trial.observations.map((observation) => ({
           utcDate: observation.utcDate,
           net: formatStat(parseNet(observation.net) - fundingDebit),
         })),
   );
-  const signedTrials = fundedTrials.map((observations) =>
-    signedObservations(observations, input.sideDeclared),
-  );
-  const aggregated = signedTrials.map((observations) => aggregateByDate(observations));
+  const aggregated = fundedTrials.map((observations) => aggregateByDate(observations));
   const dateLagFor = (nDates: number) =>
     neweyWestDateLag({
       horizonBars: input.horizonBars,
