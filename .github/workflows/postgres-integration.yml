@@ -153,6 +153,17 @@ on:
       - "tests/integration/postgres-scheduled-paper-owner-v1.test.ts"
       - "tests/helpers/postgres-commit-ack-loss-proxy.ts"
       - "tests/unit/postgres-dee1205-proof-guard.test.ts"
+      - "scripts/postgres-validation/probe-dee1213-worker-transport.mjs"
+      - "lib/trader/paper/scheduled-owned-postgres-transport-v1.ts"
+      - "lib/trader/paper/scheduled-owned-postgres-pool-v1.ts"
+      - "docs/plans/dee-1213-scheduled-db-deadline.md"
+      - "tests/stubs/cloudflare-sockets.ts"
+      - "tests/unit/trader-scheduled-postgres-dsn-profile.test.ts"
+      - "tests/unit/trader-scheduled-postgres-pool-lifetime.test.ts"
+      - "vitest.config.ts"
+      - "vitest.setup.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
       - "tests/unit/trader-scheduled-noncapital-owner.test.ts"
       - "lib/trader/execution/repository-postgres.ts"
       - "lib/trader/execution/ordinary-paper-order-repository-postgres.ts"
@@ -339,6 +350,8 @@ jobs:
         run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
       - name: Bind exact reviewed source and disposable database before native execution
         run: node scripts/postgres-validation/prepare-dee1205-postgres-proof.mjs
+      - name: Probe scheduled Worker PostgreSQL transport faults and TLS
+        run: node scripts/postgres-validation/probe-dee1213-worker-transport.mjs --output .tmp/dee1213-worker-transport.json
       - name: Execute the closed scheduled-owner native file with zero skips
         env:
           WAIA_PG_INTEGRATION: "1"
@@ -363,6 +376,7 @@ jobs:
           path: |
             .tmp/dee1205-postgres-source-manifest.json
             .tmp/dee1205-postgres-results.json
+            .tmp/dee1213-worker-transport.json
           if-no-files-found: warn
 
   dee1200-registered-training-postgres:
