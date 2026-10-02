@@ -145,3 +145,22 @@ Both inherited/current proof-guard suites passed25/25; changed-test lint passed.
 Independent narrow review accepted the two-path delta in
 `pr739-v1-concurrency-test-delta-review.md`. All original runtime/SQL/guards are
 unchanged; published exact-head CI and fresh final admission remain required.
+
+## Published CI importer-inventory repair admitted before code (2026-10-02)
+
+At head8c33533f the fresh native CI proofs passed16/16 and101/101, including the
+repaired V1 contention case. The full unit shard2 then failed one exact-closure
+assertion: research-issued-training-diagnostic-postgres-v2.ts directly imports
+deepFreezeInquiry from inquiry contracts, but the direct-consumer inventory
+omits it. The retained RED is run36986730353/job110773587774, with5,148 passed
+tests and one failure. This is an inventory omission, not a permission to weaken
+the exact-set scanner.
+
+Add the actual consumer with CONTRACTS import, PURE_INTERNAL_COMPOSITION
+disposition and createsCapitalAuthority:false. The helper only freezes verified
+diagnostic traces; it does not call inquiry acquisition or create authority.
+Preserve the inherited source-reader entry and every existing test/assertion.
+Run the exact failed closure test plus relevant inquiry/graph and proof-guard
+checks, scoped lint/typecheck and independent delta review, then publish a new
+head. Runtime, SQL, financial/scientific gates and prior native test bytes must
+remain unchanged; fresh exact-head CI and admission remain required.
