@@ -12,7 +12,7 @@ state:
   status: in-progress
   completedWorkPackages: [WP-1-owner-and-receipt, WP-2-native-proof]
   remainingWorkPackages: [WP-3-actual-main-and-ci]
-  nextAction: "Obtain final independent prepared-source review, then integrate onto actual main after DEE1212 and pass exact-head CI."
+  nextAction: "Verify the rebased actual-main source, obtain current-base independent review, publish one PR and pass exact-head CI."
 provenance:
   createdFrom: "Oct02 root source audit and Linear duplicate clearance; independent design review before code; prepared on DEE1212 56fa1436 pending mainline"
   supersedes: null
@@ -63,3 +63,9 @@ Root and independent review identified that extracting schemaVersion with a Post
 Add native proof that an over-budget malformed trace refuses with TRACE_BYTE_LIMIT before any JSON parse, and that a later legacy-schema trace refuses the full family before even a deliberately too-small source-byte budget is evaluated. Preserve all thirteen existing cases, current financial/objective/authority rules and the shared deadline. Re-run affected native proofs and obtain independent delta review; the preceding prepared review is historical until this correction is accepted.
 
 The new malformed-trace case reproduced PostgreSQL JSON parsing before the budget check; the later-schema-before-payload control already passed. The two-phase repair then passed all15 native cases without skips and with4,311 unchanged pins. The42 affected contract/CLI/strict-roster unit assertions, scoped lint and typecheck also pass; the original105-case prepared batch remains historical coverage, not147 distinct cases. Actual-main and published-head CI remain pending. Evidence: `dee1222-native/*-budget-{red,green15}.*` and `dee1222-readiness/budget-*` in the external audit.
+
+## Actual-main integration — 2026-10-02T10:42Z
+
+DEE1212/PR739 is merged as `c68377ed1d1ea7ff866caa8c4d88a0fd1a7ec8a9` after all38 applicable checks, fresh dependency admission and independent review. Only the four DEE1222-owned commits after prepared56fa were rebased onto that actual main. The accepted prepared source is retained at backup/dee1222-pre-main-3b79650f. The inherited V1 concurrency recovery and inquiry consumer inventory repairs remain in the base. No runtime, test, draft SQL, or CI-proof behavior was changed by this integration.
+
+The prepared15-case native proof,42 affected units and independent budget-order review remain historical evidence at their captured source. Current-base native and affected closure/readiness, independent rebase review and published-head applicable CI are still required before merge. This section records integration identity before those checks; it does not predeclare their outcome or qualify research/trading.
