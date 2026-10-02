@@ -57,3 +57,17 @@ The existing public V2 input loader opens its own pool and cannot be called insi
 Native regression exposed an existing SERIALIZABLE overlap: after waiting on an unchanged attempt row, the losing snapshot can still see no result and raise23505 on the deterministic accounting-frontier primary key instead of40001. Expanded V2 concurrency also failed. OriginalRED retained; no blanket23505 retry or weakened tests.
 
 Only exact PostgreSQL23505/public.trader_accounting_frontier/trader_accounting_frontier_pkey after the owning transaction has rolled back can initiate a new READ ONLY confirmation. V2 reloads checked metadata/source/result/full ledger in its fresh owned snapshot; missing diagnostic refuses before payload. V1 reloads its established root preflight/source reader, then verifies a new read-only result/ledger snapshot without FOR UPDATE. Success requires all current immutable source/spec/runtime/input-use bindings, canonical trace and complete ledger to match. No result, orphan/poisoned ledger, different constraint or divergent bytes retain refusal. Never call the stage kernel on this recovery path. V1 canonical trace bytes remain unchanged. Unknown COMMIT recovery remains separate and additionally requires the captured candidate digest. Independent design: dee1212-frontier-conflict-readonly-recovery-review.md. Native exact-conflict injection with missing result and existing-ledger corruption must prove no re-execution.
+
+## Replay-label integrity follow-up admitted before code (2026-10-02)
+
+Independent review of the shared V1/V2 verifier found an existing V1 gap:
+canonical resealing could alter seven visible trace lineage fields while the
+input-use receipt and full current ledger stayed unchanged. Extend only the
+V1 existing-result branch with the same exact current-source comparisons
+already required by V2: source run, experiment spec, train partition, modeled
+execution model, requested executable, requested PIT digest and bar count.
+Require COMMITTED_TRACE_LINEAGE_MISMATCH on a changed field; no new ledger
+work and no changed bytes for a valid historical trace. Preserve a synthetic
+PostgreSQL RED with deliberately resealed labels before implementation, then
+run the affected full native set and independent review. This is engineering
+trace integrity, not source/PIT/scientific or financial-policy qualification.
