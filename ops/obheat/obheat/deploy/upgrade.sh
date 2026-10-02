@@ -51,6 +51,8 @@ tar -C /opt/obheat -czf "$BAK" app
 echo "backup ${BAK}"
 
 rm -rf "$APP/obheat"
+# The tree includes web/index.html and web/chart-model.js. serve inlines the
+# model into GET / once at process start; both files have to ship together.
 cp -a "$SRC" "$APP/obheat"
 "$VENV/bin/pip" install -r "$SRC/requirements.txt"
 chown -R obheat:obheat /opt/obheat

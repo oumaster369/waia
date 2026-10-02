@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import base64
+import gc
 import gzip
 import hmac
 import json
 import os
+import socket
 import struct
 import threading
 import time
@@ -15,20 +17,33 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from obheat.limits import (
+    MAX_CACHE_AGE_S,
+    MAX_CACHE_ENTRIES,
+    MAX_CACHE_PER_SYMBOL,
+    MAX_LEVELS,
+    MAX_SSE_AGE_S,
+    MAX_SSE_CLIENTS,
+)
 from obheat.liquidity import canonical_symbol
-from obheat.query import read_points, read_window
+from obheat.query import read_points, read_window, release_arrow
 from obheat.symbols import ALL, SYMBOLS, VENUES
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: dict[tuple, dict] = {}
 # A heatmap window changes once a second, but rebuilding it from parquet is
 # the expensive part. 30s is fresh enough for the page and keeps an idle
-# process off the history files.
+# process off the history files. The dict itself is also capped: two windows
+# per coin, four overall, and nothing older than a minute.
 _FRESH_S = 30.0
+_SSE_LOCK = threading.Lock()
+_SSE: dict[int, float] = {}
+_SSE_SEQ = 0
 
-WEB = Path(__file__).resolve().parent / "web" / "index.html"
+WEB_DIR = Path(__file__).resolve().parent / "web"
+WEB = WEB_DIR / "index.html"
+MODEL = WEB_DIR / "chart-model.js"
 STEPS = {"1s": 1, "5s": 5, "15s": 15, "1m": 60, "5m": 300}
-_CACHE_MAX = 4
 _HEAVY = threading.BoundedSemaphore(1)
 _HEALTH_FALLBACK = b'{"ok":false,"venues":{}}'
 
@@ -44,12 +59,14 @@ class LiveSurface:
 
     def __init__(self, data_dir: Path) -> None:
         self.data_dir = Path(data_dir)
-        self.html = WEB.read_bytes()
+        self.html = compose_page()
         self._lock = threading.Lock()
         self._health = _HEALTH_FALLBACK
         self._latest: dict | None = None
         self._liquidity: dict | None = None
+        self._mtime: dict[Path, tuple | None] = {}
         self._stop = threading.Event()
+        self._next_trim = time.monotonic() + 15.0
 
     def start(self) -> None:
         self.refresh()
@@ -61,15 +78,44 @@ class LiveSurface:
                 self.refresh()
             except Exception:
                 continue
+            if time.monotonic() >= self._next_trim:
+                self._next_trim = time.monotonic() + 15.0
+                trim_rss()
+
+    def _changed(self, path: Path) -> bool:
+        try:
+            stat = path.stat()
+            stamp = (stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            stamp = None
+        if self._mtime.get(path) == stamp:
+            return False
+        self._mtime[path] = stamp
+        return True
 
     def refresh(self) -> None:
-        health = _read_bytes(self.data_dir / "health.json", _HEALTH_FALLBACK)
-        latest = _read_json(self.data_dir / "live" / "latest.json", None)
-        liquidity = _read_json(self.data_dir / "live" / "liquidity.json", None)
+        # Re-parse only when the collector has written a new snapshot. Parsing
+        # the full book four times a second was a steady allocator with nowhere
+        # for the freed pages to go.
+        health_path = self.data_dir / "health.json"
+        latest_path = self.data_dir / "live" / "latest.json"
+        liquidity_path = self.data_dir / "live" / "liquidity.json"
+        health = latest = liquidity = None
+        if self._changed(health_path):
+            health = _read_bytes(health_path, _HEALTH_FALLBACK)
+        if self._changed(latest_path):
+            latest = _read_json(latest_path, None)
+        if self._changed(liquidity_path):
+            liquidity = _read_json(liquidity_path, None)
+        if health is None and latest is None and liquidity is None:
+            return
         with self._lock:
-            self._health = health
-            self._latest = latest
-            self._liquidity = liquidity
+            if health is not None:
+                self._health = health
+            if latest is not None:
+                self._latest = latest
+            if liquidity is not None:
+                self._liquidity = liquidity
 
     def health(self) -> bytes:
         with self._lock:
@@ -160,7 +206,7 @@ class Handler(BaseHTTPRequestHandler):
         surface = type(self).surface
         if surface is not None:
             return surface.html
-        return WEB.read_bytes()
+        return compose_page()
 
     def _health_bytes(self) -> bytes:
         surface = type(self).surface
@@ -192,21 +238,35 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _stream(self, symbol: str, venue: str) -> None:
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("Connection", "keep-alive")
-        self.end_headers()
-        last = None
+        # HTTP/1.1 would otherwise keep the handler thread blocked in the next
+        # readline after the browser (or the tunnel) drops the stream.
+        self.close_connection = True
+        token = sse_open()
         try:
-            while True:
+            try:
+                self.connection.settimeout(5.0)
+                self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                self.connection.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            except OSError:
+                pass
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            last = None
+            last_ping = time.monotonic()
+            while sse_alive(token):
                 surface = type(self).surface
                 payload = surface.latest() if surface is not None else _read_json(self.data_dir / "live" / "latest.json", None)
                 stamp = None if payload is None else payload.get("ts")
                 if payload is not None and stamp != last:
                     column = ((payload.get("columns") or {}).get(symbol) or {}).get(venue)
                     if column is not None:
-                        message = json.dumps({"column": column, "health": payload.get("health")}, ensure_ascii=False)
+                        message = json.dumps(
+                            {"symbol": symbol, "venue": venue, "column": column, "health": payload.get("health")},
+                            ensure_ascii=False,
+                        )
                         self.wfile.write(f"event: column\ndata: {message}\n\n".encode("utf-8"))
                     liquidity = (((payload.get("liquidity") or {}).get("symbols") or {}).get(symbol) or {}).get(venue)
                     if liquidity is not None:
@@ -214,9 +274,19 @@ class Handler(BaseHTTPRequestHandler):
                         self.wfile.write(f"event: liquidity\ndata: {body}\n\n".encode("utf-8"))
                     self.wfile.flush()
                     last = stamp
+                elif time.monotonic() - last_ping >= 1.0:
+                    self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+                    last_ping = time.monotonic()
                 time_sleep()
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, TimeoutError, socket.timeout, OSError):
             return
+        finally:
+            sse_close(token)
+            try:
+                self.connection.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
 
 
 def time_sleep() -> None:
@@ -288,7 +358,7 @@ def _heatmap(data_dir: Path, query: dict) -> dict:
     if as_columns:
         return _load_window(data_dir, symbol, venue, minutes, step, include_prints=True)
     width = max(64, min(2400, int(_one(query, "width", "1200"))))
-    levels = max(16, min(512, int(_one(query, "levels", "40"))))
+    levels = max(16, min(MAX_LEVELS, int(_one(query, "levels", "40"))))
     key = (str(data_dir), symbol, venue, minutes, step, width, levels)
     hit = _cache_get(key)
     if hit is not None and time.monotonic() - hit["at"] < _FRESH_S:
@@ -310,6 +380,7 @@ def _heatmap(data_dir: Path, query: dict) -> dict:
         return compact
     finally:
         _HEAVY.release()
+        release_arrow()
 
 
 def _empty_compact(symbol: str, venue: str, step: str, minutes: int) -> dict:
@@ -325,6 +396,8 @@ def _empty_compact(symbol: str, venue: str, step: str, minutes: int) -> dict:
         "bid": "",
         "ask": "",
         "mid": [],
+        "ohlc": [],
+        "max_usd": 0,
         "busy": True,
     }
 
@@ -366,8 +439,8 @@ def _levels(data_dir: Path, query: dict) -> dict:
 def _compact_heatmap(window: dict, width: int, max_levels: int = 40) -> dict:
     columns = window.get("columns") or []
     if not columns:
-        return {**{k: window.get(k) for k in ("symbol", "venue", "step", "minutes")}, "format": "compact-v1", "columns": 0, "prices": [], "times": [], "bid": "", "ask": "", "mid": []}
-    sampled = _downsample_columns(columns, width)
+        return {**{k: window.get(k) for k in ("symbol", "venue", "step", "minutes")}, "format": "compact-v1", "columns": 0, "prices": [], "times": [], "bid": "", "ask": "", "mid": [], "ohlc": [], "max_usd": 0}
+    sampled = [_ensure_ohlc(col) for col in _downsample_columns(columns, width)]
     prices = sorted({row[0] for col in sampled if col.get("book_ok") for rows in (col.get("bids") or [], col.get("asks") or []) for row in rows})
     if len(prices) > max_levels:
         stride = (len(prices) + max_levels - 1) // max_levels
@@ -398,9 +471,57 @@ def _compact_heatmap(window: dict, width: int, max_levels: int = 40) -> dict:
         "prices": prices,
         "mid": [col.get("mid") for col in sampled],
         "book_ok": [bool(col.get("book_ok")) for col in sampled],
+        "ohlc": [col.get("ohlc") for col in sampled],
+        "max_usd": max_usd,
         "bid": base64.b64encode(bytes(bid)).decode("ascii"),
         "ask": base64.b64encode(bytes(ask)).decode("ascii"),
     }
+
+
+def compose_page() -> bytes:
+    """Inline the chart model so `/` stays one buffer and needs no second request.
+
+    A public bind requires the bearer token on every route. A separate script
+    URL would 401. The bytes are built once, when the surface starts.
+    """
+    html = WEB.read_text(encoding="utf-8")
+    script = MODEL.read_text(encoding="utf-8")
+    slot = "/*__CHART_MODEL__*/"
+    if slot not in html:
+        raise RuntimeError("index.html is missing the chart model slot")
+    return html.replace(slot, script, 1).encode("utf-8")
+
+
+def _ohlc_from(cols: list[dict]) -> list[float] | None:
+    opens: list[float] = []
+    highs: list[float] = []
+    lows: list[float] = []
+    closes: list[float] = []
+    for col in cols:
+        ohlc = col.get("ohlc")
+        if isinstance(ohlc, (list, tuple)) and len(ohlc) == 4:
+            opens.append(float(ohlc[0]))
+            highs.append(float(ohlc[1]))
+            lows.append(float(ohlc[2]))
+            closes.append(float(ohlc[3]))
+        elif col.get("mid"):
+            mid = float(col["mid"])
+            opens.append(mid)
+            highs.append(mid)
+            lows.append(mid)
+            closes.append(mid)
+    if not closes:
+        return None
+    return [opens[0], max(highs), min(lows), closes[-1]]
+
+
+def _ensure_ohlc(col: dict) -> dict:
+    if col.get("ohlc"):
+        return col
+    ohlc = _ohlc_from([col])
+    if ohlc is None:
+        return col
+    return {**col, "ohlc": ohlc}
 
 
 def _downsample_columns(columns: list[dict], width: int) -> list[dict]:
@@ -432,7 +553,8 @@ def _merge_compact_bin(cols: list[dict]) -> dict:
     return {
         **honest[-1],
         "book_ok": True,
-        "mid": sum(mids) / len(mids) if mids else honest[-1].get("mid"),
+        "mid": mids[-1] if mids else honest[-1].get("mid"),
+        "ohlc": _ohlc_from(honest),
         "bids": [[price, 0.0, usd] for price, usd in bids.items()],
         "asks": [[price, 0.0, usd] for price, usd in asks.items()],
     }
@@ -517,9 +639,71 @@ def _cache_get(key: tuple) -> dict | None:
 
 def _cache_put(key: tuple, compact: dict) -> None:
     with _CACHE_LOCK:
-        _CACHE[key] = {"at": time.monotonic(), "compact": compact}
-        while len(_CACHE) > _CACHE_MAX:
-            _CACHE.pop(next(iter(_CACHE)))
+        now = time.monotonic()
+        expired = [item for item, hit in _CACHE.items() if now - hit["at"] > MAX_CACHE_AGE_S]
+        for item in expired:
+            _CACHE.pop(item, None)
+        _CACHE[key] = {"at": now, "compact": compact}
+        symbol = key[1] if len(key) > 1 else None
+        same = [item for item in _CACHE if item[1] == symbol and item != key]
+        while len(same) + 1 > MAX_CACHE_PER_SYMBOL:
+            oldest = min(same, key=lambda item: _CACHE[item]["at"])
+            _CACHE.pop(oldest, None)
+            same.remove(oldest)
+        while len(_CACHE) > MAX_CACHE_ENTRIES:
+            victim = min((item for item in _CACHE if item != key), key=lambda item: _CACHE[item]["at"], default=None)
+            if victim is None:
+                break
+            _CACHE.pop(victim, None)
+
+
+def sse_count() -> int:
+    with _SSE_LOCK:
+        return len(_SSE)
+
+
+def sse_open() -> int:
+    """Register a stream. Past the cap, the oldest client is told to exit."""
+    global _SSE_SEQ
+    with _SSE_LOCK:
+        now = time.monotonic()
+        for token, started in list(_SSE.items()):
+            if now - started > MAX_SSE_AGE_S:
+                _SSE.pop(token, None)
+        while len(_SSE) >= MAX_SSE_CLIENTS:
+            oldest = min(_SSE, key=lambda token: _SSE[token])
+            _SSE.pop(oldest, None)
+        _SSE_SEQ += 1
+        _SSE[_SSE_SEQ] = now
+        return _SSE_SEQ
+
+
+def sse_alive(token: int) -> bool:
+    with _SSE_LOCK:
+        started = _SSE.get(token)
+        if started is None:
+            return False
+        if time.monotonic() - started > MAX_SSE_AGE_S:
+            _SSE.pop(token, None)
+            return False
+        return True
+
+
+def sse_close(token: int) -> None:
+    with _SSE_LOCK:
+        _SSE.pop(token, None)
+
+
+def trim_rss() -> None:
+    """Give freed heap and Arrow buffers back to the OS so RSS can plateau."""
+    gc.collect()
+    release_arrow()
+    try:
+        import ctypes
+
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        return
 
 
 def _liquidity(data_dir: Path, query: dict) -> dict:

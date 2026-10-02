@@ -5,6 +5,15 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from obheat.limits import (
+    MAX_COLUMNS,
+    MAX_LEVELS,
+    MAX_MINUTE_ROWS,
+    MAX_PRINTS,
+    MAX_SECOND_ROWS,
+    MAX_WINDOW_MINUTES,
+)
+
 
 def bin_columns(columns: list[dict], step_s: int) -> list[dict]:
     if step_s <= 1:
@@ -103,6 +112,7 @@ def column_from_second(row: dict) -> dict:
     ask_coin = list(row["ask_coin"] or [])
     bid_usd = list(row["bid_usd"] or [])
     ask_usd = list(row["ask_usd"] or [])
+    prices, bid_coin, ask_coin, bid_usd, ask_usd = _cap_levels(prices, bid_coin, ask_coin, bid_usd, ask_usd)
     bids = []
     asks = []
     for index, price in enumerate(prices):
@@ -137,34 +147,43 @@ def read_window(
     include_prints: bool = True,
 ) -> dict:
     step_s = {"1s": 1, "5s": 5, "15s": 15, "1m": 60, "5m": 300}[step]
-    if minutes < 1 or minutes > 4320:
+    if minutes < 1 or minutes > MAX_WINDOW_MINUTES:
         raise ValueError("minutes must be 1..4320")
-    if (minutes * 60) // step_s > 2000:
+    if (minutes * 60) // step_s > MAX_COLUMNS:
         raise ValueError("window is too wide; use a coarser step")
     end = datetime.now(timezone.utc)
     start = end - timedelta(minutes=minutes)
     # Long steps never materialise the raw second history. That scan is what
-    # pushed serve RSS past 6 GB. Minute sidecars (plus a three-minute tail)
-    # are the only rows a 1m/5m window is allowed to hold.
+    # pushed serve RSS past 6 GB. Minute sidecars (plus a short second tail)
+    # are the only rows a 1m/5m window is allowed to hold. A 15s chart over
+    # several hours does the same: at most MAX_SECOND_ROWS raw ladders per coin.
     if step_s >= 60:
-        minutes_rows = _read_rows(data_dir, symbol, venue, start, kinds=("minute",))
+        minutes_rows = _read_rows(data_dir, symbol, venue, start, kinds=("minute",), limit=MAX_MINUTE_ROWS)
         if minutes_rows and _covers(minutes_rows, start, step_s):
             tail_at = _as_datetime(minutes_rows[-1]["ts"]) + timedelta(seconds=60)
         else:
             tail_at = end - timedelta(seconds=180)
-        tail = _read_rows(data_dir, symbol, venue, tail_at, kinds=("second",)) if tail_at < end else []
+        tail = _read_rows(data_dir, symbol, venue, tail_at, kinds=("second",), limit=MAX_SECOND_ROWS) if tail_at < end else []
         seconds = list(minutes_rows) + tail
     else:
-        seconds = _read_rows(data_dir, symbol, venue, start, kinds=("second",))
+        second_span = min(minutes * 60, MAX_SECOND_ROWS)
+        second_start = end - timedelta(seconds=second_span)
+        tail = _read_rows(data_dir, symbol, venue, second_start, kinds=("second",), limit=MAX_SECOND_ROWS)
+        if minutes * 60 > MAX_SECOND_ROWS:
+            older = _read_rows(data_dir, symbol, venue, start, kinds=("minute",), limit=MAX_MINUTE_ROWS)
+            older = [row for row in older if _as_datetime(row["ts"]) < second_start]
+            seconds = older + tail
+        else:
+            seconds = tail
     prints: list[dict] = []
     if include_prints:
         # The liquidation model only looks at the recent edge, not the whole window.
         print_start = max(start, end - timedelta(seconds=900))
         if venue == "ALL":
-            prints = _read_rows(data_dir, symbol, None, print_start, kinds=("trade", "liquidation"), limit=5000)
+            prints = _read_rows(data_dir, symbol, None, print_start, kinds=("trade", "liquidation"), limit=MAX_PRINTS)
             prints = [row for row in prints if row.get("venue") != "ALL"]
         else:
-            prints = _read_rows(data_dir, symbol, venue, print_start, kinds=("trade", "liquidation"), limit=5000)
+            prints = _read_rows(data_dir, symbol, venue, print_start, kinds=("trade", "liquidation"), limit=MAX_PRINTS)
     by_ts: dict[int, dict] = {}
     for row in seconds:
         column = column_from_second(row)
@@ -200,6 +219,8 @@ def read_window(
         column[key].append(item)
     ordered = [by_ts[key] for key in sorted(by_ts)]
     columns = bin_columns(ordered, step_s)
+    if len(columns) > MAX_COLUMNS:
+        columns = columns[-MAX_COLUMNS:]
     return {
         "symbol": symbol,
         "venue": venue,
@@ -210,14 +231,14 @@ def read_window(
 
 
 def read_points(data_dir: Path, symbol: str, venue: str, minutes: int, kind: str) -> list[dict]:
-    if minutes < 1 or minutes > 4320:
+    if minutes < 1 or minutes > MAX_WINDOW_MINUTES:
         raise ValueError("minutes must be 1..4320")
     start = datetime.now(timezone.utc) - timedelta(minutes=minutes)
     if venue == "ALL":
-        rows = _read_rows(data_dir, symbol, None, start, kinds=(kind,), limit=5000)
+        rows = _read_rows(data_dir, symbol, None, start, kinds=(kind,), limit=MAX_PRINTS)
         rows = [row for row in rows if row.get("venue") != "ALL"]
     else:
-        rows = _read_rows(data_dir, symbol, venue, start, kinds=(kind,), limit=5000)
+        rows = _read_rows(data_dir, symbol, venue, start, kinds=(kind,), limit=MAX_PRINTS)
     points = []
     for row in rows:
         ts = row["ts"]
@@ -234,7 +255,7 @@ def read_points(data_dir: Path, symbol: str, venue: str, minutes: int, kind: str
             }
         )
     points.sort(key=lambda item: item["ts"])
-    return points[-5000:]
+    return points[-MAX_PRINTS:]
 
 
 def _read_rows(
@@ -277,10 +298,11 @@ def _read_rows(
     order = "ORDER BY ts DESC" if limit else "ORDER BY ts"
     limit_sql = f"LIMIT {int(limit)}" if limit else ""
     con = duckdb.connect()
+    frame = None
     try:
         # Spill instead of growing the process. The failed deploy crossed 6 GB
         # because several of these scans were materialised at once.
-        con.execute("SET memory_limit='512MB'")
+        con.execute("SET memory_limit='256MB'")
         con.execute("SET threads=1")
         con.execute("SET preserve_insertion_order=false")
         frame = con.execute(
@@ -301,7 +323,9 @@ def _read_rows(
         ).to_arrow_table()
         rows = frame.to_pylist()
     finally:
+        del frame
         con.close()
+        release_arrow()
     if limit:
         rows.reverse()
     return rows
@@ -331,10 +355,14 @@ def backfill_one(data_dir: Path) -> bool:
         return False
     target = path.with_name(f"{path.name[:-8]}-minute.parquet")
     rows = _minute_rows_from_hour(path)
-    from obheat.store import _write
+    try:
+        from obheat.store import _write
 
-    _write(target, rows)
-    return True
+        _write(target, rows)
+        return True
+    finally:
+        del rows
+        release_arrow()
 
 
 def _next_hour_without_minutes(data_dir: Path):
@@ -379,12 +407,45 @@ def backfill_minutes(data_dir: Path) -> int:
     return written
 
 
+def release_arrow() -> None:
+    """Return unused Arrow buffers. The pool otherwise keeps the high-water RSS."""
+    try:
+        import pyarrow as pa
+
+        pa.default_memory_pool().release_unused()
+    except Exception:
+        return
+
+
+def _cap_levels(
+    prices: list,
+    bid_coin: list,
+    ask_coin: list,
+    bid_usd: list,
+    ask_usd: list,
+) -> tuple[list, list, list, list, list]:
+    if len(prices) <= MAX_LEVELS:
+        return prices, bid_coin, ask_coin, bid_usd, ask_usd
+    stride = (len(prices) + MAX_LEVELS - 1) // MAX_LEVELS
+    index = range(0, len(prices), stride)
+
+    def take(values: list) -> list:
+        return [values[i] if i < len(values) else 0 for i in index]
+
+    return take(prices), take(bid_coin), take(ask_coin), take(bid_usd), take(ask_usd)
+
+
 def _minute_rows_from_hour(path: Path) -> list[dict]:
     import pyarrow.parquet as pq
 
-    table = pq.read_table(path)
+    table = pq.read_table(path, use_threads=False)
+    try:
+        materialized = table.to_pylist()
+    finally:
+        del table
+        release_arrow()
     grouped: dict[datetime, list[dict]] = {}
-    for row in table.to_pylist():
+    for row in materialized:
         if row.get("row_kind") != "second":
             continue
         ts = _as_datetime(row["ts"])
