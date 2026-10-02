@@ -32,6 +32,7 @@ const requiredFiles = [
   "postgres-runtime-domain-ownership-v1.test.ts",
   "postgres-live-capital-envelope-v2.test.ts",
   "postgres-ordinary-paper-order-domain.test.ts",
+  "postgres-account-executor-lease-v1.test.ts",
 ];
 const report = JSON.parse(readFileSync(process.argv[2], "utf8"));
 for (const file of requiredFiles) {
