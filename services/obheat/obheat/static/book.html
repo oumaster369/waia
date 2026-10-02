@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>OB-HEATMAP</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #07090d;
+    --panel: #0e131b;
+    --line: #1c2633;
+    --ink: #e7eef8;
+    --muted: #93a0b4;
+    --faint: #6d7c90;
+    --bid: #37d67a;
+    --ask: #c084fc;
+    --last: #f5d90a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 14px/1.35 ui-sans-serif, system-ui, sans-serif; }
+  button { font: inherit; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 6px; height: 32px; padding: 0 10px; cursor: pointer; }
+  button.on { background: #172033; border-color: #2a3a52; }
+  button:hover { background: #121a27; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  h1 { font-size: 15px; letter-spacing: 0.08em; margin: 0 8px 0 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .live { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-weight: 650; }
+  .dot { width: 9px; height: 9px; border-radius: 99px; background: #f59e0b; }
+  .live.ok .dot { background: #22c55e; }
+  .live.bad .dot { background: #ef4444; }
+  .health { padding: 6px 12px 8px; color: var(--muted); font-size: 13px; min-height: 2.4em; }
+  main { display: grid; grid-template-columns: 1fr 280px; min-height: 0; height: calc(100% - 118px); }
+  #stage { position: relative; min-width: 0; min-height: 420px; }
+  canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+  #tip { position: absolute; pointer-events: none; display: none; background: #101820ee; border: 1px solid #31445f; border-radius: 8px; padding: 8px 10px; font: 13px/1.35 ui-monospace, monospace; }
+  aside { border-left: 1px solid var(--line); padding: 12px 14px; overflow: auto; background: #0b0f15; }
+  aside h2 { font-size: 13px; margin: 12px 0 6px; }
+  aside h2:first-child { margin-top: 0; }
+  .wall, .liq { display: flex; justify-content: space-between; gap: 8px; font: 13px/1.45 ui-monospace, monospace; padding: 2px 0; }
+  .bidc { color: var(--bid); }
+  .askc { color: var(--ask); }
+  .note { color: var(--faint); font-size: 12px; margin-top: 10px; }
+  footer { padding: 6px 12px 10px; color: var(--faint); font-size: 12px; border-top: 1px solid var(--line); }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; height: auto; }
+    aside { border-left: 0; border-top: 1px solid var(--line); }
+    #stage { height: 68vh; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>OB-HEATMAP</h1>
+  <div class="row" id="symbols"></div>
+  <div class="row" id="windows"></div>
+  <div class="live bad" id="live"><span class="dot"></span><span id="liveLabel">соединение</span></div>
+</header>
+<div class="row" id="venues" style="padding: 8px 12px 0"></div>
+<div class="health" id="health">Загрузка стакана…</div>
+<main>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="tip"></div>
+  </div>
+  <aside>
+    <h2>Крупнейшие стены</h2>
+    <div id="walls"></div>
+    <h2>Ликвидации, модель</h2>
+    <div id="liqs"></div>
+    <p class="note">Оценка, не биржевой факт. Реальные принты рисуются фиолетовыми ромбами, когда приходят сделки. Цвет — логарифм долларовой ликвидности.</p>
+  </aside>
+</main>
+<footer id="foot">Московское время (UTC+3). Серый столбец — нет честной книги. Estimated liquidation levels — модель.</footer>
+<script>
+const VENUES = [
+  ["binance_perp","Binance perp"],["bybit_perp","Bybit perp"],["okx_perp","OKX perp"],
+  ["htx_perp","HTX"],["bitget_perp","Bitget"],["gate_perp","Gate"],
+  ["binance_spot","Binance spot"],["coinbase_spot","Coinbase"],["okx_spot","OKX spot"],["bybit_spot","Bybit spot"]
+];
+const WINDOWS = [["1m","1m"],["4h","4h"],["12h","12h"],["24h","24h"],["3d","3d"]];
+const SYMBOLS = ["BTC","ETH"];
+let symbol = "BTC";
+let windowId = "4h";
+let enabled = new Set(VENUES.map(v => v[0]));
+let view = null;
+let levels = null;
+let hover = null;
+let es = null;
+let delay = 1000;
+let lastMsg = 0;
+let pollTimer = 0;
+
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d", { alpha: false });
+const tip = document.getElementById("tip");
+
+function b64ToF32(b64) {
+  if (!b64) return new Float32Array();
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Float32Array(bytes.buffer);
+}
+function fmtPx(p) {
+  if (!p) return "—";
+  const d = p >= 1000 ? 1 : p >= 1 ? 2 : 4;
+  return p.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+function fmtUsd(n) {
+  const a = Math.abs(n);
+  if (a >= 1e9) return (n/1e9).toFixed(2) + "B";
+  if (a >= 1e6) return (n/1e6).toFixed(2) + "M";
+  if (a >= 1e3) return (n/1e3).toFixed(1) + "K";
+  return n.toFixed(0);
+}
+function msk(sec) {
+  return new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", hour: "2-digit", minute: "2-digit" }).format(sec * 1000);
+}
+function niceStep(raw) {
+  if (!(raw > 0)) return 1;
+  const exp = Math.floor(Math.log10(raw));
+  const base = 10 ** exp;
+  for (const m of [1, 2, 5, 10]) if (m * base >= raw * 0.99) return m * base;
+  return 10 * base;
+}
+function setLive(mode, text) {
+  const el = document.getElementById("live");
+  el.className = "live " + (mode === "live" ? "ok" : "bad");
+  document.getElementById("liveLabel").textContent = text;
+}
+
+function chip(parent, label, on, click) {
+  const b = document.createElement("button");
+  b.textContent = label;
+  b.className = on ? "on" : "";
+  b.onclick = click;
+  parent.appendChild(b);
+  return b;
+}
+function renderToggles() {
+  const s = document.getElementById("symbols");
+  const w = document.getElementById("windows");
+  const v = document.getElementById("venues");
+  s.replaceChildren(); w.replaceChildren(); v.replaceChildren();
+  for (const name of SYMBOLS) chip(s, name, name === symbol, () => { symbol = name; restart(); });
+  for (const [id, label] of WINDOWS) chip(w, label, id === windowId, () => { windowId = id; reload(); });
+  chip(v, "Все", enabled.size === VENUES.length, () => { enabled = new Set(VENUES.map(x => x[0])); renderToggles(); reload(); });
+  for (const [id, label] of VENUES) {
+    chip(v, label, enabled.has(id), () => {
+      if (enabled.has(id)) enabled.delete(id); else enabled.add(id);
+      if (enabled.size === 0) enabled.add(id);
+      renderToggles(); reload();
+    });
+  }
+}
+function venueQuery() {
+  if (enabled.size === VENUES.length) return "all";
+  return [...enabled].join(",");
+}
+
+async function reload() {
+  const v = venueQuery();
+  const q = `symbol=${symbol}&window=${windowId}&venues=${encodeURIComponent(v)}`;
+  const [heatRes, lvlRes] = await Promise.all([
+    fetch("/heatmap?" + q, { cache: "no-store" }),
+    fetch("/levels?symbol=" + symbol + "&venues=" + encodeURIComponent(v), { cache: "no-store" })
+  ]);
+  const heat = await heatRes.json();
+  levels = await lvlRes.json();
+  applyHeat(heat);
+  paintSide();
+  draw();
+}
+function applyHeat(heat) {
+  if (!heat || heat.empty) {
+    view = { empty: true, health: heat && heat.health || "", ok: heat && heat.ok };
+    document.getElementById("health").textContent = view.health || "Нет книги";
+    return;
+  }
+  const cols = heat.t.length;
+  const bins = heat.bins;
+  view = {
+    empty: false,
+    p0: heat.p0, dp: heat.dp, bins, cols, dt: heat.dt || 1,
+    bid: b64ToF32(heat.bid_b64),
+    ask: b64ToF32(heat.ask_b64),
+    t: heat.t.slice(),
+    lastPath: (heat.last_path || []).slice(),
+    last: heat.last, bb: heat.best_bid, ba: heat.best_ask,
+    health: heat.health, ok: heat.ok
+  };
+  document.getElementById("health").textContent = heat.health || "";
+}
+function mapColumn(msg, key) {
+  const src = b64ToF32(msg[key]);
+  const dst = new Float32Array(view.bins);
+  const src0 = Math.round(msg.p0 / msg.dp);
+  const dst0 = Math.round(view.p0 / view.dp);
+  let inside = 0;
+  for (let i = 0; i < msg.bins; i++) {
+    const j = src0 + i - dst0;
+    if (j >= 0 && j < view.bins) { dst[j] = src[i]; if (src[i] > 0) inside++; }
+  }
+  return { dst, inside };
+}
+function writeCol(col, bid, ask, t, last) {
+  const bins = view.bins;
+  view.bid.set(bid, col * bins);
+  view.ask.set(ask, col * bins);
+  view.t[col] = t;
+  view.lastPath[col] = last;
+}
+function appendColumn(msg) {
+  if (!view || view.empty || venueQuery() !== "all") return;
+  if (Math.abs(msg.dp - view.dp) > 1e-6) { reload(); return; }
+  const bid = mapColumn(msg, "bid_b64");
+  const ask = mapColumn(msg, "ask_b64");
+  if (bid.inside === 0 && ask.inside === 0) { reload(); return; }
+  const bucket = Math.max(1, view.dt | 0);
+  const slot = Math.floor(msg.t / bucket);
+  const prevT = view.t[view.cols - 1] || 0;
+  const prev = Math.floor(prevT / bucket);
+  if (view.cols > 0 && slot === prev) {
+    writeCol(view.cols - 1, bid.dst, ask.dst, msg.t, msg.last);
+  } else if (slot > prev && view.cols > 0) {
+    const bins = view.bins;
+    view.bid.copyWithin(0, bins);
+    view.ask.copyWithin(0, bins);
+    view.t.copyWithin(0, 1);
+    view.lastPath.copyWithin(0, 1);
+    writeCol(view.cols - 1, bid.dst, ask.dst, msg.t, msg.last);
+  }
+  if (msg.last) view.last = msg.last;
+  if (msg.best_bid) view.bb = msg.best_bid;
+  if (msg.best_ask) view.ba = msg.best_ask;
+  draw();
+}
+
+function yOf(price, plot) {
+  const hi = view.p0 + view.bins * view.dp;
+  const lo = view.p0;
+  return plot.y + (hi - price) / (hi - lo) * plot.h;
+}
+function priceOf(y, plot) {
+  const hi = view.p0 + view.bins * view.dp;
+  const lo = view.p0;
+  return hi - (y - plot.y) / plot.h * (hi - lo);
+}
+function layout() {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const rect = cv.parentElement.getBoundingClientRect();
+  cv.width = Math.max(10, Math.floor(rect.width * dpr));
+  cv.height = Math.max(10, Math.floor(rect.height * dpr));
+  const axis = 86 * dpr;
+  const hist = 72 * dpr;
+  const padT = 12 * dpr;
+  const padB = 28 * dpr;
+  return {
+    dpr,
+    plot: { x: 8 * dpr, y: padT, w: cv.width - axis - hist - 16 * dpr, h: cv.height - padT - padB },
+    axisX: cv.width - axis - hist,
+    histX: cv.width - hist,
+    histW: hist - 8 * dpr
+  };
+}
+function draw() {
+  const L = layout();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = "#07090d";
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  if (!view || view.empty) {
+    ctx.fillStyle = "#93a0b4";
+    ctx.font = `${14 * L.dpr}px sans-serif`;
+    ctx.fillText("Нет данных по выбранным площадкам", 24, 40);
+    return;
+  }
+  const { plot } = L;
+  const cols = view.cols;
+  const bins = view.bins;
+  let p99 = 1;
+  const sample = Math.min(view.bid.length, 8000);
+  for (let i = 0; i < sample; i += 7) p99 = Math.max(p99, view.bid[i], view.ask[i]);
+  p99 = Math.max(p99, 1);
+  const img = ctx.createImageData(cols, bins);
+  const data = img.data;
+  const logMax = Math.log1p(p99);
+  for (let c = 0; c < cols; c++) {
+    for (let b = 0; b < bins; b++) {
+      const bid = view.bid[c * bins + b];
+      const ask = view.ask[c * bins + b];
+      const pix = ((bins - 1 - b) * cols + c) * 4;
+      let r = 8, g = 10, bl = 16;
+      if (bid > ask && bid > 0) {
+        const t = Math.log1p(bid) / logMax;
+        r = 16 + 220 * t; g = 70 + 170 * t; bl = 24 * (1 - t);
+      } else if (ask > 0) {
+        const t = Math.log1p(ask) / logMax;
+        r = 70 + 160 * t; g = 24 + 30 * t; bl = 120 + 100 * t;
+      }
+      data[pix] = r; data[pix+1] = g; data[pix+2] = bl; data[pix+3] = 255;
+    }
+  }
+  const off = document.createElement("canvas");
+  off.width = cols; off.height = bins;
+  off.getContext("2d").putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(off, plot.x, plot.y, plot.w, plot.h);
+
+  function hline(price, color) {
+    if (!price) return;
+    const y = yOf(price, plot);
+    if (y < plot.y || y > plot.y + plot.h) return y;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(1, L.dpr);
+    ctx.beginPath();
+    ctx.moveTo(plot.x, y);
+    ctx.lineTo(plot.x + plot.w, y);
+    ctx.stroke();
+    return y;
+  }
+  if (view.lastPath && view.lastPath.some(v => v > 0)) {
+    ctx.strokeStyle = "#f5d90a";
+    ctx.lineWidth = Math.max(1.5, 1.4 * L.dpr);
+    ctx.beginPath();
+    let started = false;
+    for (let c = 0; c < cols; c++) {
+      const price = view.lastPath[c];
+      if (!price) continue;
+      const x = plot.x + (c + 0.5) / cols * plot.w;
+      const y = yOf(price, plot);
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  hline(view.bb, "#1f8f4e");
+  hline(view.ba, "#a855f7");
+  const yLast = hline(view.last, "#f5d90a");
+
+  const hi = view.p0 + bins * view.dp;
+  const lo = view.p0;
+  const step = niceStep((hi - lo) / 14);
+  ctx.font = `${12 * L.dpr}px ui-monospace, monospace`;
+  ctx.fillStyle = "#c5d0e0";
+  ctx.textBaseline = "middle";
+  for (let p = Math.ceil(lo / step) * step; p <= hi; p += step) {
+    const y = yOf(p, plot);
+    ctx.strokeStyle = "#243044";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(plot.x, y);
+    ctx.lineTo(plot.x + plot.w, y);
+    ctx.stroke();
+    ctx.fillStyle = "#d5deea";
+    ctx.fillText(fmtPx(p), L.axisX + 6 * L.dpr, y);
+  }
+  if (yLast != null && view.last) {
+    const label = fmtPx(view.last);
+    ctx.font = `700 ${13 * L.dpr}px ui-monospace, monospace`;
+    const w = ctx.measureText(label).width + 12 * L.dpr;
+    const h = 20 * L.dpr;
+    const x = plot.x + plot.w - w - 4 * L.dpr;
+    const y = Math.min(plot.y + plot.h - h, Math.max(plot.y, yLast - h / 2));
+    ctx.fillStyle = "#f5d90a";
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = "#1a1400";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x + 6 * L.dpr, y + h / 2);
+  }
+  ctx.font = `${11 * L.dpr}px ui-monospace, monospace`;
+  ctx.fillStyle = "#9fb0c6";
+  ctx.textBaseline = "alphabetic";
+  if (view.bb) ctx.fillText("bid " + fmtPx(view.bb), plot.x + 6 * L.dpr, yOf(view.bb, plot) - 3 * L.dpr);
+  if (view.ba) ctx.fillText("ask " + fmtPx(view.ba), plot.x + 6 * L.dpr, yOf(view.ba, plot) - 3 * L.dpr);
+
+  const marks = [];
+  if (levels && levels.walls) {
+    for (const w of (levels.walls.bid || []).concat(levels.walls.ask || []).slice(0, 6)) {
+      marks.push({ price: w.price, text: fmtUsd(w.size_usd), color: w.side === "bid" ? "#b6f5cf" : "#f3d2ff" });
+    }
+  }
+  if (levels && levels.liquidations) {
+    for (const c of (levels.liquidations.longs || [])) {
+      if (c.leverage === 25 || c.leverage === 50) marks.push({ price: c.price, text: "L" + c.leverage + " " + fmtUsd(c.size_usd), color: "#fda4af" });
+    }
+    for (const c of (levels.liquidations.shorts || [])) {
+      if (c.leverage === 25 || c.leverage === 50) marks.push({ price: c.price, text: "S" + c.leverage + " " + fmtUsd(c.size_usd), color: "#fdba74" });
+    }
+  }
+  marks.sort((a, b) => b.price - a.price);
+  let lastY = -1e9;
+  ctx.font = `${11 * L.dpr}px ui-monospace, monospace`;
+  ctx.textBaseline = "middle";
+  for (const m of marks) {
+    const y = yOf(m.price, plot);
+    if (y < plot.y || y > plot.y + plot.h) continue;
+    if (Math.abs(y - lastY) < 14 * L.dpr) continue;
+    lastY = y;
+    ctx.fillStyle = m.color;
+    ctx.fillText(m.text, plot.x + 8 * L.dpr, y);
+  }
+
+  if (levels && levels.bid) {
+    let maxV = 1;
+    for (const r of levels.bid) maxV = Math.max(maxV, r.size_usd);
+    for (const r of levels.ask || []) maxV = Math.max(maxV, r.size_usd);
+    function bar(rows, color) {
+      ctx.fillStyle = color;
+      for (const r of rows) {
+        const y = yOf(r.price, plot);
+        const h = Math.max(1, plot.h / bins);
+        const w = (r.size_usd / maxV) * L.histW;
+        ctx.fillRect(L.histX, y, w, h);
+      }
+    }
+    bar(levels.bid, "#16a34a");
+    bar(levels.ask || [], "#7e22ce");
+  }
+
+  if (view.t.length > 1) {
+    ctx.fillStyle = "#9fb0c6";
+    ctx.font = `${12 * L.dpr}px ui-monospace, monospace`;
+    ctx.textBaseline = "top";
+    const first = view.t.find(t => t > 0) || view.t[0];
+    const lastT = view.t[view.t.length - 1];
+    const yLabel = plot.y + plot.h + 6 * L.dpr;
+    for (let i = 0; i <= 5; i++) {
+      const target = first + (lastT - first) * (i / 5);
+      const label = msk(target);
+      const tw = ctx.measureText(label).width;
+      let x = plot.x + (i / 5) * plot.w - tw / 2;
+      x = Math.max(plot.x, Math.min(plot.x + plot.w - tw, x));
+      ctx.fillText(label, x, yLabel);
+    }
+  }
+  if (hover && hover.inside) {
+    ctx.strokeStyle = "#e7eef888";
+    ctx.setLineDash([4 * L.dpr, 4 * L.dpr]);
+    ctx.beginPath();
+    ctx.moveTo(hover.x, plot.y); ctx.lineTo(hover.x, plot.y + plot.h);
+    ctx.moveTo(plot.x, hover.y); ctx.lineTo(plot.x + plot.w, hover.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function paintSide() {
+  const w = document.getElementById("walls");
+  const l = document.getElementById("liqs");
+  w.replaceChildren(); l.replaceChildren();
+  const walls = levels && levels.walls || { bid: [], ask: [] };
+  for (const row of (walls.bid || []).concat(walls.ask || [])) {
+    const div = document.createElement("div");
+    div.className = "wall";
+    const trend = row.trend === "growing" ? "растёт" : row.trend === "pulled" ? "снимают" : row.trend === "new" ? "новая" : "стоит";
+    div.innerHTML = `<span class="${row.side === "bid" ? "bidc" : "askc"}">${row.side === "bid" ? "bid" : "ask"} ${fmtPx(row.price)}</span><span>${fmtUsd(row.size_usd)} · ${Math.round(row.persistence_s)}s · ${trend}</span>`;
+    w.appendChild(div);
+  }
+  const liq = levels && levels.liquidations || { longs: [], shorts: [] };
+  for (const row of (liq.longs || []).concat(liq.shorts || [])) {
+    const div = document.createElement("div");
+    div.className = "liq";
+    const name = row.side === "long" ? "longs" : "shorts";
+    div.innerHTML = `<span>${name} ${row.leverage}x</span><span>${fmtPx(row.price)} · ${fmtUsd(row.size_usd)} · ${row.distance_pct.toFixed(2)}%</span>`;
+    l.appendChild(div);
+  }
+}
+
+cv.addEventListener("mousemove", (ev) => {
+  if (!view || view.empty) return;
+  const rect = cv.getBoundingClientRect();
+  const L = layout();
+  const x = (ev.clientX - rect.left) * (cv.width / rect.width);
+  const y = (ev.clientY - rect.top) * (cv.height / rect.height);
+  const plot = L.plot;
+  const inside = x >= plot.x && x <= plot.x + plot.w && y >= plot.y && y <= plot.y + plot.h;
+  hover = { x, y, inside };
+  if (!inside) { tip.style.display = "none"; draw(); return; }
+  const price = priceOf(y, plot);
+  const col = Math.min(view.cols - 1, Math.max(0, Math.floor((x - plot.x) / plot.w * view.cols)));
+  const bin = Math.min(view.bins - 1, Math.max(0, Math.floor((price - view.p0) / view.dp)));
+  const bid = view.bid[col * view.bins + bin] || 0;
+  const ask = view.ask[col * view.bins + bin] || 0;
+  tip.style.display = "block";
+  tip.style.left = (ev.clientX - rect.left + 14) + "px";
+  tip.style.top = (ev.clientY - rect.top + 14) + "px";
+  tip.innerHTML = `цена ${fmtPx(price)}<br>bid ${fmtUsd(bid)}<br>ask ${fmtUsd(ask)}`;
+  draw();
+});
+cv.addEventListener("mouseleave", () => { hover = null; tip.style.display = "none"; draw(); });
+
+function connect() {
+  if (es) es.close();
+  es = new EventSource(`/stream?symbol=${symbol}`);
+  const note = () => { lastMsg = Date.now(); };
+  es.addEventListener("hello", () => { note(); setLive("live", "live"); });
+  es.addEventListener("column", (e) => {
+    note();
+    try { appendColumn(JSON.parse(e.data)); } catch (err) {}
+  });
+  es.addEventListener("levels", (e) => {
+    note();
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.symbol && msg.symbol !== symbol) return;
+      if (msg.ok === false) setLive("bad", "stale");
+      else setLive("live", "live");
+      if (venueQuery() === "all") {
+        levels = Object.assign({}, levels || {}, msg);
+        if (msg.health) document.getElementById("health").textContent = msg.health;
+        paintSide();
+        draw();
+      }
+    } catch (err) {}
+  });
+  es.addEventListener("liquidity", () => { note(); });
+  es.onerror = () => {
+    es.close();
+    setLive("bad", "переподключение");
+    setTimeout(connect, delay);
+    delay = Math.min(delay * 2, 15000);
+  };
+}
+function restart() {
+  delay = 1000;
+  renderToggles();
+  reload().then(connect);
+}
+setInterval(() => {
+  if (!lastMsg) return;
+  const age = Date.now() - lastMsg;
+  if (age > 4000) setLive("bad", "stale");
+}, 1000);
+setInterval(() => {
+  if (venueQuery() === "all") return;
+  reload();
+}, 2000);
+window.addEventListener("resize", draw);
+renderToggles();
+reload().then(connect);
+</script>
+</body>
+</html>
