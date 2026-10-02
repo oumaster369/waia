@@ -77,3 +77,12 @@ scripts/github/fixtures/single-trunk-cutover/cloudflare-preflight.json
 
 # Wrangler typegen output (large; run `pnpm cf-typegen`)
 cloudflare-env.d.ts
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Forecast journal: local market cache and append-only journals (reports are tracked)
+research/forecast_journal/data_cache/
+research/forecast_journal/journals/
