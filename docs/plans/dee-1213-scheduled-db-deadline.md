@@ -104,8 +104,12 @@ Explicit disable (or existing omitted local SSL mode) is confined to literal
 loopback synthetic fixtures, never a remote fallback. Do not copy production
 secrets into tests or rewrite production configuration. A deployment must check
 its actual DSN profile separately; this document does not assert it matches.
-The Node driver retains its certificate verification and authentication. The
-Worker adapter retains verified native TLS, hostname binding and the normal
+Application review narrowed Node support to the existing cleartext loopback
+synthetic fixture only: a Node TLS request refuses before dialing because the
+driver replaces socket listeners during TLS upgrade, defeating explicit lifetime
+ownership. The scheduled production caller is a Worker; other Node CLI owners
+are unchanged. This is an explicit unsupported profile, never a TLS downgrade.
+The Worker adapter retains verified native TLS, hostname binding and the normal
 postgres authentication/protocol. No ssl:false shortcut for remote connections.
 
 The private pool seals before cancellation/teardown, caps actual physical opens
@@ -114,6 +118,9 @@ and cancels/aborts owned streams before closing. A detached old socket's close
 failure must never skip the upgraded socket. Synchronous startTls failure must
 close the owned native transport and converge through bounded pool termination.
 A late opened resolution after abort must never hand a usable socket to postgres.
+Initial-open cancellation must independently reject even when native opened
+remains pending: prove query, pool and transport settle before releasing a
+deterministically deferred opened promise, then reject any late handoff.
 A fulfilled transaction result is latched before cleanup and cannot be relabeled
 uncertain solely because cancellation occurs during cleanup.
 

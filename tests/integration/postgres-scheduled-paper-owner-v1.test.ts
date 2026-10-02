@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import net from "node:net";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -16,6 +17,7 @@ import {
 } from "@/lib/trader/paper/scheduled-noncapital-owner-postgres-v1";
 import { startCommitAckLossProxy } from "../helpers/postgres-commit-ack-loss-proxy";
 import { recordedPublicTransport } from "../helpers/recorded-paper-public-transport";
+import { withScheduledOwnedPostgresPoolV1 } from "@/lib/trader/paper/scheduled-owned-postgres-pool-v1";
 
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -463,6 +465,83 @@ describe.skipIf(!enabled || !url)("DEE-1205 closed scheduled noncapital owner on
       if (ownerOutcome) await ownerOutcome;
     }
   }, 70_000);
+
+  it.each(["clean EOF", "silent"] as const)("bounds initial %s startup without durable effects (DEE-1213)", async (mode) => {
+    installPublicPoll();
+    const sockets = new Set<net.Socket>();
+    let connections = 0;
+    const server = net.createServer((socket) => {
+      connections++; sockets.add(socket);
+      socket.on("error", () => socket.destroy());
+      socket.on("close", () => sockets.delete(socket));
+      let startup = Buffer.alloc(0);
+      socket.on("data", (chunk) => {
+        startup = Buffer.concat([startup, chunk]);
+        if (mode === "clean EOF" && startup.length >= 4 && startup.length >= startup.readInt32BE(0)) socket.end();
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("DEE1213_STARTUP_FIXTURE_ADDRESS");
+    const endpoint = new URL(url!); endpoint.hostname = "127.0.0.1"; endpoint.port = String(address.port);
+    endpoint.searchParams.set("sslmode", "disable");
+    const before = await counts();
+    try {
+      await expect(runScheduledNoncapitalPaperLoopFromEnv(envFor(currentOrg, endpoint.toString()))).rejects.toThrow();
+      expect(connections).toBeGreaterThan(0);
+      expect(connections).toBeLessThanOrEqual(3);
+      const attemptsAtReturn = connections;
+      await new Promise<void>((resolve) => setTimeout(resolve, 250));
+      expect(connections).toBe(attemptsAtReturn);
+      expect(sockets.size).toBe(0);
+      expect(await counts()).toEqual(before);
+      await expectNoExecutionEffects();
+    } finally {
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }, 40_000);
+
+  it("joins an aborted in-flight transaction and proves rollback (DEE-1213)", async () => {
+    const controller = new AbortController();
+    const id = randomUUID();
+    let pid = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await expect(withScheduledOwnedPostgresPoolV1(url!, controller.signal, async (client) => {
+        await client.begin(async (tx) => {
+          const rows = await tx`SELECT pg_backend_pid() AS pid`;
+          pid = Number(rows[0]!.pid);
+          await tx`INSERT INTO auth.users (id) VALUES (${id}::uuid)`;
+          timer = setTimeout(() => controller.abort(new Error("DEE1213_TEST_CANCEL")), 100);
+          await tx`SELECT pg_sleep(5)`;
+        });
+      })).rejects.toThrow();
+      expect(pid).toBeGreaterThan(0);
+      expect((await witnessSql`SELECT id FROM auth.users WHERE id=${id}::uuid`).length).toBe(0);
+      expect((await witnessSql`SELECT pid FROM pg_stat_activity WHERE pid=${pid}`).length).toBe(0);
+    } finally { if (timer) clearTimeout(timer); }
+  }, 15_000);
+
+  it("preserves an acknowledged native COMMIT when cancellation starts before pool cleanup (DEE-1213)", async () => {
+    const controller = new AbortController();
+    const id = randomUUID();
+    let pid = 0;
+    const result = await withScheduledOwnedPostgresPoolV1(url!, controller.signal, async (client) => {
+      const acknowledged = await client.begin(async (tx) => {
+        const rows = await tx`SELECT pg_backend_pid() AS pid`;
+        pid = Number(rows[0]!.pid);
+        await tx`INSERT INTO auth.users (id) VALUES (${id}::uuid)`;
+        return "ACKNOWLEDGED";
+      });
+      // begin() resolved only after the actual server COMMIT acknowledgement.
+      controller.abort(new Error("DEE1213_TEST_AFTER_ACK"));
+      return acknowledged;
+    });
+    expect(result).toBe("ACKNOWLEDGED");
+    expect((await witnessSql`SELECT id FROM auth.users WHERE id=${id}::uuid`).length).toBe(1);
+    expect((await witnessSql`SELECT pid FROM pg_stat_activity WHERE pid=${pid}`).length).toBe(0);
+  }, 15_000);
 
   it("preserves full historical rows, rejects half-tagged writes, and refuses ordinary paper orders", async () => {
     const historicalId = await insertOrder({ venue: "mock", executionMode: "mock", state: "ACCEPTED",

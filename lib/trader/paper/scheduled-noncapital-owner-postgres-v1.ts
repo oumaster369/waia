@@ -2,12 +2,11 @@ import { enforceServerOnly } from "@/lib/enforce-server-only";
 
 enforceServerOnly();
 
-import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
 
 import * as pgSchema from "@/db/schema.postgres";
-import { waiaPostgresJsDriverOptions, disposePostgresClientSafely } from "@/db/postgres-client";
+import { withScheduledOwnedPostgresPoolV1 } from "./scheduled-owned-postgres-pool-v1";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { emitTraderTelemetry, type WaiaTraderTelemetryPayload } from "@/lib/observability/waia-trader-telemetry";
 import { writeTraderAuditLogPostgres } from "@/lib/trader/audit/write";
@@ -47,6 +46,7 @@ const MAX_INPUT_BYTES = 512 * 1024;
 const MAX_REPORT_BYTES = 8 * 1024;
 // One technical budget for the entire public poll, including HTX retry delays.
 const PUBLIC_POLL_DEADLINE_MS = 45_000;
+const DATABASE_DEADLINE_MS = 60_000;
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const DIGEST = /^[0-9a-f]{64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -443,48 +443,51 @@ export async function runScheduledNoncapitalPaperLoopFromEnv(
     identity: capturedPoll.identity, accountKey: config.accountKey,
     configDigest, releaseSha: release, inputDigest: capturedPoll.inputDigest,
   });
-  const client = postgres(postgresUrl, waiaPostgresJsDriverOptions());
-  const db = drizzle(client, { schema: pgSchema });
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(
+    new ScheduledNoncapitalOwnerRefusedError("SCHEDULED_PAPER_DATABASE_DEADLINE"),
+  ), DATABASE_DEADLINE_MS);
   let awaitingCommit = false;
   const telemetryLines: string[] = [];
   try {
-    let outcome: Awaited<ReturnType<typeof db.transaction<
+    let outcome:
       | { status: "BUSY"; report: null }
       | { status: "REPLAYED"; report: PaperLoopCycleReport; receiptDigest: string }
-      | { status: "COMMITTED"; report: PaperLoopCycleReport; receiptDigest: string; completion: WaiaTraderTelemetryPayload }
-    >>>;
+      | { status: "COMMITTED"; report: PaperLoopCycleReport; receiptDigest: string; completion: WaiaTraderTelemetryPayload };
     try {
-      outcome = await db.transaction(async (tx) => {
-        await tx.execute(sql`SET LOCAL lock_timeout = '5s'`);
-        await tx.execute(sql`SET LOCAL statement_timeout = '30s'`);
-        const lock = await tx.execute<{ acquired: boolean }>(sql`
-          SELECT pg_try_advisory_xact_lock(${ADVISORY_CLASS}::integer,hashtext(${organizationId}::text)) AS acquired
-        `);
-        if (lock.length !== 1 || typeof lock[0]!.acquired !== "boolean") refuse("SCHEDULED_PAPER_LOCK_INVALID");
-        if (!lock[0]!.acquired) return { status: "BUSY" as const, report: null };
-        const existing = await readReceipt(tx, binding);
-        if (existing) return { status: "REPLAYED" as const, report: existing.report, receiptDigest: existing.digest };
-        const clock = await tx.execute<{ now_ms: string }>(sql`SELECT (extract(epoch from clock_timestamp())*1000)::bigint::text AS now_ms`);
-        if (clock.length !== 1) refuse("SCHEDULED_PAPER_DATABASE_CLOCK_INVALID");
-        assertCurrentInputAtDatabaseTime(capturedPoll.bundle, Number(clock[0]!.now_ms));
-        await refuseExistingOrdinaryOrders(tx, organizationId);
-        const completed = await runHeldNoTradeCycle({ tx, config, bundle: capturedPoll.bundle, telemetryLines });
-        const digest = await insertReceipt(tx, binding, completed.report);
-        awaitingCommit = true;
-        return { status: "COMMITTED" as const, report: completed.report, receiptDigest: digest, completion: completed.completion };
+      outcome = await withScheduledOwnedPostgresPoolV1(postgresUrl, controller.signal, async (client) => {
+        const db = drizzle(client, { schema: pgSchema });
+        return db.transaction(async (tx) => {
+          await tx.execute(sql`SET LOCAL lock_timeout = '5s'`);
+          await tx.execute(sql`SET LOCAL statement_timeout = '30s'`);
+          const lock = await tx.execute<{ acquired: boolean }>(sql`
+            SELECT pg_try_advisory_xact_lock(${ADVISORY_CLASS}::integer,hashtext(${organizationId}::text)) AS acquired
+          `);
+          if (lock.length !== 1 || typeof lock[0]!.acquired !== "boolean") refuse("SCHEDULED_PAPER_LOCK_INVALID");
+          if (!lock[0]!.acquired) return { status: "BUSY" as const, report: null };
+          const existing = await readReceipt(tx, binding);
+          if (existing) return { status: "REPLAYED" as const, report: existing.report, receiptDigest: existing.digest };
+          const clock = await tx.execute<{ now_ms: string }>(sql`SELECT (extract(epoch from clock_timestamp())*1000)::bigint::text AS now_ms`);
+          if (clock.length !== 1) refuse("SCHEDULED_PAPER_DATABASE_CLOCK_INVALID");
+          assertCurrentInputAtDatabaseTime(capturedPoll.bundle, Number(clock[0]!.now_ms));
+          await refuseExistingOrdinaryOrders(tx, organizationId);
+          const completed = await runHeldNoTradeCycle({ tx, config, bundle: capturedPoll.bundle, telemetryLines });
+          const digest = await insertReceipt(tx, binding, completed.report);
+          awaitingCommit = true;
+          return { status: "COMMITTED" as const, report: completed.report, receiptDigest: digest, completion: completed.completion };
+        });
       });
     } catch (error) {
       if (!awaitingCommit || error instanceof ScheduledNoncapitalOwnerRefusedError) throw error;
       // The callback returned, so an error may be a lost COMMIT acknowledgment.
       // Resolve using a genuinely new connection; absence remains uncertain.
-      const verifier = postgres(postgresUrl, waiaPostgresJsDriverOptions());
+      if (controller.signal.aborted) return { status: "COMMIT_UNCERTAIN", report: null };
       try {
-        const exact = await readReceipt(drizzle(verifier, { schema: pgSchema }), binding);
+        const exact = await withScheduledOwnedPostgresPoolV1(postgresUrl, controller.signal,
+          (verifier) => readReceipt(drizzle(verifier, { schema: pgSchema }), binding));
         if (exact) return { status: "CONFIRMED_AFTER_UNCERTAINTY", report: exact.report, receiptDigest: exact.digest };
       } catch (readError) {
         if (readError instanceof ScheduledNoncapitalOwnerRefusedError) throw readError;
-      } finally {
-        await disposePostgresClientSafely(verifier);
       }
       return { status: "COMMIT_UNCERTAIN", report: null };
     }
@@ -504,6 +507,6 @@ export async function runScheduledNoncapitalPaperLoopFromEnv(
     }
     return outcome;
   } finally {
-    await disposePostgresClientSafely(client);
+    clearTimeout(deadline);
   }
 }
