@@ -21,17 +21,10 @@ import {
 } from "@/lib/trader/portfolio";
 import { DEFAULT_PORTFOLIO_RUN_CONFIG } from "@/lib/trader/portfolio/portfolio-run-config.types";
 import type { AccountRiskState } from "@/lib/trader/risk/capital-limits.types";
+import { safeTraderTelemetryErrorClass } from "@/lib/observability/waia-trader-telemetry";
 import { DEFAULT_ORG_RISK_LIMITS } from "@/lib/trader/risk/limits/defaults";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
-
-const EMPTY_STATE: AccountRiskState = {
-  positions: [],
-  openOrderCount: 0,
-  dailyPnl: "0",
-  drawdown: "0",
-  quoteExposureByCurrency: {},
-};
 
 function buildPaperLoopPortfolioContext(
   config: PaperLoopWorkerConfig,
@@ -136,11 +129,35 @@ export async function runPaperLoopCycle(
     buildMarkPricesFromSnapshot(snapshot.bars),
   );
 
-  let accountState = EMPTY_STATE;
+  let accountState: AccountRiskState;
   try {
     accountState = await refreshPortfolioAccountState(context, input, portfolio);
-  } catch {
-    accountState = EMPTY_STATE;
+  } catch (error) {
+    const accountStateErrorClass = safeTraderTelemetryErrorClass(error);
+    deps.logger.log({
+      event: "waia_paper_loop",
+      phase: "account_state_unavailable",
+      reason: "account_state_unavailable",
+      organizationId: context.organizationId,
+      cycleId: snapshot.cycleId,
+      accountStateStatus: "unavailable",
+      ...(accountStateErrorClass ? { errorClass: accountStateErrorClass } : {}),
+      startupReconciledOrders: startup.reconciliation.outcomes.length,
+      durationMs: Date.now() - startMs,
+    });
+    return {
+      outcome: "blocked",
+      reason: "account_state_unavailable",
+      stateRefreshed: false,
+      accountStateStatus: "unavailable",
+      ...(accountStateErrorClass ? { accountStateErrorClass } : {}),
+      organizationId: context.organizationId,
+      cycleId: snapshot.cycleId,
+      strategySignalCount: 0,
+      strategySubmittedCount: 0,
+      startupReconciledOrders: startup.reconciliation.outcomes.length,
+      durationMs: Date.now() - startMs,
+    };
   }
 
   const result = await runPaperCycleOnce(deps.paperCycleDeps, {
@@ -160,10 +177,14 @@ export async function runPaperLoopCycle(
   });
 
   let accountStateAfterCycle = accountState;
+  let stateRefreshed = true;
+  let accountStateErrorClass: string | undefined;
   try {
     accountStateAfterCycle = await refreshPortfolioAccountState(context, input, portfolio);
-  } catch {
+  } catch (error) {
     accountStateAfterCycle = accountState;
+    stateRefreshed = false;
+    accountStateErrorClass = safeTraderTelemetryErrorClass(error);
   }
 
   const strategySubmittedCount = result.strategyExecutions.filter(
@@ -177,8 +198,11 @@ export async function runPaperLoopCycle(
       cyclesRun: 1,
       durationMs: Date.now() - startMs,
       result,
-      stateRefreshed: true,
+      stateRefreshed,
+      accountStateStatus: stateRefreshed ? "current" : "stale",
       accountStateAfterCycle,
+      ...(accountStateErrorClass ? { errorClass: accountStateErrorClass } : {}),
+      executionMode: portfolioExecutionMode(input),
     },
     telemetrySink,
   );
@@ -199,6 +223,9 @@ export async function runPaperLoopCycle(
     strategySignalCount: result.strategyExecutions.length,
     strategySubmittedCount,
     startupReconciledOrders: startup.reconciliation.outcomes.length,
+    stateRefreshed,
+    accountStateStatus: stateRefreshed ? "current" : "stale",
+    ...(accountStateErrorClass ? { errorClass: accountStateErrorClass } : {}),
     durationMs: Date.now() - startMs,
   });
 
@@ -209,6 +236,9 @@ export async function runPaperLoopCycle(
     strategySignalCount: result.strategyExecutions.length,
     strategySubmittedCount,
     startupReconciledOrders: startup.reconciliation.outcomes.length,
+    stateRefreshed,
+    accountStateStatus: stateRefreshed ? "current" : "stale",
+    ...(accountStateErrorClass ? { accountStateErrorClass } : {}),
     durationMs: Date.now() - startMs,
   };
 }

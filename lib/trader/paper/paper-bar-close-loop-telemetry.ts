@@ -16,6 +16,7 @@ export type PaperBarCloseCycleCompleteInput = {
   durationMs: number;
   result: PaperCycleResult;
   stateRefreshed: boolean;
+  accountStateStatus?: "current" | "stale";
   accountStateAfterCycle: AccountRiskState;
   errorClass?: string;
   executionMode?: "mock" | "paper";
@@ -142,6 +143,7 @@ export function buildPaperBarCloseCycleCompletePayload(
     cycle_id: input.cycleId,
     cycles_run: input.cyclesRun,
     execution_mode: input.executionMode ?? "mock",
+    account_state_status: input.accountStateStatus ?? (input.stateRefreshed ? "current" : "stale"),
     signal_outcome: signalOutcome,
     skip_reason: skipReason,
     execution_status: executionStatus,
