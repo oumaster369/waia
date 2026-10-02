@@ -36,13 +36,28 @@ test("mounted Admin and tenant update the same observation automatically and cle
       readCompletedAtMs: at,
       error: null,
     };
-    const derivativeRow = (accountCode: string, collateralAsset: string,
-      marginMode: "isolated" | "cross" | null, marginBalance: string,
-      withdrawAvailable: string | null = null, marginAvailable: string | null = "0") => ({
-      accountCode, collateralAsset, marginMode,
-      marginBalance, marginAvailable, withdrawAvailable, marginPosition: null, marginFrozen: "0",
-      marginStatic: null, realizedPnl: null, unrealizedPnl: "0", riskRate: null,
-      liquidationPrice: null, leverage: null,
+    const derivativeRow = (
+      accountCode: string,
+      collateralAsset: string,
+      marginMode: "isolated" | "cross" | null,
+      marginBalance: string,
+      withdrawAvailable: string | null = null,
+      marginAvailable: string | null = "0",
+    ) => ({
+      accountCode,
+      collateralAsset,
+      marginMode,
+      marginBalance,
+      marginAvailable,
+      withdrawAvailable,
+      marginPosition: null,
+      marginFrozen: "0",
+      marginStatic: null,
+      realizedPnl: null,
+      unrealizedPnl: "0",
+      riskRate: null,
+      liquidationPrice: null,
+      leverage: null,
     });
     const families = [
       ["usdt_isolated_perpetual", [derivativeRow("BTC-USDT", "USDT", "isolated", "100.25")]],
@@ -50,21 +65,77 @@ test("mounted Admin and tenant update the same observation automatically and cle
       ["coin_perpetual", [derivativeRow("BTC-USD", "BTC", null, "0.003")]],
       ["coin_delivery_futures", [derivativeRow("BTC", "BTC", null, "0.004")]],
     ] as const;
-    const position = (symbol: string, contractCode: string, contractType: string | null, marginAsset: string,
-      direction: "buy" | "sell", unrealizedPnl: string) => ({
-      symbol, contractCode, contractType, direction,
-      volume: "0.000000000000000013", available: "0.000000000000000011",
-      frozen: "0.000000000000000002", costOpen: "100.000000000000000001",
-      costHold: "99.000000000000000009", unrealizedPnl,
-      profitRate: "-0.000000000000000003", positionMargin: "3.125000000000000001",
-      marginAsset, leverage: "5", lastPrice: "101.000000000000000003",
+    const position = (
+      symbol: string,
+      contractCode: string,
+      contractType: string | null,
+      marginAsset: string,
+      direction: "buy" | "sell",
+      unrealizedPnl: string,
+    ) => ({
+      symbol,
+      contractCode,
+      contractType,
+      direction,
+      volume: "0.000000000000000013",
+      available: "0.000000000000000011",
+      frozen: "0.000000000000000002",
+      costOpen: "100.000000000000000001",
+      costHold: "99.000000000000000009",
+      unrealizedPnl,
+      profitRate: "-0.000000000000000003",
+      positionMargin: "3.125000000000000001",
+      marginAsset,
+      leverage: "5",
+      lastPrice: "101.000000000000000003",
       liquidationPrice: null,
     });
     const positionRows = [
-      ["usdt_isolated_perpetual", [position("BTC", "BTC-USDT", null, "USDT", "buy", "-0.000000000000000007")]],
-      ["usdt_cross_shared", [position("BTC", "BTC-USDT-211217", "next_week", "USDT", "sell", "0.000000000000000009")]],
+      [
+        "usdt_isolated_perpetual",
+        [position("BTC", "BTC-USDT", null, "USDT", "buy", "-0.000000000000000007")],
+      ],
+      [
+        "usdt_cross_shared",
+        [position("BTC", "BTC-USDT-211217", "next_week", "USDT", "sell", "0.000000000000000009")],
+      ],
       ["coin_perpetual", [position("BTC", "BTC-USD", null, "BTC", "buy", "-0.000000000000000011")]],
-      ["coin_delivery_futures", [position("BTC", "BTC201225", "quarter", "BTC", "sell", "0.000000000000000013")]],
+      [
+        "coin_delivery_futures",
+        [position("BTC", "BTC201225", "quarter", "BTC", "sell", "0.000000000000000013")],
+      ],
+    ] as const;
+    const fill = (symbol: string, contractCode: string, id: string, feeAsset: string) => ({
+      id,
+      matchId: "918800256249405440",
+      orderId: "918800256249405441",
+      symbol,
+      contractCode,
+      contractType: "swap",
+      direction: "sell" as const,
+      offset: "close" as const,
+      volume: "7",
+      price: "3000.5",
+      fee: "-0.010000000000000001",
+      feeAsset,
+      realizedPnl: "-1.25",
+      offsetPnl: "0",
+      executedAtMs: at - 1_000,
+      orderSource: "api",
+    });
+    const executionRows = [
+      [
+        "usdt_isolated_perpetual",
+        ["ETH-USDT"],
+        [fill("ETH", "ETH-USDT", "fill-isolated-1", "USDT")],
+      ],
+      ["usdt_cross_shared", ["ETH-USDT"], [fill("ETH", "ETH-USDT", "fill-cross-1", "USDT")]],
+      ["coin_perpetual", ["BTC-USD"], [fill("BTC", "BTC-USD", "fill-coin-1", "BTC")]],
+      [
+        "coin_delivery_futures",
+        ["BTC201225"],
+        [fill("BTC", "BTC201225", "fill-delivery-1", "BTC")],
+      ],
     ] as const;
     return {
       schemaVersion: "account-observation/v2",
@@ -83,12 +154,34 @@ test("mounted Admin and tenant update the same observation automatically and cle
       derivatives: {
         schemaVersion: "htx-derivatives-observation/v1",
         families: families.map(([family, accounts]) => ({
-          family, status: "COMPLETE", accounts, readStartedAtMs: at,
-          readCompletedAtMs: at, responseGeneratedAtMs: at, error: null,
+          family,
+          status: "COMPLETE",
+          accounts,
+          readStartedAtMs: at,
+          readCompletedAtMs: at,
+          responseGeneratedAtMs: at,
+          error: null,
           positions: {
             status: "COMPLETE",
             values: positionRows.find(([positionFamily]) => positionFamily === family)?.[1] ?? [],
-            readStartedAtMs: at, readCompletedAtMs: at, responseGeneratedAtMs: at, error: null,
+            readStartedAtMs: at,
+            readCompletedAtMs: at,
+            responseGeneratedAtMs: at,
+            error: null,
+          },
+          executions: {
+            status: "COMPLETE",
+            coverage: "CONFIGURED_CONTRACTS",
+            values:
+              executionRows.find(([executionFamily]) => executionFamily === family)?.[2] ?? [],
+            contracts:
+              executionRows.find(([executionFamily]) => executionFamily === family)?.[1] ?? [],
+            readStartedAtMs: at,
+            readCompletedAtMs: at,
+            responseGeneratedAtMs: at,
+            windowStartMs: at - 60_000,
+            windowEndMs: at,
+            error: null,
           },
         })),
       },
@@ -147,18 +240,41 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await page.goto("/trader");
   const tenantPanel = page.getByRole("region", { name: "Account observation", exact: true });
   await expect(tenantPanel.getByText(observation().observationId)).toBeVisible();
-  const tenantCross = tenantPanel.getByRole("region", { name: "USDT cross · shared derivatives pool" });
+  const tenantCross = tenantPanel.getByRole("region", {
+    name: "USDT cross · shared derivatives pool",
+  });
   await expect(tenantCross.getByText("200.50", { exact: true })).toBeVisible();
   await expect(tenantCross.getByText("180.25", { exact: true })).toBeVisible();
-  await expect(tenantCross.getByText("Shared USDT pool for perpetual and delivery contracts. Account totals are shown once; contract details are not added again.")).toBeVisible();
-  const tenantIsolated = tenantPanel.getByRole("region", { name: "USDT perpetual · isolated accounts" });
-  await expect(tenantIsolated.getByText("Open positions")).toBeVisible();
+  await expect(
+    tenantCross.getByText(
+      "Shared USDT pool for perpetual and delivery contracts. Account totals are shown once; contract details are not added again.",
+    ),
+  ).toBeVisible();
+  const tenantIsolated = tenantPanel.getByRole("region", {
+    name: "USDT perpetual · isolated accounts",
+  });
+  await expect(
+    tenantPanel.getByText("Seeing this display does not permit futures trading."),
+  ).toBeVisible();
+  await expect(tenantIsolated.getByText("Open positions", { exact: true })).toBeVisible();
+  await expect(tenantIsolated.getByText("Recent executions")).toBeVisible();
   await expect(tenantIsolated.getByText("BTC · BTC-USDT")).toBeVisible();
+  await expect(tenantIsolated.getByText("Executed fill · ETH · ETH-USDT")).toBeVisible();
+  await expect(
+    tenantIsolated.getByText("Sell · Close · not an open position or a balance"),
+  ).toBeVisible();
+  await expect(
+    tenantCross.getByText("These fills are not a second copy of the shared USDT pool."),
+  ).toBeVisible();
   await expect(tenantIsolated.getByText("Long · Contract type unavailable")).toBeVisible();
   await expect(tenantIsolated.getByText("-0.000000000000000007", { exact: true })).toBeVisible();
   await expect(tenantCross.getByText("Short · next_week")).toBeVisible();
   await expect(tenantCross.getByText("0.000000000000000009", { exact: true })).toBeVisible();
-  for (const family of ["USDT perpetual · isolated accounts", "Coin-margined perpetual accounts", "Coin-margined delivery futures accounts"]) {
+  for (const family of [
+    "USDT perpetual · isolated accounts",
+    "Coin-margined perpetual accounts",
+    "Coin-margined delivery futures accounts",
+  ]) {
     await expect(tenantPanel.getByRole("region", { name: family })).toBeVisible();
   }
   await expect(page.getByTestId("trader-unpublished-note")).toBeVisible();
@@ -182,13 +298,32 @@ test("mounted Admin and tenant update the same observation automatically and cle
   );
   const adminPanel = admin.getByRole("region", { name: "Account observation", exact: true });
   await expect(adminPanel.getByText(observation().observationId)).toBeVisible();
-  const adminCross = adminPanel.getByRole("region", { name: "USDT cross · shared derivatives pool" });
+  const adminCross = adminPanel.getByRole("region", {
+    name: "USDT cross · shared derivatives pool",
+  });
   await expect(adminCross.getByText("200.50", { exact: true })).toBeVisible();
   await expect(adminCross.getByText("180.25", { exact: true })).toBeVisible();
-  await expect(adminCross.getByText("Shared USDT pool for perpetual and delivery contracts. Account totals are shown once; contract details are not added again.")).toBeVisible();
-  const adminIsolated = adminPanel.getByRole("region", { name: "USDT perpetual · isolated accounts" });
-  await expect(adminIsolated.getByText("Open positions")).toBeVisible();
+  await expect(
+    adminCross.getByText(
+      "Shared USDT pool for perpetual and delivery contracts. Account totals are shown once; contract details are not added again.",
+    ),
+  ).toBeVisible();
+  const adminIsolated = adminPanel.getByRole("region", {
+    name: "USDT perpetual · isolated accounts",
+  });
+  await expect(
+    adminPanel.getByText("Seeing this display does not permit futures trading."),
+  ).toBeVisible();
+  await expect(adminIsolated.getByText("Open positions", { exact: true })).toBeVisible();
+  await expect(adminIsolated.getByText("Recent executions")).toBeVisible();
   await expect(adminIsolated.getByText("BTC · BTC-USDT")).toBeVisible();
+  await expect(adminIsolated.getByText("Executed fill · ETH · ETH-USDT")).toBeVisible();
+  await expect(
+    adminIsolated.getByText("Sell · Close · not an open position or a balance"),
+  ).toBeVisible();
+  await expect(
+    adminCross.getByText("These fills are not a second copy of the shared USDT pool."),
+  ).toBeVisible();
   await expect(adminIsolated.getByText("Long · Contract type unavailable")).toBeVisible();
   await expect(adminIsolated.getByText("-0.000000000000000007", { exact: true })).toBeVisible();
   await expect(adminCross.getByText("Short · next_week")).toBeVisible();
