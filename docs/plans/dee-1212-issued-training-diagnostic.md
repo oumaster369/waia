@@ -86,3 +86,21 @@ the one verified committed trace and each attempt must have exactly one
 complete result/ledger. Unknown errors/uncertainty still fail the test. This
 proves safe recovery after bounded refusal, not guaranteed completion under
 unbounded concurrency or production capacity.
+
+## Command-wide transport deadline admitted before code (2026-10-02)
+
+The independent1211 native COMMIT-loss proof exposed Postgres.js initial
+clean-EOF reconnects that reset its per-connect timeout. After inheriting the
+reviewed1211 transport, this owner must use that same bounded private pool
+helper. Capture one180-second AbortSignal at public invocation and reuse it
+for the SERIALIZABLE execution and both possible fresh READ ONLY confirmation
+paths. Do not restart the command budget on retries or confirmation. Check
+the signal before held-transaction dispatch and after callback completion;
+abort closes only owned transports, prevents new reconnects, and cannot
+return an unconfirmed trace. Preserve max3 known40001 attempts and the exact
+23505 verification-only boundary. No new capital, payload or scientific
+authority. Extend the existing unavailable-confirmation native scenario to
+protocol-clean EOF, finite total connections and no post-return reconnects;
+rerun all53 affected native scenarios and scoped readiness after actual-parent
+integration. The helper and dependency files must be source-pinned by the
+1212 CI proof contract.
