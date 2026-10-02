@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 
 import { insertDiscoveryStructureClusterPostgres } from "@/lib/trader/discovery/discovery-registry-postgres";
 import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
@@ -11,6 +13,7 @@ const CAMPAIGN = {
   campaignDigest: "a".repeat(64),
   state: "ACTIVE" as const,
 };
+const pgDialect = new PgDialect();
 
 function observation(): ObservationRecord {
   return {
@@ -46,23 +49,46 @@ function observation(): ObservationRecord {
   };
 }
 
-function registryExecutor() {
+function registryExecutor(
+  organizationId = "org-registry",
+  campaigns: Array<Record<string, unknown>> = [],
+) {
   const inserted: Record<string, unknown>[] = [];
+  let campaignReads = 0;
+  let campaignWhereParams: unknown[] = [];
   const executor = {
     insert: () => ({
       values: async (value: Record<string, unknown>) => {
         inserted.push(value);
       },
     }),
-    select: () => ({
-      from: () => ({
-        where: () => ({
-          limit: async () => inserted,
+    select: (projection?: unknown) => {
+      if (projection) campaignReads += 1;
+      return {
+        from: () => ({
+          where: (condition: unknown) => ({
+            limit: async () => {
+              if (projection) {
+                campaignWhereParams = pgDialect.sqlToQuery(condition as SQL).params;
+                return campaigns.filter(
+                  (campaign) =>
+                    campaign.id === CAMPAIGN.campaignId &&
+                    campaign.organizationId === organizationId,
+                );
+              }
+              return inserted;
+            },
+          }),
         }),
-      }),
-    }),
+      };
+    },
   };
-  return { executor: executor as never, inserted };
+  return {
+    executor: executor as never,
+    inserted,
+    getCampaignReads: () => campaignReads,
+    getCampaignWhereParams: () => campaignWhereParams,
+  };
 }
 
 describe("discovery structure cluster append boundary", () => {
@@ -72,11 +98,27 @@ describe("discovery structure cluster append boundary", () => {
       () => "cluster-registry",
       "2026-01-01T00:04:00.000Z",
     );
-    const { executor, inserted } = registryExecutor();
+    const { executor, inserted, getCampaignReads, getCampaignWhereParams } = registryExecutor(
+      "org-registry",
+      [
+        {
+          id: CAMPAIGN.campaignId,
+          organizationId: "org-registry",
+          contentDigest: CAMPAIGN.campaignDigest,
+          currentState: CAMPAIGN.state,
+        },
+      ],
+    );
 
-    await insertDiscoveryStructureClusterPostgres(executor, { organizationId: "org-registry" }, { cluster });
+    await insertDiscoveryStructureClusterPostgres(
+      executor,
+      { organizationId: "org-registry" },
+      { cluster },
+    );
 
     expect(inserted).toHaveLength(1);
+    expect(getCampaignReads()).toBe(1);
+    expect(getCampaignWhereParams()).toEqual([CAMPAIGN.campaignId, "org-registry"]);
     expect(inserted[0]).toMatchObject({
       id: cluster.clusterId,
       organizationId: "org-registry",
@@ -96,16 +138,105 @@ describe("discovery structure cluster append boundary", () => {
     const { executor, inserted } = registryExecutor();
     const invalid = { ...cluster, contentDigest: "0".repeat(64) };
 
-    await expect(insertDiscoveryStructureClusterPostgres(
-      executor,
-      { organizationId: "org-registry" },
-      { cluster: invalid },
-    )).rejects.toThrow(/STRUCTURE_CLUSTER_V2_INVALID:CONTENT_DIGEST/);
+    await expect(
+      insertDiscoveryStructureClusterPostgres(
+        executor,
+        { organizationId: "org-registry" },
+        { cluster: invalid },
+      ),
+    ).rejects.toThrow(/STRUCTURE_CLUSTER_V2_INVALID:CONTENT_DIGEST/);
+    expect(inserted).toHaveLength(0);
+  });
+
+  it.each([
+    ["missing", []],
+    [
+      "owned by another organization",
+      [
+        {
+          id: CAMPAIGN.campaignId,
+          organizationId: "org-other",
+          contentDigest: CAMPAIGN.campaignDigest,
+          currentState: CAMPAIGN.state,
+        },
+      ],
+    ],
+  ] as const)("refuses V2 append when the campaign is %s", async (_reason, campaigns) => {
+    const [cluster] = clusterStructureSignatures(
+      { campaignRef: CAMPAIGN, observations: [observation()] },
+      () => "cluster-unowned-campaign",
+      "2026-01-01T00:04:00.000Z",
+    );
+    const { executor, inserted, getCampaignReads, getCampaignWhereParams } = registryExecutor(
+      "org-registry",
+      [...campaigns],
+    );
+
+    await expect(
+      insertDiscoveryStructureClusterPostgres(
+        executor,
+        { organizationId: "org-registry" },
+        { cluster },
+      ),
+    ).rejects.toThrow(/STRUCTURE_CLUSTER_V2_INVALID:CAMPAIGN_NOT_IN_ORG/);
+    expect(inserted).toHaveLength(0);
+    expect(getCampaignReads()).toBe(1);
+    expect(getCampaignWhereParams()).toEqual([CAMPAIGN.campaignId, "org-registry"]);
+  });
+
+  it("refuses a V2 campaign reference whose stored digest does not match", async () => {
+    const [cluster] = clusterStructureSignatures(
+      { campaignRef: CAMPAIGN, observations: [observation()] },
+      () => "cluster-stale-campaign",
+      "2026-01-01T00:04:00.000Z",
+    );
+    const { executor, inserted, getCampaignReads } = registryExecutor("org-registry", [
+      {
+        id: CAMPAIGN.campaignId,
+        organizationId: "org-registry",
+        contentDigest: "b".repeat(64),
+        currentState: CAMPAIGN.state,
+      },
+    ]);
+
+    await expect(
+      insertDiscoveryStructureClusterPostgres(
+        executor,
+        { organizationId: "org-registry" },
+        { cluster },
+      ),
+    ).rejects.toThrow(/STRUCTURE_CLUSTER_V2_INVALID:CAMPAIGN_IDENTITY/);
+    expect(inserted).toHaveLength(0);
+    expect(getCampaignReads()).toBe(1);
+  });
+
+  it("refuses a V2 campaign reference whose stored lifecycle state does not match", async () => {
+    const [cluster] = clusterStructureSignatures(
+      { campaignRef: CAMPAIGN, observations: [observation()] },
+      () => "cluster-stale-campaign-state",
+      "2026-01-01T00:04:00.000Z",
+    );
+    const { executor, inserted } = registryExecutor("org-registry", [
+      {
+        id: CAMPAIGN.campaignId,
+        organizationId: "org-registry",
+        contentDigest: CAMPAIGN.campaignDigest,
+        currentState: "PAUSED",
+      },
+    ]);
+
+    await expect(
+      insertDiscoveryStructureClusterPostgres(
+        executor,
+        { organizationId: "org-registry" },
+        { cluster },
+      ),
+    ).rejects.toThrow(/STRUCTURE_CLUSTER_V2_INVALID:CAMPAIGN_IDENTITY/);
     expect(inserted).toHaveLength(0);
   });
 
   it("preserves the legacy scalar-row append contract", async () => {
-    const { executor, inserted } = registryExecutor();
+    const { executor, inserted, getCampaignReads } = registryExecutor();
     const legacy: InsertStructureClusterRow = {
       id: "legacy-cluster",
       organizationId: "ignored-caller-org",
@@ -115,7 +246,11 @@ describe("discovery structure cluster append boundary", () => {
       contentDigest: "legacy-digest",
     };
 
-    await insertDiscoveryStructureClusterPostgres(executor, { organizationId: "org-registry" }, legacy);
+    await insertDiscoveryStructureClusterPostgres(
+      executor,
+      { organizationId: "org-registry" },
+      legacy,
+    );
 
     expect(inserted[0]).toEqual({
       id: legacy.id,
@@ -126,5 +261,6 @@ describe("discovery structure cluster append boundary", () => {
       contentDigest: legacy.contentDigest,
       createdAt: undefined,
     });
+    expect(getCampaignReads()).toBe(0);
   });
 });

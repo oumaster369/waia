@@ -86,6 +86,7 @@ export function buildStructureClusterV2ContentDigest(
         signature: cluster.signature,
         memberObservationRefs: cluster.memberObservationRefs,
         memberTradeReferenceCounts: cluster.memberTradeReferenceCounts,
+        createdAt: cluster.createdAt,
       }),
       "utf8",
     )

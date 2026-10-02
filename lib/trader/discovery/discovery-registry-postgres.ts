@@ -185,6 +185,30 @@ export async function insertDiscoveryStructureClusterPostgres(
   if ("cluster" in row) {
     const structureCluster = row.cluster;
     assertValidStructureClusterV2(structureCluster);
+    const [campaign] = await ex
+      .select({
+        id: pgSchema.traderDiscoveryResearchCampaign.id,
+        organizationId: pgSchema.traderDiscoveryResearchCampaign.organizationId,
+        contentDigest: pgSchema.traderDiscoveryResearchCampaign.contentDigest,
+        currentState: pgSchema.traderDiscoveryResearchCampaign.currentState,
+      })
+      .from(pgSchema.traderDiscoveryResearchCampaign)
+      .where(
+        and(
+          eq(pgSchema.traderDiscoveryResearchCampaign.id, structureCluster.campaignRef.campaignId),
+          orgScopedWhere(pgSchema.traderDiscoveryResearchCampaign.organizationId, scoped),
+        ),
+      )
+      .limit(1);
+    if (!campaign) {
+      throw new Error("STRUCTURE_CLUSTER_V2_INVALID:CAMPAIGN_NOT_IN_ORG");
+    }
+    if (
+      campaign.contentDigest !== structureCluster.campaignRef.campaignDigest ||
+      campaign.currentState !== structureCluster.campaignRef.state
+    ) {
+      throw new Error("STRUCTURE_CLUSTER_V2_INVALID:CAMPAIGN_IDENTITY");
+    }
     values = {
       id: structureCluster.clusterId,
       organizationId: scoped.organizationId,

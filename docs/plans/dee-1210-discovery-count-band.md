@@ -66,21 +66,29 @@ rules, historical V1 artifacts, or question text already persisted.
 - **WP-2 — versioned count band:** add an additive V2 cluster type and
   serializer while leaving the V1 type/serializer unchanged. Use a
   version-prefixed signature key and include metric identity, per-member
-  counts, counts/band, and unavailable-volatility state in V2 content identity.
+  counts, counts/band, unavailable-volatility state, and canonical UTC
+  `createdAt` in V2 content identity. V2 validation rejects noncanonical or
+  normalizing timestamps.
   Emit V2 from the normal clusterer. Validate its schema, exact key, per-member
   count-band consistency, aggregate counts, memberships and digest before
   creating a question; reject V1 or malformed V2 input. New question text
   names the trade-reference count band and says measured volatility is
   unavailable. The existing organization-scoped registry retains its legacy
   V1 scalar-row insert and adds a V2 append path that validates and serializes
-  the cluster into the existing opaque JSON column.
-- **WP-3 — readiness:** passed 51 focused/adjacent unit tests across ten files;
-  V2-specific tests cover counts 0, 1, 2, 5, 6, 3+3 members with aggregate 6
-  remaining `medium`, zero-trade regime preservation, V1 byte/digest
-  preservation, detached caller inputs, malformed V2 refusal, and question
-  wording, plus V2 registry serialization and invalid-payload refusal. Scoped
-  ESLint, typecheck, build, canonical docs, and both consumer
-  graph validators passed. No database or real market data was used.
+  the cluster into the existing opaque JSON column. Before insertion, V2 must
+  resolve the referenced campaign by both ID and context organization and
+  match its stored content digest and lifecycle state; the historical V1 raw
+  row path is unchanged.
+- **WP-3 — readiness:** passed 62 focused/adjacent unit tests across ten files.
+  Coverage includes counts 0, 1, 2, 5, 6; 3+3 members with aggregate 6
+  remaining `medium`; zero-trade regime preservation; exact V1 byte/digest
+  preservation; detached caller inputs; createdAt digest and canonical UTC
+  timestamp checks; V2 registry serialization and organization-owned campaign
+  checks; malformed payload refusal; and question wording. Full ESLint passed
+  with 0 errors and 331 repository warnings; typecheck, build, canonical docs,
+  and both consumer graph validators passed. The pre-fix review RED is retained
+  in `audit-ai-trader-2026-10-01/dee1210/review-fixes-red.json` and `.log`.
+  No database or real market data was used.
 - **WP-4 — review and CI:** obtain independent review and pass exact-head CI
   before merge.
 
@@ -93,13 +101,16 @@ rules, historical V1 artifacts, or question text already persisted.
    1, 2, 5, and 6. Aggregation never recalculates an individual member's band
    from the cluster aggregate; refs and no-trade known-regime membership are
    preserved.
-3. V2 uses a distinct key/schema and content digest. A valid legacy V1 fixture
+3. V2 uses a distinct key/schema and content digest that binds canonical UTC
+   `createdAt`. A valid legacy V1 fixture
    retains its exact serialized bytes and digest; V1 is not silently accepted
    as V2.
 4. Invalid version, metric marker, key, digest, member count, aggregate count,
-   or band consistency is refused before a new research question is emitted.
+   band consistency, or noncanonical timestamp is refused before a new research
+  question is emitted.
 5. The existing registry appends validated V2 payloads through its current
-   organization-scoped table path while retaining legacy V1 insert behavior.
+   organization-scoped table path only when the campaign resolves in that org
+   with matching stored digest/state, while retaining legacy V1 insert behavior.
 6. Focused and adjacent checks, independent review, and required exact-head CI
    pass. This establishes artifact labeling/integrity only, not volatility
    measurement, provenance, scientific validity, or production use.

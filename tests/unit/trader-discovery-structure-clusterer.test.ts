@@ -6,6 +6,7 @@ import {
   buildStructureClusterV2ContentDigest,
   buildResearchQuestionContentDigest,
 } from "@/lib/trader/discovery/serialize-discovery";
+import { assertValidStructureClusterV2 } from "@/lib/trader/discovery/structure-cluster-v2";
 import { clusterStructureSignatures } from "@/lib/trader/discovery/structure-clusterer";
 import {
   STRUCTURE_CLUSTER_SCHEMA_VERSION,
@@ -83,7 +84,9 @@ const LEGACY_V1_FIXTURE: StructureCluster = {
 
 describe("discovery structure cluster versioned count bands", () => {
   it("keeps the exact immutable legacy V1 bytes and digest fixture", () => {
-    expect(buildStructureClusterContentDigest(LEGACY_V1_FIXTURE)).toBe(LEGACY_V1_FIXTURE.contentDigest);
+    expect(buildStructureClusterContentDigest(LEGACY_V1_FIXTURE)).toBe(
+      LEGACY_V1_FIXTURE.contentDigest,
+    );
     expect(canonicalJsonString(LEGACY_V1_FIXTURE)).toBe(
       '{"campaignRef":{"campaignDigest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","campaignId":"campaign-1210","state":"ACTIVE"},"clusterId":"cluster-v1-fixed","contentDigest":"35f80329f1d154ffc1a9d7aa8ac4fc9847253ba21ee59bb5ffd15edf38d7ea99","createdAt":"2026-01-01T00:03:00.000Z","memberObservationRefs":["obs-legacy-1210"],"schemaVersion":"waia.trader.discovery-structure-cluster.v1","signature":{"observationCount":1,"regimeLabel":"TREND","signatureKey":"TREND::medium","tradeCount":2,"volBucket":"medium"}}',
     );
@@ -215,21 +218,26 @@ describe("discovery structure cluster versioned count bands", () => {
     expect(() => clusters([source])).toThrow(/STRUCTURE_CLUSTER_V2_INVALID:OBSERVATION_SCOPE/);
   });
 
-  it.each(["", "duplicate"])("refuses invalid generated cluster identifiers (%s)", (generatedId) => {
-    const source = observation("obs-id-check", 2);
-    source.observedRegimes = ["TREND", "RANGE"];
-    let calls = 0;
+  it.each(["", "duplicate"])(
+    "refuses invalid generated cluster identifiers (%s)",
+    (generatedId) => {
+      const source = observation("obs-id-check", 2);
+      source.observedRegimes = ["TREND", "RANGE"];
+      let calls = 0;
 
-    expect(() => clusterStructureSignatures(
-      { campaignRef: CAMPAIGN, observations: [source] },
-      () => {
-        calls += 1;
-        return generatedId === "duplicate" ? "same-cluster-id" : "";
-      },
-      CREATED_AT,
-    )).toThrow(/STRUCTURE_CLUSTER_V2_INVALID:CLUSTER_ID/);
-    expect(calls).toBe(generatedId === "duplicate" ? 2 : 1);
-  });
+      expect(() =>
+        clusterStructureSignatures(
+          { campaignRef: CAMPAIGN, observations: [source] },
+          () => {
+            calls += 1;
+            return generatedId === "duplicate" ? "same-cluster-id" : "";
+          },
+          CREATED_AT,
+        ),
+      ).toThrow(/STRUCTURE_CLUSTER_V2_INVALID:CLUSTER_ID/);
+      expect(calls).toBe(generatedId === "duplicate" ? 2 : 1);
+    },
+  );
 
   it("versions the key and content identity separately from legacy V1", () => {
     const [cluster] = clusters([observation("obs-two", 2)]);
@@ -259,7 +267,9 @@ describe("discovery structure cluster versioned count bands", () => {
     const question = buildResearchQuestion({
       campaignRef: CAMPAIGN,
       cluster: cluster as never,
-      rejectionContext: { recordBody: { strategyId: "candidate", strategyVersion: "1.0.0" } } as never,
+      rejectionContext: {
+        recordBody: { strategyId: "candidate", strategyVersion: "1.0.0" },
+      } as never,
       questionId: "question-rejection-context",
       createdAt: CREATED_AT,
     });
@@ -270,12 +280,14 @@ describe("discovery structure cluster versioned count bands", () => {
   });
 
   it("refuses immutable V1 input for new question generation", () => {
-    expect(() => buildResearchQuestion({
-      campaignRef: CAMPAIGN,
-      cluster: LEGACY_V1_FIXTURE as never,
-      questionId: "question-from-v1",
-      createdAt: CREATED_AT,
-    })).toThrow(/STRUCTURE_CLUSTER_V2_INVALID/);
+    expect(() =>
+      buildResearchQuestion({
+        campaignRef: CAMPAIGN,
+        cluster: LEGACY_V1_FIXTURE as never,
+        questionId: "question-from-v1",
+        createdAt: CREATED_AT,
+      }),
+    ).toThrow(/STRUCTURE_CLUSTER_V2_INVALID/);
   });
 
   it("rejects forged count-band consistency even when the altered V2 digest is recomputed", () => {
@@ -289,46 +301,87 @@ describe("discovery structure cluster versioned count bands", () => {
       draft as Omit<StructureClusterV2, "contentDigest">,
     );
 
-    expect(() => buildResearchQuestion({
-      campaignRef: CAMPAIGN,
-      cluster: forged as never,
-      questionId: "question-forged-band",
-      createdAt: CREATED_AT,
-    })).toThrow(/STRUCTURE_CLUSTER_V2_INVALID/);
+    expect(() =>
+      buildResearchQuestion({
+        campaignRef: CAMPAIGN,
+        cluster: forged as never,
+        questionId: "question-forged-band",
+        createdAt: CREATED_AT,
+      }),
+    ).toThrow(/STRUCTURE_CLUSTER_V2_INVALID/);
   });
 
   it("rejects a mismatched V2 digest before creating a question", () => {
     const [cluster] = clusters([observation("obs-two", 2)]);
     const forged = { ...asRecord(cluster), contentDigest: "0".repeat(64) };
 
-    expect(() => buildResearchQuestion({
-      campaignRef: CAMPAIGN,
-      cluster: forged as never,
-      questionId: "question-bad-digest",
-      createdAt: CREATED_AT,
-    })).toThrow(/STRUCTURE_CLUSTER_V2_INVALID:CONTENT_DIGEST/);
+    expect(() =>
+      buildResearchQuestion({
+        campaignRef: CAMPAIGN,
+        cluster: forged as never,
+        questionId: "question-bad-digest",
+        createdAt: CREATED_AT,
+      }),
+    ).toThrow(/STRUCTURE_CLUSTER_V2_INVALID:CONTENT_DIGEST/);
+  });
+
+  it("binds createdAt into the V2 digest and refuses a timestamp changed with the old digest", () => {
+    const [cluster] = clusters([observation("obs-created-at", 2)]);
+    const tampered = { ...cluster, createdAt: "2026-01-02T00:00:00.000Z" };
+
+    expect(() => assertValidStructureClusterV2(tampered)).toThrow(
+      /STRUCTURE_CLUSTER_V2_INVALID:CONTENT_DIGEST/,
+    );
+  });
+
+  it.each([
+    "",
+    "not-a-date",
+    "2026-02-30T00:00:00.000Z",
+    "2026-01-01T24:00:00.000Z",
+    "2026-01-01T00:00:00",
+    "2026-01-01T03:00:00.000+03:00",
+  ])("refuses noncanonical V2 createdAt timestamps (%s)", (createdAt) => {
+    const [cluster] = clusters([observation("obs-bad-created-at", 2)]);
+    const { contentDigest: oldDigest, ...clusterDraft } = cluster;
+    expect(oldDigest).toMatch(/^[a-f0-9]{64}$/);
+    const draft = { ...clusterDraft, createdAt };
+    const forged = {
+      ...draft,
+      contentDigest: buildStructureClusterV2ContentDigest(
+        draft as Omit<StructureClusterV2, "contentDigest">,
+      ),
+    };
+
+    expect(() => assertValidStructureClusterV2(forged)).toThrow(
+      /STRUCTURE_CLUSTER_V2_INVALID:CREATED_AT/,
+    );
   });
 
   it("refuses a question whose campaign scope differs from its V2 cluster", () => {
     const [cluster] = clusters([observation("obs-two", 2)]);
 
-    expect(() => buildResearchQuestion({
-      campaignRef: { ...CAMPAIGN, campaignId: "other-campaign" },
-      cluster: cluster as never,
-      questionId: "question-wrong-campaign",
-      createdAt: CREATED_AT,
-    })).toThrow(/STRUCTURE_CLUSTER_V2_INVALID:CAMPAIGN_SCOPE/);
+    expect(() =>
+      buildResearchQuestion({
+        campaignRef: { ...CAMPAIGN, campaignId: "other-campaign" },
+        cluster: cluster as never,
+        questionId: "question-wrong-campaign",
+        createdAt: CREATED_AT,
+      }),
+    ).toThrow(/STRUCTURE_CLUSTER_V2_INVALID:CAMPAIGN_SCOPE/);
   });
 
   it("refuses extra nested caller data in the supplied question campaign reference", () => {
     const [cluster] = clusters([observation("obs-two", 2)]);
     const unsafeCampaign = { ...CAMPAIGN, unexpected: { mutable: true } };
 
-    expect(() => buildResearchQuestion({
-      campaignRef: unsafeCampaign as never,
-      cluster,
-      questionId: "question-extra-campaign-field",
-      createdAt: CREATED_AT,
-    })).toThrow(/STRUCTURE_CLUSTER_V2_INVALID:CAMPAIGN_REF/);
+    expect(() =>
+      buildResearchQuestion({
+        campaignRef: unsafeCampaign as never,
+        cluster,
+        questionId: "question-extra-campaign-field",
+        createdAt: CREATED_AT,
+      }),
+    ).toThrow(/STRUCTURE_CLUSTER_V2_INVALID:CAMPAIGN_REF/);
   });
 });

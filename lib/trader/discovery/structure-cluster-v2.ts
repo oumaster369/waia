@@ -20,12 +20,23 @@ function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): 
   return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
 }
 
-export function assertValidResearchCampaignRefV2(value: unknown): asserts value is ResearchCampaignRef {
-  if (!isRecord(value) || !hasExactKeys(value, ["campaignId", "campaignDigest", "state"]) ||
-      typeof value.campaignId !== "string" || value.campaignId.length === 0 ||
-      typeof value.campaignDigest !== "string" || value.campaignDigest.length === 0 ||
-      (value.state !== "PROPOSED" && value.state !== "ACTIVE" && value.state !== "PAUSED" &&
-       value.state !== "CONSOLIDATING" && value.state !== "CONSOLIDATED" && value.state !== "ARCHIVED")) {
+export function assertValidResearchCampaignRefV2(
+  value: unknown,
+): asserts value is ResearchCampaignRef {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["campaignId", "campaignDigest", "state"]) ||
+    typeof value.campaignId !== "string" ||
+    value.campaignId.length === 0 ||
+    typeof value.campaignDigest !== "string" ||
+    value.campaignDigest.length === 0 ||
+    (value.state !== "PROPOSED" &&
+      value.state !== "ACTIVE" &&
+      value.state !== "PAUSED" &&
+      value.state !== "CONSOLIDATING" &&
+      value.state !== "CONSOLIDATED" &&
+      value.state !== "ARCHIVED")
+  ) {
     invalid("CAMPAIGN_REF");
   }
 }
@@ -48,44 +59,55 @@ export function structureSignatureKeyV2(
 
 /** Validates the complete self-contained V2 shape. Its digest proves integrity, not provenance. */
 export function assertValidStructureClusterV2(value: unknown): asserts value is StructureClusterV2 {
-  if (!isRecord(value) || !hasExactKeys(value, [
-    "schemaVersion",
-    "clusterId",
-    "campaignRef",
-    "signature",
-    "memberObservationRefs",
-    "memberTradeReferenceCounts",
-    "contentDigest",
-    "createdAt",
-  ])) {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "schemaVersion",
+      "clusterId",
+      "campaignRef",
+      "signature",
+      "memberObservationRefs",
+      "memberTradeReferenceCounts",
+      "contentDigest",
+      "createdAt",
+    ])
+  ) {
     invalid("SHAPE");
   }
   if (value.schemaVersion !== STRUCTURE_CLUSTER_V2_SCHEMA_VERSION) invalid("SCHEMA_VERSION");
-  if (typeof value.clusterId !== "string" || value.clusterId.length === 0 ||
-      typeof value.createdAt !== "string" || value.createdAt.length === 0) {
+  if (typeof value.clusterId !== "string" || value.clusterId.length === 0) {
     invalid("IDENTITY");
+  }
+  if (typeof value.createdAt !== "string" || !isCanonicalUtcTimestamp(value.createdAt)) {
+    invalid("CREATED_AT");
   }
 
   assertValidResearchCampaignRefV2(value.campaignRef);
 
   const signature = value.signature;
-  if (!isRecord(signature) || !hasExactKeys(signature, [
-    "signatureKey",
-    "regimeLabel",
-    "metricKind",
-    "tradeReferenceCountBand",
-    "measuredVolatilityStatus",
-    "tradeCount",
-    "observationCount",
-  ])) {
+  if (
+    !isRecord(signature) ||
+    !hasExactKeys(signature, [
+      "signatureKey",
+      "regimeLabel",
+      "metricKind",
+      "tradeReferenceCountBand",
+      "measuredVolatilityStatus",
+      "tradeCount",
+      "observationCount",
+    ])
+  ) {
     invalid("SIGNATURE_SHAPE");
   }
   const regimeLabel = signature.regimeLabel;
   const band = signature.tradeReferenceCountBand;
-  if (typeof regimeLabel !== "string" || regimeLabel.length === 0 ||
-      signature.metricKind !== "TRADE_REFERENCE_COUNT_BAND" ||
-      (band !== "low" && band !== "medium" && band !== "high") ||
-      signature.measuredVolatilityStatus !== "UNAVAILABLE") {
+  if (
+    typeof regimeLabel !== "string" ||
+    regimeLabel.length === 0 ||
+    signature.metricKind !== "TRADE_REFERENCE_COUNT_BAND" ||
+    (band !== "low" && band !== "medium" && band !== "high") ||
+    signature.measuredVolatilityStatus !== "UNAVAILABLE"
+  ) {
     invalid("METRIC");
   }
   if (signature.signatureKey !== structureSignatureKeyV2(regimeLabel, band)) {
@@ -94,9 +116,12 @@ export function assertValidStructureClusterV2(value: unknown): asserts value is 
 
   const refs = value.memberObservationRefs;
   const memberCounts = value.memberTradeReferenceCounts;
-  if (!Array.isArray(refs) || refs.length === 0 ||
-      refs.some((ref) => typeof ref !== "string" || ref.length === 0) ||
-      refs.some((ref, index) => index > 0 && refs[index - 1]! >= ref)) {
+  if (
+    !Array.isArray(refs) ||
+    refs.length === 0 ||
+    refs.some((ref) => typeof ref !== "string" || ref.length === 0) ||
+    refs.some((ref, index) => index > 0 && refs[index - 1]! >= ref)
+  ) {
     invalid("MEMBER_REFS");
   }
   if (!Array.isArray(memberCounts) || memberCounts.length !== refs.length) {
@@ -105,17 +130,25 @@ export function assertValidStructureClusterV2(value: unknown): asserts value is 
 
   let totalTradeCount = 0;
   for (const [index, member] of memberCounts.entries()) {
-    if (!isRecord(member) || !hasExactKeys(member, ["observationRef", "tradeReferenceCount"]) ||
-        member.observationRef !== refs[index] || !Number.isSafeInteger(member.tradeReferenceCount) ||
-        (member.tradeReferenceCount as number) < 0) {
+    if (
+      !isRecord(member) ||
+      !hasExactKeys(member, ["observationRef", "tradeReferenceCount"]) ||
+      member.observationRef !== refs[index] ||
+      !Number.isSafeInteger(member.tradeReferenceCount) ||
+      (member.tradeReferenceCount as number) < 0
+    ) {
       invalid(`MEMBER_COUNT:${index}`);
     }
     const count = member.tradeReferenceCount as number;
     if (tradeReferenceCountBandForCount(count) !== band) invalid(`MEMBER_BAND:${index}`);
     totalTradeCount += count;
   }
-  if (!Number.isSafeInteger(signature.tradeCount) || signature.tradeCount !== totalTradeCount ||
-      !Number.isSafeInteger(signature.observationCount) || signature.observationCount !== refs.length) {
+  if (
+    !Number.isSafeInteger(signature.tradeCount) ||
+    signature.tradeCount !== totalTradeCount ||
+    !Number.isSafeInteger(signature.observationCount) ||
+    signature.observationCount !== refs.length
+  ) {
     invalid("AGGREGATE_COUNTS");
   }
 
@@ -124,4 +157,9 @@ export function assertValidStructureClusterV2(value: unknown): asserts value is 
   }
   const { contentDigest, ...draft } = value as StructureClusterV2;
   if (buildStructureClusterV2ContentDigest(draft) !== contentDigest) invalid("CONTENT_DIGEST");
+}
+
+function isCanonicalUtcTimestamp(value: string): boolean {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) && date.toISOString() === value;
 }
