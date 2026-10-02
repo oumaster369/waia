@@ -119,7 +119,7 @@ applicable exact-head CI check precede merge; no redundant full local suite.
 
 ### PR738 exact consumer-inventory correction (2026-10-02)
 
-The first published unit shard found that the new
+PR738's published-head unit shard 2 found that the new
 `research-development-source-read-v1.ts` directly imports only
 `deepFreezeInquiry` from the inquiry `contracts-v1` module, but the exact
 importer inventory omits that path. Add this one `CONTRACTS` consumer to
