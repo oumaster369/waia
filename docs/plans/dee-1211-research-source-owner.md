@@ -168,3 +168,19 @@ to actual main, retaining source and evidence identities. DEE-1207 still
 precedes publication. Graph inventories, CI-trigger coverage and final
 independent review remain to be closed. SQL remains an unnumbered synthetic
 draft; no real payload, production migration, release or trading is involved.
+
+
+The four owned plan/implementation/fault-proof commits were rebased onto actual
+main7b0a9b72 without conflicts; the resulting tree is byte-identical to the
+reviewed pre-rebase tree. The native test's final SQL result type annotation
+is erased: the captured prior test bytes and current bytes emit identical
+JavaScript, while all1825 other native pins remain exact. This bounded transfer
+is recorded separately; it is not a new database execution. Final targeted
+unit/graph/gate assertions pass100/100. The CI report guard now accepts the
+actual one-file/two-nested-suite native report, and the isolated source-proof
+service explicitly uses local-only trust authentication for the synthetic
+restricted login. No production authentication setting is changed.
+
+DEE-1207 is now PR737 and still precedes publication. A subsequent actual-main
+binding after that merge, final independent acceptance and all published-head
+CI results remain required. The source-owner feature remains unpublished.
