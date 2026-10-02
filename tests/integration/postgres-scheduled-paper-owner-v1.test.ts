@@ -20,6 +20,7 @@ import { recordedPublicTransport } from "../helpers/recorded-paper-public-transp
 const enabled = process.env.WAIA_PG_INTEGRATION === "1";
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
 const REQUIRED_DATABASE = "waia_hsv2_it_oct01_mock_ledger_scope_1205_v1";
+const DEE1213_DATABASE = "waia_hsv2_it_dee1213_scheduled_deadline_v1";
 const CI_DATABASE = "waia_dee1205";
 const RECEIPT_TABLE = "trader_scheduled_noncapital_cycle_receipts_v1";
 
@@ -29,13 +30,15 @@ function assertExactDisposableDatabase(raw: string | undefined): asserts raw is 
   if (!raw) throw new Error("DEE1205_ISOLATED_POSTGRES_REQUIRED");
   let parsed: URL;
   try { parsed = new URL(raw); } catch { throw new Error("DEE1205_ISOLATED_POSTGRES_REQUIRED"); }
-  const localTarget = new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsed.hostname) &&
-    parsed.port === "54329" && parsed.username === "waia_validate" &&
+  const localHost = new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsed.hostname);
+  const localTarget1205 = localHost && parsed.port === "54329" && parsed.username === "waia_validate" &&
     parsed.pathname === `/${REQUIRED_DATABASE}` && !parsed.searchParams.has("ssl");
+  const localTarget1213 = localHost && parsed.port === "54338" && parsed.username === "waia_validate" &&
+    parsed.pathname === `/${DEE1213_DATABASE}` && !parsed.searchParams.has("ssl");
   const ciTarget = process.env.CI === "true" && process.env.GITHUB_ACTIONS === "true" &&
     parsed.hostname === "127.0.0.1" && parsed.port === "5432" && parsed.username === "waia_it" &&
     parsed.password === "waia_it" && parsed.pathname === "/waia_dee1205" && !parsed.search && !parsed.hash;
-  if (!localTarget && !ciTarget) {
+  if (!localTarget1205 && !localTarget1213 && !ciTarget) {
     throw new Error("DEE1205_EXACT_DISPOSABLE_DATABASE_REQUIRED");
   }
 }
@@ -231,7 +234,7 @@ describe.skipIf(!enabled || !url)("DEE-1205 closed scheduled noncapital owner on
     assertExactDisposableDatabase(url);
     const expectedDatabase = process.env.CI === "true" && process.env.GITHUB_ACTIONS === "true"
       ? CI_DATABASE
-      : REQUIRED_DATABASE;
+      : new URL(url!).port === "54338" ? DEE1213_DATABASE : REQUIRED_DATABASE;
     ownerSql = postgres(url, { max: 6, prepare: false });
     witnessSql = postgres(url, { max: 4, prepare: false });
     db = drizzle(ownerSql, { schema: pgSchema }) as unknown as WaiaPostgresDb;
@@ -388,6 +391,78 @@ describe.skipIf(!enabled || !url)("DEE-1205 closed scheduled noncapital owner on
       await proxy.close();
     }
   }, 45_000);
+
+  it("bounds post-COMMIT uncertainty when verifier startups receive repeated clean EOF (DEE-1213)", async () => {
+    installPublicPoll();
+    const direct = new URL(url!);
+    const proxy = await startCommitAckLossProxy({
+      targetHost: "127.0.0.1",
+      targetPort: Number(direct.port),
+      refuseReconnectAfterCommitLoss: true,
+      cleanEofOnRefusedReconnect: true,
+    });
+    direct.hostname = "127.0.0.1";
+    direct.port = String(proxy.port);
+    direct.searchParams.set("sslmode", "disable");
+    const telemetry = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    type OwnerOutcome =
+      | { readonly kind: "resolved"; readonly result: Awaited<ReturnType<typeof runScheduledNoncapitalPaperLoopFromEnv>> }
+      | { readonly kind: "rejected"; readonly error: unknown };
+    type GuardOutcome = { readonly kind: "attempt-limit" | "watchdog" };
+    let interval: ReturnType<typeof setInterval> | undefined;
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    let ownerOutcome: Promise<OwnerOutcome> | undefined;
+    let observed: { readonly outcome: OwnerOutcome | GuardOutcome; readonly proxy: ReturnType<typeof proxy.stats>; readonly durable: Counts } | undefined;
+    try {
+      ownerOutcome = runScheduledNoncapitalPaperLoopFromEnv(envFor(currentOrg, direct.toString())).then(
+        (result): OwnerOutcome => ({ kind: "resolved", result }),
+        (error): OwnerOutcome => ({ kind: "rejected", error }),
+      );
+      const attemptLimit = new Promise<GuardOutcome>((resolve) => {
+        interval = setInterval(() => {
+          if (proxy.stats().connections > 6) resolve({ kind: "attempt-limit" });
+        }, 10);
+      });
+      const outerWatchdog = new Promise<GuardOutcome>((resolve) => {
+        watchdog = setTimeout(() => resolve({ kind: "watchdog" }), 65_000);
+      });
+      const outcome = await Promise.race([ownerOutcome, attemptLimit, outerWatchdog]);
+      observed = { outcome, proxy: proxy.stats(), durable: await counts() };
+      // Synthetic witness facts survive an externally contained pre-fix RED.
+      console.log(JSON.stringify({ event: "dee1213_native_observation", ...observed,
+        outcome: { kind: outcome.kind } }));
+
+      // Capture the facts demonstrating the real upstream commit before the
+      // attempt-bound assertion can fail on the original retry loop.
+      expect(observed.proxy.commitResponsesWithheld).toBe(1);
+      expect(observed.proxy.protocolErrors).toBe(0);
+      expect(observed.durable.receipts).toBe(1);
+      expect(observed.durable.limits).toBe(1);
+      await expectNoExecutionEffects();
+
+      expect(observed.outcome.kind).toBe("resolved");
+      expect(observed.proxy.connections).toBeLessThanOrEqual(6);
+      if (observed.outcome.kind !== "resolved") return;
+      expect(observed.outcome.result).toMatchObject({ status: "COMMIT_UNCERTAIN", report: null });
+      expect(telemetry.mock.calls.some(([line]) => String(line).includes('"phase":"cycle_complete"'))).toBe(false);
+
+      const settledAttempts = proxy.stats().connections;
+      await new Promise<void>((resolve) => setTimeout(resolve, 250));
+      expect(proxy.stats().connections).toBe(settledAttempts);
+      const retry = await runScheduledNoncapitalPaperLoopFromEnv(envFor(currentOrg));
+      expect(retry.status).toBe("REPLAYED");
+      expect(await counts()).toEqual(observed.durable);
+      await expectNoExecutionEffects();
+    } finally {
+      if (interval) clearInterval(interval);
+      if (watchdog) clearTimeout(watchdog);
+      await proxy.close();
+      // GREEN requires the owned work to have actually settled. An external
+      // process watchdog contains the known pre-fix RED; it is never PASS.
+      if (ownerOutcome) await ownerOutcome;
+    }
+  }, 70_000);
 
   it("preserves full historical rows, rejects half-tagged writes, and refuses ordinary paper orders", async () => {
     const historicalId = await insertOrder({ venue: "mock", executionMode: "mock", state: "ACCEPTED",
