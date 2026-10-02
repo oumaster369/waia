@@ -136,7 +136,7 @@ export const INFORMATION_INQUIRY_DIRECT_CONSUMERS_V1 = [
   },
   {
     path: "lib/trader/research/research-development-source-read-v1.ts",
-    symbols: ["readResearchDevelopmentSourceIssuanceV1"],
+    symbols: ["readResearchDevelopmentSourceRowsV1", "deepFreezeInquiry"],
     imports: ["CONTRACTS"],
     disposition: "PURE_INTERNAL_COMPOSITION",
     createsCapitalAuthority: false,
