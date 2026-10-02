@@ -31,7 +31,7 @@ import { evaluateDrawdownPolicy } from "@/lib/trader/risk/drawdown-policy-evalua
 import { calculateRiskAdmissionV2 } from "@/lib/trader/risk/v2/risk-admission-service-v2";
 import { addDecimal, compareDecimal, divideDecimal, multiplyDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 import type { OrgContext } from "@/lib/waia-core/scope/org-context";
-import { evaluateResearchLookbackV1 } from "@/lib/trader/research/research-lookback-evaluator-v1";
+import { evaluateResearchFeatureInvocationV1, type ResearchFeatureInvocationReceiptV1 } from "@/lib/trader/research/research-feature-invocation-v1";
 import type { loadRegisteredResearchTrainingExecutionInputPostgresV1 } from "@/lib/trader/research/research-training-payload-postgres-v1";
 import type { resolveResearchTrainingPolicyV1 } from "@/lib/trader/research/research-training-policy-v1";
 
@@ -100,6 +100,7 @@ export async function runOwnedResearchModeledStageV1(input: Readonly<{
   const registry = createHistoricalModeledExecutionRegistryV2();
   const cycleMap = new Map(source.cycles.map(cycle => [cycle.cycleId, cycle] as const));
   const decisions: Record<string, unknown>[] = [];
+  const invocations: ResearchFeatureInvocationReceiptV1[] = [];
   const advances: Record<string, unknown>[] = [];
   const fillDetails: Record<string, unknown>[] = [];
   const advance = createAdvanceHistoricalModeledExecutionV2({ context: captured,
@@ -146,9 +147,11 @@ export async function runOwnedResearchModeledStageV1(input: Readonly<{
     }
     eventClock = bar.barCloseTime;
     await advance(cycle.cycleId);
-    const signal = evaluateResearchLookbackV1({ parameters: scope.identity.parameters,
-      bars: source.bars.slice(Math.max(0, index - 127), index + 1),
-      symbol: source.experiment.spec.universe.symbol, interval: "1m", evaluatedAt: bar.barCloseTime });
+    const { signal, invocationReceipt } = evaluateResearchFeatureInvocationV1({
+      parameters: scope.identity.parameters, bars: source.bars,
+      symbol: source.experiment.spec.universe.symbol, interval: "1m",
+      index, sourceBarIndex: cycle.barIndex, cycleId: cycle.cycleId });
+    invocations.push(invocationReceipt);
     if (signal.action === "NONE") continue;
     const before = accounting;
     const held = before.positions[source.experiment.spec.universe.symbol]?.quantity ?? "0";
@@ -252,6 +255,7 @@ export async function runOwnedResearchModeledStageV1(input: Readonly<{
   const orderRows = await orders.listOrders(captured);
   const openOrderIds = exchange.listOpenOrders().map(entry => entry.order.id);
   return Object.freeze({ accounting, decisions: Object.freeze(decisions),
+    invocations: Object.freeze(invocations),
     advances: Object.freeze(advances), fillDetails: Object.freeze(fillDetails),
     orderRows: Object.freeze(orderRows), openOrderIds: Object.freeze(openOrderIds) });
 }

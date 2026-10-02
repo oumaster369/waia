@@ -15,8 +15,10 @@ import { runOwnedResearchModeledStageV1 } from "@/lib/trader/research/research-m
 import { resolveCurrentResearchExecutableIdentityV1 } from "@/lib/trader/research/research-executable-runtime-identity-v1";
 import { loadResearchTrainingLedgerScopePostgresV1 } from "@/lib/trader/research/research-attempt-registry-postgres-v1";
 import { loadRegisteredResearchExperimentPostgresV1 } from "@/lib/trader/research/research-experiment-registry-postgres-v1";
+import { evaluateResearchFeatureInvocationV1, type ResearchFeatureInvocationReceiptV1 } from "@/lib/trader/research/research-feature-invocation-v1";
 
 export const RESEARCH_TRAINING_DIAGNOSTIC_V1 = "waia.research.training-diagnostic.v1" as const;
+export const RESEARCH_TRAINING_DIAGNOSTIC_V2 = "waia.research.training-diagnostic.v2" as const;
 const REQUEST = z.object({
   attemptId: z.string().uuid(), trialIndex: z.number().int().min(0).max(31),
   limits: z.object({ maxBars: z.number().int().min(1).max(4096),
@@ -32,6 +34,34 @@ type DiagnosticRow = Readonly<{
   stage_run_id: string; experiment_spec_sha256: string; scope_digest_hex: string;
   policy_digest_hex: string; trace_canonical_json: string; trace_sha256: string;
 }>;
+type CheckedInput = Awaited<ReturnType<typeof loadRegisteredResearchTrainingExecutionInputPostgresV1>>;
+
+/** Binds actual calls, including NONE, to all checked modeled-execution input.
+ * Cycle metadata/volume can affect fills even if the OHLCV bars are unchanged.
+ * These hashes establish input use, not historical source or PIT provenance. */
+function bindInputUseReceipt(
+  source: CheckedInput,
+  policy: ReturnType<typeof resolveResearchTrainingPolicyV1>,
+  observedExecutableIdentity: ReturnType<typeof resolveCurrentResearchExecutableIdentityV1>,
+  invocations: readonly ResearchFeatureInvocationReceiptV1[],
+) {
+  if (invocations.length !== source.bars.length) refuse("INPUT_USE_INVOCATION_COUNT");
+  const body = Object.freeze({ schemaVersion: "waia.research.development-input-use.v1" as const,
+    authority: "DEVELOPMENT_INPUT_USE_INTEGRITY_ONLY" as const,
+    sourceQualification: "NOT_ESTABLISHED" as const,
+    organizationId: source.scope.identity.organizationId,
+    experimentSpecSha256: source.scope.identity.experimentSpecSha256,
+    attemptId: source.scope.identity.attemptId, trialIndex: source.scope.identity.trialIndex,
+    scopeDigestHex: source.scope.contentDigest,
+    sourceRunId: source.sourceRunId, sourceClass: source.source,
+    datasetAuthorityDigest: source.datasetAuthorityDigest,
+    partition: "DEVELOPMENT" as const, partitionIdentity: source.partition,
+    symbol: source.experiment.spec.universe.symbol, interval: source.experiment.spec.universe.interval,
+    executionCyclesSha256: computeStableJsonDigest(source.cycles),
+    policyDigestHex: policy.guardianResolvedPolicySha256, observedExecutableIdentity,
+    invocationCount: invocations.length, invocations: Object.freeze([...invocations]) });
+  return Object.freeze({ ...body, contentDigestHex: computeStableJsonDigest(body) });
+}
 type VerifiedTrace = Readonly<Record<string, unknown> & {
   authority: "TRAINING_ENGINEERING_TRACE_ONLY"; capitalEligible: false; scientificQualified: false;
   stageRunId: string; scopeDigestHex: string; decisions: readonly unknown[];
@@ -41,23 +71,35 @@ type VerifiedTrace = Readonly<Record<string, unknown> & {
   appliedProtectionScope: "ACCOUNT_D20_SIGNAL_ADMISSION_ONLY";
   orderCount: number; fillCount: number; accountingSequence: number;
   finalAccountingDigestHex: string; ledgerDigestHex: string; traceSha256: string;
+  inputUseReceipt: ReturnType<typeof bindInputUseReceipt>;
 }>;
 
-function verifyCommittedTrace(row: DiagnosticRow, expected: Readonly<{
-  organizationId: string; attemptId: string; trialIndex: number; stageRunId: string;
-  specSha256: string; scopeDigest: string; policyDigest: string;
-  observedExecutableIdentity: ReturnType<typeof resolveCurrentResearchExecutableIdentityV1>;
-}>) {
-  if (row.organization_id !== expected.organizationId || row.attempt_id !== expected.attemptId ||
-      row.trial_index !== expected.trialIndex || row.stage_run_id !== expected.stageRunId ||
-      row.experiment_spec_sha256 !== expected.specSha256 || row.scope_digest_hex !== expected.scopeDigest ||
-      row.policy_digest_hex !== expected.policyDigest) refuse("COMMITTED_SCOPE_MISMATCH");
+function readCurrentTrace(row: Pick<DiagnosticRow, "trace_canonical_json" | "trace_sha256">) {
   let parsed: Record<string, unknown>;
   try { parsed = JSON.parse(row.trace_canonical_json) as Record<string, unknown>; }
   catch { return refuse("COMMITTED_TRACE_INVALID"); }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) ||
       canonicalJsonString(parsed) !== row.trace_canonical_json ||
-      computeStableJsonDigest(parsed) !== row.trace_sha256 ||
+      computeStableJsonDigest(parsed) !== row.trace_sha256) refuse("COMMITTED_TRACE_INVALID");
+  if (parsed.schemaVersion === RESEARCH_TRAINING_DIAGNOSTIC_V1) {
+    refuse("LEGACY_TRACE_REQUIRES_NEW_ATTEMPT");
+  }
+  if (parsed.schemaVersion !== RESEARCH_TRAINING_DIAGNOSTIC_V2) refuse("COMMITTED_TRACE_INVALID");
+  return parsed;
+}
+
+function verifyCommittedTrace(row: DiagnosticRow, expected: Readonly<{
+  organizationId: string; attemptId: string; trialIndex: number; stageRunId: string;
+  specSha256: string; scopeDigest: string; policyDigest: string;
+  observedExecutableIdentity: ReturnType<typeof resolveCurrentResearchExecutableIdentityV1>;
+  inputUseReceipt: ReturnType<typeof bindInputUseReceipt>;
+}>) {
+  if (row.organization_id !== expected.organizationId || row.attempt_id !== expected.attemptId ||
+      row.trial_index !== expected.trialIndex || row.stage_run_id !== expected.stageRunId ||
+      row.experiment_spec_sha256 !== expected.specSha256 || row.scope_digest_hex !== expected.scopeDigest ||
+      row.policy_digest_hex !== expected.policyDigest) refuse("COMMITTED_SCOPE_MISMATCH");
+  const parsed = readCurrentTrace(row);
+  if (parsed.sourceQualification !== "NOT_ESTABLISHED" ||
       parsed.authority !== "TRAINING_ENGINEERING_TRACE_ONLY" ||
       parsed.capitalEligible !== false || parsed.scientificQualified !== false ||
       parsed.organizationId !== expected.organizationId || parsed.attemptId !== expected.attemptId ||
@@ -78,6 +120,8 @@ function verifyCommittedTrace(row: DiagnosticRow, expected: Readonly<{
       typeof parsed.ledgerDigestHex !== "string") {
     refuse("COMMITTED_TRACE_INVALID");
   }
+  if (!parsed.inputUseReceipt || canonicalJsonString(parsed.inputUseReceipt) !==
+      canonicalJsonString(expected.inputUseReceipt)) refuse("COMMITTED_INPUT_USE_MISMATCH");
   return Object.freeze({ ...parsed, traceSha256: row.trace_sha256 }) as VerifiedTrace;
 }
 
@@ -105,12 +149,20 @@ export async function runRegisteredResearchTrainingDiagnosticPostgresV1(
   if (preflightExperiment.spec.executable.sourceSha256 !== observedExecutableIdentity.sourceSha256) {
     refuse("EXECUTABLE_IDENTITY_MISMATCH");
   }
+  // Unsupported policy/sidecar is a metadata-only refusal before price access.
+  const policy = resolveResearchTrainingPolicyV1(preflightExperiment.spec);
+  // Legacy evidence must refuse even if its old source rows are unavailable.
+  // This early read grants nothing; current V2 is re-read under the stage lock.
+  const [preflightTrace] = await db.execute<Pick<DiagnosticRow, "trace_canonical_json" | "trace_sha256">>(sql`
+    select trace_canonical_json,trace_sha256 from public.trader_research_training_diagnostics_v1
+    where organization_id=${organizationId}::uuid and attempt_id=${request.attemptId}::uuid
+      and trial_index=${request.trialIndex}`);
+  if (preflightTrace) readCurrentTrace(preflightTrace);
   const source = await loadRegisteredResearchTrainingExecutionInputPostgresV1(db, captured, request);
   if (source.scope.contentDigest !== preflightScope.contentDigest ||
       source.experiment.specSha256 !== preflightExperiment.specSha256) {
     refuse("PREFLIGHT_SOURCE_IDENTITY_CHANGED");
   }
-  const policy = resolveResearchTrainingPolicyV1(source.experiment.spec);
   const { scope } = source;
   const stageRunId = scope.ledgerScope.historicalRunId;
   const accountKey = scope.ledgerScope.historicalAccountKey;
@@ -187,7 +239,13 @@ export async function runRegisteredResearchTrainingDiagnosticPostgresV1(
       return value.digest;
     };
     if (existing) {
-      const committed = verifyCommittedTrace(existing, expected);
+      // Recompute only pure evaluator calls on retry; never replay order effects.
+      const invocations = source.cycles.map((cycle, index) =>
+        evaluateResearchFeatureInvocationV1({ parameters: scope.identity.parameters,
+          bars: source.bars, symbol: source.experiment.spec.universe.symbol, interval: "1m",
+          index, sourceBarIndex: cycle.barIndex, cycleId: cycle.cycleId }).invocationReceipt);
+      const committed = verifyCommittedTrace(existing, { ...expected,
+        inputUseReceipt: bindInputUseReceipt(source, policy, observedExecutableIdentity, invocations) });
       if (ledger.order_count !== String(committed.orderCount) ||
           ledger.fill_count !== String(committed.fillCount) ||
           ledger.frontier_count !== String(committed.accountingSequence)) {
@@ -209,7 +267,7 @@ export async function runRegisteredResearchTrainingDiagnosticPostgresV1(
       refuse("UNCOMMITTED_STAGE_LEDGER_EXISTS");
     }
 
-    const { accounting, decisions, advances, fillDetails, orderRows, openOrderIds } =
+    const { accounting, decisions, advances, fillDetails, orderRows, openOrderIds, invocations } =
       await runOwnedResearchModeledStageV1({ tx, source, request, policy, model });
     const finalPositions = Object.entries(accounting.positions).filter(([, position]) =>
       compareDecimal(position.quantity, "0") > 0).map(([symbol, position]) => ({
@@ -222,7 +280,8 @@ export async function runRegisteredResearchTrainingDiagnosticPostgresV1(
     const remainingNetBasis = Object.values(accounting.positions).reduce((sum, position) =>
       addDecimal(sum, position.netPositionBasis), "0");
     const ledgerDigestHex = await readLedgerDigest();
-    const trace = Object.freeze({ schemaVersion: RESEARCH_TRAINING_DIAGNOSTIC_V1,
+    const trace = Object.freeze({ schemaVersion: RESEARCH_TRAINING_DIAGNOSTIC_V2,
+      inputUseReceipt: bindInputUseReceipt(source, policy, observedExecutableIdentity, invocations),
       authority: "TRAINING_ENGINEERING_TRACE_ONLY" as const, capitalEligible: false as const,
       scientificQualified: false as const, strategyGuardianQualification: "UNQUALIFIED" as const,
       accountGuardianQualification: "UNQUALIFIED" as const,

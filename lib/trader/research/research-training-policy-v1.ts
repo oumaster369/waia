@@ -94,6 +94,7 @@ export function resolveResearchTrainingPolicyV1(proposal: unknown) {
   const current = deriveCurrentResearchTrainingPolicyV1();
   const requested = spec.replay;
   const portfolio = requested.portfolio;
+  if (spec.universe.sidecarContentSha256 !== null) refuse("SIDECAR_UNSUPPORTED");
   if (requested.enableReplayFusedContext || requested.intelligenceProfileSha256 !== null) {
     refuse("UNSUPPORTED_INTELLIGENCE_PROFILE");
   }

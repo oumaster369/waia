@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { assertSourceHashes, assertVitestProofReport, requiredSuites } from "@/scripts/postgres-validation/dee1200-postgres-proof-contract.mjs";
+import { assertSourceHashes, assertVitestProofReport, requiredSuites, sourcePaths } from "@/scripts/postgres-validation/dee1200-postgres-proof-contract.mjs";
 
 type VitestFile = {
   name: string;
@@ -81,5 +81,18 @@ describe("DEE-1200 PostgreSQL proof report guard", () => {
     const file = report.testResults.find(result => result.assertionResults.length > 1)!;
     file.assertionResults.pop();
     expect(() => assertVitestProofReport(report)).toThrow(/ASSERTION_TOTAL_MISMATCH/);
+  });
+
+  it("binds DEE-1207 invocation inputs and ensures their changes trigger the PostgreSQL workflow", () => {
+    const inputs = [
+      "lib/trader/research/research-feature-invocation-v1.ts",
+      "tests/unit/trader-research-feature-invocation-v1.test.ts",
+      "docs/plans/dee-1207-research-input-use.md",
+    ];
+    const workflow = readFileSync(resolve(process.cwd(), ".github/workflows/postgres-integration.yml"), "utf8");
+    for (const path of inputs) expect(sourcePaths).toContain(path);
+    expect(workflow).toContain('"lib/trader/research/**"');
+    expect(workflow).toContain('"tests/unit/trader-research-feature-invocation-v1.test.ts"');
+    expect(workflow).toContain('"docs/plans/dee-1207-research-input-use.md"');
   });
 });
