@@ -9,10 +9,10 @@ executionSurfaces: [local, github-pr-ci]
 requiredValidation: [targeted-unit, lint, typecheck, build, validate-canon, consumer-graphs, independent-review, required-ci]
 approvalGates: [user-authorized-engineering, independent-review, required-ci, no-live-activation]
 state:
-  status: in-review
+  status: in-progress
   completedWorkPackages: [WP-1, WP-2, WP-3]
   remainingWorkPackages: [WP-4]
-  nextAction: "Rebase onto actual main, review final source binding and require all published-head CI."
+  nextAction: "Complete bounded readiness on actual main 98a591c8, then prepare publication and require published-head CI."
 provenance:
   createdFrom: "Independent October 1 code audit and explicit user authorization for technical fixes"
   supersedes: null
@@ -20,7 +20,8 @@ provenance:
 
 # DEE-1206 — research net convention correction
 
-Plan frozen before source changes. Base: main `31c78cba`. Parent: DEE-1152.
+Plan frozen before source changes. Original implementation base: main `31c78cba`.
+Prepared local rebase base: actual main `98a591c8`. Parent: DEE-1152.
 The user authorizes technical corrections, tests, independent audits and PR
 integration after required checks. This implements existing after-cost return
 meaning; it changes no financial threshold, cost constant, strategy or live gate.
