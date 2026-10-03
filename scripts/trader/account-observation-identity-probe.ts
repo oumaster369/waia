@@ -1,6 +1,7 @@
 import "server-only";
 import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
+import { types } from "node:util";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import { accountObservationClock } from "@/lib/trader/account-observation/clock";
@@ -11,6 +12,7 @@ import { createPostgresObservationReader } from "@/lib/trader/account-observatio
 import { parseAccountObservationAssignmentManifest } from "@/lib/trader/account-observation/assignment-manifest";
 import { probeObservationCredentialPool, probeObservationPool, observationPoolLimits } from "@/lib/trader/account-observation/host-role-probe";
 import { createHtxV5ReadTransport } from "@/lib/trader/account-observation/derivatives/htx-v5-read-transport";
+import { AccountObservationReadFailure } from "@/lib/trader/account-observation/service";
 import { parseHtxV5AssetMode } from "@/lib/trader/account-observation/derivatives/htx-v5-read-contract";
 import { SecretsStoreMasterKeyProvider } from "@/lib/trader/security/secrets-store-master-key-provider";
 import { isProductionDeployment } from "@/lib/trader/security/deployment-tier";
@@ -30,7 +32,9 @@ type ProbeRefusal =
   | "CLI_ENVIRONMENT" | "RELEASE_SHA" | "MANIFEST_PATH" | "MANIFEST_DIGEST" | "READER_DATABASE_URL"
   | "CREDENTIAL_DATABASE_URL" | "DATABASE_LOGIN" | "DATABASE_RESOURCES_NOT_DISTINCT" | "MASTER_KEY"
   | "MANIFEST" | "ASSIGNMENT_COUNT" | "DATABASE_REFUSED" | "ASSIGNMENT_STALE" | "CREDENTIAL_REFUSED"
-  | "VENUE_REFUSED" | "TIMEOUT" | "CLEANUP_TIMEOUT" | "CLEANUP_FAILED" | "FAILED";
+  | "VENUE_REFUSED" | "HTX_TIMEOUT" | "HTX_RATE_LIMITED" | "HTX_PERMISSION_DENIED"
+  | "HTX_READ_FAILED" | "HTX_INVALID_RESPONSE" | "HTX_IDENTITY_MISMATCH"
+  | "ASSET_MODE_INVALID_RESPONSE" | "TIMEOUT" | "CLEANUP_TIMEOUT" | "CLEANUP_FAILED" | "FAILED";
 
 export class AccountObservationIdentityProbeFailure extends Error {
   readonly code: ProbeRefusal;
@@ -173,19 +177,42 @@ const productionDependencies: ProbeDependencies = {
   now: () => accountObservationClock.now(),
 };
 
+const probeRefusalCodes: readonly ProbeRefusal[] = [
+  "CLI_ENVIRONMENT", "RELEASE_SHA", "MANIFEST_PATH", "MANIFEST_DIGEST", "READER_DATABASE_URL",
+  "CREDENTIAL_DATABASE_URL", "DATABASE_LOGIN", "DATABASE_RESOURCES_NOT_DISTINCT", "MASTER_KEY",
+  "MANIFEST", "ASSIGNMENT_COUNT", "DATABASE_REFUSED", "ASSIGNMENT_STALE", "CREDENTIAL_REFUSED",
+  "VENUE_REFUSED", "HTX_TIMEOUT", "HTX_RATE_LIMITED", "HTX_PERMISSION_DENIED", "HTX_READ_FAILED",
+  "HTX_INVALID_RESPONSE", "HTX_IDENTITY_MISMATCH", "ASSET_MODE_INVALID_RESPONSE", "TIMEOUT",
+  "CLEANUP_TIMEOUT", "CLEANUP_FAILED", "FAILED",
+];
+
 function safeCode(error: unknown): ProbeRefusal {
   try {
+    if (types.isProxy(error)) return "FAILED";
     if (!(error instanceof AccountObservationIdentityProbeFailure)) return "FAILED";
     const descriptor = Object.getOwnPropertyDescriptor(error, "code");
     const code: unknown = descriptor && "value" in descriptor ? descriptor.value : undefined;
-    if ([
-      "CLI_ENVIRONMENT", "RELEASE_SHA", "MANIFEST_PATH", "MANIFEST_DIGEST", "READER_DATABASE_URL",
-      "CREDENTIAL_DATABASE_URL", "DATABASE_LOGIN", "DATABASE_RESOURCES_NOT_DISTINCT", "MASTER_KEY",
-      "MANIFEST", "ASSIGNMENT_COUNT", "DATABASE_REFUSED", "ASSIGNMENT_STALE", "CREDENTIAL_REFUSED",
-      "VENUE_REFUSED", "TIMEOUT", "CLEANUP_TIMEOUT", "CLEANUP_FAILED", "FAILED",
-    ].includes(code as string)) return code as ProbeRefusal;
+    if (typeof code === "string" && probeRefusalCodes.includes(code as ProbeRefusal)) return code as ProbeRefusal;
   } catch { /* Error objects from dependencies are untrusted. */ }
   return "FAILED";
+}
+
+function safeTransportCode(error: unknown): ProbeRefusal {
+  try {
+    if (types.isProxy(error)) return "VENUE_REFUSED";
+    if (!(error instanceof AccountObservationReadFailure)) return "VENUE_REFUSED";
+    const descriptor = Object.getOwnPropertyDescriptor(error, "code");
+    const code: unknown = descriptor && "value" in descriptor ? descriptor.value : undefined;
+    switch (code) {
+      case "TIMEOUT": return "HTX_TIMEOUT";
+      case "RATE_LIMITED": return "HTX_RATE_LIMITED";
+      case "PERMISSION_DENIED": return "HTX_PERMISSION_DENIED";
+      case "READ_FAILED": return "HTX_READ_FAILED";
+      case "INVALID_RESPONSE": return "HTX_INVALID_RESPONSE";
+      case "IDENTITY_MISMATCH": return "HTX_IDENTITY_MISMATCH";
+      default: return "VENUE_REFUSED";
+    }
+  } catch { return "VENUE_REFUSED"; }
 }
 
 async function bounded<T>(promise: Promise<T>, ms: number, code: ProbeRefusal): Promise<T> {
@@ -290,7 +317,8 @@ export async function runAccountObservationIdentityProbe(
       ...(assignment.config.htxV5?.expectedHtxUid ? { expectedHtxUid: assignment.config.htxV5.expectedHtxUid } : {}),
     });
     let response;
-    try { response = await transport.readAssetMode(signal); } catch { refuse(signal.aborted ? "TIMEOUT" : "VENUE_REFUSED"); }
+    try { response = await transport.readAssetMode(signal); }
+    catch (error) { refuse(signal.aborted ? "TIMEOUT" : safeTransportCode(error)); }
     ensureLive(signal);
     const currentAfter = await source.authorizeOpen(assignment.binding, signal);
     ensureLive(signal);
@@ -299,7 +327,7 @@ export async function runAccountObservationIdentityProbe(
     if (!currentAfter || !activeAfter || !sameObservationBinding(activeAfter, assignment.binding))
       refuse("ASSIGNMENT_STALE");
     let mode;
-    try { mode = dependencies.parseMode(response!.body); } catch { refuse("VENUE_REFUSED"); }
+    try { mode = dependencies.parseMode(response!.body); } catch { refuse("ASSET_MODE_INVALID_RESPONSE"); }
     if (!sameObservationBinding(response!.identity.binding, assignment.binding) ||
         response!.identity.permission !== "readOnly" || !/^[1-9]\d{0,38}$/.test(response!.identity.htxUid))
       refuse("VENUE_REFUSED");

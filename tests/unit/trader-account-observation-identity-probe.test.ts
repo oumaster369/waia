@@ -9,6 +9,7 @@ import { createObservationCredentialStore } from "@/lib/trader/account-observati
 import { createPostgresObservationAssignmentSource } from "@/lib/trader/account-observation/postgres-assignments";
 import { createPostgresObservationReader } from "@/lib/trader/account-observation/postgres-reader";
 import { createHtxV5ReadTransport } from "@/lib/trader/account-observation/derivatives/htx-v5-read-transport";
+import { AccountObservationReadFailure } from "@/lib/trader/account-observation/service";
 import { parseHtxV5AssetMode } from "@/lib/trader/account-observation/derivatives/htx-v5-read-contract";
 import { parseAccountObservationIdentityProbeEnv, runAccountObservationIdentityProbe, renderIdentityProbeRefusal,
   writeIdentityProbeRefusal, readManifestBounded, AccountObservationIdentityProbeFailure, type ProbeDependencies } from "@/scripts/trader/account-observation-identity-probe";
@@ -169,8 +170,59 @@ describe("protected HTX identity probe", () => {
         data: [{ accessKey: "synthetic-api-key", status: "normal", permission: "readOnly,trade" }] }));
       return original(input);
     });
-    await expect(runAccountObservationIdentityProbe(f.fixture.env, f.deps)).rejects.toMatchObject({ code: "VENUE_REFUSED" });
+    await expect(runAccountObservationIdentityProbe(f.fixture.env, f.deps)).rejects.toMatchObject({ code: "HTX_PERMISSION_DENIED" });
     expect(f.fetchImpl.mock.calls.map(([url]) => new URL(String(url)).pathname)).not.toContain("/v5/account/asset_mode");
+  });
+
+  it.each([
+    ["TIMEOUT", "HTX_TIMEOUT"], ["RATE_LIMITED", "HTX_RATE_LIMITED"],
+    ["PERMISSION_DENIED", "HTX_PERMISSION_DENIED"], ["READ_FAILED", "HTX_READ_FAILED"],
+    ["INVALID_RESPONSE", "HTX_INVALID_RESPONSE"], ["IDENTITY_MISMATCH", "HTX_IDENTITY_MISMATCH"],
+  ] as const)("maps strict transport %s to the fixed diagnostic %s", async (transportCode, refusal) => {
+    const transportOverride: ProbeDependencies["createTransport"] = () => ({
+      readAssetMode: async () => { throw new AccountObservationReadFailure(transportCode); },
+      dispose: vi.fn(), settled: async () => {},
+    }) as unknown as ReturnType<typeof createHtxV5ReadTransport>;
+    const f = setup({ transportOverride });
+    await expect(runAccountObservationIdentityProbe(f.fixture.env, f.deps)).rejects.toMatchObject({ code: refusal });
+    expect(f.fetchImpl.mock.calls.map(([url]) => new URL(String(url)).pathname)).toHaveLength(0);
+  });
+
+  it.each([
+    ["unknown data code", Object.assign(new Error("private response URL/body"), { code: "HTX_TIMEOUT" })],
+    ["transparent data proxy", new Proxy(new AccountObservationReadFailure("TIMEOUT"), {})],
+    ["accessor code", Object.defineProperty(new AccountObservationReadFailure("TIMEOUT"), "code", { get: () => "TIMEOUT" })],
+    ["proxy descriptor", new Proxy(new AccountObservationReadFailure("TIMEOUT"), {
+      getOwnPropertyDescriptor: () => { throw new Error("private proxy trap"); },
+    })],
+  ])("maps a %s transport error to generic refusal", async (_label, transportError) => {
+    const transportOverride: ProbeDependencies["createTransport"] = () => ({
+      readAssetMode: async () => { throw transportError; },
+      dispose: vi.fn(), settled: async () => {},
+    }) as unknown as ReturnType<typeof createHtxV5ReadTransport>;
+    const f = setup({ transportOverride });
+    await expect(runAccountObservationIdentityProbe(f.fixture.env, f.deps)).rejects.toMatchObject({ code: "VENUE_REFUSED" });
+  });
+
+  it("refuses transparent transport proxies without reading their code accessor", async () => {
+    let getterCalls = 0;
+    const failure = Object.defineProperty(new AccountObservationReadFailure("TIMEOUT"), "code", {
+      get: () => { getterCalls += 1; return "TIMEOUT"; },
+    });
+    const transparentProxy = new Proxy(failure, {});
+    const transportOverride: ProbeDependencies["createTransport"] = () => ({
+      readAssetMode: async () => { throw transparentProxy; },
+      dispose: vi.fn(), settled: async () => {},
+    }) as unknown as ReturnType<typeof createHtxV5ReadTransport>;
+    const f = setup({ transportOverride });
+    await expect(runAccountObservationIdentityProbe(f.fixture.env, f.deps)).rejects.toMatchObject({ code: "VENUE_REFUSED" });
+    expect(getterCalls).toBe(0);
+  });
+
+  it("distinguishes strict asset-mode parse failure", async () => {
+    const f = setup();
+    const deps = { ...f.deps, parseMode: (() => { throw new Error("private response body"); }) as ProbeDependencies["parseMode"] };
+    await expect(runAccountObservationIdentityProbe(f.fixture.env, deps)).rejects.toMatchObject({ code: "ASSET_MODE_INVALID_RESPONSE" });
   });
 
   it("maps sensitive dependency failures to fixed redacted JSON", () => {
@@ -189,6 +241,19 @@ describe("protected HTX identity probe", () => {
     const protoForgery = Object.create(AccountObservationIdentityProbeFailure.prototype) as Error & { code: string };
     Object.defineProperty(protoForgery, "code", { get: () => "CLEANUP_TIMEOUT" });
     expect(renderIdentityProbeRefusal(protoForgery)).toContain('"refusal":"FAILED"');
+  });
+
+  it("refuses transparent identity failure proxies without reading their code accessor", () => {
+    expect(renderIdentityProbeRefusal(new Proxy(new AccountObservationIdentityProbeFailure("TIMEOUT"), {})))
+      .toContain('"refusal":"FAILED"');
+    let getterCalls = 0;
+    const failure = Object.defineProperty(new AccountObservationIdentityProbeFailure("FAILED"), "code", {
+      get: () => { getterCalls += 1; return "CLEANUP_TIMEOUT"; },
+    });
+    expect(renderIdentityProbeRefusal(new Proxy(failure, {}))).toBe(JSON.stringify({
+      schemaVersion: "waia.account_observation_identity_probe.v1", refusal: "FAILED",
+    }));
+    expect(getterCalls).toBe(0);
   });
 
   it("reads only bounded regular manifest files", () => {
