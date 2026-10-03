@@ -82,10 +82,12 @@ function setup(overrides: Partial<ObservationConfig> = {}) {
   const openReader = vi.fn(async (_binding: ObservationBinding, _signal: AbortSignal) => {
     void _binding; void _signal; return reader;
   });
+  const settleReader = vi.fn(async (_binding: ObservationBinding) => { void _binding; });
   const deps = { repository, clock, openReader,
+    ...(overrides.htxV5?.enabled ? { settleReader } : {}),
     newObservationId: () => `10000000-0000-4000-8000-${String(state.counter).padStart(12, "0")}` };
   const service = createAccountObservationService(deps, { ...config, ...overrides });
-  return { state, repository, reader, openReader, service, envelope, snapshot, position, beforeCommit, deps };
+  return { state, repository, reader, openReader, service, envelope, snapshot, position, beforeCommit, deps, settleReader };
 }
 function htxV5Projection(htxUid = "456", withPartialError = false): HtxV5AccountObservation {
   const started = Date.now();
@@ -205,6 +207,99 @@ describe("DEE-960 injected account observation — no production adapter or real
       binding: { ...f.state.binding }, projection })) });
     expect(await f.service.tick(initial, "owner")).toEqual({ status: "FENCED" });
     expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+  });
+
+  it("does not commit a timed-out V5 projection or release its lease before reader settlement", async () => {
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(() => new Promise(() => {})) });
+    let drain!: () => void;
+    f.settleReader.mockImplementation(() => new Promise<void>(resolve => { drain = resolve; }));
+    const work = f.service.tick(initial, "owner");
+    await vi.advanceTimersByTimeAsync(120_000);
+    await vi.waitFor(() => expect(f.settleReader).toHaveBeenCalledOnce());
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.repository.release).not.toHaveBeenCalled();
+    expect(f.state.lease).not.toBeNull();
+    drain();
+    const result = await work;
+    expect(result).toMatchObject({ status: "COMMITTED", observation: { schemaVersion: "account-observation/v3",
+      htxV5: { assetMode: { status: "ERROR", error: "TIMEOUT" } } } });
+    expect(f.repository.commitIfCurrent).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a partial V5 read fenced until cancelled reader cleanup has settled", async () => {
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection: htxV5Projection("456", true) })) });
+    const stop = new AbortController(); let drain!: () => void;
+    f.settleReader.mockImplementation(() => new Promise<void>(resolve => { drain = resolve; }));
+    const work = f.service.tick(initial, "owner", stop.signal);
+    await vi.waitFor(() => expect(f.settleReader).toHaveBeenCalledOnce());
+    stop.abort();
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.repository.release).not.toHaveBeenCalled();
+    expect(f.state.lease).not.toBeNull();
+    drain();
+    expect(await work).toEqual({ status: "FENCED" });
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.repository.release).toHaveBeenCalledOnce();
+  });
+
+  it("holds the lease for a late reader open and its cleanup before releasing", async () => {
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    const stop = new AbortController(); let finishOpen!: (reader: AccountObservationReader) => void;
+    let finishDrain!: () => void;
+    f.openReader.mockReturnValue(new Promise(resolve => { finishOpen = resolve; }));
+    f.settleReader.mockImplementation(() => new Promise<void>(resolve => { finishDrain = resolve; }));
+    const work = f.service.tick(initial, "owner", stop.signal);
+    await vi.advanceTimersByTimeAsync(0);
+    stop.abort();
+    await vi.waitFor(() => expect(f.openReader).toHaveBeenCalledOnce());
+    expect(f.repository.release).not.toHaveBeenCalled();
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    finishOpen(f.reader);
+    await vi.waitFor(() => expect(f.settleReader).toHaveBeenCalledOnce());
+    expect(f.reader.dispose).toHaveBeenCalledOnce();
+    expect(f.repository.release).not.toHaveBeenCalled();
+    expect(f.state.lease).not.toBeNull();
+    finishDrain();
+    expect(await work.catch(error => error)).toMatchObject({ code: "ACCOUNT_OBSERVATION_OPEN_FAILED" });
+    expect(f.repository.release).toHaveBeenCalledOnce();
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+  });
+
+  it("retains the lease and refuses commit when reader settlement rejects", async () => {
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection: htxV5Projection() })) });
+    f.settleReader.mockRejectedValue(new Error("synthetic-cleanup-secret"));
+    await expect(f.service.tick(initial, "owner")).rejects.toThrow("ACCOUNT_OBSERVATION_INTERNAL_FAILURE");
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.repository.release).not.toHaveBeenCalled();
+    expect(f.state.lease).not.toBeNull();
+    expect(JSON.stringify(vi.mocked(f.repository.release).mock.calls)).not.toContain("synthetic-cleanup-secret");
+  });
+
+  it("waits for V5 settlement after dispose throws, then rejects without releasing the lease", async () => {
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection: htxV5Projection() })) });
+    vi.mocked(f.reader.dispose).mockImplementation(() => { throw new Error("synthetic-dispose-error"); });
+    let drain!: () => void;
+    f.settleReader.mockImplementation(() => new Promise<void>(resolve => { drain = resolve; }));
+    let settled = false;
+    const work = f.service.tick(initial, "owner").catch(error => { settled = true; return error; });
+    await vi.waitFor(() => expect(f.settleReader).toHaveBeenCalledOnce());
+    expect(settled).toBe(false);
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.repository.release).not.toHaveBeenCalled();
+    expect(f.state.lease).not.toBeNull();
+    drain();
+    const error = await work;
+    expect(error).toMatchObject({ code: "ACCOUNT_OBSERVATION_DISPOSAL_FAILED" });
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.repository.release).not.toHaveBeenCalled();
+    expect(f.state.lease).not.toBeNull();
   });
 
   it.each(["before-read", "before-commit"])("fences cancellation during async currentness %s", async phase => {
@@ -589,7 +684,7 @@ describe("DEE-960 injected account observation — no production adapter or real
   });
   it("disposal failure prevents commit and redacts the underlying exception", async () => {
     const f = setup(); vi.mocked(f.reader.dispose).mockImplementation(() => { throw new Error("synthetic-secret"); });
-    await expect(f.service.tick(initial, "owner")).rejects.toThrow("ACCOUNT_OBSERVATION_INTERNAL_FAILURE");
+    await expect(f.service.tick(initial, "owner")).rejects.toThrow("ACCOUNT_OBSERVATION_DISPOSAL_FAILED");
     expect(f.reader.dispose).toHaveBeenCalledOnce(); expect(f.state.lease).toBeNull(); expect(f.state.observations).toEqual([]);
   });
   it("pre-cancelled tick makes no claim or reads", async () => {

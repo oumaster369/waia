@@ -136,6 +136,9 @@ export function createConfiguredHtxObservationRuntime(
   const htxV5Readers = new Map<HtxV5ObservationReader, string>();
   const admissions = new Set<ReturnType<typeof createHtxReadAdmission>>();
   const closingAdmissions = new WeakSet<ReturnType<typeof createHtxReadAdmission>>();
+  // Per-opening owners survive prompt abort rejection. The service drains this exact
+  // binding before releasing its persistent lease, including initial metadata admission.
+  const cleanupOwners = new Map<string, { accountKey: string; settle(): Promise<void> }>();
   let derivativeCleanupFailed = false;
   const releaseDerivatives = (
     reader: ReturnType<typeof createHtxDerivativesObservationReader> | undefined,
@@ -258,6 +261,13 @@ export function createConfiguredHtxObservationRuntime(
     intervalMs,
     iterationTimeoutMs,
     maxAccounts: 20,
+    async settleReader(binding) {
+      const id = key(binding);
+      const owner = cleanupOwners.get(id);
+      if (!owner) return;
+      await owner.settle();
+      if (cleanupOwners.get(id) === owner) cleanupOwners.delete(id);
+    },
     async openReader(requested, signal) {
       if (
         closed ||
@@ -266,7 +276,8 @@ export function createConfiguredHtxObservationRuntime(
         derivativeCleanupFailed ||
         derivativeReaders.size >= 20 ||
         htxV5Readers.size >= 20 ||
-        admissions.size >= 20
+        admissions.size >= 20 ||
+        cleanupOwners.size >= 20
       )
         throw new AccountObservationReadFailure("READ_FAILED");
       let binding: ObservationBinding;
@@ -276,7 +287,8 @@ export function createConfiguredHtxObservationRuntime(
         return failure();
       }
       const accountKey = JSON.stringify([binding.organizationId, binding.exchangeAccountId]);
-      if ([...htxV5Readers.values()].includes(accountKey))
+      if ([...htxV5Readers.values()].includes(accountKey) ||
+        [...cleanupOwners.values()].some(owner => owner.accountKey === accountKey))
         throw new AccountObservationReadFailure("READ_FAILED");
       const opened = ensureStore(binding);
       if (!opened) throw new AccountObservationReadFailure("IDENTITY_MISMATCH");
@@ -290,6 +302,25 @@ export function createConfiguredHtxObservationRuntime(
       let admission: ReturnType<typeof createHtxReadAdmission> | undefined;
       let derivatives: ReturnType<typeof createHtxDerivativesObservationReader> | undefined;
       let htxV5Reader: HtxV5ObservationReader | undefined;
+      let openerWork: Promise<void> | undefined;
+      let openedDone!: () => void;
+      const openingDone = new Promise<void>(resolve => { openedDone = resolve; });
+      cleanupOwners.set(key(binding), {
+        accountKey,
+        async settle() {
+          await openingDone;
+          await openerWork;
+          // Calling settled also disposes the concrete transports. Failure retains
+          // ownership and the lease for expiry recovery; never declare clean shutdown.
+          let disposalFailed = false;
+          try { owned?.dispose(); } catch { disposalFailed = true; }
+          const drained = await Promise.allSettled([
+            () => owned?.settled?.(), () => admission?.settled(),
+            () => derivatives?.settled(), () => htxV5Reader?.settled(), () => store.settled(),
+          ].map(async settle => settle()));
+          if (disposalFailed || drained.some(result => result.status === "rejected")) failure();
+        },
+      });
       const verifyExactKey: AdmissionVerifier = async (scope, digest, admissionSignal) => {
         if (closed || admissionSignal.aborted || !admission) return false;
         if (
@@ -305,6 +336,7 @@ export function createConfiguredHtxObservationRuntime(
             clock,
             host,
             fetchImpl,
+            trackOpening(work) { openerWork = work; },
             authorizeOpen: source.authorizeOpen,
             async openCredential(scope, credentialSignal) {
               const handle = await store.openCredential(scope, credentialSignal);
@@ -403,6 +435,7 @@ export function createConfiguredHtxObservationRuntime(
           readBalances: reader.readBalances,
           readOpenOrders: reader.readOpenOrders,
           readTrades: reader.readTrades,
+          settled: reader.settled,
           ...(derivatives ? { readDerivativesAccount: derivatives.readDerivativesAccount } : {}),
           ...(htxV5Reader ? { readHtxV5: async (requestSignal: AbortSignal) => Object.freeze({
             binding: readerOptions.binding,
@@ -421,17 +454,21 @@ export function createConfiguredHtxObservationRuntime(
         readers.add(wrapped);
         return wrapped;
       } finally {
-        if (!owned) {
-          try {
-            releaseHtxV5(htxV5Reader);
-          } finally {
-            try { releaseDerivatives(derivatives); }
-            finally { releaseAdmission(admission); }
+        try {
+          if (!owned) {
+            try {
+              releaseHtxV5(htxV5Reader);
+            } finally {
+              try { releaseDerivatives(derivatives); }
+              finally { releaseAdmission(admission); }
+            }
           }
+        } finally {
+          signal.removeEventListener("abort", cancel);
+          opening.delete(abort);
+          abort.abort();
+          openedDone();
         }
-        signal.removeEventListener("abort", cancel);
-        opening.delete(abort);
-        abort.abort();
       }
     },
   });
@@ -459,7 +496,7 @@ export function createConfiguredHtxObservationRuntime(
           failed = true;
         }
       }
-      if (failed) failure();
+      if (failed || derivativeCleanupFailed || cleanupOwners.size > 0) failure();
     },
   });
 }

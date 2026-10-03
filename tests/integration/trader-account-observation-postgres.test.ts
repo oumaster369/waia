@@ -256,6 +256,157 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
     const nowMs = Date.now();
     return repo.commitIfCurrent({ lease: l, observation: o, nowMs, nextDueAtMs: nowMs + 10000, consecutiveFailures: 0 });
   }
+  const deferred = <T,>() => {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>(done => { resolve = done; });
+    return { promise, resolve };
+  };
+  const within = async <T,>(promise: Promise<T>, label: string): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([promise, new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`timed out waiting for ${label}`)), 8000);
+      })]);
+    } finally { if (timer) clearTimeout(timer); }
+  };
+  const makeCrossRuntime = (binding: ObservationBinding, config: ReturnType<typeof createObservationConfiguration>,
+    ownerId: string, started: { resolve(value: void): void }, response: { promise: Promise<Response> },
+    committed: string[]) => {
+    const readerLimits = { pageSize: 10, maxPages: 1, maxRecords: 20, maxResponseBytes: 4096, tradeWindowMs: 3600000 };
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const request = new URL(String(input));
+      expect(init?.redirect).toBe("error");
+      if (request.hostname === "api.hbdm.com") {
+        started.resolve();
+        return response.promise;
+      }
+      expect(request.origin).toBe("https://api.huobi.pro");
+      if (request.pathname === "/v1/account/accounts") return Response.json({ status: "ok",
+        data: [{ id: Number(binding.exchangeAccountId), type: "spot", state: "working" }] });
+      if (request.pathname === "/v2/user/uid") return Response.json({ code: 200, data: 456 });
+      if (request.pathname === "/v2/user/api-key") return Response.json({ code: 200,
+        data: [{ accessKey: "synthetic-key", status: "normal", permission: "readOnly" }] });
+      if (request.pathname.endsWith("/balance")) return Response.json({ status: "ok", data: {
+        id: Number(binding.exchangeAccountId), type: "spot", state: "working",
+        list: [{ currency: "usdt", type: "trade", balance: "42" }, { currency: "usdt", type: "frozen", balance: "0" }] } });
+      return Response.json({ status: "ok", data: [] });
+    };
+    return createConfiguredHtxObservationRuntime({ collectorSql: client, readerSql: readerClient,
+      protectedCredentialService: { async getDecryptedCredentials(context, id) {
+        expect(context.organizationId).toBe(binding.organizationId); expect(id).toBe(binding.credentialId);
+        return { apiKey: "synthetic-key", apiSecret: "synthetic-secret" };
+      } }, configured: [{ binding, config, readerLimits }], host: "api.huobi.pro", fetchImpl,
+      clock: accountObservationClock, ownerId, intervalMs: 1000, iterationTimeoutMs: 180000,
+      report(event) { if (event === "COLLECTION_COMMITTED") committed.push(event); } });
+  };
+  const heldV5Response = () => Response.json({ code: 200, ts: Date.now(), data: { asset_mode: "1" } });
+  const readLease = async (binding: ObservationBinding) => {
+    const rows = await admin`SELECT lease_token::text AS token, lease_owner,
+      floor(extract(epoch from lease_expires_at) * 1000)::bigint AS expires_ms,
+      consecutive_failures FROM public.trader_account_collection_state WHERE credential_id=${binding.credentialId}`;
+    expect(rows).toHaveLength(1);
+    return rows[0];
+  };
+  it("holds a shared lease through cancelled V5 settlement before another runtime can claim", async () => {
+    const readerLimits = { pageSize: 10, maxPages: 1, maxRecords: 20, maxResponseBytes: 4096, tradeWindowMs: 3600000 };
+    const config = createObservationConfiguration({ symbols: ["BTCUSDT"], pollIntervalMs: 1000,
+      maxBackoffMs: 8000, readTimeoutMs: 1000, leaseTtlMs: 150000,
+      htxCoverage: { ...readerLimits, host: "api.huobi.pro" }, htxV5: { enabled: true, expectedHtxUid: "456" } });
+    const binding = { ...await seed("654321"), configurationRevision: config.revision };
+    await admin`UPDATE public.trader_account_collection_state SET configuration_revision=${config.revision}
+      WHERE credential_id=${binding.credentialId}`;
+    const aStarted = deferred<void>(); const bStarted = deferred<void>();
+    const heldA = deferred<Response>(); const heldB = deferred<Response>();
+    let aSettled = false; let bSettled = false;
+    const aResponse = { promise: heldA.promise.then(response => { aSettled = true; return response; }) };
+    const bResponse = { promise: heldB.promise.then(response => { bSettled = true; return response; }) };
+    const commitsA: string[] = []; const commitsB: string[] = [];
+    const stopA = new AbortController(); const stopB = new AbortController();
+    const runtimeA = makeCrossRuntime(binding, config, "cross-runtime-A", aStarted, aResponse, commitsA);
+    const runtimeB = makeCrossRuntime(binding, config, "cross-runtime-B", bStarted, bResponse, commitsB);
+    let runA: Promise<void> | undefined; let runB: Promise<void> | undefined;
+    try {
+      runA = runtimeA.run(stopA.signal);
+      await within(aStarted.promise, "runtime A V5 request");
+      const claimed = await readLease(binding);
+      expect(claimed.lease_owner).toBe("cross-runtime-A");
+      if (typeof claimed.token !== "string" || typeof claimed.lease_owner !== "string")
+        throw new Error("expected runtime A lease to be held");
+      const leaseA: ObservationLease = { binding, token: claimed.token, ownerId: claimed.lease_owner,
+        expiresAtMs: Number(claimed.expires_ms), consecutiveFailures: claimed.consecutive_failures };
+
+      stopA.abort();
+      runB = runtimeB.run(stopB.signal);
+      await new Promise(resolve => setTimeout(resolve, 150));
+      expect(aSettled).toBe(false);
+      expect(bSettled).toBe(false);
+      const whileASettling = await readLease(binding);
+      expect(whileASettling).toMatchObject({ token: leaseA.token, lease_owner: "cross-runtime-A" });
+      expect(runA).toBeDefined();
+      const aStillPending = await Promise.race([runA!.then(() => false), new Promise<true>(resolve =>
+        setTimeout(() => resolve(true), 100))]);
+      expect(aStillPending).toBe(true);
+
+      heldA.resolve(heldV5Response());
+      await within(runA!, "runtime A settled cancellation");
+      expect(aSettled).toBe(true);
+      await admin`UPDATE public.trader_account_collection_state SET next_due_at=clock_timestamp()-interval '1 second'
+        WHERE credential_id=${binding.credentialId}`;
+      await within(bStarted.promise, "runtime B V5 request after A settlement");
+      const current = await readLease(binding);
+      expect(current).toMatchObject({ lease_owner: "cross-runtime-B" });
+      expect(current.token).not.toBe(leaseA.token);
+      expect(await commit(leaseA, v3Observation(binding))).toBe(false);
+      expect((await readLease(binding)).token).toBe(current.token);
+      expect((await repo.readLatest(binding))).toBeNull();
+      expect((await admin`SELECT count(*)::int AS n FROM public.trader_account_observations
+        WHERE credential_id=${binding.credentialId}`)[0].n).toBe(0);
+      expect(commitsA).toHaveLength(0);
+
+      // Force an expiry takeover while B's fetch is still pending. Once B later
+      // settles, its stale release and commit must leave C's successor token intact.
+      const leaseBRow = current;
+      const leaseB: ObservationLease = { binding, token: String(leaseBRow.token), ownerId: String(leaseBRow.lease_owner),
+        expiresAtMs: Number(leaseBRow.expires_ms), consecutiveFailures: leaseBRow.consecutive_failures };
+      stopB.abort();
+      const cStarted = deferred<void>(); const heldC = deferred<Response>();
+      const cResponse = { promise: heldC.promise.then(response => response) };
+      const commitsC: string[] = []; const stopC = new AbortController();
+      const runtimeC = makeCrossRuntime(binding, config, "cross-runtime-C", cStarted, cResponse, commitsC);
+      let runC: Promise<void> | undefined;
+      try {
+        await admin`UPDATE public.trader_account_collection_state SET lease_expires_at=clock_timestamp()-interval '1 second',
+          next_due_at=clock_timestamp()-interval '1 second' WHERE credential_id=${binding.credentialId}`;
+        runC = runtimeC.run(stopC.signal);
+        await within(cStarted.promise, "runtime C V5 request after lease expiry");
+        const successor = await readLease(binding);
+        expect(successor.lease_owner).toBe("cross-runtime-C");
+        expect(successor.token).not.toBe(leaseB.token);
+
+        heldB.resolve(heldV5Response());
+        await within(runB!, "runtime B settled after lease expiry");
+        expect(bSettled).toBe(true);
+        expect((await readLease(binding)).token).toBe(successor.token);
+        expect(await commit(leaseB, v3Observation(binding))).toBe(false);
+        expect((await readLease(binding)).token).toBe(successor.token);
+        expect(await repo.readLatest(binding)).toBeNull();
+        expect((await admin`SELECT count(*)::int AS n FROM public.trader_account_observations
+          WHERE credential_id=${binding.credentialId}`)[0].n).toBe(0);
+        expect(commitsB).toHaveLength(0);
+      } finally {
+        stopC.abort(); heldC.resolve(heldV5Response()); runtimeC.dispose();
+        if (runC) await Promise.allSettled([runC]);
+      }
+    } finally {
+      stopA.abort(); stopB.abort();
+      heldA.resolve(heldV5Response()); heldB.resolve(heldV5Response());
+      runtimeA.dispose(); runtimeB.dispose();
+      await Promise.allSettled([...(runA ? [runA] : []), ...(runB ? [runB] : [])]);
+      expect(await repo.readLatest(binding)).toBeNull();
+      expect((await admin`SELECT count(*)::int AS n FROM public.trader_account_observations
+        WHERE credential_id=${binding.credentialId}`)[0].n).toBe(0);
+    }
+  }, 30000);
   it("commits v3 through the restricted writer and reads its exact tenant projection through a restricted LOGIN", async () => {
     const b = await seed(); const l = await lease(b); const o = v3Observation(b);
     expect(await commit(l, o)).toBe(true);

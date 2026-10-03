@@ -138,6 +138,7 @@ export function createPostgresAccountObservationRuntime(
     sql: Sql;
     loadAssignments(signal: AbortSignal): Promise<readonly ObservationAssignment[]>;
     openReader(binding: ObservationBinding, signal: AbortSignal): Promise<AccountObservationReader>;
+    settleReader?(binding: ObservationBinding): Promise<void>;
     report(event: ObservationRuntimeEvent): void;
     ownerId?: string;
     clock?: ObservationClock;
@@ -190,7 +191,8 @@ export function createPostgresAccountObservationRuntime(
         const assignment = assignments.get(key(binding));
         if (!assignment) return { status: "FENCED" };
         const service = createAccountObservationService(
-          { repository, clock, openReader: input.openReader, newObservationId: randomUUID },
+          { repository, clock, openReader: input.openReader, settleReader: input.settleReader,
+            newObservationId: randomUUID },
           assignment.config,
         );
         return service.tick(assignment.binding, ownerId, signal);

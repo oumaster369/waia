@@ -19,6 +19,8 @@ type Dependencies = Readonly<{
   clock: ObservationClock; fetchImpl: typeof fetch; host: TransportInput["host"];
   authorizeOpen(binding: ObservationBinding, signal: AbortSignal): Promise<boolean>;
   openCredential(binding: ObservationBinding, signal: AbortSignal): Promise<HtxObservationCredentialHandle>;
+  /** Track the underlying opening, even when its bounded outward promise rejects early. */
+  trackOpening?(settled: Promise<void>): void;
   verifyReadAdmission: TransportInput["verifyReadAdmission"];
 }>;
 const fail = (code: "READ_FAILED" | "TIMEOUT" | "PERMISSION_DENIED" | "IDENTITY_MISMATCH"): never => {
@@ -80,11 +82,15 @@ export async function openHtxObservationReader(
     transport = createHtxObservationGetTransport({ binding, apiKey, apiSecret, host,
       symbols: fixedOptions.symbols, timeoutMs, clock, fetchImpl, verifyReadAdmission });
     reader = createHtxAccountObservationReader({ transport, clock }, fixedOptions);
-    return Object.freeze({ readBalances: reader.readBalances, readOpenOrders: reader.readOpenOrders,
-      readTrades: reader.readTrades, dispose });
+    const owner = { readBalances: reader.readBalances, readOpenOrders: reader.readOpenOrders,
+      readTrades: reader.readTrades, dispose, settled: async () => { await transport?.settled(); } };
+    Object.defineProperty(owner, "settled", { enumerable: false });
+    return Object.freeze(owner);
   };
+  const opening = work();
   try {
-    return await Promise.race([work(), cancelled, clock.sleep(timeoutMs, timer.signal).then(() => fail("TIMEOUT"))]);
+    deps.trackOpening?.(opening.then(() => {}, () => {}));
+    return await Promise.race([opening, cancelled, clock.sleep(timeoutMs, timer.signal).then(() => fail("TIMEOUT"))]);
   } catch (error) {
     try { dispose(); } catch { /* Preserve the primary classified failure. */ }
     if (error instanceof AccountObservationReadFailure) throw error;

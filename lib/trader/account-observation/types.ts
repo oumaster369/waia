@@ -77,6 +77,8 @@ export type AccountObservationReader = Readonly<{
     }>
   >;
   dispose(): void;
+  /** Resolves only after disposed transport work has actually settled, including late responses. */
+  settled?(): Promise<void>;
 }>;
 export type DerivativesExecutionsObservation = Readonly<{
   status: "NOT_CONFIGURED" | "COMPLETE" | "PARTIAL" | "ERROR";

@@ -289,6 +289,8 @@ export function createAccountObservationService(
     clock: ObservationClock;
     newObservationId(): string;
     openReader(binding: ObservationBinding, signal: AbortSignal): Promise<AccountObservationReader>;
+    /** Owned opening/admission/transport cleanup; required by V5. Host bounds shutdown. */
+    settleReader?(binding: ObservationBinding): Promise<void>;
   }>,
   inputConfig: ObservationConfig,
 ) {
@@ -362,6 +364,7 @@ export function createAccountObservationService(
       ((!htxV5.enabled &&
         (htxV5.fillContracts !== undefined || htxV5.expectedHtxUid !== undefined)) ||
         new Set(htxV5.fillContracts ?? []).size !== (htxV5.fillContracts?.length ?? 0))) ||
+    (htxV5?.enabled && typeof deps.settleReader !== "function") ||
     (fillContracts !== undefined &&
       (derivativeFamilies === undefined ||
         new Set(fillContracts.map((item) => `${item.family}\u0000${item.contract}`)).size !==
@@ -378,6 +381,7 @@ export function createAccountObservationService(
   async function open(
     binding: ObservationBinding,
     signal?: AbortSignal,
+    trackOpening?: (settled: Promise<void>) => void,
   ): Promise<AccountObservationReader> {
     if (signal?.aborted) throw new AccountObservationFailure("ACCOUNT_OBSERVATION_OPEN_FAILED");
     const abort = new AbortController();
@@ -404,13 +408,14 @@ export function createAccountObservationService(
       if (signal?.aborted) cancel();
     });
     const pending = Promise.resolve().then(() => deps.openReader(binding, abort.signal));
-    void pending.then(
+    const openingSettled = pending.then(
       (reader) => {
         resolved = reader;
         if (abandoned) disposeLate();
       },
       () => {},
     );
+    trackOpening?.(openingSettled);
     try {
       return await Promise.race([
         pending,
@@ -767,12 +772,28 @@ export function createAccountObservationService(
       let reader: AccountObservationReader | undefined;
       let primary: AccountObservationFailure | undefined;
       let committed = false;
+      let openingSettled: Promise<void> | undefined;
+      let cleanupReady = true;
+      let cleanupWork: Promise<void> | undefined;
       let releaseClaim: Pick<ObservationLease, "binding" | "ownerId" | "token"> | undefined;
       const dispose = () => {
         const owned = reader;
         reader = undefined;
         owned?.dispose();
       };
+      const disposeAndSettle = () => cleanupWork ??= (async () => {
+        let disposalFailed = false;
+        try { dispose(); } catch { disposalFailed = true; }
+        if (openingSettled && deps.settleReader) {
+          // Abort is a request, not proof that transport stopped. Keep the shared lease
+          // until this owner drains. The host bounds shutdown; expiry handles a crash
+          // or an uncooperative transport and still fences every stale database write.
+          await openingSettled;
+          await deps.settleReader(binding);
+        }
+        if (disposalFailed) throw new AccountObservationFailure("ACCOUNT_OBSERVATION_DISPOSAL_FAILED");
+        cleanupReady = true;
+      })();
       try {
         let rawLease: ObservationLease | null;
         try {
@@ -795,7 +816,8 @@ export function createAccountObservationService(
           !(await active())
         )
           return { status: "FENCED" };
-        reader = await open(binding, signal);
+        cleanupReady = !deps.settleReader;
+        reader = await open(binding, signal, (settled) => { openingSettled = settled; });
         if (!(await active())) return { status: "FENCED" };
         if (
           config.htxDerivativesFamilies?.length &&
@@ -922,7 +944,7 @@ export function createAccountObservationService(
           if (!projection || !(await active())) return { status: "FENCED" };
           htxV5 = projection;
         }
-        dispose();
+        await disposeAndSettle();
         if (!(await active())) return { status: "FENCED" };
         const ended = now();
         if (ended < started) invalid();
@@ -981,12 +1003,12 @@ export function createAccountObservationService(
       } finally {
         let cleanup: AccountObservationFailure | undefined;
         try {
-          dispose();
+          await disposeAndSettle();
         } catch {
           cleanup = new AccountObservationFailure("ACCOUNT_OBSERVATION_DISPOSAL_FAILED");
         }
         // Successful commit atomically released its token; do not invent a second release obligation.
-        if (!committed && releaseClaim)
+        if (!committed && releaseClaim && cleanupReady)
           try {
             // Even a malformed claim response cannot redirect cleanup into another scope/owner.
             await deps.repository.release(releaseClaim);
