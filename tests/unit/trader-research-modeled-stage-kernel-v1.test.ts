@@ -10,6 +10,30 @@ import {
 import type { ResearchModeledStageSourceV1 } from "@/lib/trader/research/research-modeled-stage-source-v1";
 
 const ATTEMPT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const ORG_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+function stagePayload(overrides: Record<string, unknown> = {}) {
+  return {
+    scope: {
+      identity: {
+        attemptId: ATTEMPT_ID,
+        trialIndex: 0,
+        organizationId: ORG_ID,
+        parameters: { lookbackBars: 2, buyZscore: "-1.5", sellZscore: "0" },
+      },
+      ledgerScope: {
+        organizationId: ORG_ID,
+        historicalRunId: "run-1",
+        historicalAccountKey: "acct",
+      },
+      contentDigest: "ab",
+    },
+    experiment: { spec: { universe: { symbol: "BTCUSDT" } } },
+    bars: [],
+    cycles: [],
+    ...overrides,
+  };
+}
 
 function executor() {
   return {
@@ -265,6 +289,248 @@ describe("owned research modeled stage kernel", () => {
       }),
     ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
     expect(db.execute).not.toHaveBeenCalled();
+  });
+
+  it("refuses an index getter on bars and a field getter on cycle.barIndex", async () => {
+    const { descriptor } = sealed();
+    const db = executor();
+    let indexReads = 0;
+    const bars = Object.defineProperty([], "0", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        indexReads += 1;
+        return {
+          barOpenTime: "2026-01-01T00:00:00.000Z",
+          barCloseTime: "1999-01-01T00:00:00.000Z",
+        };
+      },
+    });
+    await expect(
+      runOwnedResearchModeledStageV1({
+        executor: db,
+        descriptor,
+        payload: stagePayload({ bars }) as never,
+      }),
+    ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
+    expect(indexReads).toBe(0);
+
+    let fieldReads = 0;
+    const cycle = {
+      cycleId: "cycle-1",
+      closedBar: { barCloseTime: "2026-01-01T00:01:00.000Z" },
+    };
+    Object.defineProperty(cycle, "barIndex", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        fieldReads += 1;
+        return fieldReads === 1 ? 0 : 99;
+      },
+    });
+    await expect(
+      runOwnedResearchModeledStageV1({
+        executor: db,
+        descriptor,
+        payload: stagePayload({ cycles: [cycle] }) as never,
+      }),
+    ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
+    expect(fieldReads).toBe(0);
+    expect(db.execute).not.toHaveBeenCalled();
+  });
+
+  it("refuses a cycles length getter that would grow the array", async () => {
+    const { descriptor } = sealed();
+    const db = executor();
+    let reads = 0;
+    const cycles = Object.create(Array.prototype) as object;
+    Object.defineProperty(cycles, "0", {
+      enumerable: true,
+      configurable: true,
+      value: {
+        cycleId: "cycle-1",
+        barIndex: 0,
+        closedBar: { barCloseTime: "2026-01-01T00:01:00.000Z" },
+      },
+    });
+    Object.defineProperty(cycles, "length", {
+      configurable: true,
+      get() {
+        reads += 1;
+        return reads;
+      },
+    });
+    await expect(
+      runOwnedResearchModeledStageV1({
+        executor: db,
+        descriptor,
+        payload: stagePayload({ cycles }) as never,
+      }),
+    ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
+    expect(reads).toBe(0);
+    expect(db.select).not.toHaveBeenCalled();
+  });
+
+  it("refuses a getter on experiment.spec.universe.symbol", async () => {
+    const { descriptor } = sealed();
+    const db = executor();
+    let reads = 0;
+    const universe = { venue: "HTX" };
+    Object.defineProperty(universe, "symbol", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        reads += 1;
+        return reads === 1 ? "BTCUSDT" : "ETHUSDT";
+      },
+    });
+    await expect(
+      runOwnedResearchModeledStageV1({
+        executor: db,
+        descriptor,
+        payload: stagePayload({ experiment: { spec: { universe } } }) as never,
+      }),
+    ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
+    expect(reads).toBe(0);
+    expect(db.select).not.toHaveBeenCalled();
+  });
+
+  it("keeps the snapshotted bar after the caller mutates it during the first await", async () => {
+    const { descriptor } = sealed();
+    const open = "2026-01-01T00:00:00.000Z";
+    const close = "2026-01-01T00:01:00.000Z";
+    const mutated = "1999-01-01T00:01:00.000Z";
+    const bar = {
+      symbol: "BTCUSDT",
+      interval: "1m",
+      open: "1",
+      high: "1",
+      low: "1",
+      close: "1",
+      volume: "1",
+      barOpenTime: open,
+      barCloseTime: close,
+    };
+    const row = {
+      id: "11111111-1111-4111-8111-111111111111",
+      organizationId: ORG_ID,
+      accountKey: "acct",
+      runId: "run-1",
+      accountingSequence: 1,
+      frontierAsOf: new Date(open),
+      monthKey: "2026-01",
+      cash: "100",
+      positionQuantityJson: {},
+      grossPositionBasisJson: {},
+      netPositionBasisJson: {},
+      grossRealizedPnl: "0",
+      netRealizedPnl: "0",
+      marksJson: {},
+      markedPositionValue: "0",
+      equity: "100",
+      equityHwm: "100",
+      monthlyPeakHwm: "100",
+      monthlyDrawdownBps: 0,
+      strategyPeakHwmByKeyJson: {},
+      strategyDrawdownBpsByKeyJson: {},
+      accountDrawdownBps: 0,
+      sourceFillId: null,
+      sourceEconomicsDigest: "c".repeat(64),
+      semanticContentDigest: "d".repeat(64),
+      idempotencyKey: "idem",
+      schemaVersion: "htr-accounting-frontier/v1",
+    };
+    let selects = 0;
+    const db = {
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: () => {
+              selects += 1;
+              return Promise.resolve(selects === 1 ? [] : [row]);
+            },
+          }),
+        }),
+      }),
+      insert: () => ({
+        values: () =>
+          Promise.resolve().then(() => {
+            bar.barCloseTime = mutated;
+            bar.close = "999";
+          }),
+      }),
+      update: () => {
+        throw new Error("UPDATE_TOUCHED");
+      },
+      execute: () => {
+        throw new Error("EXECUTE_TOUCHED");
+      },
+    };
+    const error = await runOwnedResearchModeledStageV1({
+      executor: db as never,
+      descriptor,
+      payload: stagePayload({
+        bars: [bar],
+        cycles: [{ cycleId: "cycle-1", barIndex: 0, closedBar: { barCloseTime: close } }],
+      }) as never,
+    }).then(
+      () => {
+        throw new Error("STAGE_RESOLVED");
+      },
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("HISTORICAL_SEALED_MARKET_CYCLE_V2_INVALID");
+    expect((error as Error).message).not.toContain(mutated);
+    expect(bar.barCloseTime).toBe(mutated);
+    expect(selects).toBeGreaterThan(0);
+  });
+
+  it("freezes a plain policy copy and refuses a proxy policy at seal", () => {
+    const model = createHistoricalExecutionModelV1();
+    const mutable = JSON.parse(JSON.stringify(resolvedPolicy())) as {
+      declaredQuantityCap: string;
+      scientificQualified: boolean;
+      capitalEligible: boolean;
+      portfolio: { runConfig: { startingBalanceUsdt: string } };
+    };
+    mutable.declaredQuantityCap = "0.5";
+    mutable.scientificQualified = false;
+    mutable.capitalEligible = false;
+    const descriptor = sealOwnedResearchModeledStageDescriptorV1({
+      attemptId: ATTEMPT_ID,
+      trialIndex: 0,
+      policy: mutable as ReturnType<typeof resolvedPolicy>,
+      model,
+    });
+    mutable.declaredQuantityCap = "999";
+    mutable.scientificQualified = true;
+    mutable.capitalEligible = true;
+    mutable.portfolio.runConfig.startingBalanceUsdt = "1";
+    expect(descriptor.policy.declaredQuantityCap).toBe("0.5");
+    expect(descriptor.policy.scientificQualified).toBe(false);
+    expect(descriptor.policy.capitalEligible).toBe(false);
+    expect(descriptor.policy.portfolio.runConfig.startingBalanceUsdt).not.toBe("1");
+    expect(Object.isFrozen(descriptor.policy)).toBe(true);
+    expect(Object.isFrozen(descriptor.model)).toBe(true);
+
+    let reads = 0;
+    const proxy = new Proxy(resolvedPolicy(), {
+      get(target, key, receiver) {
+        reads += 1;
+        if (key === "scientificQualified" || key === "capitalEligible") return true;
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    expect(() =>
+      sealOwnedResearchModeledStageDescriptorV1({
+        attemptId: ATTEMPT_ID,
+        trialIndex: 0,
+        policy: proxy as never,
+        model,
+      }),
+    ).toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_DESCRIPTOR");
+    expect(reads).toBe(0);
   });
 
   it("keeps the local stage index separate from a nonzero absolute source bar index", () => {
