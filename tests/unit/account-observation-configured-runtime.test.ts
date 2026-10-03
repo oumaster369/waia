@@ -71,6 +71,12 @@ function assignment(account = "123", credentialSuffix = "2"): ConfiguredHtxObser
 }
 type Input = Parameters<typeof createConfiguredHtxObservationRuntime>[0];
 type MutableInput = { -readonly [Key in keyof Input]: Input[Key] };
+const TEST_JSON_PARAMETER = Symbol("test-json-parameter");
+type TestJsonParameter = { readonly [TEST_JSON_PARAMETER]: unknown };
+type FakeCollectorTransaction = ((strings: TemplateStringsArray) => Promise<unknown>) & {
+  unsafe: () => Promise<void>;
+  json: (value: unknown) => TestJsonParameter;
+};
 function withDerivatives(
   item: ConfiguredHtxObservationAssignment,
   families: readonly HtxDerivativesAccountFamily[] = ["usdt_cross_shared"],
@@ -84,10 +90,16 @@ function withDerivatives(
 }
 function setup(overrides: Partial<Input> = {}) {
   const item = assignment();
+  const collectorJson = vi.fn((value: unknown): TestJsonParameter => ({ [TEST_JSON_PARAMETER]: value }));
   const collectorSql = {
     purpose: "collector",
-    begin: async (run: (tx: unknown) => Promise<unknown>) =>
-      run(Object.assign(async () => [], { unsafe: async () => undefined })),
+    begin: async (run: (tx: FakeCollectorTransaction) => Promise<unknown>) =>
+      run(
+        Object.assign(async () => [], {
+          unsafe: async () => undefined,
+          json: collectorJson,
+        }) as FakeCollectorTransaction,
+      ),
   } as unknown as Sql;
   const readerSql = { purpose: "reader" } as unknown as Sql;
   const getDecryptedCredentials = vi.fn(
@@ -139,6 +151,7 @@ function setup(overrides: Partial<Input> = {}) {
     input,
     item,
     collectorSql,
+    collectorJson,
     readerSql,
     getDecryptedCredentials,
     fetchImpl,
@@ -526,6 +539,7 @@ describe("configured observation runtime, real local composition with mock persi
     );
     expect(f.fetchImpl).toHaveBeenCalledTimes(24);
     expect(f.verifyReadAdmission).toHaveBeenCalledTimes(7);
+    expect(f.collectorJson).toHaveBeenCalledWith(["BTCUSDT"]);
     expect(JSON.stringify(ports.commitIfCurrent.mock.calls)).not.toMatch(/synthetic|Signature/);
     stop.abort();
     await work;
