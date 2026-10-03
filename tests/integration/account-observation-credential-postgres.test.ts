@@ -25,8 +25,12 @@ import {
 
 // Explicit synthetic loopback-only target; never use production environment URLs.
 const enabled = process.env.DEE960_LOCAL_PG17 === "1";
-const url = "postgres://waia_local_admin:local_validation_only@127.0.0.1:55460/waia_dee960_local";
-const HOST = "127.0.0.1:55460";
+const port = process.env.DEE960_LOCAL_PG17_PORT ?? "55460";
+if (enabled && !["55460", "55462"].includes(port)) {
+  throw new Error("DEE960_LOCAL_PG17_PORT must use an explicitly isolated loopback port");
+}
+const url = `postgres://waia_local_admin:local_validation_only@127.0.0.1:${port}/waia_dee960_local`;
+const HOST = `127.0.0.1:${port}`;
 const MASTER_KEY = Buffer.alloc(32, 7).toString("base64");
 
 /** Distinct, synthetic, >=32 characters; never a production secret. */
@@ -882,7 +886,10 @@ describe.skipIf(!enabled)(
         const url = await Promise.race([
           reached,
           new Promise<string>((_, reject) =>
-            setTimeout(() => reject(new Error("NO_SYNTHETIC_REQUEST")), 20000),
+            setTimeout(
+              () => reject(new Error(`NO_SYNTHETIC_REQUEST:${events.join(",")}`)),
+              20000,
+            ),
           ),
         ]);
         // Reaching a signed venue read proves the whole bounded chain executed: collector and

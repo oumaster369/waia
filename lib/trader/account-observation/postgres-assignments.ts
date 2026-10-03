@@ -74,7 +74,7 @@ export function createPostgresObservationAssignmentSource(
             credential_revision, configuration_revision, symbols
           FROM public.trader_account_observation_spot_inventory(
             ${envelope.config.revision},
-            ${JSON.stringify(envelope.config.symbols)}::jsonb)`;
+            ${tx.json(envelope.config.symbols)}::jsonb)`;
       });
       cancelled(signal);
       const extra: ObservationAssignment[] = [];

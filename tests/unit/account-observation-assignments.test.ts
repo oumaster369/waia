@@ -27,6 +27,19 @@ function assignment() {
 }
 const signal = () => new AbortController().signal;
 const sql = {} as Sql;
+const TEST_JSON_PARAMETER = Symbol("test-json-parameter");
+type TestJsonParameter = { readonly [TEST_JSON_PARAMETER]: unknown };
+type FakeInventoryTransaction = ((strings: TemplateStringsArray) => Promise<unknown>) & {
+  unsafe: () => Promise<void>;
+  json: (value: unknown) => TestJsonParameter;
+};
+
+function inventoryTransaction(rows: unknown[], unsafe = vi.fn(async () => undefined)) {
+  const json = vi.fn((value: unknown): TestJsonParameter => ({ [TEST_JSON_PARAMETER]: value }));
+  const tx = Object.assign(async () => rows, { unsafe, json }) as FakeInventoryTransaction;
+  return { tx, json, unsafe };
+}
+
 describe("explicit assignments filtered by current read-only DB state", () => {
   beforeEach(() => {
     ports.isCurrentAssignment.mockReset().mockResolvedValue(true);
@@ -87,11 +100,10 @@ describe("explicit assignments filtered by current read-only DB state", () => {
     let fail = false;
     const collectorSql = {
       begin: async (
-        run: (tx: ((strings: TemplateStringsArray) => Promise<unknown>) & { unsafe: () => Promise<void> }) => Promise<unknown>,
+        run: (tx: FakeInventoryTransaction) => Promise<unknown>,
       ) => {
         if (fail) throw new Error("synthetic-inventory");
-        const tx = Object.assign(
-          async () => [
+        const { tx } = inventoryTransaction([
             {
               organization_id: extraOrg,
               credential_id: extraCredential,
@@ -100,9 +112,7 @@ describe("explicit assignments filtered by current read-only DB state", () => {
               configuration_revision: a.config.revision,
               symbols: ["BTCUSDT"],
             },
-          ],
-          { unsafe: async () => undefined },
-        );
+          ]);
         return run(tx);
       },
     } as never;
@@ -124,8 +134,10 @@ describe("explicit assignments filtered by current read-only DB state", () => {
       exchange_account_id: String(1000 + index), credential_revision: "1",
       configuration_revision: config.revision, symbols: ["BTCUSDT"],
     }));
-    const begin = vi.fn(async (run: (tx: unknown) => Promise<unknown>) => run(
-      Object.assign(async () => rows, { unsafe: async () => undefined })));
+    const begin = vi.fn(async (run: (tx: FakeInventoryTransaction) => Promise<unknown>) => {
+      const { tx } = inventoryTransaction(rows);
+      return run(tx);
+    });
     const source = createPostgresObservationAssignmentSource(sql, [configured], { begin } as unknown as Sql);
     expect(await source.loadAssignments(signal())).toEqual([configured]);
     expect(begin).not.toHaveBeenCalled();
@@ -137,15 +149,9 @@ describe("explicit assignments filtered by current read-only DB state", () => {
     const extraCredential = "00000000-0000-4000-8000-000000000004";
     const collectorSql = {
       begin: async (
-        run: (
-          tx: ((strings: TemplateStringsArray) => Promise<unknown>) & {
-            unsafe: () => Promise<void>;
-          },
-        ) => Promise<unknown>,
+        run: (tx: FakeInventoryTransaction) => Promise<unknown>,
       ) => {
-        const unsafe = vi.fn(async () => undefined);
-        const tx = Object.assign(
-          async () => [
+        const { tx, json, unsafe } = inventoryTransaction([
             {
               organization_id: extraOrg,
               credential_id: extraCredential,
@@ -154,11 +160,12 @@ describe("explicit assignments filtered by current read-only DB state", () => {
               configuration_revision: a.config.revision,
               symbols: ["BTCUSDT"],
             },
-          ],
-          { unsafe },
-        );
+          ]);
         const rows = await run(tx);
         expect(unsafe).toHaveBeenCalledWith("SET LOCAL ROLE waia_account_observation_inventory");
+        const encodedSymbols = json.mock.calls[0]?.[0];
+        expect(Array.isArray(encodedSymbols)).toBe(true);
+        expect(encodedSymbols).toEqual(a.config.symbols);
         return rows;
       },
     } as never;
@@ -178,8 +185,10 @@ describe("explicit assignments filtered by current read-only DB state", () => {
       exchange_account_id: String(1000 + index), credential_revision: "1",
       configuration_revision: spot.config.revision, symbols: ["BTCUSDT"],
     }));
-    const begin = vi.fn(async (run: (tx: unknown) => Promise<unknown>) => run(
-      Object.assign(async () => rows, { unsafe: async () => undefined })));
+    const begin = vi.fn(async (run: (tx: FakeInventoryTransaction) => Promise<unknown>) => {
+      const { tx } = inventoryTransaction(rows);
+      return run(tx);
+    });
     const manifest = futuresFirst ? [futures, spot] : [spot, futures];
     const source = createPostgresObservationAssignmentSource(sql, manifest, { begin } as unknown as Sql);
     const result = await source.loadAssignments(signal());
