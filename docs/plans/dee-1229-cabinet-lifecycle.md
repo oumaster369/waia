@@ -1,3 +1,24 @@
+---
+integrationIssue: DEE-1229
+integrationTitle: "Personal account connection lifecycle"
+branch: dee-1229-cabinet-lifecycle
+riskTier: T2
+prPolicy: one-integration-pr
+executionSurfaces: [local]
+requiredValidation: [targeted-unit, mounted-e2e, lint, typecheck, build, canon, pr-governance]
+approvalGates: [independent-review, exact-head-ci, fresh-merge-admission]
+state:
+  status: in-review
+  prNumber: 764
+  prUrl: https://github.com/oumaster369/waia/pull/764
+  lastValidatedGitSha: c94d69cb69db3c999f5f4d692f6e4fd34d5fda2b
+  nextAction: "Pass canonical document validation and all applicable CI; refresh independent review and merge admission on the final head."
+provenance:
+  createdFrom: chat
+  gapRegistry: null
+  supersedes: null
+---
+
 # DEE-1229 — personal account connection lifecycle
 
 ## Problem and scope
