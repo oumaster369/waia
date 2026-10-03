@@ -310,7 +310,7 @@
     "contentPins": [
       {"path": "lib/trader/account-observation/credential-read-boundary.ts","sha256": "1c302306d59844713198f16cf6b0056eebd03652fd5c24b44deb12a120c541ad"},
       {"path": "lib/trader/account-observation/credential-store.ts","sha256": "77fcab86d72f5636c48f2a4d957f819bd525531013dc39700c8678d3c655ae70"},
-      {"path": "lib/trader/account-observation/derivatives/htx-account-transport.ts","sha256": "fe38ba38a35e2fc2089e8388ea64130c5455958c48765f90322ae17196bc5516"},
+      {"path": "lib/trader/account-observation/derivatives/htx-account-transport.ts","sha256": "b4f0851d51e969c880e2f85e92e31f285468daaf3576ab5d51bd9f7d99ab6101"},
       {"path": "lib/trader/account-observation/htx-get-transport.ts","sha256": "3b0ea19c5aff17186e10fe13f2ebbec2e39fa46cf8a0ebfaa36f2e781040c561"},
       {"path": "lib/trader/account-observation/htx-reader.ts","sha256": "cc600c6b4d4329bcd046b04f86a57c976fa89f791a6bcfc0ca62b74328b13c55"},
       {"path": "lib/trader/account-observation/service.ts","sha256": "481c1d4f6bc74e9cf3b42e23d496e1d9f42883b378e6b4040814d19af7db683f"},
