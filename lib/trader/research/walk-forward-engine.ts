@@ -164,8 +164,17 @@ function serializeMetrics(metrics: ResearchValidationMetrics): string {
 export async function runWalkForwardValidation(
   input: RunWalkForwardValidationInput,
 ): Promise<WalkForwardValidationResult> {
-  if (typeof input.runBacktest === "function") {
-    throw new WalkForwardValidationError("RESEARCH_DEVELOPMENT_STAGE_REFUSED:FORGED_CALLBACK");
+  if (input !== null && (typeof input === "object" || typeof input === "function")) {
+    const runBacktest = Object.getOwnPropertyDescriptor(input, "runBacktest");
+    if (
+      runBacktest !== undefined &&
+      (runBacktest.get !== undefined ||
+        runBacktest.set !== undefined ||
+        !("value" in runBacktest) ||
+        typeof runBacktest.value === "function")
+    ) {
+      throw new WalkForwardValidationError("RESEARCH_DEVELOPMENT_STAGE_REFUSED:FORGED_CALLBACK");
+    }
   }
   throw new WalkForwardValidationError("RESEARCH_DEVELOPMENT_STAGE_REFUSED:SEALED_KERNEL_REQUIRED");
 }

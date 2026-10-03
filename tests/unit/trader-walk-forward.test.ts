@@ -133,6 +133,38 @@ describe("trader walk-forward (RI-P3)", () => {
     expect(runBacktest).not.toHaveBeenCalled();
     expect(updateStrategyCandidateStatus).not.toHaveBeenCalled();
   });
+
+  it("runWalkForwardValidation refuses a runBacktest getter without invoking it", async () => {
+    let reads = 0;
+    const insertWalkForwardWindow = vi.fn().mockResolvedValue(undefined);
+    const updateStrategyCandidateStatus = vi.fn().mockResolvedValue(undefined);
+    const input = {
+      context: { organizationId: ORG_ID },
+      candidate: buildCandidate(),
+      trainBars: buildBars(10),
+      validationBars: buildBars(4),
+      oosBarCount: 2,
+      repository: {
+        insertWalkForwardWindow,
+        updateStrategyCandidateStatus,
+      },
+    };
+    Object.defineProperty(input, "runBacktest", {
+      configurable: true,
+      enumerable: true,
+      get() {
+        reads += 1;
+        return vi.fn().mockResolvedValue(buildMetrics(["RANGE"]));
+      },
+    });
+
+    await expect(
+      runWalkForwardValidation(input as unknown as Parameters<typeof runWalkForwardValidation>[0]),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:FORGED_CALLBACK");
+    expect(reads).toBe(0);
+    expect(insertWalkForwardWindow).not.toHaveBeenCalled();
+    expect(updateStrategyCandidateStatus).not.toHaveBeenCalled();
+  });
 });
 
 /** Org-0 RI-P7 campaign split sizes (129,602 bars, 60/20/20 three-way split). */

@@ -114,26 +114,115 @@ function descriptor() {
   });
 }
 
+function statementText(query: unknown): string {
+  if (!query || typeof query !== "object" || !("queryChunks" in query))
+    return JSON.stringify(query);
+  const chunks = (query as { queryChunks: unknown[] }).queryChunks;
+  const parts: string[] = [];
+  for (const chunk of chunks) {
+    if (!chunk || typeof chunk !== "object" || !("value" in chunk)) continue;
+    const value = (chunk as { value: unknown }).value;
+    if (Array.isArray(value) && value.every((part) => typeof part === "string")) {
+      parts.push(value.join(""));
+    }
+  }
+  return parts.join(" ");
+}
+
+function statementParameters(query: unknown): unknown[] {
+  if (!query || typeof query !== "object" || !("queryChunks" in query)) return [];
+  const chunks = (query as { queryChunks: unknown[] }).queryChunks;
+  const parameters: unknown[] = [];
+  for (const chunk of chunks) {
+    if (typeof chunk === "string" || typeof chunk === "number" || typeof chunk === "boolean") {
+      parameters.push(chunk);
+      continue;
+    }
+    if (!chunk || typeof chunk !== "object" || !("value" in chunk)) continue;
+    const value = (chunk as { value: unknown }).value;
+    if (Array.isArray(value) && value.every((part) => typeof part === "string")) continue;
+    parameters.push(value);
+  }
+  return parameters;
+}
+
+function isValidationCanonical(value: unknown): value is string {
+  if (typeof value !== "string" || !value.includes('"stage"')) return false;
+  try {
+    const parsed = JSON.parse(value) as { stage?: unknown };
+    return parsed.stage === "validation";
+  } catch {
+    return false;
+  }
+}
+
 function executor(rows: readonly Record<string, unknown>[] = []) {
   const calls: unknown[] = [];
-  return {
-    calls,
-    db: {
-      select: vi.fn(() => {
-        throw new Error("SELECT_TOUCHED");
-      }),
-      insert: vi.fn(() => {
-        throw new Error("INSERT_TOUCHED");
-      }),
-      update: vi.fn(() => {
-        throw new Error("UPDATE_TOUCHED");
-      }),
-      execute: vi.fn(async (query: unknown) => {
-        calls.push(query);
-        return calls.length === 1 ? rows : [];
-      }),
-    },
+  const committed: Record<string, unknown>[] = [...rows];
+  let queue: Promise<void> = Promise.resolve();
+  const ports = {
+    select: vi.fn(() => {
+      throw new Error("SELECT_TOUCHED");
+    }),
+    insert: vi.fn(() => {
+      throw new Error("INSERT_TOUCHED");
+    }),
+    update: vi.fn(() => {
+      throw new Error("UPDATE_TOUCHED");
+    }),
   };
+
+  function apply(query: unknown, bucket: Record<string, unknown>[]): unknown[] {
+    calls.push(query);
+    const text = statementText(query);
+    if (text.includes("pg_advisory_xact_lock")) return [];
+    if (text.includes("select receipt_canonical_json")) {
+      return bucket.filter((row) => isValidationCanonical(row.receipt_canonical_json));
+    }
+    const canonical = statementParameters(query).find(
+      (value) =>
+        isValidationCanonical(value) ||
+        (typeof value === "string" && value.includes('"schemaVersion"')),
+    );
+    if (text.includes("insert into") && typeof canonical === "string") {
+      bucket.push({ receipt_canonical_json: canonical });
+      return [];
+    }
+    if (text.includes("update ") && typeof canonical === "string") {
+      const index = bucket.findIndex((row) => isValidationCanonical(row.receipt_canonical_json));
+      if (index < 0) return [];
+      bucket[index] = { receipt_canonical_json: canonical };
+      return [{ receipt_sha256: "updated" }];
+    }
+    return [];
+  }
+
+  const db = {
+    ...ports,
+    execute: vi.fn(async (query: unknown) => apply(query, committed)),
+    transaction: vi.fn(async (run: (tx: OwnedResearchStageExecutorV1) => Promise<unknown>) => {
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const previous = queue;
+      queue = gate;
+      await previous;
+      const pending = committed.map((row) => ({ ...row }));
+      const tx = {
+        ...ports,
+        execute: vi.fn(async (query: unknown) => apply(query, pending)),
+      };
+      try {
+        const result = await run(tx as unknown as OwnedResearchStageExecutorV1);
+        committed.splice(0, committed.length, ...pending);
+        return result;
+      } finally {
+        release();
+      }
+    }),
+  };
+  return { calls, db };
 }
 
 function runnerResult(scientificQualified = false) {
@@ -152,10 +241,13 @@ function runnerResult(scientificQualified = false) {
 
 describe("development modeled stage binding", () => {
   it("runs train, validation, and walk-forward only through the sealed kernel and records runner receipts", async () => {
+    const { db, calls } = executor();
     const kernel = vi
       .spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1")
-      .mockResolvedValue(runnerResult(true) as never);
-    const { db, calls } = executor();
+      .mockImplementation(async () => {
+        expect(JSON.stringify(calls)).toContain("VALIDATION_RESERVATION");
+        return runnerResult(true) as never;
+      });
     try {
       const receipts = await runBoundDevelopmentModeledStagesV1({
         executor: owned(db),
@@ -189,7 +281,6 @@ describe("development modeled stage binding", () => {
         expect(receipt.parametersSha256).toBe(computeStableJsonDigest(PARAMETERS));
         expect(receipt.contentDigestHex).toMatch(/^[a-f0-9]{64}$/);
       }
-      expect(calls).toHaveLength(4);
       const persisted = JSON.stringify(calls);
       expect(persisted).toContain("select receipt_canonical_json");
       expect(persisted).toContain(receipts[1]!.contentDigestHex);
@@ -390,9 +481,10 @@ describe("development modeled stage binding", () => {
         stages: [{ kind: "train", windowIndex: 0, payload: payload(TRAIN_PARTITION) }],
       }),
     ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
-    expect(calls).toHaveLength(1);
-    expect(JSON.stringify(calls[0])).toContain("select receipt_canonical_json");
-    expect(JSON.stringify(calls[0])).not.toContain("insert into");
+    const persisted = JSON.stringify(calls);
+    expect(persisted).toContain("pg_advisory_xact_lock");
+    expect(persisted).toContain("select receipt_canonical_json");
+    expect(persisted).not.toContain("insert into");
   });
 
   it("refuses a registration sealed with a score, bars, or a spec that was not committed", () => {
@@ -436,5 +528,173 @@ describe("development modeled stage binding", () => {
       }),
     ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:SCIENTIFIC_QUALIFICATION_UNAVAILABLE");
     expect(calls).toEqual([]);
+  });
+
+  it("refuses a proxy, an array subclass, or an own map before the executor runs", async () => {
+    const kernel = vi.spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1");
+    const { db, calls } = executor();
+    const base = {
+      executor: owned(db),
+      descriptor: descriptor(),
+      registration: registrationFor(),
+    };
+    let proxyTouched = false;
+    const proxy = new Proxy(stages(), {
+      get() {
+        proxyTouched = true;
+        return () => [];
+      },
+    });
+    let subclassMapped = false;
+    class HostileStages extends Array {
+      override map(): never[] {
+        subclassMapped = true;
+        return [];
+      }
+    }
+    const subclass = new HostileStages();
+    for (const stage of stages()) subclass.push(stage);
+    let ownMapped = false;
+    const ownMap = stages();
+    Object.defineProperty(ownMap, "map", {
+      value: () => {
+        ownMapped = true;
+        return [];
+      },
+      configurable: true,
+      writable: true,
+    });
+    for (const hostile of [proxy, subclass, ownMap]) {
+      await expect(
+        runBoundDevelopmentModeledStagesV1({ ...base, stages: hostile as never }),
+      ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_INPUT");
+    }
+    expect(proxyTouched).toBe(false);
+    expect(subclassMapped).toBe(false);
+    expect(ownMapped).toBe(false);
+    expect(kernel).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+    expect(db.execute).not.toHaveBeenCalled();
+    kernel.mockRestore();
+  });
+
+  it("reserves validation before scoring so a concurrent caller and a crash retry cannot score it twice", async () => {
+    let releaseScore: () => void = () => undefined;
+    const scoreEntered = new Promise<void>((resolve) => {
+      releaseScore = resolve;
+    });
+    let scoring = false;
+    const kernel = vi
+      .spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1")
+      .mockImplementation(async () => {
+        scoring = true;
+        await scoreEntered;
+        return runnerResult() as never;
+      });
+    const shared = executor();
+    const input = {
+      executor: owned(shared.db),
+      descriptor: descriptor(),
+      registration: registrationFor(),
+      stages: [
+        { kind: "validation" as const, windowIndex: 0, payload: payload(VALIDATION_PARTITION) },
+      ],
+    };
+    const first = runBoundDevelopmentModeledStagesV1(input);
+    const started = Date.now();
+    while (!scoring) {
+      if (Date.now() - started > 2000) throw new Error("validation score did not start");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    let secondScored = false;
+    const kernelCallsAtOverlap = kernel.mock.calls.length;
+    const second = runBoundDevelopmentModeledStagesV1(input).then(
+      () => {
+        secondScored = true;
+      },
+      (error: unknown) => error,
+    );
+    releaseScore();
+    await first;
+    const secondResult = await second;
+    expect(secondScored).toBe(false);
+    expect(secondResult).toBeInstanceOf(Error);
+    expect((secondResult as Error).message).toContain(
+      "RESEARCH_DEVELOPMENT_STAGE_REFUSED:REPEATED_VALIDATION_SELECTION",
+    );
+    expect(kernel.mock.calls.length).toBe(kernelCallsAtOverlap);
+
+    kernel.mockImplementation(async () => {
+      throw new Error("CRASH_AFTER_VALIDATION_SCORE");
+    });
+    const retryDb = executor();
+    const retry = {
+      executor: owned(retryDb.db),
+      descriptor: descriptor(),
+      registration: registrationFor(),
+      stages: [
+        { kind: "validation" as const, windowIndex: 0, payload: payload(VALIDATION_PARTITION) },
+      ],
+    };
+    await expect(runBoundDevelopmentModeledStagesV1(retry)).rejects.toThrow(
+      "CRASH_AFTER_VALIDATION_SCORE",
+    );
+    expect(kernel).toHaveBeenCalledTimes(kernelCallsAtOverlap + 1);
+    await expect(
+      runBoundDevelopmentModeledStagesV1({
+        ...retry,
+        registration: registrationFor(),
+      }),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:REPEATED_VALIDATION_SELECTION");
+    expect(kernel).toHaveBeenCalledTimes(kernelCallsAtOverlap + 1);
+    kernel.mockRestore();
+  });
+
+  it("refuses qualification accessors before any executor call", async () => {
+    const { db, calls } = executor();
+    const kernel = vi.spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1");
+    let reads = 0;
+    const current = policy();
+    const scientific = { ...current };
+    Object.defineProperty(scientific, "scientificQualified", {
+      configurable: true,
+      enumerable: true,
+      get() {
+        reads += 1;
+        void db.execute("scientific-qualified");
+        return false;
+      },
+    });
+    const capital = { ...current, scientificQualified: false as const };
+    Object.defineProperty(capital, "capitalEligible", {
+      configurable: true,
+      enumerable: true,
+      get() {
+        reads += 1;
+        void db.execute("capital-eligible");
+        return false;
+      },
+    });
+    for (const hostile of [scientific, capital]) {
+      await expect(
+        runBoundDevelopmentModeledStagesV1({
+          executor: owned(db),
+          descriptor: {
+            attemptId: ATTEMPT_ID,
+            trialIndex: 0,
+            policy: hostile,
+            model: createHistoricalExecutionModelV1(),
+          } as never,
+          registration: registrationFor(),
+          stages: [{ kind: "train", windowIndex: 0, payload: payload(TRAIN_PARTITION) }],
+        }),
+      ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:SCIENTIFIC_QUALIFICATION_UNAVAILABLE");
+    }
+    expect(reads).toBe(0);
+    expect(calls).toEqual([]);
+    expect(db.execute).not.toHaveBeenCalled();
+    expect(db.transaction).not.toHaveBeenCalled();
+    expect(kernel).not.toHaveBeenCalled();
+    kernel.mockRestore();
   });
 });

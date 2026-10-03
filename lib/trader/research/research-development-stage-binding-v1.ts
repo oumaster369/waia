@@ -1,6 +1,7 @@
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 enforceServerOnly();
 
+import { randomUUID } from "node:crypto";
 import { types as nodeUtilTypes } from "node:util";
 import { sql } from "drizzle-orm";
 import { canonicalJsonString, computeStableJsonDigest } from "@/lib/trader/research/digest";
@@ -46,6 +47,10 @@ const SHA256 = /^[a-f0-9]{64}$/;
 
 export const RESEARCH_DEVELOPMENT_STAGE_RECEIPT_V1 =
   "waia.research.development-stage-receipt.v1" as const;
+
+/** Committed claim that the validation identity is already taken. Not a score. */
+const VALIDATION_RESERVATION_V1 =
+  "waia.research.development-stage-validation-reservation.v1" as const;
 
 export type DevelopmentStageKindV1 = "train" | "validation" | "walk-forward";
 
@@ -508,30 +513,109 @@ function parseStoredValidation(raw: unknown): ResearchDevelopmentStageReceiptV1 
   return parsed as ResearchDevelopmentStageReceiptV1;
 }
 
-function assertAgainstStoredValidation(
-  stored: readonly ResearchDevelopmentStageReceiptV1[],
+type StoredValidationV1 =
+  | { readonly kind: "receipt"; readonly receipt: ResearchDevelopmentStageReceiptV1 }
+  | { readonly kind: "reservation"; readonly token: string; readonly digest: string };
+
+function readStoredValidation(raw: unknown): StoredValidationV1 {
+  if (typeof raw !== "string") refuse("STORED_RECEIPT_INVALID");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    refuse("STORED_RECEIPT_INVALID");
+  }
+  if (!isPlainRecord(parsed)) refuse("STORED_RECEIPT_INVALID");
+  if (parsed.schemaVersion === VALIDATION_RESERVATION_V1) {
+    const digest = parsed.reservationDigestHex;
+    const body: Record<string, unknown> = {};
+    for (const name of Object.getOwnPropertyNames(parsed)) {
+      if (name === "reservationDigestHex") continue;
+      const property = Object.getOwnPropertyDescriptor(parsed, name);
+      if (
+        !property ||
+        property.get !== undefined ||
+        property.set !== undefined ||
+        !("value" in property)
+      ) {
+        refuse("STORED_RECEIPT_INVALID");
+      }
+      body[name] = property.value;
+    }
+    if (typeof digest !== "string" || computeStableJsonDigest(body) !== digest) {
+      refuse("STORED_RECEIPT_INVALID");
+    }
+    if (
+      body.stage !== "validation" ||
+      body.capitalEligible !== false ||
+      body.scientificQualified !== false ||
+      body.provenance !== "VALIDATION_RESERVATION" ||
+      typeof body.reservationToken !== "string" ||
+      !UUID.test(body.reservationToken)
+    ) {
+      refuse("STORED_RECEIPT_INVALID");
+    }
+    return { kind: "reservation", token: body.reservationToken, digest };
+  }
+  return { kind: "receipt", receipt: parseStoredValidation(raw) };
+}
+
+function reservationRecord(
+  identity: { organizationId: string; attemptId: string; trialIndex: number },
+  token: string,
+): { readonly canonical: string; readonly digest: string } {
+  const body = Object.freeze({
+    schemaVersion: VALIDATION_RESERVATION_V1,
+    organizationId: identity.organizationId,
+    attemptId: identity.attemptId,
+    trialIndex: identity.trialIndex,
+    stage: "validation" as const,
+    reservationToken: token,
+    capitalEligible: false as const,
+    scientificQualified: false as const,
+    provenance: "VALIDATION_RESERVATION" as const,
+  });
+  const digest = computeStableJsonDigest(body);
+  return {
+    canonical: canonicalJsonString({ ...body, reservationDigestHex: digest }),
+    digest,
+  };
+}
+
+/** Empty storage may be claimed. A foreign claim or a finished receipt may not. */
+function assertStoredValidation(
+  stored: readonly StoredValidationV1[],
   stages: readonly ObservedStage[],
   attemptId: string,
   trialIndex: number,
-): void {
+  reservationToken: string | null,
+): string | null {
   if (stored.length > 1) refuse("REPEATED_VALIDATION_SELECTION");
   const existing = stored[0];
-  if (!existing) return;
+  if (!existing) {
+    if (reservationToken !== null) refuse("REPEATED_VALIDATION_SELECTION");
+    return null;
+  }
+  if (existing.kind === "reservation") {
+    if (reservationToken === null || existing.token !== reservationToken) {
+      refuse("REPEATED_VALIDATION_SELECTION");
+    }
+    return existing.digest;
+  }
+  const receipt = existing.receipt;
   const includesValidation = stages.some((stage) => stage.kind === "validation");
-  if (
-    includesValidation ||
-    existing.trialIndex !== trialIndex ||
-    existing.attemptId !== attemptId
-  ) {
+  if (includesValidation || receipt.trialIndex !== trialIndex || receipt.attemptId !== attemptId) {
     refuse("REPEATED_VALIDATION_SELECTION");
   }
   const observed = stages[0]!;
-  if (existing.parametersSha256 !== observed.parametersSha256) refuse("PARAMS_MISMATCH");
-  if (existing.costModelDigest !== observed.costModelDigest) refuse("COST_MISMATCH");
-  if (existing.universeSha256 !== observed.universeSha256) refuse("UNIVERSE_MISMATCH");
-  if (existing.executableSourceSha256 !== observed.executableSourceSha256)
+  if (receipt.parametersSha256 !== observed.parametersSha256) refuse("PARAMS_MISMATCH");
+  if (receipt.costModelDigest !== observed.costModelDigest) refuse("COST_MISMATCH");
+  if (receipt.universeSha256 !== observed.universeSha256) refuse("UNIVERSE_MISMATCH");
+  if (receipt.executableSourceSha256 !== observed.executableSourceSha256) {
     refuse("EVALUATOR_MISMATCH");
-  if (existing.experimentSpecSha256 !== observed.specSha256) refuse("SPEC_MISMATCH");
+  }
+  if (receipt.experimentSpecSha256 !== observed.specSha256) refuse("SPEC_MISMATCH");
+  return null;
 }
 
 function runnerReceipt(
@@ -579,6 +663,109 @@ function runnerReceipt(
   );
 }
 
+function snapshotStageList(value: unknown): readonly object[] {
+  if (isProxyLike(value)) refuse("STAGE_INPUT");
+  if (typeof value !== "object" || value === null) refuse("STAGE_INPUT");
+  if (Object.getPrototypeOf(value) !== Array.prototype) refuse("STAGE_INPUT");
+  const lengthRead = readOwnProperty(value, "length");
+  if (
+    !lengthRead.present ||
+    lengthRead.accessor ||
+    typeof lengthRead.value !== "number" ||
+    !Number.isSafeInteger(lengthRead.value) ||
+    lengthRead.value < 1 ||
+    lengthRead.value > 1026
+  ) {
+    refuse("STAGE_INPUT");
+  }
+  const length = lengthRead.value;
+  const names = Object.getOwnPropertyNames(value);
+  const indexes = new Set<string>();
+  for (const name of names) {
+    if (name === "length") continue;
+    if (!/^(?:0|[1-9]\d*)$/.test(name)) refuse("STAGE_INPUT");
+    const index = Number(name);
+    if (index >= length) refuse("STAGE_INPUT");
+    indexes.add(name);
+  }
+  if (indexes.size !== length || Object.getOwnPropertySymbols(value).length !== 0) {
+    refuse("STAGE_INPUT");
+  }
+  const copy: object[] = [];
+  for (let index = 0; index < length; index += 1) {
+    const entry = readOwnProperty(value, String(index));
+    if (
+      !entry.present ||
+      entry.accessor ||
+      !isPlainRecord(entry.value) ||
+      isProxyLike(entry.value)
+    ) {
+      refuse("STAGE_INPUT");
+    }
+    copy.push(entry.value);
+  }
+  return copy;
+}
+
+function refuseUnlessFalseData(
+  record: object,
+  key: "scientificQualified" | "capitalEligible",
+): void {
+  const property = Object.getOwnPropertyDescriptor(record, key);
+  if (
+    !property ||
+    property.get !== undefined ||
+    property.set !== undefined ||
+    !("value" in property) ||
+    property.value !== false
+  ) {
+    refuse("SCIENTIFIC_QUALIFICATION_UNAVAILABLE");
+  }
+}
+
+function requireTransaction(
+  executor: object,
+): <T>(run: (tx: OwnedResearchStageExecutorV1) => Promise<T>) => Promise<T> {
+  const transaction = readOwnProperty(executor, "transaction");
+  if (!transaction.present || transaction.accessor || typeof transaction.value !== "function") {
+    refuse("STAGE_INPUT");
+  }
+  const runTransaction = transaction.value as (
+    this: object,
+    run: (tx: OwnedResearchStageExecutorV1) => Promise<unknown>,
+  ) => Promise<unknown>;
+  return async (run) =>
+    (await runTransaction.call(executor, run)) as Awaited<ReturnType<typeof run>>;
+}
+
+async function lockValidationIdentity(
+  tx: OwnedResearchStageExecutorV1,
+  organizationId: string,
+  attemptId: string,
+): Promise<void> {
+  await tx.execute(sql`
+    select pg_advisory_xact_lock(hashtextextended(
+      ${`research-development-validation-v1:${organizationId}:${attemptId}`}, 0
+    ))
+  `);
+}
+
+async function readValidationRows(
+  tx: OwnedResearchStageExecutorV1,
+  organizationId: string,
+  attemptId: string,
+): Promise<readonly StoredValidationV1[]> {
+  return rowsOf(
+    await tx.execute(sql`
+      select receipt_canonical_json
+      from public.trader_research_development_stage_receipts_v1
+      where organization_id = ${organizationId}::uuid
+        and attempt_id = ${attemptId}::uuid
+        and stage = 'validation'
+    `),
+  ).map((row) => readStoredValidation(row.receipt_canonical_json));
+}
+
 /**
  * DEVELOPMENT train, validation, and walk-forward may run only through the sealed
  * modeled-stage kernel. The caller supplies an owned executor, a frozen descriptor,
@@ -608,18 +795,11 @@ export async function runBoundDevelopmentModeledStagesV1(
   if (!registrationRead.present || registrationRead.accessor) refuse("LATE_REGISTRATION");
   const registration = registrationRead.value;
   const stagesValue = requireData(input, "stages");
-  if (!isPlainRecord(executor) || isProxyLike(executor) || typeof executor.execute !== "function") {
-    refuse("STAGE_INPUT");
-  }
   if (!isPlainRecord(descriptor) || isProxyLike(descriptor)) refuse("STAGE_INPUT");
   const policy = requireData(descriptor, "policy");
-  if (
-    !isPlainRecord(policy) ||
-    policy.scientificQualified !== false ||
-    policy.capitalEligible !== false
-  ) {
-    refuse("SCIENTIFIC_QUALIFICATION_UNAVAILABLE");
-  }
+  if (!isPlainRecord(policy) || isProxyLike(policy)) refuse("STAGE_INPUT");
+  refuseUnlessFalseData(policy, "scientificQualified");
+  refuseUnlessFalseData(policy, "capitalEligible");
   const attemptId = requireData(descriptor, "attemptId");
   const trialIndex = requireData(descriptor, "trialIndex");
   if (typeof attemptId !== "string" || typeof trialIndex !== "number") refuse("STAGE_INPUT");
@@ -631,13 +811,10 @@ export async function runBoundDevelopmentModeledStagesV1(
   ) {
     refuse("LATE_REGISTRATION");
   }
-  if (!Array.isArray(stagesValue) || stagesValue.length < 1 || stagesValue.length > 1026) {
-    refuse("STAGE_INPUT");
-  }
-  const stages = stagesValue.map((stage) => {
-    if (!isPlainRecord(stage) || isProxyLike(stage)) refuse("STAGE_INPUT");
-    return observeStage(stage, descriptor as ResearchModeledStageDescriptorV1);
-  });
+  const stageList = snapshotStageList(stagesValue);
+  const stages = stageList.map((stage) =>
+    observeStage(stage, descriptor as ResearchModeledStageDescriptorV1),
+  );
   assertSameIdentities(stages);
   if (stages.some((stage) => stage.specSha256 !== registration.specSha256))
     refuse("LATE_REGISTRATION");
@@ -648,36 +825,83 @@ export async function runBoundDevelopmentModeledStagesV1(
     if (typeof value !== "string" || !UUID.test(value)) refuse("STAGE_PAYLOAD_IDENTITY");
     return value;
   })();
-  const owned = executor as OwnedResearchStageExecutorV1;
-  const prior = rowsOf(
-    await owned.execute(sql`
-    select receipt_canonical_json
-    from public.trader_research_development_stage_receipts_v1
-    where organization_id = ${organizationId}::uuid
-      and attempt_id = ${attemptId}::uuid
-      and stage = 'validation'
-  `),
-  ).map((row) => parseStoredValidation(row.receipt_canonical_json));
-  assertAgainstStoredValidation(prior, stages, attemptId, trialIndex);
-  const receipts: ResearchDevelopmentStageReceiptV1[] = [];
-  for (const stage of stages) {
-    const result = await modeledStageKernel.runOwnedResearchModeledStageV1({
-      executor: owned,
-      descriptor: descriptor as ResearchModeledStageDescriptorV1,
-      payload: stage.payload,
-    });
-    const receipt = runnerReceipt(stage, result, { organizationId, attemptId, trialIndex });
-    const canonical = canonicalJsonString(receipt);
-    await owned.execute(sql`
-      insert into public.trader_research_development_stage_receipts_v1 (
-        organization_id, attempt_id, trial_index, stage, window_index,
-        receipt_canonical_json, receipt_sha256
-      ) values (
-        ${organizationId}::uuid, ${attemptId}::uuid, ${trialIndex},
-        ${stage.kind}, ${stage.windowIndex}, ${canonical}, ${receipt.contentDigestHex}
-      )
-    `);
-    receipts.push(receipt);
+  if (!isPlainRecord(executor) || isProxyLike(executor)) refuse("STAGE_INPUT");
+  const execute = readOwnProperty(executor, "execute");
+  if (!execute.present || execute.accessor || typeof execute.value !== "function") {
+    refuse("STAGE_INPUT");
   }
-  return Object.freeze(receipts);
+  const runTransaction = requireTransaction(executor);
+  const includesValidation = stages.some((stage) => stage.kind === "validation");
+  const reservationToken = includesValidation ? randomUUID() : null;
+  const identity = { organizationId, attemptId, trialIndex };
+  // The receipt table has no journal migration, so uniqueness is not enforced by
+  // schema. This claim commits under the advisory lock before any stage score.
+  if (reservationToken !== null) {
+    const claim = reservationRecord(identity, reservationToken);
+    await runTransaction(async (tx) => {
+      await lockValidationIdentity(tx, organizationId, attemptId);
+      const stored = await readValidationRows(tx, organizationId, attemptId);
+      assertStoredValidation(stored, stages, attemptId, trialIndex, null);
+      await tx.execute(sql`
+        insert into public.trader_research_development_stage_receipts_v1 (
+          organization_id, attempt_id, trial_index, stage, window_index,
+          receipt_canonical_json, receipt_sha256
+        ) values (
+          ${organizationId}::uuid, ${attemptId}::uuid, ${trialIndex},
+          'validation', 0, ${claim.canonical}, ${claim.digest}
+        )
+      `);
+    });
+  }
+  return runTransaction(async (tx) => {
+    await lockValidationIdentity(tx, organizationId, attemptId);
+    const stored = await readValidationRows(tx, organizationId, attemptId);
+    const reservationDigest = assertStoredValidation(
+      stored,
+      stages,
+      attemptId,
+      trialIndex,
+      reservationToken,
+    );
+    const receipts: ResearchDevelopmentStageReceiptV1[] = [];
+    for (const stage of stages) {
+      const result = await modeledStageKernel.runOwnedResearchModeledStageV1({
+        executor: tx,
+        descriptor: descriptor as ResearchModeledStageDescriptorV1,
+        payload: stage.payload,
+      });
+      const receipt = runnerReceipt(stage, result, identity);
+      const canonical = canonicalJsonString(receipt);
+      if (stage.kind === "validation") {
+        if (reservationDigest === null) refuse("REPEATED_VALIDATION_SELECTION");
+        const updated = rowsOf(
+          await tx.execute(sql`
+            update public.trader_research_development_stage_receipts_v1
+            set trial_index = ${trialIndex},
+                window_index = ${stage.windowIndex},
+                receipt_canonical_json = ${canonical},
+                receipt_sha256 = ${receipt.contentDigestHex}
+            where organization_id = ${organizationId}::uuid
+              and attempt_id = ${attemptId}::uuid
+              and stage = 'validation'
+              and receipt_sha256 = ${reservationDigest}
+            returning receipt_sha256
+          `),
+        );
+        if (updated.length !== 1) refuse("REPEATED_VALIDATION_SELECTION");
+      } else {
+        await tx.execute(sql`
+          insert into public.trader_research_development_stage_receipts_v1 (
+            organization_id, attempt_id, trial_index, stage, window_index,
+            receipt_canonical_json, receipt_sha256
+          ) values (
+            ${organizationId}::uuid, ${attemptId}::uuid, ${trialIndex},
+            ${stage.kind}, ${stage.windowIndex}, ${canonical}, ${receipt.contentDigestHex}
+          )
+        `);
+      }
+      receipts.push(receipt);
+    }
+    return Object.freeze(receipts);
+  });
 }
