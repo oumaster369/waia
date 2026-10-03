@@ -97,9 +97,29 @@ export interface ExternalJournalDiagnostic {
   readonly byteLength: number;
 }
 
+/** A complete rejected source record, safe to persist atomically with its cursor.
+ * Diagnostics alone are not terminal records (for example an unfinished oversized line).
+ * Oversized rows have no digest because prior discarded bytes are deliberately not retained.
+ */
+export interface ExternalJournalQuarantine {
+  readonly code:
+    | "line_too_large"
+    | "invalid_utf8"
+    | "invalid_json"
+    | "invalid_event_shape"
+    | "source_identity_mismatch"
+    | "conflicting_event_fields"
+    | "conflicting_instrument_fields";
+  readonly source: Readonly<TrustedExternalJournalSource>;
+  readonly provenance: Readonly<
+    Omit<ExternalJournalProvenance, "rawSha256"> & { rawSha256: string | null }
+  >;
+}
+
 export interface ExternalJournalChunkResult {
   readonly cursor: Readonly<ExternalJournalCursor>;
   readonly observations: readonly Readonly<ExternalJournalObservation>[];
+  readonly quarantines: readonly Readonly<ExternalJournalQuarantine>[];
   readonly diagnostics: readonly Readonly<ExternalJournalDiagnostic>[];
   readonly withheldTailBytes: number;
 }
@@ -353,8 +373,7 @@ function normalizeExternalJournalEvent(
   value: unknown,
   source: TrustedExternalJournalSource,
   provenance: ExternalJournalProvenance,
-): { observation?: ExternalJournalObservation; diagnostic?: ExternalJournalDiagnosticCode } {
-  if (!validSource(source)) return { diagnostic: "invalid_source_scope" };
+): { observation?: ExternalJournalObservation; diagnostic?: ExternalJournalQuarantine["code"] } {
   if (!isSafeRecord(value)) return { diagnostic: "invalid_event_shape" };
   const row = value;
   if (own(row, "__proto__") || own(row, "constructor") || own(row, "prototype")) {
@@ -532,6 +551,7 @@ function cursorResult(
   return Object.freeze({
     cursor,
     observations: Object.freeze([]),
+    quarantines: Object.freeze([]),
     diagnostics: Object.freeze(diagnostics.slice()),
     withheldTailBytes,
   });
@@ -579,6 +599,25 @@ export function parseExternalJournalChunk(input: {
   const maxEvents = input.maxEvents ?? EXTERNAL_JOURNAL_MAX_EVENTS_PER_CHUNK;
   const diagnostics: ExternalJournalDiagnostic[] = [];
   const observations: ExternalJournalObservation[] = [];
+  const quarantines: ExternalJournalQuarantine[] = [];
+  const quarantine = (
+    code: ExternalJournalQuarantine["code"],
+    byteOffset: number,
+    byteLength: number,
+    rawBytes?: Uint8Array,
+  ): ExternalJournalQuarantine =>
+    Object.freeze({
+      code,
+      source: snapshotSource(source),
+      provenance: Object.freeze({
+        normalizerVersion: EXTERNAL_JOURNAL_NORMALIZER_VERSION,
+        sourceId: source.sourceId,
+        generationId,
+        byteOffset,
+        byteLength,
+        rawSha256: rawBytes ? createHash("sha256").update(rawBytes).digest("hex") : null,
+      }),
+    });
 
   if (
     !Number.isSafeInteger(chunkStartOffset) ||
@@ -650,6 +689,9 @@ export function parseExternalJournalChunk(input: {
       }),
     });
     const discarded = parseExternalJournalChunk({ ...input, cursor: discardCursor });
+    // A record-budget rejection must roll back the original persisted pending bytes too.
+    if (discarded.cursor === discardCursor)
+      return cursorResult(cursor, [overflowDiagnostic, ...discarded.diagnostics]);
     return Object.freeze({
       ...discarded,
       diagnostics: Object.freeze([overflowDiagnostic, ...discarded.diagnostics]),
@@ -677,7 +719,15 @@ export function parseExternalJournalChunk(input: {
         generationId: cursor.generationId,
         discardUntilLf,
       });
-      return cursorResult(nextCursor, diagnostics, 0);
+      const result = cursorResult(nextCursor, diagnostics, 0);
+      return input.endOfSource
+        ? Object.freeze({
+            ...result,
+            quarantines: Object.freeze([
+              quarantine("line_too_large", cursor.discardUntilLf.lineOffset, bytesSeen),
+            ]),
+          })
+        : result;
     }
     const consumed = delimiterIndex + 1;
     const remainderOffset = chunkStartOffset + consumed;
@@ -688,11 +738,34 @@ export function parseExternalJournalChunk(input: {
       boundSource: snapshotSource(cursor.boundSource!),
       generationId: cursor.generationId,
     });
-    return parseExternalJournalChunk({
+    const recovered = parseExternalJournalChunk({
       ...input,
       cursor: recoveredCursor,
       chunk: chunk.subarray(consumed),
       chunkStartOffset: remainderOffset,
+    });
+    if (
+      recovered.diagnostics.some((item) => item.code === "event_limit_reached") ||
+      recovered.observations.length + recovered.quarantines.length >= maxEvents
+    ) {
+      return cursorResult(cursor, [
+        diagnostic(
+          "event_limit_reached",
+          cursor.discardUntilLf.lineOffset,
+          cursor.discardUntilLf.bytesSeen + delimiterIndex,
+        ),
+      ]);
+    }
+    return Object.freeze({
+      ...recovered,
+      quarantines: Object.freeze([
+        quarantine(
+          "line_too_large",
+          cursor.discardUntilLf.lineOffset,
+          cursor.discardUntilLf.bytesSeen + delimiterIndex,
+        ),
+        ...recovered.quarantines,
+      ]),
     });
   }
 
@@ -726,51 +799,45 @@ export function parseExternalJournalChunk(input: {
       break;
     }
 
+    if (lineLength > 0 && processedEvents >= maxEvents) {
+      diagnostics.push(diagnostic("event_limit_reached", absoluteOffset, lineLength));
+      return cursorResult(cursor, diagnostics);
+    }
+    if (lineLength > 0) processedEvents += 1;
     if (lineLength > maxLineBytes) {
       diagnostics.push(diagnostic("line_too_large", absoluteOffset, lineLength));
+      quarantines.push(quarantine("line_too_large", absoluteOffset, lineLength));
     } else if (lineLength > 0) {
-      if (processedEvents >= maxEvents) {
-        diagnostics.push(diagnostic("event_limit_reached", absoluteOffset, lineLength));
-        return Object.freeze({
-          cursor,
-          observations: Object.freeze([]),
-          diagnostics: Object.freeze(diagnostics.slice()),
-          withheldTailBytes: cursor.pendingBytes.length,
+      const rawBytes = combined.slice(lineStart, i);
+      let text: string;
+      try {
+        text = utf8Decoder.decode(rawBytes);
+      } catch {
+        diagnostics.push(diagnostic("invalid_utf8", absoluteOffset, lineLength));
+        quarantines.push(quarantine("invalid_utf8", absoluteOffset, lineLength, rawBytes));
+        lineStart = i + 1;
+        continue;
+      }
+      try {
+        const value: unknown = parseBoundedJournalJson(text);
+        const provenance: ExternalJournalProvenance = Object.freeze({
+          normalizerVersion: EXTERNAL_JOURNAL_NORMALIZER_VERSION,
+          sourceId: source.sourceId,
+          generationId,
+          byteOffset: absoluteOffset,
+          byteLength: lineLength,
+          rawSha256: createHash("sha256").update(rawBytes).digest("hex"),
         });
-      } else {
-        processedEvents += 1;
-        const rawBytes = combined.slice(lineStart, i);
-        let text: string;
-        try {
-          text = utf8Decoder.decode(rawBytes);
-        } catch {
-          diagnostics.push(diagnostic("invalid_utf8", absoluteOffset, lineLength));
-          lineStart = i + 1;
-          continue;
+        const normalized = normalizeExternalJournalEvent(value, source, provenance);
+        if (normalized.observation) observations.push(normalized.observation);
+        else {
+          const code = normalized.diagnostic ?? "invalid_event_shape";
+          diagnostics.push(diagnostic(code, absoluteOffset, lineLength));
+          quarantines.push(quarantine(code, absoluteOffset, lineLength, rawBytes));
         }
-        try {
-          const value: unknown = parseBoundedJournalJson(text);
-          const provenance: ExternalJournalProvenance = Object.freeze({
-            normalizerVersion: EXTERNAL_JOURNAL_NORMALIZER_VERSION,
-            sourceId: source.sourceId,
-            generationId,
-            byteOffset: absoluteOffset,
-            byteLength: lineLength,
-            rawSha256: createHash("sha256").update(rawBytes).digest("hex"),
-          });
-          const normalized = normalizeExternalJournalEvent(value, source, provenance);
-          if (normalized.observation) observations.push(normalized.observation);
-          else
-            diagnostics.push(
-              diagnostic(
-                normalized.diagnostic ?? "invalid_event_shape",
-                absoluteOffset,
-                lineLength,
-              ),
-            );
-        } catch {
-          diagnostics.push(diagnostic("invalid_json", absoluteOffset, lineLength));
-        }
+      } catch {
+        diagnostics.push(diagnostic("invalid_json", absoluteOffset, lineLength));
+        quarantines.push(quarantine("invalid_json", absoluteOffset, lineLength, rawBytes));
       }
     }
     lineStart = i + 1;
@@ -789,6 +856,7 @@ export function parseExternalJournalChunk(input: {
   return Object.freeze({
     cursor: nextCursor,
     observations: Object.freeze(observations.slice()),
+    quarantines: Object.freeze(quarantines.slice()),
     diagnostics: Object.freeze(diagnostics.slice()),
     withheldTailBytes,
   });

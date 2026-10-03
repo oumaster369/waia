@@ -32,6 +32,151 @@ function parse(
 }
 
 describe("external HTX journal observation parser", () => {
+  it("emits terminal quarantine provenance for exact malformed bytes without storing their content", () => {
+    const rows = [
+      bytes('{"secret":"do-not-store" bad}\r'),
+      new Uint8Array([0xff]),
+      bytes('{"event":"filled","accountId":"foreign"}'),
+    ];
+    const chunk = new Uint8Array(rows.flatMap((row) => [...row, 0x0a]));
+    const result = parse(chunk);
+    expect(result.quarantines.map((row) => row.code)).toEqual([
+      "invalid_json",
+      "invalid_utf8",
+      "source_identity_mismatch",
+    ]);
+    let offset = 0;
+    for (const [index, row] of rows.entries()) {
+      expect(result.quarantines[index]).toEqual({
+        code: result.quarantines[index]!.code,
+        source,
+        provenance: {
+          normalizerVersion: "htx-journal-v1",
+          sourceId: source.sourceId,
+          generationId: "fixture-generation-1",
+          byteOffset: offset,
+          byteLength: row.length,
+          rawSha256: createHash("sha256").update(row).digest("hex"),
+        },
+      });
+      offset += row.length + 1;
+    }
+    expect(JSON.stringify(result.quarantines)).not.toContain("do-not-store");
+    expect(result.cursor.nextOffset).toBe(chunk.length);
+  });
+
+  it("quarantines an oversized line exactly once at LF after a serialized restart", () => {
+    const first = parse(bytes("123456"), { maxLineBytes: 5 });
+    expect(first.quarantines).toEqual([]);
+    expect(first.diagnostics[0]?.code).toBe("line_too_large");
+    const continued = parse(bytes("789"), {
+      cursor: JSON.parse(JSON.stringify(first.cursor)),
+      chunkStartOffset: 6,
+      maxLineBytes: 5,
+    });
+    expect(continued.quarantines).toEqual([]);
+    expect(continued.cursor.pendingBytes).toEqual([]);
+    const completed = parse(bytes("0\r\n{}\n"), {
+      cursor: JSON.parse(JSON.stringify(continued.cursor)),
+      chunkStartOffset: 9,
+      maxLineBytes: 5,
+    });
+    expect(completed.quarantines).toHaveLength(1);
+    expect(completed.quarantines[0]).toMatchObject({
+      code: "line_too_large",
+      provenance: { byteOffset: 0, byteLength: 11, rawSha256: null },
+    });
+    expect(completed.observations[0]?.provenance.byteOffset).toBe(12);
+    const whole = parse(bytes("1234567890\r\n{}\n"), { maxLineBytes: 5 });
+    expect(completed.quarantines).toEqual(whole.quarantines);
+    expect(completed.observations).toEqual(whole.observations);
+    const next = parse(new Uint8Array(), {
+      cursor: completed.cursor,
+      chunkStartOffset: completed.cursor.nextOffset,
+      endOfSource: true,
+    });
+    expect(next.quarantines).toEqual([]);
+  });
+
+  it("finalizes discarded bytes at explicit EOF and leaves an open source unfinished", () => {
+    const waiting = parse(bytes("123456"), { maxLineBytes: 5 });
+    const stillOpen = parse(new Uint8Array(), { cursor: waiting.cursor, chunkStartOffset: 6 });
+    expect(stillOpen.quarantines).toEqual([]);
+    expect(stillOpen.cursor.discardUntilLf).toEqual({ lineOffset: 0, bytesSeen: 6 });
+    const closed = parse(new Uint8Array(), {
+      cursor: stillOpen.cursor,
+      chunkStartOffset: 6,
+      endOfSource: true,
+    });
+    expect(closed.quarantines[0]?.provenance).toMatchObject({ byteLength: 6, rawSha256: null });
+    expect(closed.cursor.discardUntilLf).toBeUndefined();
+    expect(closed.quarantines).toEqual(
+      parse(bytes("123456"), {
+        maxLineBytes: 5,
+        endOfSource: true,
+      }).quarantines,
+    );
+  });
+
+  it("rolls back all output and the exact cursor when terminal records exceed the budget", () => {
+    const pending = parse(bytes("123456"), { maxLineBytes: 5 });
+    const chunk = bytes("\n{}\n");
+    const rejected = parse(chunk, {
+      cursor: pending.cursor,
+      chunkStartOffset: 6,
+      maxLineBytes: 5,
+      maxEvents: 1,
+    });
+    expect(rejected.cursor).toBe(pending.cursor);
+    expect(rejected.observations).toEqual([]);
+    expect(rejected.quarantines).toEqual([]);
+    expect(rejected.diagnostics.at(-1)?.code).toBe("event_limit_reached");
+    const retry = parse(chunk, {
+      cursor: rejected.cursor,
+      chunkStartOffset: 6,
+      maxLineBytes: 5,
+      maxEvents: 2,
+    });
+    expect(retry.quarantines).toHaveLength(1);
+    expect(retry.observations).toHaveLength(1);
+    expect(retry.cursor.nextOffset).toBe(10);
+    const entire = parse(bytes("123456\n{}\n"), { maxLineBytes: 5, maxEvents: 1 });
+    expect(entire.cursor.nextOffset).toBe(0);
+    expect(entire.quarantines).toEqual([]);
+    expect(entire.observations).toEqual([]);
+    const twoBadRows = parse(bytes("bad\nbad\n"), { maxEvents: 1 });
+    expect(twoBadRows.cursor.nextOffset).toBe(0);
+    expect(twoBadRows.quarantines).toEqual([]);
+  });
+
+  it("preserves the original pending cursor on a limit-shrink rejection and emits no control-fault records", () => {
+    const pending = parse(bytes("123456"), { maxLineBytes: 8 });
+    const refused = parse(bytes("\n{}\n"), {
+      cursor: pending.cursor,
+      chunkStartOffset: 6,
+      maxLineBytes: 5,
+      maxEvents: 1,
+    });
+    expect(refused.cursor).toBe(pending.cursor);
+    expect(refused.quarantines).toEqual([]);
+    const accepted = parse(bytes("\n{}\n"), {
+      cursor: refused.cursor,
+      chunkStartOffset: 6,
+      maxLineBytes: 5,
+      maxEvents: 2,
+    });
+    expect(accepted.quarantines[0]?.provenance.byteLength).toBe(6);
+    for (const overrides of [
+      { maxEvents: 0 },
+      { chunkStartOffset: 2 },
+      { source: { ...source, organizationId: "" } },
+    ]) {
+      const result = parse(bytes("bad\n"), overrides);
+      expect(result.quarantines).toEqual([]);
+      expect(result.cursor.nextOffset).toBe(0);
+    }
+  });
+
   it("keeps byte offsets and raw digest stable when a UTF-8 record is split across appends", () => {
     const line =
       '{"event":"entry_filled","symbol":"ETH-USDT","side":"long","ts":"2026-10-03T12:00:00Z"}\n';
@@ -74,6 +219,27 @@ describe("external HTX journal observation parser", () => {
     });
     expect(switchedGeneration.observations).toEqual([]);
     expect(switchedGeneration.diagnostics[0]?.code).toBe("source_identity_mismatch");
+  });
+
+  it("keeps terminal records identical across every two-chunk boundary", () => {
+    const stream = new Uint8Array([
+      ...bytes('{"event":"filled"}\nbad\r\n'),
+      0xff,
+      0x0a,
+      ...bytes("x".repeat(48) + '\n{"event":"closed"}\n'),
+    ]);
+    const whole = parse(stream, { maxLineBytes: 32 });
+    for (let split = 0; split <= stream.length; split += 1) {
+      const left = parse(stream.slice(0, split), { maxLineBytes: 32 });
+      const right = parse(stream.slice(split), {
+        cursor: JSON.parse(JSON.stringify(left.cursor)),
+        chunkStartOffset: split,
+        maxLineBytes: 32,
+      });
+      expect([...left.observations, ...right.observations]).toEqual(whole.observations);
+      expect([...left.quarantines, ...right.quarantines]).toEqual(whole.quarantines);
+      expect(right.cursor).toEqual(whole.cursor);
+    }
   });
 
   it("withholds a final partial UTF-8 code point and diagnoses invalid UTF-8 once framed", () => {
