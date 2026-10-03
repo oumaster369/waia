@@ -205,6 +205,20 @@ describe("explicit recurring PostgreSQL observation composition", () => {
       }),
     ).toThrow();
   });
+  it("digest-binds protected V5 scope and reserves its full reader budget in the lease", () => {
+    const withV5 = createObservationConfiguration({ ...parameters, leaseTtlMs: 120_401,
+      htxV5: { enabled: true, fillContracts: ["ETH-USDT", "BTC-USDT"], expectedHtxUid: "594179655" } });
+    expect(withV5.revision).not.toBe(createObservationConfiguration({ ...parameters, leaseTtlMs: 120_401 }).revision);
+    expect(withV5.htxV5).toEqual({ enabled: true, fillContracts: ["BTC-USDT", "ETH-USDT"], expectedHtxUid: "594179655" });
+    expect(Object.isFrozen(withV5.htxV5)).toBe(true);
+    expect(Object.isFrozen(withV5.htxV5?.fillContracts)).toBe(true);
+    expect(() => createObservationConfiguration({ ...parameters, leaseTtlMs: 120_400,
+      htxV5: { enabled: true } })).toThrow();
+    expect(() => createObservationConfiguration({ ...parameters, htxV5: { enabled: true,
+      fillContracts: ["BTC-USDT", "BTC-USDT"] }, leaseTtlMs: 120_401 })).toThrow();
+    expect(() => createObservationConfiguration({ ...parameters, htxV5: { enabled: false,
+      expectedHtxUid: "594179655" } })).toThrow();
+  });
   it("starts only when awaited, recurs without a browser, and stops cleanly", async () => {
     const stop = new AbortController();
     const openReader = vi.fn();

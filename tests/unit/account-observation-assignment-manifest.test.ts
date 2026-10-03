@@ -78,6 +78,23 @@ describe("account observation trusted assignment manifest", () => {
     expect(Object.isFrozen(configured.config.htxDerivativesFamilies)).toBe(true);
   });
 
+  it("carries digest-bound V5 assignment scope and rejects a stale V5 revision", () => {
+    const base = assignment({ leaseTtlMs: 160_001 });
+    const config = createObservationConfiguration({ symbols: base.symbols, pollIntervalMs: base.pollIntervalMs,
+      maxBackoffMs: base.maxBackoffMs, readTimeoutMs: base.readTimeoutMs, leaseTtlMs: base.leaseTtlMs,
+      htxCoverage: { ...base.readerLimits, host: "api.huobi.pro" },
+      htxV5: { enabled: true, fillContracts: ["BTC-USDT"], expectedHtxUid: "594179655" } });
+    const configuredAssignment = { ...base, htxV5: { enabled: true, fillContracts: ["BTC-USDT"],
+      expectedHtxUid: "594179655" }, configurationRevision: config.revision };
+    const { text, digest } = sealed({ assignments: [configuredAssignment], iterationTimeoutMs: 300_000 });
+    const [configured] = parse(text, digest).configured;
+    expect(configured?.config.htxV5).toEqual({ enabled: true, fillContracts: ["BTC-USDT"], expectedHtxUid: "594179655" });
+    expect(Object.isFrozen(configured?.config.htxV5?.fillContracts)).toBe(true);
+    const stale = sealed({ assignments: [{ ...configuredAssignment, configurationRevision: assignment().configurationRevision }],
+      iterationTimeoutMs: 300_000 });
+    expect(() => parse(stale.text, stale.digest)).toThrow(/REFUSED:CONFIGURATION_REVISION/);
+  });
+
   it("refuses a derivatives-family mutation that is not included in the sealed digest", () => {
     const { text, digest } = sealed({ assignments: [assignmentWithFamilies(["coin_perpetual"])] });
     const tampered = JSON.parse(text) as { assignments: Array<Record<string, unknown>> };

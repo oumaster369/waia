@@ -5,6 +5,7 @@ import { AccountObservationReadFailure } from "../service";
 import type { HtxObservationCredentialHandle } from "../htx-reader-opener";
 import type { ObservationBinding, ObservationClock, ObservationReadError, HtxV5AccountObservation,
   HtxV5RowsObservation, HtxV5ValueObservation } from "../types";
+import { HTX_V5_READ_BUDGET_MS } from "../types";
 import { observationBindingSchema, sameObservationBinding } from "../validation";
 import { createHtxV5ReadTransport, type HtxV5ReadResponse, type HtxV5ReadTransport } from "./htx-v5-read-transport";
 import {
@@ -18,7 +19,7 @@ export const HTX_V5_READ_MAX_PAGES = 2;
 export const HTX_V5_READ_MAX_CONTRACTS = 8;
 export const HTX_V5_READ_LOOKBACK_MS = 86_400_000;
 export const HTX_V5_READ_MAX_REQUESTS = 31;
-export const HTX_V5_READ_MAX_DURATION_MS = 120_000;
+export const HTX_V5_READ_MAX_DURATION_MS = HTX_V5_READ_BUDGET_MS;
 const ALGO_TYPES: readonly HtxV5AlgoType[] = Object.freeze(["tp", "sl", "tpsl", "trigger", "trailing_stop"]);
 const CONTRACT = /^[A-Z0-9]+-USDT(?:-\d{6})?$/;
 const UID = /^[1-9]\d{0,38}$/;
@@ -165,7 +166,7 @@ export function createHtxV5ObservationReader(input: ReaderInput): HtxV5Observati
     activeController?.abort();
     for (const transport of transports) transport.dispose();
   };
-  async function read(signal: AbortSignal): Promise<HtxV5AccountObservation> {
+  async function readOnce(signal: AbortSignal): Promise<HtxV5AccountObservation> {
     if (disposed || terminal || reading || !signal || signal.aborted) fail("READ_FAILED");
     reading = true;
     const controller = new AbortController();
@@ -439,6 +440,22 @@ export function createHtxV5ObservationReader(input: ReaderInput): HtxV5Observati
       if (activeController === controller) activeController = undefined;
       controller.abort();
       reading = false;
+    }
+  }
+  async function read(signal: AbortSignal): Promise<HtxV5AccountObservation> {
+    if (disposed || terminal || reading || !signal || signal.aborted) fail("READ_FAILED");
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        terminal = true;
+        activeController?.abort();
+        reject(new AccountObservationReadFailure("TIMEOUT"));
+      }, HTX_V5_READ_MAX_DURATION_MS);
+    });
+    try {
+      return await Promise.race([readOnce(signal), deadline]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
     }
   }
   return Object.freeze({

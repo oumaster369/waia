@@ -62,6 +62,8 @@ export type AccountObservationReader = Readonly<{
   readBalances(signal: AbortSignal): Promise<ReadEnvelope<Balance>>;
   readOpenOrders(signal: AbortSignal): Promise<ReadEnvelope<ObservedOrder>>;
   readTrades(symbol: string, signal: AbortSignal): Promise<ReadEnvelope<ObservedTrade>>;
+  /** Present only for an enabled digest-bound V5 assignment. */
+  readHtxV5?(signal: AbortSignal): Promise<HtxV5ObservationReadResult>;
   /** Optional unless this exact family list is present in digest-bound config. */
   readDerivativesAccount?(
     family: HtxDerivativesAccountFamily,
@@ -186,6 +188,17 @@ export type HtxV5AccountObservation = Readonly<{
   algoOrders: HtxV5AlgoOrdersObservation;
   fills: HtxV5FillsObservation;
 }>;
+export type HtxV5ObservationConfiguration = Readonly<{
+  enabled: boolean;
+  fillContracts?: readonly string[];
+  expectedHtxUid?: string;
+}>;
+/** Fixed reader bound used in the scheduler lease inequality and service timeout. */
+export const HTX_V5_READ_BUDGET_MS = 120_000;
+export type HtxV5ObservationReadResult = Readonly<{
+  binding: ObservationBinding;
+  projection: HtxV5AccountObservation;
+}>;
 export type AccountObservationFields = Readonly<{
   observationId: string;
   binding: ObservationBinding;
@@ -247,6 +260,8 @@ export type ObservationConfig = Readonly<{
   }>[];
   /** Required by the configured HTX composition; generic injected readers may omit it. */
   htxCoverage?: HtxObservationCoverage;
+  /** Optional protected V5 observation scope; omitted preserves legacy behavior. */
+  htxV5?: HtxV5ObservationConfiguration;
 }>;
 export type ObservationTickResult =
   | Readonly<{ status: "NOT_CLAIMED" | "FENCED" }>

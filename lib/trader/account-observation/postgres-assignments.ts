@@ -53,7 +53,8 @@ export function createPostgresObservationAssignmentSource(
   async function inventory(signal: AbortSignal): Promise<readonly ObservationAssignment[]> {
     // A spot self-service configuration match cannot grant derivatives family
     // access or displace exact manifest-listed assignments from the bounded list.
-    if (!collectorSql || !envelope || envelope.config.htxDerivativesFamilies?.length) return [];
+    if (!collectorSql || !envelope || envelope.config.htxDerivativesFamilies?.length ||
+        envelope.config.htxV5?.expectedHtxUid) return [];
     cancelled(signal);
     try {
       const rows = await collectorSql.begin(async (tx) => {

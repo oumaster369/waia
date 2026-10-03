@@ -77,6 +77,14 @@ function withDerivatives(item: ConfiguredHtxObservationAssignment,
   const config = createObservationConfiguration({ ...parameters, htxDerivativesFamilies: families });
   return { ...item, config, binding: { ...item.binding, configurationRevision: config.revision } };
 }
+function withV5(item: ConfiguredHtxObservationAssignment,
+  htxV5: Readonly<{ enabled: boolean; fillContracts?: readonly string[]; expectedHtxUid?: string }> = {
+    enabled: true, fillContracts: ["BTC-USDT", "ETH-USDT"], expectedHtxUid: "456",
+  }) {
+  const { revision: _revision, ...parameters } = item.config;
+  const config = createObservationConfiguration({ ...parameters, leaseTtlMs: 120_401, htxV5 });
+  return { ...item, config, binding: { ...item.binding, configurationRevision: config.revision } };
+}
 function setup(overrides: Partial<Input> = {}) {
   const item = assignment();
   const collectorSql = { purpose: "collector" } as unknown as Sql;
@@ -88,7 +96,17 @@ function setup(overrides: Partial<Input> = {}) {
     }),
   );
   const fetchImpl = vi.fn<typeof fetch>(async (url) => {
-    const path = new URL(String(url)).pathname;
+    const target = new URL(String(url));
+    const path = target.pathname;
+    if (target.hostname === "api.hbdm.com") {
+      if (path === "/v5/account/asset_mode")
+        return Response.json({ code: 200, data: { asset_mode: "1" }, ts: Date.now() });
+      if (path === "/v5/account/balance")
+        return Response.json({ code: 200, data: { state: "normal", equity: "0", initial_margin: "0",
+          maintenance_margin: "0", maintenance_margin_rate: "0", profit_unreal: "0",
+          available_margin: "0", voucher_value: "0", details: [] }, ts: Date.now() });
+      return Response.json({ code: 200, data: [], ts: Date.now() });
+    }
     if (path === "/v1/account/accounts")
       return Response.json({ status: "ok", data: [{ id: 123, type: "spot", state: "working" }] });
     if (path === "/v2/user/uid") return Response.json({ code: 200, data: 456 });
@@ -220,6 +238,62 @@ describe("configured observation runtime, real local composition with mock persi
         readStartedAtMs: expect.any(Number), readCompletedAtMs: expect.any(Number), error: null })]) } });
     expect(observation.derivatives.families.filter((family: { status: string }) => family.status === "NOT_CONFIGURED")).toHaveLength(3);
     expect(JSON.stringify(ports.commitIfCurrent.mock.calls)).not.toMatch(/synthetic|Signature|AccessKey/);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("commits the configured V5 projection through the existing repository with identity-bound GET reads", async () => {
+    const f = setup();
+    const item = withV5(f.item);
+    f.input.configured = [item];
+    f.input.iterationTimeoutMs = 200_000;
+    await stopAfterTick(f);
+    expect(ports.commitIfCurrent).toHaveBeenCalledTimes(1);
+    const observation = ports.commitIfCurrent.mock.calls[0][0].observation;
+    expect(observation).toMatchObject({ schemaVersion: "account-observation/v3", binding: item.binding,
+      htxV5: { schemaVersion: "htx-v5-observation/v1", htxUid: "456",
+        assetMode: { status: "COMPLETE", value: "1" },
+        balance: { status: "COMPLETE", value: { account: { equityUsd: "0" }, details: [] } },
+        positions: { status: "COMPLETE", values: [] }, openOrders: { status: "PARTIAL", values: [] },
+        algoOrders: { status: "PARTIAL", values: [] },
+        fills: { status: "PARTIAL", values: [], contracts: ["BTC-USDT", "ETH-USDT"] } } });
+    expect(derivativesCalls(f).filter(([url]) => new URL(String(url)).pathname.startsWith("/v5/"))).toHaveLength(11);
+    for (const [url, options] of derivativesCalls(f).filter(([url]) => new URL(String(url)).pathname.startsWith("/v5/"))) {
+      expect(new URL(String(url)).hostname).toBe("api.hbdm.com");
+      expect(options).toMatchObject({ method: "GET", redirect: "error" });
+    }
+    expect(JSON.stringify(ports.commitIfCurrent.mock.calls)).not.toMatch(/synthetic|Signature|AccessKey|apiSecret/);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("aborts a real configured V5 read on shutdown and settles its late body before releasing ownership", async () => {
+    const f = setup();
+    f.input.configured = [withV5(f.item)];
+    f.input.iterationTimeoutMs = 200_000;
+    const ordinaryFetch = f.fetchImpl.getMockImplementation()!;
+    let finish!: (response: Response) => void;
+    let started!: () => void;
+    const v5Started = new Promise<void>(resolve => { started = resolve; });
+    f.fetchImpl.mockImplementation((url, options) => {
+      const target = new URL(String(url));
+      if (target.hostname === "api.hbdm.com" && target.pathname === "/v5/account/asset_mode") {
+        started();
+        return new Promise(resolve => { finish = resolve; });
+      }
+      return ordinaryFetch(url, options);
+    });
+    bindConfiguredRows(f);
+    const runtime = createConfiguredHtxObservationRuntime(f.input);
+    const work = runtime.run(new AbortController().signal);
+    await vi.advanceTimersByTimeAsync(0);
+    await v5Started;
+    const request = f.fetchImpl.mock.calls.find(([url]) => new URL(String(url)).pathname === "/v5/account/asset_mode");
+    expect(request?.[1]?.signal?.aborted).toBe(false);
+    runtime.dispose();
+    await work;
+    expect(request?.[1]?.signal?.aborted).toBe(true);
+    const cancel = vi.fn();
+    finish(new Response(new ReadableStream({ cancel })));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(ports.commitIfCurrent).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
   it("uses the second explicit account's own family configuration instead of the first template", async () => {

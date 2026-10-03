@@ -454,6 +454,35 @@ describe("HTX V5 observation reader", () => {
     expect(f.credentialHandle.dispose).not.toHaveBeenCalled();
   });
 
+  it("enforces the wall-clock whole-read deadline when the injected clock does not advance", async () => {
+    const v5Started = deferred<void>();
+    let v5Fetches = 0;
+    const frozenClock = { now: () => ts, sleep: accountObservationClock.sleep.bind(accountObservationClock) };
+    const fetchImpl = vi.fn<typeof fetch>(input => {
+      const url = new URL(String(input));
+      if (url.hostname === "api.hbdm.com") {
+        v5Fetches++;
+        v5Started.resolve();
+        return new Promise<Response>(resolve => setTimeout(() => resolve(json({ code: 500, message: "route error" })),
+          50_000));
+      }
+      return Promise.resolve(json(body(url.pathname)));
+    });
+    const reader = createHtxV5ObservationReader({ credential: credential(), clock: frozenClock, fetchImpl,
+      timeoutMs: 120_000, maxResponseBytes: 4096, authorizeCurrent: async () => true });
+    const reading = reader.read(new AbortController().signal);
+    await v5Started.promise;
+    await vi.advanceTimersByTimeAsync(120_000);
+    await expect(reading).rejects.toMatchObject({ code: "TIMEOUT" });
+    expect(v5Fetches).toBeGreaterThanOrEqual(2);
+    const requestsAtTimeout = v5Fetches;
+    await expect(reader.read(new AbortController().signal)).rejects.toMatchObject({ code: "READ_FAILED" });
+    expect(v5Fetches).toBe(requestsAtTimeout);
+    const settlement = reader.settled();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await settlement;
+  });
+
   it("parent cancellation rejects promptly while a late fetch remains owned until settlement", async () => {
     const lateResponse = deferred<Response>();
     const v5Started = deferred<void>();

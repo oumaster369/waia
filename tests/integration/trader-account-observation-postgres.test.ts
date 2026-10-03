@@ -12,7 +12,7 @@ import { createObservationConfiguration, createPostgresAccountObservationRuntime
 import { openHtxObservationReader } from "@/lib/trader/account-observation/htx-reader-opener";
 import { createConfiguredHtxObservationRuntime } from "@/lib/trader/account-observation/configured-runtime";
 import { handleAccountObservationGet, type ObservationReadDependencies } from "@/lib/trader/account-observation/read-handler";
-import type { AccountObservation, ObservationBinding, ObservationLease } from "@/lib/trader/account-observation/types";
+import type { AccountObservation, HtxV5AccountObservation, ObservationBinding, ObservationLease } from "@/lib/trader/account-observation/types";
 import { accountObservationManifestDigest } from "@/lib/trader/account-observation/assignment-manifest";
 import { runAccountObservationCollectionStateProvisioning } from "@/scripts/ops/account-observation-provision-collection-state-v1";
 
@@ -23,7 +23,10 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
   let root: Sql;
   let admin: Sql;
   let client: Sql;
+  let readerClient: Sql;
+  let readerLogin: string;
   let repo: ReturnType<typeof createPostgresObservationRepository>;
+  let reader: ReturnType<typeof createPostgresObservationReader>;
   beforeAll(async () => {
     root = postgres(url, { max: 1, connect_timeout: 3, prepare: false });
     const version = await root`SHOW server_version_num`;
@@ -59,9 +62,19 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
       { max: 4, connect_timeout: 3, prepare: false, connection: { statement_timeout: 3000 } });
     repo = createPostgresObservationRepository(client);
     expect((await client`SELECT session_user`)[0].session_user).toBe("dee960_local_collector");
+    readerLogin = "dee960_v3_reader_" + randomUUID().replaceAll("-", "");
+    await admin.unsafe(`CREATE ROLE "${readerLogin}" LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE
+      PASSWORD 'synthetic_v3_reader';
+      GRANT waia_account_observation_reader TO "${readerLogin}" WITH INHERIT FALSE, SET TRUE;`);
+    readerClient = postgres(url.replace("waia_local_admin:local_validation_only", `${readerLogin}:synthetic_v3_reader`)
+      .replace("/waia_dee960_local", "/" + name),
+      { max: 2, connect_timeout: 3, prepare: false, connection: { statement_timeout: 3000 } });
+    reader = createPostgresObservationReader(readerClient);
+    expect((await readerClient`SELECT session_user`)[0].session_user).toBe(readerLogin);
   }, 30000);
   afterAll(async () => {
-    await client?.end({ timeout: 2 }); await admin?.end({ timeout: 2 }); await root?.end({ timeout: 2 });
+    await readerClient?.end({ timeout: 2 }); await client?.end({ timeout: 2 });
+    await admin?.end({ timeout: 2 }); await root?.end({ timeout: 2 });
     // Retain isolated synthetic DB for diagnosis. Never drop any user database.
   });
   async function seed(exchangeAccountId: string = randomUUID()): Promise<ObservationBinding> {
@@ -188,6 +201,53 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
       collectionStartedAtMs: t, collectionCompletedAtMs: t, status: "COMPLETE",
       balances: component, openOrders: component, trades: [{ symbol: "BTCUSDT", component }], holdings: [] };
   }
+  function htxV5Projection(t: number): HtxV5AccountObservation {
+    const completeValue = <T>(value: T) => ({ status: "COMPLETE" as const, value,
+      readStartedAtMs: t, readCompletedAtMs: t, responseGeneratedAtMs: null, error: null });
+    const completeRows = <T>(values: readonly T[]) => ({ status: "COMPLETE" as const, values,
+      readStartedAtMs: t, readCompletedAtMs: t, responseGeneratedAtMs: null, error: null, pageScope: null });
+    return { schemaVersion: "htx-v5-observation/v1", htxUid: "456", assetMode: completeValue("1"),
+      balance: completeValue({ state: "normal", account: { equityUsd: "0", initialMarginUsd: "0",
+        maintenanceMarginUsd: "0", maintenanceMarginRate: "0", profitUnrealUsd: "0", availableMarginUsd: "0",
+        voucherValue: "0", createdTimeMs: null, updatedTimeMs: null }, details: [] }),
+      positions: completeRows([{ contractCode: "BTC-USDT", positionSide: "long", direction: "buy", marginMode: "cross",
+        volume: "0.123456789012345678", available: "0.111111111111111111", openAveragePrice: "60000.000000000001",
+        liquidationPrice: null, initialMargin: "12.000000000000001", maintenanceMargin: "3.000000000000001",
+        margin: "15.000000000000002", profitUnreal: "-0.000000000000007", profitRate: "-0.000000000000003",
+        marginRate: "0.012345678901234567", marginCurrency: "USDT", lastPrice: "60001.000000000003",
+        markPrice: "60002.000000000004", contractType: "swap", createdTimeMs: t, updatedTimeMs: t }]),
+      openOrders: { status: "PARTIAL", values: [{ id: "9007199254740993", orderId: "123456789012345678901234",
+        contractCode: "BTC-USDT", clientOrderId: "client_v3_order_01", side: "sell", positionSide: "long",
+        marginMode: "cross", volume: "0.000000000000000019", state: "partially_filled", reduceOnly: true,
+        tpTriggerPrice: "70000.000000000001", slTriggerPrice: null, createdTimeMs: t, updatedTimeMs: null }],
+        readStartedAtMs: t, readCompletedAtMs: t,
+        responseGeneratedAtMs: null, error: null,
+        pageScope: { pageSize: 100, maxPages: 2, pagesRead: 1, nextFrom: null, completeness: "UNKNOWN" } },
+      algoOrders: { status: "PARTIAL", values: [{ id: "9007199254740993123", algoId: "algo_12345678901234567890",
+        contractCode: "BTC-USDT", volume: "0.000000000000000021", type: "tpsl", state: "active",
+        positionSide: "long", side: "sell", marginMode: "cross", tpTriggerPrice: "71000.000000000001",
+        slTriggerPrice: "59000.000000000001", reduceOnly: true, createdTimeMs: t, updatedTimeMs: null }],
+        readStartedAtMs: t, readCompletedAtMs: t,
+        responseGeneratedAtMs: null, error: null, pageScope: { pageSize: 20, maxPagesPerType: 2,
+          queries: (["tp", "sl", "tpsl", "trigger", "trailing_stop"] as const)
+            .map(type => ({ type, pagesRead: 1, nextFrom: null })),
+          completeness: "UNKNOWN" } },
+      fills: { status: "PARTIAL", values: [{ id: "9007199254740993123", tradeId: "trade_12345678901234567890",
+        orderId: "order_12345678901234567890", contractCode: "BTC-USDT", side: "buy", positionSide: "long",
+        orderType: "1", marginMode: "cross", tradePrice: "60001.000000000003",
+        tradeVolume: "0.000000000000000023", tradeTurnover: "0.000000001380023000000069",
+        tradeFee: "-0.000000000000000007", feeCurrency: "USDT", profit: "0.000000000000000011",
+        createdTimeMs: t, updatedTimeMs: t }], readStartedAtMs: t, readCompletedAtMs: t,
+        responseGeneratedAtMs: null, error: null, coverage: "CONFIGURED_CONTRACTS_AND_WINDOW", contracts: ["BTC-USDT"],
+        windowStartMs: t - 10000, windowEndMs: t,
+        pageScope: { pageSize: 100, maxPagesPerContract: 2,
+          queries: [{ contractCode: "BTC-USDT", pagesRead: 1, nextFrom: null }], completeness: "UNKNOWN" } } };
+  }
+  function v3Observation(b: ObservationBinding): AccountObservation {
+    const base = observation(b);
+    return { ...base, schemaVersion: "account-observation/v3", status: "PARTIAL",
+      htxV5: htxV5Projection(base.collectionCompletedAtMs) };
+  }
   async function lease(b: ObservationBinding) {
     const l = await repo.claimDue(b, "worker-1", Date.now(), 60000);
     expect(l).not.toBeNull(); return l!;
@@ -196,6 +256,66 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
     const nowMs = Date.now();
     return repo.commitIfCurrent({ lease: l, observation: o, nowMs, nextDueAtMs: nowMs + 10000, consecutiveFailures: 0 });
   }
+  it("commits v3 through the restricted writer and reads its exact tenant projection through a restricted LOGIN", async () => {
+    const b = await seed(); const l = await lease(b); const o = v3Observation(b);
+    expect(await commit(l, o)).toBe(true);
+    expect(await repo.readLatest(b)).toEqual(o);
+    expect(await reader.resolveActiveBinding({ organizationId: b.organizationId,
+      credentialId: b.credentialId, exchangeAccountId: b.exchangeAccountId })).toEqual(b);
+    expect(await reader.readLatest(b)).toEqual(o);
+    expect(await reader.readLatest({ ...b, organizationId: randomUUID() })).toBeNull();
+    expect(await reader.readLatest({ ...b, credentialId: randomUUID() })).toBeNull();
+    expect(await reader.readLatest({ ...b, exchangeAccountId: "different-account" })).toBeNull();
+    expect((await admin`SELECT payload->>'schemaVersion' AS schema_version FROM public.trader_account_observations
+      WHERE credential_id=${b.credentialId}`)[0].schema_version).toBe("account-observation/v3");
+  });
+  it("does not append or advance latest for rotated, revoked, expired, or superseded v3 commits", async () => {
+    const expired = await seed(); const expiredLease = await lease(expired);
+    await admin`UPDATE public.trader_account_collection_state SET lease_expires_at=clock_timestamp()-interval '1 second'
+      WHERE credential_id=${expired.credentialId}`;
+    expect(await commit(expiredLease, v3Observation(expired))).toBe(false);
+    expect((await admin`SELECT count(*)::int AS n FROM public.trader_account_observations
+      WHERE credential_id=${expired.credentialId}`)[0].n).toBe(0);
+    expect((await admin`SELECT last_observation_id FROM public.trader_account_collection_state
+      WHERE credential_id=${expired.credentialId}`)[0].last_observation_id).toBeNull();
+    const successor = await repo.claimDue(expired, "successor-v3", Date.now(), 60000);
+    expect(successor).not.toBeNull();
+    expect(await commit(expiredLease, v3Observation(expired))).toBe(false);
+    const stillEmpty = await admin`SELECT last_observation_id FROM public.trader_account_collection_state
+      WHERE credential_id=${expired.credentialId}`;
+    expect(stillEmpty[0].last_observation_id).toBeNull();
+    const accepted = v3Observation(expired);
+    expect(await commit(successor!, accepted)).toBe(true);
+    expect(await repo.readLatest(expired)).toEqual(accepted);
+    expect(await commit(expiredLease, v3Observation(expired))).toBe(false);
+    expect(await repo.readLatest(expired)).toEqual(accepted);
+    expect((await admin`SELECT count(*)::int AS n FROM public.trader_account_observations
+      WHERE credential_id=${expired.credentialId}`)[0].n).toBe(1);
+    expect((await admin`SELECT last_observation_id FROM public.trader_account_collection_state
+      WHERE credential_id=${expired.credentialId}`)[0].last_observation_id).toBe(accepted.observationId);
+
+    const rotated = await seed(); const rotatedLease = await lease(rotated);
+    await admin`UPDATE public.exchange_credentials SET permission_metadata='synthetic-rotation' WHERE id=${rotated.credentialId}`;
+    expect(await commit(rotatedLease, v3Observation(rotated))).toBe(false);
+    expect((await admin`SELECT count(*)::int AS n FROM public.trader_account_observations
+      WHERE credential_id=${rotated.credentialId}`)[0].n).toBe(0);
+    expect((await admin`SELECT last_observation_id FROM public.trader_account_collection_state
+      WHERE credential_id=${rotated.credentialId}`)[0].last_observation_id).toBeNull();
+    const current = await reader.resolveActiveBinding({ organizationId: rotated.organizationId,
+      credentialId: rotated.credentialId, exchangeAccountId: rotated.exchangeAccountId });
+    expect(current?.credentialRevision).toBe("2");
+    expect(await reader.readLatest(rotated)).toBeNull();
+    expect(current && await reader.readLatest(current)).toBeNull();
+
+    const revoked = await seed(); const revokedLease = await lease(revoked);
+    await admin`UPDATE public.exchange_credentials SET status='revoked' WHERE id=${revoked.credentialId}`;
+    expect(await commit(revokedLease, v3Observation(revoked))).toBe(false);
+    expect((await admin`SELECT count(*)::int AS n FROM public.trader_account_observations
+      WHERE credential_id=${revoked.credentialId}`)[0].n).toBe(0);
+    expect((await admin`SELECT last_observation_id FROM public.trader_account_collection_state
+      WHERE credential_id=${revoked.credentialId}`)[0].last_observation_id).toBeNull();
+    expect(await reader.readLatest(revoked)).toBeNull();
+  });
   async function restricted(b: ObservationBinding, statement: string) {
     return admin.begin(async tx => {
       await tx.unsafe("SET LOCAL ROLE waia_account_observer");

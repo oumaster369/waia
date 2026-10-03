@@ -144,6 +144,21 @@ describe("explicit assignments filtered by current read-only DB state", () => {
     expect(list[1]?.binding.organizationId).toBe(extraOrg);
     expect(list[1]?.config.revision).toBe(a.config.revision);
   });
+  it("does not auto-apply a fixed external HTX UID to inventory accounts", async () => {
+    const a = assignment();
+    const { revision: _revision, ...parameters } = a.config;
+    const config = createObservationConfiguration({ ...parameters, leaseTtlMs: 120_401,
+      htxV5: { enabled: true, expectedHtxUid: "594179655" } });
+    const configured = { ...a, config, binding: { ...a.binding, configurationRevision: config.revision } };
+    const begin = vi.fn(async (run: (tx: unknown) => Promise<unknown>) => run(
+      Object.assign(async () => [{ organization_id: a.binding.organizationId,
+        credential_id: "00000000-0000-4000-8000-000000000009", exchange_account_id: "456",
+        credential_revision: "1", configuration_revision: config.revision, symbols: ["BTCUSDT"] }],
+      { unsafe: async () => undefined })));
+    const source = createPostgresObservationAssignmentSource(sql, [configured], { begin } as unknown as Sql);
+    expect(await source.loadAssignments(signal())).toEqual([configured]);
+    expect(begin).not.toHaveBeenCalled();
+  });
   it.each([false, true])("reserves explicit accounts with a full spot inventory (futures first: %s)", async (futuresFirst) => {
     const spot = assignment();
     const { revision: _revision, ...parameters } = spot.config;

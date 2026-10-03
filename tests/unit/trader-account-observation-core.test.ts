@@ -3,7 +3,7 @@ import { AccountObservationFailure, AccountObservationReadFailure, createAccount
   "@/lib/trader/account-observation/service";
 import { parseAccountObservation } from "@/lib/trader/account-observation/validation";
 import type { AccountObservation, AccountObservationReader, ObservationBinding, ObservationClock,
-  ObservationConfig, ObservationLease, ObservationRepository, ObservedOrder, ReadEnvelope } from
+  HtxV5AccountObservation, ObservationConfig, ObservationLease, ObservationRepository, ObservedOrder, ReadEnvelope } from
   "@/lib/trader/account-observation/types";
 import type { Balance, Trade } from "@/lib/trader/connectors/types";
 import { HTX_DERIVATIVES_ACCOUNT_FAMILIES, type HtxDerivativesAccountFamily,
@@ -87,10 +87,126 @@ function setup(overrides: Partial<ObservationConfig> = {}) {
   const service = createAccountObservationService(deps, { ...config, ...overrides });
   return { state, repository, reader, openReader, service, envelope, snapshot, position, beforeCommit, deps };
 }
+function htxV5Projection(htxUid = "456", withPartialError = false): HtxV5AccountObservation {
+  const started = Date.now();
+  const completeValue = <T>(value: T) => ({ status: "COMPLETE" as const, value,
+    readStartedAtMs: started, readCompletedAtMs: started, responseGeneratedAtMs: null, error: null });
+  const completeRows = <T>(values: readonly T[]) => ({ status: "COMPLETE" as const, values,
+    readStartedAtMs: started, readCompletedAtMs: started, responseGeneratedAtMs: null, error: null, pageScope: null });
+  const algoTypes = ["tp", "sl", "tpsl", "trigger", "trailing_stop"] as const;
+  return { schemaVersion: "htx-v5-observation/v1", htxUid,
+    assetMode: completeValue("1"),
+    balance: completeValue({ state: "normal", account: { equityUsd: "0", initialMarginUsd: "0",
+      maintenanceMarginUsd: "0", maintenanceMarginRate: "0", profitUnrealUsd: "0", availableMarginUsd: "0",
+      voucherValue: "0", createdTimeMs: null, updatedTimeMs: null }, details: [] }),
+    positions: completeRows([]),
+    openOrders: withPartialError ? { status: "PARTIAL", values: [], readStartedAtMs: started,
+      readCompletedAtMs: started, responseGeneratedAtMs: null, error: "INVALID_RESPONSE",
+      pageScope: { pageSize: 100, maxPages: 2, pagesRead: 1, nextFrom: null, completeness: "UNKNOWN" } }
+      : { status: "PARTIAL", values: [], readStartedAtMs: started, readCompletedAtMs: started,
+        responseGeneratedAtMs: null, error: null,
+        pageScope: { pageSize: 100, maxPages: 2, pagesRead: 1, nextFrom: null, completeness: "UNKNOWN" } },
+    algoOrders: { status: "PARTIAL", values: [], readStartedAtMs: started, readCompletedAtMs: started,
+      responseGeneratedAtMs: null, error: null, pageScope: { pageSize: 20, maxPagesPerType: 2,
+        queries: algoTypes.map(type => ({ type, pagesRead: 1, nextFrom: null })), completeness: "UNKNOWN" } },
+    fills: { status: "NOT_CONFIGURED", values: null, readStartedAtMs: null, readCompletedAtMs: null,
+      responseGeneratedAtMs: null, error: null, coverage: "NOT_CONFIGURED", contracts: [],
+      windowStartMs: null, windowEndMs: null, pageScope: null } };
+}
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(10000); });
 afterEach(() => { vi.useRealTimers(); });
 
 describe("DEE-960 injected account observation — no production adapter or real venue", () => {
+  it("validates the additional V5 lease budget and backs off on a partial classified failure", async () => {
+    expect(() => setup({ htxV5: { enabled: true }, leaseTtlMs: 120_050 })).toThrow();
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection: htxV5Projection("456", true) })) });
+    const result = await f.service.tick(initial, "owner");
+    expect(result).toMatchObject({ status: "COMMITTED", observation: { schemaVersion: "account-observation/v3",
+      htxV5: { htxUid: "456", openOrders: { status: "PARTIAL", error: "INVALID_RESPONSE" } } } });
+    expect(f.state.failures).toBe(1);
+    expect(f.state.nextDue).toBe(Date.now() + 200);
+  });
+
+  it.each([
+    { enabled: false, fillContracts: ["BTC-USDT"] },
+    { enabled: false, expectedHtxUid: "456" },
+    { enabled: true, fillContracts: ["BTC-USDT", "BTC-USDT"] },
+  ])("rejects invalid direct-service V5 configuration %#", htxV5 => {
+    const f = setup();
+    expect(() => createAccountObservationService(f.deps, {
+      ...config, htxV5, leaseTtlMs: 120_051,
+    })).toThrow();
+  });
+
+  it("fences a changed lease after the V5 reader returns and before repository commit", async () => {
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => {
+      f.state.active = false;
+      return { binding: { ...f.state.binding }, projection: htxV5Projection() };
+    }) });
+    expect(await f.service.tick(initial, "owner")).toEqual({ status: "FENCED" });
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.reader.readHtxV5).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a V5 fill projection whose contract scope differs from the digest-bound configuration", async () => {
+    const f = setup({ htxV5: { enabled: true, fillContracts: ["BTC-USDT"] }, leaseTtlMs: 120_051 });
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection: htxV5Projection() })) });
+    const result = await f.service.tick(initial, "owner");
+    expect(result).toMatchObject({ status: "COMMITTED", observation: { schemaVersion: "account-observation/v3",
+      htxV5: { fills: { status: "ERROR", error: "INVALID_RESPONSE", coverage: "CONFIGURED_CONTRACTS_AND_WINDOW",
+        contracts: ["BTC-USDT"], windowStartMs: null, windowEndMs: null } } } });
+    expect(f.state.failures).toBe(1);
+  });
+
+  it("rejects fill data when no contracts were configured", async () => {
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    const base = htxV5Projection();
+    const projection: HtxV5AccountObservation = { ...base, fills: { status: "ERROR", values: null,
+      readStartedAtMs: 10_000, readCompletedAtMs: 10_000,
+      responseGeneratedAtMs: null, error: "READ_FAILED", coverage: "CONFIGURED_CONTRACTS_AND_WINDOW",
+      contracts: ["BTC-USDT"], windowStartMs: null, windowEndMs: null, pageScope: null } };
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection })) });
+    const result = await f.service.tick(initial, "owner");
+    expect(result).toMatchObject({ status: "COMMITTED", observation: { schemaVersion: "account-observation/v3",
+      htxV5: { assetMode: { status: "ERROR", error: "INVALID_RESPONSE" },
+        fills: { status: "NOT_CONFIGURED", error: null, coverage: "NOT_CONFIGURED", contracts: [] } } } });
+  });
+
+  it("keeps total V5 read failure as an unavailable observation when the expected UID was never observed", async () => {
+    const f = setup({ htxV5: { enabled: true, expectedHtxUid: "456" }, leaseTtlMs: 120_051 });
+    const base = htxV5Projection();
+    const errorValue = <T>(value: T | null) => ({ status: "ERROR" as const, value,
+      readStartedAtMs: 10_000, readCompletedAtMs: 10_000, responseGeneratedAtMs: null,
+      error: "READ_FAILED" as const });
+    const errorRows = { status: "ERROR" as const, values: null, readStartedAtMs: 10_000,
+      readCompletedAtMs: 10_000, responseGeneratedAtMs: null, error: "READ_FAILED" as const, pageScope: null };
+    const projection: HtxV5AccountObservation = { ...base, htxUid: null,
+      assetMode: errorValue(null), balance: errorValue(null), positions: errorRows, openOrders: errorRows,
+      algoOrders: { status: "ERROR", values: null, readStartedAtMs: 10_000, readCompletedAtMs: 10_000,
+        responseGeneratedAtMs: null, error: "READ_FAILED", pageScope: null } };
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection })) });
+    const result = await f.service.tick(initial, "owner");
+    expect(result).toMatchObject({ status: "COMMITTED", observation: { schemaVersion: "account-observation/v3",
+      htxV5: { htxUid: null, assetMode: { status: "ERROR", error: "READ_FAILED" } } } });
+    expect(f.state.failures).toBe(1);
+  });
+
+  it("fences a missing UID when any V5 component reports data", async () => {
+    const f = setup({ htxV5: { enabled: true, expectedHtxUid: "456" }, leaseTtlMs: 120_051 });
+    const base = htxV5Projection();
+    const projection = { ...base, htxUid: null };
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection })) });
+    expect(await f.service.tick(initial, "owner")).toEqual({ status: "FENCED" });
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+  });
+
   it.each(["before-read", "before-commit"])("fences cancellation during async currentness %s", async phase => {
     const f = setup(); const stop = new AbortController();
     let finish!: (value: boolean) => void; let reached!: () => void;

@@ -14,6 +14,9 @@ import { createObservationCredentialStore } from "./credential-store";
 import { openHtxObservationReader, type HtxObservationCredentialHandle } from "./htx-reader-opener";
 import { createHtxReadAdmission } from "./htx-read-admission";
 import { createHtxDerivativesObservationReader } from "./derivatives/reader";
+import { createHtxV5ObservationReader } from "./derivatives/htx-v5-reader";
+import { HTX_V5_READ_BUDGET_MS } from "./types";
+import type { HtxV5ObservationReader } from "./derivatives/htx-v5-reader";
 import type { HtxObservationReaderOptions } from "./htx-reader";
 import { observationBindingSchema } from "./validation";
 import { AccountObservationReadFailure } from "./service";
@@ -130,6 +133,7 @@ export function createConfiguredHtxObservationRuntime(
   const stores = new Map<string, ReturnType<typeof createObservationCredentialStore>>();
   const options = new Map<string, HtxObservationReaderOptions>();
   const derivativeReaders = new Set<ReturnType<typeof createHtxDerivativesObservationReader>>();
+  const htxV5Readers = new Map<HtxV5ObservationReader, string>();
   const admissions = new Set<ReturnType<typeof createHtxReadAdmission>>();
   const closingAdmissions = new WeakSet<ReturnType<typeof createHtxReadAdmission>>();
   let derivativeCleanupFailed = false;
@@ -143,6 +147,14 @@ export function createConfiguredHtxObservationRuntime(
       () => {
         derivativeCleanupFailed = true;
       },
+    );
+  };
+  const releaseHtxV5 = (reader: HtxV5ObservationReader | undefined) => {
+    if (!reader) return;
+    reader.dispose();
+    void reader.settled().then(
+      () => htxV5Readers.delete(reader),
+      () => { derivativeCleanupFailed = true; },
     );
   };
   const releaseAdmission = (admission: ReturnType<typeof createHtxReadAdmission> | undefined) => {
@@ -165,6 +177,7 @@ export function createConfiguredHtxObservationRuntime(
       fixed.find((item) => key(item.binding) === id) ??
       (template &&
       !template.config.htxDerivativesFamilies?.length &&
+      !template.config.htxV5?.expectedHtxUid &&
       binding.configurationRevision === template.config.revision
         ? template
         : undefined);
@@ -217,6 +230,9 @@ export function createConfiguredHtxObservationRuntime(
         failed = true;
       }
     }
+    for (const reader of htxV5Readers.keys()) {
+      try { releaseHtxV5(reader); } catch { failed = true; }
+    }
     for (const reader of readers) {
       try {
         reader.dispose();
@@ -249,6 +265,7 @@ export function createConfiguredHtxObservationRuntime(
         signal.aborted ||
         derivativeCleanupFailed ||
         derivativeReaders.size >= 20 ||
+        htxV5Readers.size >= 20 ||
         admissions.size >= 20
       )
         throw new AccountObservationReadFailure("READ_FAILED");
@@ -258,6 +275,9 @@ export function createConfiguredHtxObservationRuntime(
       } catch {
         return failure();
       }
+      const accountKey = JSON.stringify([binding.organizationId, binding.exchangeAccountId]);
+      if ([...htxV5Readers.values()].includes(accountKey))
+        throw new AccountObservationReadFailure("READ_FAILED");
       const opened = ensureStore(binding);
       if (!opened) throw new AccountObservationReadFailure("IDENTITY_MISMATCH");
       const { store, readerOptions, config } = opened;
@@ -269,6 +289,7 @@ export function createConfiguredHtxObservationRuntime(
       let owned: AccountObservationReader | undefined;
       let admission: ReturnType<typeof createHtxReadAdmission> | undefined;
       let derivatives: ReturnType<typeof createHtxDerivativesObservationReader> | undefined;
+      let htxV5Reader: HtxV5ObservationReader | undefined;
       const verifyExactKey: AdmissionVerifier = async (scope, digest, admissionSignal) => {
         if (closed || admissionSignal.aborted || !admission) return false;
         if (
@@ -314,6 +335,19 @@ export function createConfiguredHtxObservationRuntime(
                   });
                   derivativeReaders.add(derivatives);
                 }
+                if (config.htxV5?.enabled) {
+                  htxV5Reader = createHtxV5ObservationReader({
+                    credential: handle,
+                    clock,
+                    fetchImpl,
+                    timeoutMs: HTX_V5_READ_BUDGET_MS,
+                    maxResponseBytes: readerOptions.maxResponseBytes,
+                    ...(config.htxV5.expectedHtxUid ? { expectedHtxUid: config.htxV5.expectedHtxUid } : {}),
+                    ...(config.htxV5.fillContracts ? { contracts: config.htxV5.fillContracts } : {}),
+                    authorizeCurrent: source.authorizeOpen,
+                  });
+                  htxV5Readers.set(htxV5Reader, accountKey);
+                }
                 // Keep the protected store's non-enumerable, disposal-aware accessors;
                 // never spread/copy secrets into an enumerable wrapper or retain new strings.
                 const wrapped: HtxObservationCredentialHandle = {
@@ -326,12 +360,16 @@ export function createConfiguredHtxObservationRuntime(
                   },
                   dispose() {
                     try {
-                      releaseDerivatives(derivatives);
+                      releaseHtxV5(htxV5Reader);
                     } finally {
                       try {
-                        releaseAdmission(admission);
+                        releaseDerivatives(derivatives);
                       } finally {
-                        handle.dispose();
+                        try {
+                          releaseAdmission(admission);
+                        } finally {
+                          handle.dispose();
+                        }
                       }
                     }
                   },
@@ -342,7 +380,11 @@ export function createConfiguredHtxObservationRuntime(
                 });
                 return Object.freeze(wrapped);
               } catch (error) {
-                handle.dispose();
+                try { releaseHtxV5(htxV5Reader); }
+                finally {
+                  try { releaseDerivatives(derivatives); }
+                  finally { try { releaseAdmission(admission); } finally { handle.dispose(); } }
+                }
                 throw error;
               }
             },
@@ -362,6 +404,10 @@ export function createConfiguredHtxObservationRuntime(
           readOpenOrders: reader.readOpenOrders,
           readTrades: reader.readTrades,
           ...(derivatives ? { readDerivativesAccount: derivatives.readDerivativesAccount } : {}),
+          ...(htxV5Reader ? { readHtxV5: async (requestSignal: AbortSignal) => Object.freeze({
+            binding: readerOptions.binding,
+            projection: await htxV5Reader!.read(requestSignal),
+          }) } : {}),
           dispose() {
             if (released) return;
             released = true;
@@ -377,9 +423,10 @@ export function createConfiguredHtxObservationRuntime(
       } finally {
         if (!owned) {
           try {
-            releaseDerivatives(derivatives);
+            releaseHtxV5(htxV5Reader);
           } finally {
-            releaseAdmission(admission);
+            try { releaseDerivatives(derivatives); }
+            finally { releaseAdmission(admission); }
           }
         }
         signal.removeEventListener("abort", cancel);

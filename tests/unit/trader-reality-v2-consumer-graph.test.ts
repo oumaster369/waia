@@ -334,6 +334,29 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
             ).toEqual(["AccountObservationReadFailure"]);
             continue;
           }
+          if (
+            file === "lib/trader/account-observation/service.ts" &&
+            (statement.moduleSpecifier as ts.StringLiteral).text === "./coverage"
+          ) {
+            const bindings = statement.importClause?.namedBindings;
+            expect(statement.importClause?.isTypeOnly).toBe(false);
+            expect(bindings && ts.isNamedImports(bindings) &&
+              bindings.elements.map((element) => element.name.text)).toEqual([
+              "htxV5ObservationConfigurationSchema",
+            ]);
+            continue;
+          }
+          if (
+            file === "lib/trader/account-observation/service.ts" &&
+            (statement.moduleSpecifier as ts.StringLiteral).text === "./types" &&
+            statement.importClause?.isTypeOnly !== true
+          ) {
+            const bindings = statement.importClause?.namedBindings;
+            expect(statement.importClause?.isTypeOnly).toBe(false);
+            expect(bindings && ts.isNamedImports(bindings) &&
+              bindings.elements.map((element) => element.name.text)).toEqual(["HTX_V5_READ_BUDGET_MS"]);
+            continue;
+          }
           expect(statement.importClause?.isTypeOnly).toBe(true);
           if (
             file === "lib/trader/account-observation/types.ts" &&
@@ -431,7 +454,8 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
             declaration.name.getText(ast),
           ),
         ),
-    ).toEqual(["htxObservationReaderLimitsSchema", "htxObservationCoverageSchema"]);
+    ).toEqual(["htxObservationReaderLimitsSchema", "htxObservationCoverageSchema",
+      "htxV5ObservationConfigurationSchema"]);
     expect(body).not.toMatch(
       /import\s*\(|require\s*\(|fetch|process\.env|globalThis|window|=>|\bfunction\b/,
     );

@@ -41,6 +41,7 @@ export type ManifestAssignment = {
   readTimeoutMs: number;
   leaseTtlMs: number;
   readerLimits: ManifestReaderLimits;
+  htxV5?: Readonly<{ enabled: boolean; fillContracts?: string[]; expectedHtxUid?: string }>;
 };
 
 export type ManifestBody = Omit<AccountObservationAssignmentManifest, "contentSha256">;
@@ -73,6 +74,7 @@ export function manifestAssignment(
       readTimeoutMs: base.readTimeoutMs,
       leaseTtlMs: base.leaseTtlMs,
       htxCoverage: { ...base.readerLimits, host },
+      ...(base.htxV5 ? { htxV5: base.htxV5 } : {}),
     }).revision;
   return { ...base, configurationRevision };
 }

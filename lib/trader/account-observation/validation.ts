@@ -166,11 +166,13 @@ const htxV5 = z.object({
         c.readCompletedAtMs === null && c.responseGeneratedAtMs === null && c.error === null &&
         c.contracts.length === 0 && c.windowStartMs === null && c.windowEndMs === null && c.pageScope === null
       : c.coverage === "CONFIGURED_CONTRACTS_AND_WINDOW" && c.contracts.length > 0 &&
-        c.windowStartMs !== null && c.windowEndMs !== null && c.windowStartMs < c.windowEndMs &&
         c.readStartedAtMs !== null && c.readCompletedAtMs !== null && c.readStartedAtMs <= c.readCompletedAtMs &&
         (c.responseGeneratedAtMs === null || c.responseGeneratedAtMs <= c.readCompletedAtMs) &&
-        (c.status === "ERROR" ? c.values === null && c.error !== null && c.pageScope === null :
-          c.status === "PARTIAL" && c.values !== null && c.error === null && c.pageScope !== null)),
+        (c.status === "ERROR" ? c.values === null && c.error !== null && c.pageScope === null &&
+          ((c.windowStartMs === null && c.windowEndMs === null) ||
+            (c.windowStartMs !== null && c.windowEndMs !== null && c.windowStartMs < c.windowEndMs)) :
+          c.status === "PARTIAL" && c.values !== null && c.error === null && c.pageScope !== null &&
+            c.windowStartMs !== null && c.windowEndMs !== null && c.windowStartMs < c.windowEndMs)),
 }).strict().refine(v => v.htxUid === null || v.htxUid.length > 0);
 function component<T extends z.ZodTypeAny>(item: T) {
   return z
@@ -550,15 +552,20 @@ function validateHtxV5Projection(
   const fill = projection.fills;
   if (fill.status === "NOT_CONFIGURED") return;
   const fillPageScope = fill.pageScope;
+  const invalidWindowPair = (fill.windowStartMs === null) !== (fill.windowEndMs === null);
+  const invalidKnownWindow = fill.windowStartMs !== null && fill.windowEndMs !== null &&
+    (fill.windowEndMs - fill.windowStartMs > 48 * 60 * 60 * 1000 || fill.windowStartMs >= fill.windowEndMs);
+  const invalidFillScope = fillPageScope !== null && (fillPageScope.queries.length !== fill.contracts.length ||
+    fillPageScope.queries.some((query, index) => query.contractCode !== fill.contracts[index] ||
+      (fill.values ?? []).filter(row => row.contractCode === query.contractCode).length >
+        fillPageScope.pageSize * query.pagesRead));
+  const invalidFillValue = fill.values !== null && fill.values.some(row => !fill.contracts.includes(row.contractCode) ||
+    (fill.windowStartMs !== null && fill.windowEndMs !== null && row.createdTimeMs !== null &&
+      (row.createdTimeMs < fill.windowStartMs || row.createdTimeMs > fill.windowEndMs)));
   if (fill.contracts.length === 0 || new Set(fill.contracts).size !== fill.contracts.length ||
-    fill.windowEndMs! - fill.windowStartMs! > 48 * 60 * 60 * 1000 ||
-    (fill.status === "ERROR" ? fillPageScope !== null : !fillPageScope) ||
-    (fillPageScope !== null && (fillPageScope.queries.length !== fill.contracts.length ||
-      fillPageScope.queries.some((query, index) => query.contractCode !== fill.contracts[index] ||
-        (fill.values ?? []).filter(row => row.contractCode === query.contractCode).length >
-          fillPageScope.pageSize * query.pagesRead))) ||
-    (fill.values !== null && fill.values.some(row => !fill.contracts.includes(row.contractCode) ||
-      (row.createdTimeMs !== null && (row.createdTimeMs < fill.windowStartMs! || row.createdTimeMs > fill.windowEndMs!)))))
+    invalidWindowPair || invalidKnownWindow ||
+    (fill.status === "PARTIAL" && (fill.windowStartMs === null || fill.windowEndMs === null)) ||
+    (fill.status === "ERROR" ? fillPageScope !== null : !fillPageScope) || invalidFillScope || invalidFillValue)
     throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
 }
 

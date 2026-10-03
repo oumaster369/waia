@@ -13,4 +13,10 @@ export const htxObservationCoverageSchema = htxObservationReaderLimitsSchema.ext
   host: z.enum(["api.huobi.pro", "api-aws.huobi.pro"]),
 }).strict();
 
+export const htxV5ObservationConfigurationSchema = z.object({
+  enabled: z.boolean(),
+  fillContracts: z.array(z.string().regex(/^[A-Z0-9]+-USDT(?:-\d{6})?$/)).min(1).max(8).optional(),
+  expectedHtxUid: z.string().regex(/^[1-9]\d{0,38}$/).optional(),
+}).strict();
+
 export type HtxObservationCoverage = Readonly<z.infer<typeof htxObservationCoverageSchema>>;
