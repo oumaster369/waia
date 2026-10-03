@@ -149,6 +149,124 @@ describe("owned research modeled stage kernel", () => {
     ).toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_DESCRIPTOR");
   });
 
+  it("refuses a transplanted brand symbol and a mutated unfrozen copy", async () => {
+    const { descriptor } = sealed();
+    const db = executor();
+    const [brand] = Object.getOwnPropertySymbols(descriptor);
+    expect(brand).toBeDefined();
+    const brandProperty = Object.getOwnPropertyDescriptor(descriptor, brand!);
+    const transplanted = {
+      attemptId: ATTEMPT_ID,
+      trialIndex: 0,
+      policy: { ...resolvedPolicy(), scientificQualified: true, capitalEligible: true },
+      model: createHistoricalExecutionModelV1(),
+    };
+    Object.defineProperty(transplanted, brand!, brandProperty!);
+    transplanted.trialIndex = 4;
+    expect(Object.isFrozen(transplanted)).toBe(false);
+    await expect(
+      runOwnedResearchModeledStageV1({
+        executor: db,
+        descriptor: transplanted as never,
+        payload: payload(),
+      }),
+    ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
+
+    const frozenCopy = {
+      attemptId: ATTEMPT_ID,
+      trialIndex: 0,
+      policy: resolvedPolicy(),
+      model: createHistoricalExecutionModelV1(),
+    };
+    Object.defineProperty(frozenCopy, brand!, brandProperty!);
+    Object.freeze(frozenCopy);
+    expect(Object.isFrozen(frozenCopy)).toBe(true);
+    await expect(
+      runOwnedResearchModeledStageV1({
+        executor: db,
+        descriptor: frozenCopy as never,
+        payload: payload(),
+      }),
+    ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
+    expect(db.select).not.toHaveBeenCalled();
+    expect(db.execute).not.toHaveBeenCalled();
+  });
+
+  it("refuses a payload getter that would swap bars on the second read", async () => {
+    const { descriptor } = sealed();
+    const db = executor();
+    const verified = payload();
+    const swapped = payload("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", 7);
+    let reads = 0;
+    const input = { executor: db, descriptor };
+    Object.defineProperty(input, "payload", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        reads += 1;
+        return reads === 1 ? verified : swapped;
+      },
+    });
+    await expect(runOwnedResearchModeledStageV1(input as never)).rejects.toThrow(
+      "RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT",
+    );
+    expect(reads).toBe(0);
+    expect(db.select).not.toHaveBeenCalled();
+    expect(db.execute).not.toHaveBeenCalled();
+  });
+
+  it("refuses payload bars and cycles accessors before the modeled loop", async () => {
+    const { descriptor } = sealed();
+    const db = executor();
+    let reads = 0;
+    const verifiedBars = Object.freeze([{ barOpenTime: "2026-01-01T00:00:00.000Z" }]);
+    const swappedBars = Object.freeze([{ barOpenTime: "1999-01-01T00:00:00.000Z" }]);
+    const stagePayload = {
+      scope: { identity: { attemptId: ATTEMPT_ID, trialIndex: 0 } },
+      cycles: Object.freeze([]),
+    };
+    Object.defineProperty(stagePayload, "bars", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        reads += 1;
+        return reads === 1 ? verifiedBars : swappedBars;
+      },
+    });
+    await expect(
+      runOwnedResearchModeledStageV1({
+        executor: db,
+        descriptor,
+        payload: stagePayload as never,
+      }),
+    ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
+    expect(reads).toBe(0);
+    expect(db.execute).not.toHaveBeenCalled();
+  });
+
+  it("refuses a proxy payload that could swap bars after the identity check", async () => {
+    const { descriptor } = sealed();
+    const db = executor();
+    const verified = payload();
+    const swappedBars = [{ barOpenTime: "1999-01-01T00:00:00.000Z" }];
+    let reads = 0;
+    const proxyPayload = new Proxy(verified, {
+      get(target, key, receiver) {
+        reads += 1;
+        if (key === "bars") return reads > 1 ? swappedBars : [];
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    await expect(
+      runOwnedResearchModeledStageV1({
+        executor: db,
+        descriptor,
+        payload: proxyPayload as never,
+      }),
+    ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
+    expect(db.execute).not.toHaveBeenCalled();
+  });
+
   it("keeps the local stage index separate from a nonzero absolute source bar index", () => {
     const close = "2026-01-01T00:05:00.000Z";
     expect(assertResearchModeledStageCycleAlignmentV1(4, 0, 4, close, close)).toEqual({

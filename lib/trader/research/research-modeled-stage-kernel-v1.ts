@@ -1,6 +1,7 @@
 import { enforceServerOnly } from "@/lib/enforce-server-only";
 enforceServerOnly();
 
+import { types as nodeUtilTypes } from "node:util";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import type { AccountingFrontierV1 } from "@/lib/trader/accounting/accounting-frontier.types";
 import { createAccountingFrontierRepositoryPostgres } from "@/lib/trader/accounting/accounting-frontier-repository-postgres";
@@ -40,6 +41,8 @@ function refuse(reason: string): never {
 }
 
 const STAGE_DESCRIPTOR_BRAND = Symbol("owned-research-modeled-stage-descriptor-v1");
+/** Object identity of descriptors minted by the sealer. A copied brand symbol is not membership. */
+const mintedStageDescriptors = new WeakSet<object>();
 const STAGE_CALL_KEYS = new Set(["executor", "descriptor", "payload"]);
 const STAGE_DESCRIPTOR_KEYS = new Set(["attemptId", "trialIndex", "policy", "model"]);
 /** Keys that must not arrive as caller-controlled stage authority. Verified
@@ -74,6 +77,26 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function isProxyLike(value: unknown): boolean {
+  return Boolean(value) && (typeof value === "object" || typeof value === "function") && nodeUtilTypes.isProxy(value);
+}
+
+/** Own data property only. Accessors are reported and never invoked. */
+function readOwnProperty(record: object, key: string): { present: boolean; accessor: boolean; value: unknown } {
+  const property = Object.getOwnPropertyDescriptor(record, key);
+  if (!property) return { present: false, accessor: false, value: undefined };
+  if (property.get !== undefined || property.set !== undefined || !("value" in property)) {
+    return { present: true, accessor: true, value: undefined };
+  }
+  return { present: true, accessor: false, value: property.value };
+}
+
+function readRequiredData(record: object, key: string): unknown {
+  const read = readOwnProperty(record, key);
+  if (!read.present || read.accessor) refuse("STAGE_INPUT");
+  return read.value;
+}
+
 /** Binds one already resolved attempt/trial to the policy and model the owner
  * checked. Extra keys, including caller bars and callbacks, refuse. */
 export function sealOwnedResearchModeledStageDescriptorV1(input: Readonly<{
@@ -97,17 +120,33 @@ export function sealOwnedResearchModeledStageDescriptorV1(input: Readonly<{
     refuse("STAGE_DESCRIPTOR");
   }
   if (!isPlainRecord(policy) || !isPlainRecord(model)) refuse("STAGE_DESCRIPTOR");
-  return Object.freeze({
+  const descriptor = Object.freeze({
     [STAGE_DESCRIPTOR_BRAND]: true as const,
     attemptId, trialIndex,
     policy: policy as ResolvedTrainingPolicy,
     model: model as HistoricalExecutionModel,
   });
+  mintedStageDescriptors.add(descriptor);
+  return descriptor;
+}
+
+function descriptorShapeIsExact(value: object): boolean {
+  if (!Object.isFrozen(value) || isProxyLike(value)) return false;
+  const names = Object.getOwnPropertyNames(value);
+  if (names.length !== STAGE_DESCRIPTOR_KEYS.size) return false;
+  for (const name of names) {
+    if (!STAGE_DESCRIPTOR_KEYS.has(name)) return false;
+    const property = Object.getOwnPropertyDescriptor(value, name);
+    if (!property || property.get !== undefined || property.set !== undefined || !("value" in property)) return false;
+  }
+  const symbols = Object.getOwnPropertySymbols(value);
+  if (symbols.length !== 1 || symbols[0] !== STAGE_DESCRIPTOR_BRAND) return false;
+  const brand = Object.getOwnPropertyDescriptor(value, STAGE_DESCRIPTOR_BRAND);
+  return Boolean(brand && brand.get === undefined && brand.set === undefined && brand.value === true);
 }
 
 function isSealedDescriptor(value: unknown): value is ResearchModeledStageDescriptorV1 {
-  return isPlainRecord(value) &&
-    (value as { [STAGE_DESCRIPTOR_BRAND]?: unknown })[STAGE_DESCRIPTOR_BRAND] === true;
+  return isPlainRecord(value) && mintedStageDescriptors.has(value) && descriptorShapeIsExact(value);
 }
 
 /** Local stage position and the sealed absolute source bar index stay distinct.
@@ -126,19 +165,67 @@ function assertOwnedResearchModeledStageCallV1(input: Readonly<{
   executor: OwnedResearchStageExecutorV1;
   descriptor: ResearchModeledStageDescriptorV1;
   payload: ResearchModeledStageSourceV1;
-}>): void {
-  if (!isPlainRecord(input)) refuse("STAGE_INPUT");
+}>): {
+  executor: OwnedResearchStageExecutorV1;
+  descriptor: ResearchModeledStageDescriptorV1;
+  scopeContentDigest: ResearchModeledStageSourceV1["scope"]["contentDigest"];
+  organizationId: string;
+  parameters: ResearchModeledStageSourceV1["scope"]["identity"]["parameters"];
+  ledgerScope: ResearchModeledStageSourceV1["scope"]["ledgerScope"];
+  experiment: ResearchModeledStageSourceV1["experiment"];
+  bars: ResearchModeledStageSourceV1["bars"];
+  cycles: ResearchModeledStageSourceV1["cycles"];
+} {
+  if (!isPlainRecord(input) || isProxyLike(input)) refuse("STAGE_INPUT");
   for (const key of ownKeys(input)) {
     if (UNTRUSTED_STAGE_CALL_KEYS.has(key) || !STAGE_CALL_KEYS.has(key)) refuse("UNTRUSTED_STAGE_INPUT");
   }
-  if (!isPlainRecord(input.executor) || !isSealedDescriptor(input.descriptor) || !isPlainRecord(input.payload)) {
+  const executor = readRequiredData(input, "executor");
+  const descriptor = readRequiredData(input, "descriptor");
+  const payload = readRequiredData(input, "payload");
+  if (!isPlainRecord(executor) || isProxyLike(descriptor) || !isSealedDescriptor(descriptor) ||
+      !isPlainRecord(payload) || isProxyLike(payload)) {
     refuse("STAGE_INPUT");
   }
-  const identity = input.payload.scope?.identity;
-  if (!identity || identity.attemptId !== input.descriptor.attemptId ||
-      identity.trialIndex !== input.descriptor.trialIndex) {
+  const scopeRead = readOwnProperty(payload, "scope");
+  if (scopeRead.accessor || isProxyLike(scopeRead.value)) refuse("STAGE_INPUT");
+  if (!scopeRead.present || !isPlainRecord(scopeRead.value)) refuse("STAGE_PAYLOAD_IDENTITY");
+  const scope = scopeRead.value;
+  const identityRead = readOwnProperty(scope, "identity");
+  if (identityRead.accessor || isProxyLike(identityRead.value)) refuse("STAGE_INPUT");
+  if (!identityRead.present || !isPlainRecord(identityRead.value)) refuse("STAGE_PAYLOAD_IDENTITY");
+  const identity = identityRead.value;
+  const attemptRead = readOwnProperty(identity, "attemptId");
+  const trialRead = readOwnProperty(identity, "trialIndex");
+  if (attemptRead.accessor || trialRead.accessor) refuse("STAGE_INPUT");
+  if (!attemptRead.present || !trialRead.present ||
+      attemptRead.value !== descriptor.attemptId || trialRead.value !== descriptor.trialIndex) {
     refuse("STAGE_PAYLOAD_IDENTITY");
   }
+  const barsRead = readOwnProperty(payload, "bars");
+  const cyclesRead = readOwnProperty(payload, "cycles");
+  const experimentRead = readOwnProperty(payload, "experiment");
+  const ledgerScopeRead = readOwnProperty(scope, "ledgerScope");
+  const parametersRead = readOwnProperty(identity, "parameters");
+  const organizationRead = readOwnProperty(identity, "organizationId");
+  const contentDigestRead = readOwnProperty(scope, "contentDigest");
+  if (barsRead.accessor || cyclesRead.accessor || experimentRead.accessor || ledgerScopeRead.accessor ||
+      parametersRead.accessor || organizationRead.accessor || contentDigestRead.accessor ||
+      isProxyLike(barsRead.value) || isProxyLike(cyclesRead.value) || isProxyLike(experimentRead.value) ||
+      isProxyLike(ledgerScopeRead.value)) {
+    refuse("STAGE_INPUT");
+  }
+  return {
+    executor: executor as OwnedResearchStageExecutorV1,
+    descriptor,
+    scopeContentDigest: contentDigestRead.value as ResearchModeledStageSourceV1["scope"]["contentDigest"],
+    organizationId: organizationRead.value as string,
+    parameters: parametersRead.value as ResearchModeledStageSourceV1["scope"]["identity"]["parameters"],
+    ledgerScope: ledgerScopeRead.value as ResearchModeledStageSourceV1["scope"]["ledgerScope"],
+    experiment: experimentRead.value as ResearchModeledStageSourceV1["experiment"],
+    bars: barsRead.value as ResearchModeledStageSourceV1["bars"],
+    cycles: cyclesRead.value as ResearchModeledStageSourceV1["cycles"],
+  };
 }
 
 function assertNonnegativeCash(frontier: AccountingFrontierV1): void {
@@ -180,26 +267,24 @@ export async function runOwnedResearchModeledStageV1(input: Readonly<{
   descriptor: ResearchModeledStageDescriptorV1;
   payload: ResearchModeledStageSourceV1;
 }>) {
-  assertOwnedResearchModeledStageCallV1(input);
-  const tx = input.executor;
-  const source = input.payload;
+  const stage = assertOwnedResearchModeledStageCallV1(input);
+  const tx = stage.executor;
+  const { descriptor, scopeContentDigest, organizationId, parameters, ledgerScope, experiment, bars, cycles } = stage;
   const request = Object.freeze({
-    attemptId: input.descriptor.attemptId,
-    trialIndex: input.descriptor.trialIndex,
+    attemptId: descriptor.attemptId,
+    trialIndex: descriptor.trialIndex,
   });
-  const { policy, model } = input.descriptor;
-  const { scope } = source;
-  const { organizationId } = scope.identity;
+  const { policy, model } = descriptor;
   const captured = Object.freeze({ organizationId });
-  const stageRunId = scope.ledgerScope.historicalRunId;
-  const accountKey = scope.ledgerScope.historicalAccountKey;
-  const orders = createHistoricalMockOrderRepositoryFromExecutor(tx, scope.ledgerScope, {
+  const stageRunId = ledgerScope.historicalRunId;
+  const accountKey = ledgerScope.historicalAccountKey;
+  const orders = createHistoricalMockOrderRepositoryFromExecutor(tx, ledgerScope, {
     newId() { return deterministicExecutionUuidV2("report", { stageRunId, eventOrdinal: ++eventOrdinal }); },
     now() { return new Date(eventClock); },
   });
   const accountingRepository = createAccountingFrontierRepositoryPostgres(tx);
   let eventOrdinal = 0;
-  let eventClock = source.bars[0]!.barOpenTime;
+  let eventClock = bars[0]!.barOpenTime;
   let accounting = buildHistoricalAccountingInceptionV2({ organizationId, accountId: accountKey,
     runId: stageRunId, startingCash: policy.portfolio.runConfig.startingBalanceUsdt,
     frontierAsOf: eventClock });
@@ -207,7 +292,7 @@ export async function runOwnedResearchModeledStageV1(input: Readonly<{
   accounting = await accountingRepository.append(captured, accounting);
   const exchange = createHistoricalSimulatedExchange(model);
   const registry = createHistoricalModeledExecutionRegistryV2();
-  const cycleMap = new Map(source.cycles.map(cycle => [cycle.cycleId, cycle] as const));
+  const cycleMap = new Map(cycles.map(cycle => [cycle.cycleId, cycle] as const));
   const decisions: Record<string, unknown>[] = [];
   const invocations: ResearchFeatureInvocationReceiptV1[] = [];
   const advances: Record<string, unknown>[] = [];
@@ -247,22 +332,22 @@ export async function runOwnedResearchModeledStageV1(input: Readonly<{
     },
   });
 
-  const firstSourceBarIndex = source.cycles[0]!.barIndex;
-  for (let index = 0; index < source.cycles.length; index += 1) {
-    const cycle = source.cycles[index]!;
-    const bar = source.bars[index]!;
+  const firstSourceBarIndex = cycles[0]!.barIndex;
+  for (let index = 0; index < cycles.length; index += 1) {
+    const cycle = cycles[index]!;
+    const bar = bars[index]!;
     assertResearchModeledStageCycleAlignmentV1(
       firstSourceBarIndex, index, cycle.barIndex, cycle.closedBar.barCloseTime, bar.barCloseTime);
     eventClock = bar.barCloseTime;
     await advance(cycle.cycleId);
     const { signal, invocationReceipt } = evaluateResearchFeatureInvocationV1({
-      parameters: scope.identity.parameters, bars: source.bars,
-      symbol: source.experiment.spec.universe.symbol, interval: "1m",
+      parameters, bars,
+      symbol: experiment.spec.universe.symbol, interval: "1m",
       index, sourceBarIndex: cycle.barIndex, cycleId: cycle.cycleId });
     invocations.push(invocationReceipt);
     if (signal.action === "NONE") continue;
     const before = accounting;
-    const held = before.positions[source.experiment.spec.universe.symbol]?.quantity ?? "0";
+    const held = before.positions[experiment.spec.universe.symbol]?.quantity ?? "0";
     const anyPending = exchange.listOpenOrders().length > 0;
     const action = signal.action === "BUY" ? "ENTER_LONG" : "CLOSE";
     const skip = anyPending ? "PENDING_ORDER" :
@@ -283,7 +368,7 @@ export async function runOwnedResearchModeledStageV1(input: Readonly<{
     const posture = d20.breachState === "STOP_ACCOUNT" ? "HALT" :
       d20.breachState === "CLOSE_ONLY" ? "CLOSE_ONLY" : "NORMAL";
     const sized = computeResearchStopBasedQuantity({ side: signal.action === "BUY" ? "buy" : "sell",
-      symbol: source.experiment.spec.universe.symbol, entryPrice: bar.close,
+      symbol: experiment.spec.universe.symbol, entryPrice: bar.close,
       defaultQuantity: policy.declaredQuantityCap, account,
       limits: policy.portfolio.limits, runConfig: policy.portfolio.runConfig,
       costModel: policy.portfolio.costModel });
@@ -298,7 +383,7 @@ export async function runOwnedResearchModeledStageV1(input: Readonly<{
       outstandingReservationNotional: "0" });
     const lifecycle = buildHistoricalModeledPortfolioLifecycleV2({ organizationId,
       accountId: accountKey, runId: stageRunId, cycleId: cycle.cycleId,
-      symbol: source.experiment.spec.universe.symbol, action,
+      symbol: experiment.spec.universe.symbol, action,
       quantity: sized.quantity, referencePrice: bar.close, accounting: modeledAccounting });
     const requestedReservationNotional = action === "ENTER_LONG" ?
       multiplyExecutionNotionalConservativelyV2(sized.quantity, bar.close) : "0";
@@ -307,7 +392,7 @@ export async function runOwnedResearchModeledStageV1(input: Readonly<{
       strictExposureReduction: lifecycle.strictExposureReduction, reconciliationStatus: "RECONCILED" });
     const decisionBody = Object.freeze({ schemaVersion: "waia.research.training-modeled-decision.v1",
       organizationId, attemptId: request.attemptId, trialIndex: request.trialIndex,
-      stageRunId, scopeDigestHex: scope.contentDigest, cycleId: cycle.cycleId, index, sourceBarIndex: cycle.barIndex,
+      stageRunId, scopeDigestHex: scopeContentDigest, cycleId: cycle.cycleId, index, sourceBarIndex: cycle.barIndex,
       signal, action, quantity: sized.quantity, stopDistanceUsdt: sized.stopDistanceUsdt,
       accountingFrontierDigestHex: before.semanticContentDigest, lifecycleDigestHex: lifecycle.contentDigestHex });
     const decisionDigest = computeSemanticSha256Hex(decisionBody);
@@ -332,7 +417,7 @@ export async function runOwnedResearchModeledStageV1(input: Readonly<{
     const side = signal.action === "BUY" ? "buy" : "sell";
     const executionPlanContentDigestHex = computeSemanticSha256Hex({
       schemaVersion: "waia.research.training-modeled-plan.v1", executionPlanId,
-      decisionId, decisionDigest, riskDigest, symbol: source.experiment.spec.universe.symbol,
+      decisionId, decisionDigest, riskDigest, symbol: experiment.spec.universe.symbol,
       side, quantity: sized.quantity, modelDigest: policy.historicalExecutionModelSha256 });
     const executionAttemptContentDigestHex = computeSemanticSha256Hex({
       schemaVersion: "waia.research.training-modeled-attempt.v1", executionAttemptId,
@@ -340,14 +425,14 @@ export async function runOwnedResearchModeledStageV1(input: Readonly<{
     const orderContentDigestHex = computeSemanticSha256Hex({
       schemaVersion: "waia.research.training-modeled-order.v1", orderId,
       executionAttemptId, executionAttemptContentDigestHex, decisionDigest,
-      symbol: source.experiment.spec.universe.symbol, side, quantity: sized.quantity });
+      symbol: experiment.spec.universe.symbol, side, quantity: sized.quantity });
     const executionBody = Object.freeze({ schemaVersion: HISTORICAL_MODELED_EXECUTION_V2_SCHEMA,
       source: "MODELED_HISTORICAL" as const, capitalEligible: false as const,
       executionPlanId, executionPlanContentDigestHex,
       executionAttemptId, executionAttemptContentDigestHex, orderId, orderContentDigestHex,
       decisionId, decisionContentDigestHex: decisionDigest, riskVerdictId,
       riskReceiptContentDigestHex: riskDigest,
-      symbol: source.experiment.spec.universe.symbol, side, quantity: sized.quantity,
+      symbol: experiment.spec.universe.symbol, side, quantity: sized.quantity,
       decisionBarIndex: cycle.barIndex, acceptedAtUtc: bar.barCloseTime });
     const receipt = Object.freeze({ ...executionBody,
       contentDigestHex: computeSemanticSha256Hex(executionBody) }) satisfies HistoricalModeledExecutionReceiptV2;
