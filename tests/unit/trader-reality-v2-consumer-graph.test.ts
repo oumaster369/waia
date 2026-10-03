@@ -50,8 +50,9 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         // DEE-1196 adds one fixed Org0 read-only credential account-info probe.
         // DEE-1200 adds one research diagnostic consumer under the existing excluded/lineage-only rule.
         // DEE-1205 adds the closed scheduled noncapital owner consumer.
-        consumers: 154,
-        consumerDigestHex: "f04cfbd3338d766013e392d186fe99c12e2b29f0265569590457456bb2c9e715",
+        // DEE-1231 adds one observation-only fixed V5 GET transport.
+        consumers: 155,
+        consumerDigestHex: "eac684d9a68357360ea098e772a51ac25dc85caf2f5e8461680abac37b83f670",
         // DEE-1099 adds one read of freshly validated account permissions,
         // not a financial observation or a venue effect.
         // DEE-1151 keeps that read on the live connector and does not add placeOrder.
@@ -309,6 +310,17 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
               "HtxDerivativesAccountSnapshot",
               "HtxDerivativesFillRow",
               "HtxDerivativesPositionRow",
+            ]);
+            continue;
+          }
+          if (file.endsWith("/types.ts") && moduleName === "./derivatives/htx-v5-read-contract") {
+            expect(statement.importClause?.isTypeOnly).toBe(true);
+            const bindings = statement.importClause?.namedBindings;
+            expect(
+              bindings && ts.isNamedImports(bindings) && bindings.elements.map((element) => element.name.text),
+            ).toEqual([
+              "HtxV5AlgoOrder", "HtxV5AssetMode", "HtxV5BalanceDetail", "HtxV5BalanceSnapshot",
+              "HtxV5Fill", "HtxV5OpenOrder", "HtxV5Position",
             ]);
             continue;
           }

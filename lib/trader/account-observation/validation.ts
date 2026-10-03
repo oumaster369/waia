@@ -4,6 +4,7 @@ import type {
   AccountObservation,
   ObservationBinding,
   DerivativesAccountFamilyObservation,
+  HtxV5AccountObservation,
 } from "./types";
 
 const text = z.string().min(1).max(256);
@@ -57,6 +58,120 @@ const error = z.enum([
   "INVALID_RESPONSE",
   "IDENTITY_MISMATCH",
 ]);
+const v5Decimal = z.string().min(1).max(80).regex(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/);
+const v5UnsignedDecimal = z.string().min(1).max(80).regex(/^\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/);
+const v5Timestamp = time.nullable();
+const v5Contract = z.string().regex(/^[A-Z0-9]+-USDT(?:-\d{6})?$/);
+const v5Identifier = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
+const v5PositionSide = z.enum(["long", "short", "both"]);
+const v5Side = z.enum(["buy", "sell"]);
+const v5MarginMode = z.enum(["cross", "isolated"]);
+const v5ComponentStatus = z.enum(["NOT_CONFIGURED", "COMPLETE", "PARTIAL", "ERROR"]);
+const v5ReadTimes = {
+  readStartedAtMs: time.nullable(),
+  readCompletedAtMs: time.nullable(),
+  responseGeneratedAtMs: time.nullable(),
+  error: error.nullable(),
+};
+const v5ValueObservation = <T extends z.ZodTypeAny>(value: T) => z.object({
+  status: z.enum(["COMPLETE", "ERROR"]), value: value.nullable(), ...v5ReadTimes,
+}).strict().refine(c => c.readStartedAtMs !== null && c.readCompletedAtMs !== null &&
+  c.readStartedAtMs <= c.readCompletedAtMs &&
+  (c.responseGeneratedAtMs === null || c.responseGeneratedAtMs <= c.readCompletedAtMs) &&
+  (c.status === "ERROR" ? c.value === null && c.error !== null : c.value !== null && c.error === null));
+const v5PageScope = z.object({ pageSize: z.number().int().min(1).max(100),
+  maxPages: z.number().int().min(1).max(2), pagesRead: z.number().int().min(1).max(2),
+  nextFrom: z.string().regex(/^(?:0|[1-9]\d{0,18})$/).nullable(), completeness: z.literal("UNKNOWN") }).strict();
+const v5RowsObservation = <T extends z.ZodTypeAny>(value: T, paginated: boolean) => z.object({
+  status: z.enum(["COMPLETE", "PARTIAL", "ERROR"]), values: z.array(value).max(200).nullable(),
+  ...v5ReadTimes, pageScope: paginated ? v5PageScope.nullable() : z.null(),
+}).strict().refine(c => c.status === "ERROR"
+  ? c.values === null && c.error !== null && c.readStartedAtMs !== null && c.readCompletedAtMs !== null
+  : c.values !== null && (c.status === "COMPLETE" ? c.error === null : true) &&
+    c.readStartedAtMs !== null && c.readCompletedAtMs !== null &&
+    (c.status === "PARTIAL" ? c.pageScope !== null : c.error === null))
+  .refine(c => !paginated || c.status === "ERROR" || (c.status === "PARTIAL" && c.pageScope !== null));
+const v5BalanceDetail = z.object({
+  currency: z.string().regex(/^[A-Z0-9]{2,16}$/), equity: v5Decimal,
+  isolatedEquity: v5Decimal, available: v5Decimal, isolatedAvailable: v5Decimal,
+  withdrawAvailable: v5Decimal, profitUnreal: v5Decimal, isolatedProfitUnreal: v5Decimal,
+  initialMargin: v5Decimal, maintenanceMargin: v5Decimal, maintenanceMarginRate: v5Decimal,
+  initialMarginRate: v5Decimal, voucher: v5Decimal, voucherValue: v5Decimal,
+  createdTimeMs: v5Timestamp, updatedTimeMs: v5Timestamp,
+}).strict();
+const v5Balance = z.object({
+  state: z.enum(["normal", "liquidating", "adl", "open_limit"]),
+  account: z.object({ equityUsd: v5Decimal, initialMarginUsd: v5Decimal,
+    maintenanceMarginUsd: v5Decimal, maintenanceMarginRate: v5Decimal, profitUnrealUsd: v5Decimal,
+    availableMarginUsd: v5Decimal, voucherValue: v5Decimal, createdTimeMs: v5Timestamp,
+    updatedTimeMs: v5Timestamp }).strict(),
+  details: z.array(v5BalanceDetail).max(100),
+}).strict().refine(v => new Set(v.details.map(row => row.currency)).size === v.details.length);
+const v5Position = z.object({ contractCode: v5Contract, positionSide: v5PositionSide,
+  direction: v5Side, marginMode: v5MarginMode, volume: v5UnsignedDecimal,
+  available: v5UnsignedDecimal, openAveragePrice: v5Decimal, liquidationPrice: v5Decimal.nullable(),
+  initialMargin: v5Decimal.nullable(), maintenanceMargin: v5Decimal, margin: v5Decimal,
+  profitUnreal: v5Decimal, profitRate: v5Decimal, marginRate: v5Decimal,
+  marginCurrency: z.string().min(1).max(256), lastPrice: v5Decimal, markPrice: v5Decimal,
+  contractType: z.string().min(1).max(256), createdTimeMs: v5Timestamp,
+  updatedTimeMs: v5Timestamp }).strict();
+const v5OpenOrder = z.object({ id: z.string().regex(/^(?:0|[1-9]\d{0,18})$/), orderId: v5Identifier,
+  contractCode: v5Contract, clientOrderId: v5Identifier.nullable(), side: v5Side,
+  positionSide: v5PositionSide, marginMode: v5MarginMode, volume: v5UnsignedDecimal,
+  state: z.enum(["new", "partially_filled", "filled", "partially_canceled", "canceled"]),
+  reduceOnly: z.boolean().nullable(), tpTriggerPrice: v5Decimal.nullable(),
+  slTriggerPrice: v5Decimal.nullable(), createdTimeMs: v5Timestamp, updatedTimeMs: v5Timestamp }).strict();
+const v5AlgoOrder = z.object({ id: z.string().regex(/^(?:0|[1-9]\d{0,18})$/), algoId: v5Identifier,
+  contractCode: v5Contract, volume: v5UnsignedDecimal,
+  type: z.enum(["tp", "sl", "tpsl", "trigger", "trailing_stop"]), state: z.literal("active"),
+  positionSide: v5PositionSide, side: v5Side, marginMode: v5MarginMode,
+  tpTriggerPrice: v5Decimal.nullable(), slTriggerPrice: v5Decimal.nullable(),
+  reduceOnly: z.boolean().nullable(), createdTimeMs: v5Timestamp, updatedTimeMs: v5Timestamp }).strict();
+const v5Fill = z.object({ id: z.string().regex(/^(?:0|[1-9]\d{0,18})$/), tradeId: v5Identifier,
+  orderId: v5Identifier, contractCode: v5Contract, side: v5Side, positionSide: v5PositionSide,
+  orderType: z.enum(["1", "3", "4", "22"]), marginMode: v5MarginMode,
+  tradePrice: v5UnsignedDecimal, tradeVolume: v5UnsignedDecimal, tradeTurnover: v5UnsignedDecimal,
+  tradeFee: v5Decimal, feeCurrency: z.string().min(1).max(256), profit: v5Decimal,
+  createdTimeMs: v5Timestamp, updatedTimeMs: v5Timestamp }).strict();
+const v5AlgoPageScope = z.object({ pageSize: z.number().int().min(1).max(20),
+  maxPagesPerType: z.number().int().min(1).max(2),
+  queries: z.array(z.object({ type: z.enum(["tp", "sl", "tpsl", "trigger", "trailing_stop"]),
+    pagesRead: z.number().int().min(1).max(2), nextFrom: z.string().regex(/^(?:0|[1-9]\d{0,18})$/).nullable() }).strict()).length(5),
+  completeness: z.literal("UNKNOWN") }).strict()
+  .refine(scope => new Set(scope.queries.map(query => query.type)).size === 5 &&
+    scope.queries.every(query => query.pagesRead <= scope.maxPagesPerType));
+const v5FillPageScope = z.object({ pageSize: z.number().int().min(1).max(100),
+  maxPagesPerContract: z.number().int().min(1).max(2),
+  queries: z.array(z.object({ contractCode: v5Contract, pagesRead: z.number().int().min(1).max(2),
+    nextFrom: z.string().regex(/^(?:0|[1-9]\d{0,18})$/).nullable() }).strict()).max(8),
+  completeness: z.literal("UNKNOWN") }).strict()
+  .refine(scope => scope.queries.every(query => query.pagesRead <= scope.maxPagesPerContract));
+const htxV5 = z.object({
+  schemaVersion: z.literal("htx-v5-observation/v1"), htxUid: z.string().regex(/^[1-9]\d{0,38}$/).nullable(),
+  assetMode: v5ValueObservation(z.enum(["0", "1", "2"])),
+  balance: v5ValueObservation(v5Balance),
+  positions: v5RowsObservation(v5Position, false),
+  openOrders: v5RowsObservation(v5OpenOrder, true),
+  algoOrders: z.object({ status: z.enum(["PARTIAL", "ERROR"]), values: z.array(v5AlgoOrder).max(200).nullable(),
+    ...v5ReadTimes, pageScope: v5AlgoPageScope.nullable() }).strict().refine(c =>
+      c.readStartedAtMs !== null && c.readCompletedAtMs !== null &&
+      c.readStartedAtMs <= c.readCompletedAtMs && (c.responseGeneratedAtMs === null ||
+        c.responseGeneratedAtMs <= c.readCompletedAtMs) &&
+      (c.status === "ERROR" ? c.values === null && c.error !== null : c.values !== null && c.pageScope !== null)),
+  fills: z.object({ status: v5ComponentStatus, values: z.array(v5Fill).max(800).nullable(),
+    ...v5ReadTimes, coverage: z.enum(["NOT_CONFIGURED", "CONFIGURED_CONTRACTS_AND_WINDOW"]),
+    contracts: z.array(v5Contract).max(8), windowStartMs: time.nullable(), windowEndMs: time.nullable(),
+    pageScope: v5FillPageScope.nullable() }).strict().refine(c => c.status === "NOT_CONFIGURED"
+      ? c.coverage === "NOT_CONFIGURED" && c.values === null && c.readStartedAtMs === null &&
+        c.readCompletedAtMs === null && c.responseGeneratedAtMs === null && c.error === null &&
+        c.contracts.length === 0 && c.windowStartMs === null && c.windowEndMs === null && c.pageScope === null
+      : c.coverage === "CONFIGURED_CONTRACTS_AND_WINDOW" && c.contracts.length > 0 &&
+        c.windowStartMs !== null && c.windowEndMs !== null && c.windowStartMs < c.windowEndMs &&
+        c.readStartedAtMs !== null && c.readCompletedAtMs !== null && c.readStartedAtMs <= c.readCompletedAtMs &&
+        (c.responseGeneratedAtMs === null || c.responseGeneratedAtMs <= c.readCompletedAtMs) &&
+        (c.status === "ERROR" ? c.values === null && c.error !== null && c.pageScope === null :
+          c.status === "PARTIAL" && c.values !== null && c.error === null && c.pageScope !== null)),
+}).strict().refine(v => v.htxUid === null || v.htxUid.length > 0);
 function component<T extends z.ZodTypeAny>(item: T) {
   return z
     .object({
@@ -311,6 +426,9 @@ const observation = z.discriminatedUnion("schemaVersion", [
   observationFields
     .extend({ schemaVersion: z.literal("account-observation/v2"), derivatives })
     .strict(),
+  observationFields
+    .extend({ schemaVersion: z.literal("account-observation/v3"), htxV5: htxV5, derivatives: derivatives.optional() })
+    .strict(),
 ]);
 export function sameObservationBinding(a: ObservationBinding, b: ObservationBinding) {
   return (
@@ -338,9 +456,10 @@ export function deriveAccountObservationStatus(
 export function parseAccountObservation(value: unknown): AccountObservation {
   const result = observation.parse(value);
   const components = [result.balances, result.openOrders, ...result.trades.map((t) => t.component)];
-  const derivativeStatuses =
-    result.schemaVersion === "account-observation/v2"
-      ? result.derivatives.families.flatMap((item) =>
+  const derivativeProjection = result.schemaVersion === "account-observation/v2" || result.schemaVersion === "account-observation/v3"
+    ? result.derivatives : undefined;
+  const derivativeStatuses = derivativeProjection
+      ? derivativeProjection.families.flatMap((item) =>
           item.status === "NOT_CONFIGURED"
             ? []
             : [
@@ -352,9 +471,15 @@ export function parseAccountObservation(value: unknown): AccountObservation {
               ],
         )
       : [];
+  const v5Statuses = result.schemaVersion === "account-observation/v3"
+    ? [result.htxV5.assetMode.status, result.htxV5.balance.status, result.htxV5.positions.status,
+      result.htxV5.openOrders.status, result.htxV5.algoOrders.status, result.htxV5.fills.status]
+      .filter((status): status is Exclude<typeof status, "NOT_CONFIGURED"> => status !== "NOT_CONFIGURED")
+    : [];
   const status = deriveAccountObservationStatus([
     ...components.map((component) => component.status),
     ...derivativeStatuses,
+    ...v5Statuses,
   ]);
   if (
     result.collectionStartedAtMs > result.collectionCompletedAtMs ||
@@ -371,13 +496,70 @@ export function parseAccountObservation(value: unknown): AccountObservation {
   ) {
     throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
   }
-  if (result.schemaVersion === "account-observation/v2")
+  if (derivativeProjection)
     validateDerivativesProjection(
-      result.derivatives.families,
+      derivativeProjection.families,
       result.collectionStartedAtMs,
       result.collectionCompletedAtMs,
     );
+  if (result.schemaVersion === "account-observation/v3")
+    validateHtxV5Projection(result.htxV5, result.collectionStartedAtMs, result.collectionCompletedAtMs);
   return result as AccountObservation;
+}
+
+function validateHtxV5Projection(
+  projection: HtxV5AccountObservation,
+  collectionStartedAtMs: number,
+  collectionCompletedAtMs: number,
+): void {
+  const components = [projection.assetMode, projection.balance, projection.positions,
+    projection.openOrders, projection.algoOrders,
+    ...(projection.fills.status === "NOT_CONFIGURED" ? [] : [projection.fills])];
+  let successful = false;
+  for (const component of components) {
+    if (component.status === "ERROR") {
+      if (component.error === null) throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
+    } else if (component.status !== "NOT_CONFIGURED") {
+      successful = true;
+      if (component.status === "COMPLETE" && component.error !== null)
+        throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
+    }
+    if (component.readStartedAtMs === null || component.readCompletedAtMs === null ||
+      component.readStartedAtMs > component.readCompletedAtMs ||
+      component.readStartedAtMs < collectionStartedAtMs ||
+      component.readCompletedAtMs > collectionCompletedAtMs ||
+      (component.responseGeneratedAtMs !== null && component.responseGeneratedAtMs > component.readCompletedAtMs))
+      throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
+  }
+  if ((successful && projection.htxUid === null) || (!successful && projection.htxUid !== null))
+    throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
+  const checkUnique = <T>(values: readonly T[] | null, key: (row: T) => string) => {
+    if (values && new Set(values.map(key)).size !== values.length) throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
+  };
+  checkUnique(projection.positions.values, row => `${row.contractCode}\0${row.marginMode}\0${row.positionSide}`);
+  checkUnique(projection.openOrders.values, row => row.id);
+  checkUnique(projection.algoOrders.values, row => `${row.type}\0${row.id}`);
+  checkUnique(projection.fills.values, row => `${row.contractCode}\0${row.id}`);
+  if (projection.openOrders.pageScope && (projection.openOrders.pageScope.pagesRead > projection.openOrders.pageScope.maxPages ||
+    (projection.openOrders.values?.length ?? 0) > projection.openOrders.pageScope.pageSize * projection.openOrders.pageScope.pagesRead))
+    throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
+  if (projection.algoOrders.pageScope && (projection.algoOrders.pageScope.queries.length !== 5 ||
+    projection.algoOrders.pageScope.queries.some(query => (projection.algoOrders.values ?? [])
+      .filter(row => row.type === query.type).length > projection.algoOrders.pageScope!.pageSize * query.pagesRead)))
+    throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
+  const fill = projection.fills;
+  if (fill.status === "NOT_CONFIGURED") return;
+  const fillPageScope = fill.pageScope;
+  if (fill.contracts.length === 0 || new Set(fill.contracts).size !== fill.contracts.length ||
+    fill.windowEndMs! - fill.windowStartMs! > 48 * 60 * 60 * 1000 ||
+    (fill.status === "ERROR" ? fillPageScope !== null : !fillPageScope) ||
+    (fillPageScope !== null && (fillPageScope.queries.length !== fill.contracts.length ||
+      fillPageScope.queries.some((query, index) => query.contractCode !== fill.contracts[index] ||
+        (fill.values ?? []).filter(row => row.contractCode === query.contractCode).length >
+          fillPageScope.pageSize * query.pagesRead))) ||
+    (fill.values !== null && fill.values.some(row => !fill.contracts.includes(row.contractCode) ||
+      (row.createdTimeMs !== null && (row.createdTimeMs < fill.windowStartMs! || row.createdTimeMs > fill.windowEndMs!)))))
+    throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
 }
 
 function validateDerivativesProjection(

@@ -23,7 +23,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Continue the user-authorized read-only integration with a reader-first runtime path, then scope persisted observations and native account acceptance; keep this draft PR open for review."
+  nextAction: "Review the V3 reader/projection package, then integrate its read-only composition into the collector and scope persisted projections without enabling writes."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -47,7 +47,13 @@ Define a bounded HTX V5 read-only transport and identity-evidence boundary for t
 - Validate builder inputs without coercion, retain exact decimal and identifier lexemes, reject duplicate JSON keys, and project only documented response fields.
 - Preserve asset-mode values as raw evidence separate from API capability. Preserve server response timestamps.
 - Preserve returned pagination cursors as source data and report page completeness as unknown when exhaustion is undocumented; never manufacture whole-account completeness.
-- Add synthetic fixtures for route methods/paths, mode enums, currency balances, mode-distinct positions, nullable values, order/protection fields, fills, invalid inputs, duplicate keys, and cursor handling.
+- Add synthetic fixtures for route methods/paths, mode enums, currency balances, mode-distinct positions, nullable values, order/protection fields, fills, invalid inputs, duplicate keys, cursor handling, route-specific page limits, fill-window scope, and cancellation settlement.
+- Add a strict browser-safe V3 account-observation DTO whose V5 projection is required; keep V1/V2 read validation and storage shapes backward-compatible.
+- Add a server-only bounded V5 reader that composes the fixed transport and offline parsers, checks binding/UID/key identity across requests, records per-component timing and partial/error/null states, and preserves unknown page coverage.
+- Bound the whole reader to 31 V5 requests and 120 seconds, with at most eight configured fill contracts and a 24-hour window. Every independent request receives fresh admission; failed request owners are disposed and never reused.
+- Enforce each response's requested page limit and reject known fills outside the requested window while retaining null fill timestamps as unknown. A timed-out or cancelled reader owner is terminal even while late fetch/body cleanup remains pending, so another read cannot overlap it.
+- The 31 V5 route/page requests each include fresh metadata admission traffic (up to 217 total network requests per poll); cadence and rate-limit headroom must be proven before runtime activation.
+- Never persist the transport key digest or authorization receipt. The HTX UID is descriptive identity only. Caller retains protected credential-handle ownership.
 
 ## Explicit exclusions
 
@@ -79,3 +85,7 @@ Files: `lib/trader/account-observation/htx-read-admission.ts`, `lib/trader/accou
 Official route details are available in the HTX Open Platform: [asset mode](https://www.htx.com/en-us/opend/newApiPages/?id=8cb89359-77b5-11ed-9966-1957dd37de0), [balance](https://www.htx.com/en-us/opend/newApiPages/?id=8cb89359-77b5-11ed-9966-195703a12d5), [open orders](https://www.htx.com/en-us/opend/newApiPages/?id=8cb89359-77b5-11ed-9966-1957e082f23), [open positions](https://www.htx.com/en-us/opend/newApiPages/?id=8cb89359-77b5-11ed-9966-1957f1fbee4), [fills](https://www.htx.com/en-us/opend/newApiPages/?id=8cb89359-77b5-11ed-9966-1957e2a0e6a), and [algo orders](https://www.htx.com/en-us/opend/newApiPages/?id=8cb89359-77b5-11ed-9966-19b7345a20e).
 
 The older announcement's multi-assets framing and current account-mode enum do not establish route availability for every mode. Mode stays separate from capability. Fills documentation conflicts on retention/window and required contract fields: the builder conservatively requires a contract and limits the query to 48 hours, while completeness remains unknown. Native successful reads must resolve these questions before production acceptance.
+
+### WP-2 — V3 reader-first account-observation projection
+
+Files: `lib/trader/account-observation/types.ts`, `lib/trader/account-observation/validation.ts`, `lib/trader/account-observation/derivatives/htx-v5-reader.ts`, and focused synthetic tests. The DTO validator is browser-safe and imports no server-only transport or Node modules. V3 requires its V5 projection; V1/V2 schemas continue to read unchanged, and a valid legacy derivatives projection remains optional in V3. Each component carries its own source/read times, bounded scope, partial/error state, and nullable values. List cursors remain candidate source data with `completeness: UNKNOWN`; a successful page is not recorded as complete history. Identity or permission fences reject the whole read. Unsupported or ordinary route failures stay scoped to their component when the remaining requests can be safely admitted. This is a reader/projection baseline only: collector wiring and durable schema/UI work remain outside this package.
