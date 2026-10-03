@@ -39,6 +39,108 @@ function refuse(reason: string): never {
   throw new Error(`RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:${reason}`);
 }
 
+const STAGE_DESCRIPTOR_BRAND = Symbol("owned-research-modeled-stage-descriptor-v1");
+const STAGE_CALL_KEYS = new Set(["executor", "descriptor", "payload"]);
+const STAGE_DESCRIPTOR_KEYS = new Set(["attemptId", "trialIndex", "policy", "model"]);
+/** Keys that must not arrive as caller-controlled stage authority. Verified
+ * bars stay inside the owner-supplied payload. Policy and model are sealed
+ * into the descriptor, not accepted beside it. */
+const UNTRUSTED_STAGE_AUTHORITY_KEYS = [
+  "bars", "cycles", "scorer", "callbacks", "callback", "stageLabel", "stageKind",
+  "receipt", "orderRepository", "repository", "score", "result", "source", "request", "tx",
+] as const;
+const UNTRUSTED_STAGE_CALL_KEYS = new Set<string>([...UNTRUSTED_STAGE_AUTHORITY_KEYS, "policy", "model"]);
+const UNTRUSTED_STAGE_DESCRIPTOR_KEYS = new Set<string>(UNTRUSTED_STAGE_AUTHORITY_KEYS);
+
+type ResolvedTrainingPolicy = ReturnType<typeof resolveResearchTrainingPolicyV1>;
+type HistoricalExecutionModel = ReturnType<typeof createHistoricalExecutionModelV1>;
+export type OwnedResearchStageExecutorV1 = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "execute">;
+
+/** Frozen internal stage identity. Only `sealOwnedResearchModeledStageDescriptorV1`
+ * can mint this. It carries no bars, stage label, receipt, or order port. */
+export type ResearchModeledStageDescriptorV1 = Readonly<{
+  [STAGE_DESCRIPTOR_BRAND]: true;
+  attemptId: string;
+  trialIndex: number;
+  policy: ResolvedTrainingPolicy;
+  model: HistoricalExecutionModel;
+}>;
+
+function ownKeys(value: object): string[] {
+  return Object.keys(value);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Binds one already resolved attempt/trial to the policy and model the owner
+ * checked. Extra keys, including caller bars and callbacks, refuse. */
+export function sealOwnedResearchModeledStageDescriptorV1(input: Readonly<{
+  attemptId: string;
+  trialIndex: number;
+  policy: ResolvedTrainingPolicy;
+  model: HistoricalExecutionModel;
+}>): ResearchModeledStageDescriptorV1 {
+  if (!isPlainRecord(input)) refuse("STAGE_DESCRIPTOR");
+  for (const key of ownKeys(input)) {
+    if (UNTRUSTED_STAGE_DESCRIPTOR_KEYS.has(key) || !STAGE_DESCRIPTOR_KEYS.has(key)) {
+      refuse("UNTRUSTED_STAGE_DESCRIPTOR");
+    }
+  }
+  const { attemptId, trialIndex, policy, model } = input;
+  if (typeof attemptId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(attemptId)) {
+    refuse("STAGE_DESCRIPTOR");
+  }
+  if (typeof trialIndex !== "number" || !Number.isInteger(trialIndex) || trialIndex < 0 || trialIndex > 31) {
+    refuse("STAGE_DESCRIPTOR");
+  }
+  if (!isPlainRecord(policy) || !isPlainRecord(model)) refuse("STAGE_DESCRIPTOR");
+  return Object.freeze({
+    [STAGE_DESCRIPTOR_BRAND]: true as const,
+    attemptId, trialIndex,
+    policy: policy as ResolvedTrainingPolicy,
+    model: model as HistoricalExecutionModel,
+  });
+}
+
+function isSealedDescriptor(value: unknown): value is ResearchModeledStageDescriptorV1 {
+  return isPlainRecord(value) &&
+    (value as { [STAGE_DESCRIPTOR_BRAND]?: unknown })[STAGE_DESCRIPTOR_BRAND] === true;
+}
+
+/** Local stage position and the sealed absolute source bar index stay distinct.
+ * A nonzero training start keeps `sourceBarIndex === firstSourceBarIndex + index`. */
+export function assertResearchModeledStageCycleAlignmentV1(
+  firstSourceBarIndex: number, index: number, sourceBarIndex: number,
+  cycleCloseTime: string, barCloseTime: string,
+): Readonly<{ index: number; sourceBarIndex: number }> {
+  if (sourceBarIndex !== firstSourceBarIndex + index || cycleCloseTime !== barCloseTime) {
+    refuse("CYCLE_INDEX_MISMATCH");
+  }
+  return Object.freeze({ index, sourceBarIndex });
+}
+
+function assertOwnedResearchModeledStageCallV1(input: Readonly<{
+  executor: OwnedResearchStageExecutorV1;
+  descriptor: ResearchModeledStageDescriptorV1;
+  payload: ResearchModeledStageSourceV1;
+}>): void {
+  if (!isPlainRecord(input)) refuse("STAGE_INPUT");
+  for (const key of ownKeys(input)) {
+    if (UNTRUSTED_STAGE_CALL_KEYS.has(key) || !STAGE_CALL_KEYS.has(key)) refuse("UNTRUSTED_STAGE_INPUT");
+  }
+  if (!isPlainRecord(input.executor) || !isSealedDescriptor(input.descriptor) || !isPlainRecord(input.payload)) {
+    refuse("STAGE_INPUT");
+  }
+  const identity = input.payload.scope?.identity;
+  if (!identity || identity.attemptId !== input.descriptor.attemptId ||
+      identity.trialIndex !== input.descriptor.trialIndex) {
+    refuse("STAGE_PAYLOAD_IDENTITY");
+  }
+}
+
 function assertNonnegativeCash(frontier: AccountingFrontierV1): void {
   // The canonical accounting engine represents arithmetic, including negative
   // cash. A spot-only research stage must not silently create simulated credit
@@ -69,16 +171,23 @@ function sizingAccount(frontier: AccountingFrontierV1, runConfig: PortfolioRunCo
 
 /** Internal modeled loop, called only after the registered stage owner loads its
  * DEVELOPMENT input, validates policy and locks/checks its ledger in this exact
- * transaction. This function is not a registration, stage-access or authority
- * boundary. Do not export it through a public request/service facade. */
+ * transaction. The call is an owned executor, a sealed descriptor, and that
+ * already verified payload. Caller bars, scorers, callbacks, stage labels,
+ * receipts, and order repositories are refused. This function is not a
+ * registration, stage-access, qualification, or authority boundary. */
 export async function runOwnedResearchModeledStageV1(input: Readonly<{
-  tx: Pick<WaiaPostgresDb, "select" | "insert" | "update" | "execute">;
-  source: ResearchModeledStageSourceV1;
-  request: Readonly<{ attemptId: string; trialIndex: number }>;
-  policy: ReturnType<typeof resolveResearchTrainingPolicyV1>;
-  model: ReturnType<typeof createHistoricalExecutionModelV1>;
+  executor: OwnedResearchStageExecutorV1;
+  descriptor: ResearchModeledStageDescriptorV1;
+  payload: ResearchModeledStageSourceV1;
 }>) {
-  const { tx, source, request, policy, model } = input;
+  assertOwnedResearchModeledStageCallV1(input);
+  const tx = input.executor;
+  const source = input.payload;
+  const request = Object.freeze({
+    attemptId: input.descriptor.attemptId,
+    trialIndex: input.descriptor.trialIndex,
+  });
+  const { policy, model } = input.descriptor;
   const { scope } = source;
   const { organizationId } = scope.identity;
   const captured = Object.freeze({ organizationId });
@@ -142,9 +251,8 @@ export async function runOwnedResearchModeledStageV1(input: Readonly<{
   for (let index = 0; index < source.cycles.length; index += 1) {
     const cycle = source.cycles[index]!;
     const bar = source.bars[index]!;
-    if (cycle.barIndex !== firstSourceBarIndex + index || cycle.closedBar.barCloseTime !== bar.barCloseTime) {
-      refuse("CYCLE_INDEX_MISMATCH");
-    }
+    assertResearchModeledStageCycleAlignmentV1(
+      firstSourceBarIndex, index, cycle.barIndex, cycle.closedBar.barCloseTime, bar.barCloseTime);
     eventClock = bar.barCloseTime;
     await advance(cycle.cycleId);
     const { signal, invocationReceipt } = evaluateResearchFeatureInvocationV1({

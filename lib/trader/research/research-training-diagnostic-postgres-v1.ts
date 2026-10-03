@@ -10,7 +10,7 @@ import { canonicalJsonString, computeStableJsonDigest } from "@/lib/trader/resea
 import { assertResearchRootPostgresDbV1 } from "@/lib/trader/research/research-root-postgres-db-v1";
 import { loadRegisteredResearchTrainingExecutionInputPostgresV1 } from "@/lib/trader/research/research-training-payload-postgres-v1";
 import { resolveResearchTrainingPolicyV1 } from "@/lib/trader/research/research-training-policy-v1";
-import { runOwnedResearchModeledStageV1 } from "@/lib/trader/research/research-modeled-stage-kernel-v1";
+import { runOwnedResearchModeledStageV1, sealOwnedResearchModeledStageDescriptorV1 } from "@/lib/trader/research/research-modeled-stage-kernel-v1";
 import { resolveCurrentResearchExecutableIdentityV1 } from "@/lib/trader/research/research-executable-runtime-identity-v1";
 import { loadResearchTrainingLedgerScopePostgresV1 } from "@/lib/trader/research/research-attempt-registry-postgres-v1";
 import { loadRegisteredResearchExperimentPostgresV1 } from "@/lib/trader/research/research-experiment-registry-postgres-v1";
@@ -148,7 +148,13 @@ async function runRegisteredDiagnosticInternal(
     }
 
     const { accounting, decisions, advances, fillDetails, orderRows, openOrderIds, invocations } =
-      await runOwnedResearchModeledStageV1({ tx, source, request, policy, model });
+      await runOwnedResearchModeledStageV1({
+        executor: tx,
+        descriptor: sealOwnedResearchModeledStageDescriptorV1({
+          attemptId: request.attemptId, trialIndex: request.trialIndex, policy, model,
+        }),
+        payload: source,
+      });
     const trace = buildResearchTrainingTraceV1({ source, request, policy, observedExecutableIdentity,
       stage: { accounting, decisions, advances, fillDetails, orderRows, openOrderIds, invocations },
       ledgerDigestHex: await readLedgerDigest() });
