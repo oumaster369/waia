@@ -9,12 +9,13 @@ import { createObservationCredentialStore } from "@/lib/trader/account-observati
 import { createPostgresObservationAssignmentSource } from "@/lib/trader/account-observation/postgres-assignments";
 import { createPostgresObservationReader } from "@/lib/trader/account-observation/postgres-reader";
 import { createHtxV5ReadTransport } from "@/lib/trader/account-observation/derivatives/htx-v5-read-transport";
+import type { HtxV5ObservationReader } from "@/lib/trader/account-observation/derivatives/htx-v5-reader";
 import { AccountObservationReadFailure } from "@/lib/trader/account-observation/service";
 import { parseHtxV5AssetMode } from "@/lib/trader/account-observation/derivatives/htx-v5-read-contract";
 import { parseAccountObservationIdentityProbeEnv, runAccountObservationIdentityProbe, renderIdentityProbeRefusal,
   writeIdentityProbeRefusal, readManifestBounded, AccountObservationIdentityProbeFailure, type ProbeDependencies } from "@/scripts/trader/account-observation-identity-probe";
 import type { Sql } from "postgres";
-import type { ObservationBinding } from "@/lib/trader/account-observation/types";
+import type { HtxV5AccountObservation, ObservationBinding } from "@/lib/trader/account-observation/types";
 import type { MasterKeyProvider } from "@/lib/trader/security/master-key-provider";
 
 const binding: ObservationBinding = {
@@ -30,10 +31,10 @@ const readerUrl = "postgresql://waia_account_observation_reader_login:reader-pas
 const credentialUrl = "postgresql://waia_account_observation_credential_login:credential-pass@credential.example/db";
 const readerLimits = { pageSize: 100, maxPages: 2, maxRecords: 200, maxResponseBytes: 65536, tradeWindowMs: 60000 };
 
-function manifestFixture() {
+function manifestFixture(options: { htxV5?: { enabled: boolean; expectedHtxUid?: string; fillContracts?: string[] } } = {}) {
   const config = createObservationConfiguration({ symbols: ["BTCUSDT"], pollIntervalMs: 60000,
     maxBackoffMs: 120000, readTimeoutMs: 10000, leaseTtlMs: 240000,
-    htxCoverage: { ...readerLimits, host: "api.huobi.pro" } });
+    htxCoverage: { ...readerLimits, host: "api.huobi.pro" }, ...(options.htxV5 ? { htxV5: options.htxV5 } : {}) });
   const assigned = { ...binding, configurationRevision: config.revision };
   const body = {
     schemaVersion: ACCOUNT_OBSERVATION_ASSIGNMENT_MANIFEST_SCHEMA as typeof ACCOUNT_OBSERVATION_ASSIGNMENT_MANIFEST_SCHEMA,
@@ -46,7 +47,8 @@ function manifestFixture() {
     assignments: [{ organizationId: assigned.organizationId, credentialId: assigned.credentialId,
       exchangeAccountId: assigned.exchangeAccountId, credentialRevision: assigned.credentialRevision,
       configurationRevision: config.revision, symbols: ["BTCUSDT"], pollIntervalMs: 60000,
-      maxBackoffMs: 120000, readTimeoutMs: 10000, leaseTtlMs: 240000, readerLimits }],
+      maxBackoffMs: 120000, readTimeoutMs: 10000, leaseTtlMs: 240000, readerLimits,
+      ...(options.htxV5 ? { htxV5: options.htxV5 } : {}) }],
   };
   const digest = accountObservationManifestDigest(body);
   const text = JSON.stringify({ ...body, contentSha256: digest });
@@ -59,8 +61,9 @@ function manifestFixture() {
   return { assigned, config, digest, text, env };
 }
 
-function setup(options: { providerReady?: boolean; authorizations?: boolean[]; transportOverride?: ProbeDependencies["createTransport"] } = {}) {
-  const fixture = manifestFixture();
+function setup(options: { providerReady?: boolean; authorizations?: boolean[]; transportOverride?: ProbeDependencies["createTransport"];
+  v5Observation?: unknown; v5Read?: HtxV5ObservationReader; htxV5?: boolean } = {}) {
+  const fixture = manifestFixture(options.htxV5 ? { htxV5: { enabled: true, expectedHtxUid: "7654321" } } : {});
   const readerSql = (() => {}) as unknown as Sql;
   const credentialSql = (() => {}) as unknown as Sql;
   const closeReader = vi.fn(async () => {});
@@ -76,6 +79,20 @@ function setup(options: { providerReady?: boolean; authorizations?: boolean[]; t
   const store = {
     openCredential: vi.fn(async () => credential), dispose: vi.fn(), settled: vi.fn(async () => {}),
   } as unknown as ReturnType<typeof createObservationCredentialStore>;
+  const observation = options.v5Observation ?? { schemaVersion: "htx-v5-observation/v1", htxUid: "7654321",
+    assetMode: { status: "COMPLETE", value: "1", readStartedAtMs: Date.now(), readCompletedAtMs: Date.now(),
+      responseGeneratedAtMs: Date.now(), error: null }, balance: { status: "ERROR", value: null,
+      readStartedAtMs: Date.now(), readCompletedAtMs: Date.now(), responseGeneratedAtMs: null, error: "READ_FAILED" },
+    positions: { status: "ERROR", values: null, readStartedAtMs: Date.now(), readCompletedAtMs: Date.now(),
+      responseGeneratedAtMs: null, error: "READ_FAILED", pageScope: null },
+    openOrders: { status: "ERROR", values: null, readStartedAtMs: Date.now(), readCompletedAtMs: Date.now(),
+      responseGeneratedAtMs: null, error: "READ_FAILED", pageScope: null },
+    algoOrders: { status: "ERROR", values: null, readStartedAtMs: Date.now(), readCompletedAtMs: Date.now(),
+      responseGeneratedAtMs: null, error: "READ_FAILED", pageScope: null },
+    fills: { status: "NOT_CONFIGURED", values: null, readStartedAtMs: null, readCompletedAtMs: null,
+      responseGeneratedAtMs: null, error: null, coverage: "NOT_CONFIGURED", contracts: [], windowStartMs: null,
+      windowEndMs: null, pageScope: null } };
+  const v5Reader = { read: vi.fn(async () => observation), dispose: vi.fn(), settled: vi.fn(async () => {}) };
   const fetchImpl = vi.fn<typeof fetch>(async input => {
     const url = new URL(String(input));
     if (url.pathname === "/v1/account/accounts")
@@ -98,12 +115,13 @@ function setup(options: { providerReady?: boolean; authorizations?: boolean[]; t
     createAssignmentSource: vi.fn(() => source),
     createReader: vi.fn(() => reader),
     createStore: vi.fn(() => store),
-    createTransport: options.transportOverride ?? (input => createHtxV5ReadTransport(input)),
+    createTransport: vi.fn(options.transportOverride ?? (input => createHtxV5ReadTransport(input))),
+    createV5Reader: vi.fn(() => options.v5Read ?? v5Reader as never),
     parseMode: parseHtxV5AssetMode,
     fetchImpl,
     now: () => Date.now(),
   };
-  return { fixture, deps, fetchImpl, authorizeOpen, store, credential, closeReader, closeCredential };
+  return { fixture, deps, fetchImpl, authorizeOpen, store, v5Reader, credential, closeReader, closeCredential };
 }
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-03T00:00:00Z")); });
@@ -125,6 +143,75 @@ describe("protected HTX identity probe", () => {
     expect(f.closeReader).toHaveBeenCalledOnce();
     expect(f.closeCredential).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("runs the bounded full V5 reader only with an exact manifest UID and returns parsed observation provenance", async () => {
+    const f = setup({ htxV5: true });
+    const env = { ...f.fixture.env, WAIA_OBSERVATION_PROBE_MODE: "v5-acceptance", WAIA_OBSERVATION_EXPECTED_HTX_UID: "7654321" };
+    const pending = runAccountObservationIdentityProbe(env, f.deps);
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    expect(result).toMatchObject({ schemaVersion: "waia.account_observation_v5_acceptance_probe.v1",
+      htxUid: "7654321", expectedHtxUid: "7654321", permission: "readOnly",
+      manifestSha256: f.fixture.digest, observation: { schemaVersion: "htx-v5-observation/v1", htxUid: "7654321" } });
+    expect(f.deps.createV5Reader).toHaveBeenCalledOnce();
+    expect(f.v5Reader.read).toHaveBeenCalledOnce();
+    expect(f.v5Reader.dispose).toHaveBeenCalledOnce();
+    expect(f.v5Reader.settled).toHaveBeenCalledOnce();
+    expect(f.deps.createTransport).not.toHaveBeenCalled();
+    expect(f.fetchImpl).not.toHaveBeenCalled();
+    expect(f.closeReader).toHaveBeenCalledOnce();
+    expect(f.closeCredential).toHaveBeenCalledOnce();
+    const serialized = JSON.stringify(result);
+    for (const secret of [readerUrl, credentialUrl, masterKey, "synthetic-api-key", "synthetic-api-secret", "accessKeySha256"])
+      expect(serialized).not.toContain(secret);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    ["missing expected UID", undefined],
+    ["unexpected expected UID", "7654322"],
+  ])("refuses V5 acceptance with %s before opening resources", async (_label, expectedUid) => {
+    const f = setup({ htxV5: true });
+    const env = { ...f.fixture.env, WAIA_OBSERVATION_PROBE_MODE: "v5-acceptance",
+      ...(expectedUid ? { WAIA_OBSERVATION_EXPECTED_HTX_UID: expectedUid } : {}) };
+    await expect(runAccountObservationIdentityProbe(env, f.deps)).rejects.toMatchObject({ code: "HTX_IDENTITY_MISMATCH" });
+    expect(f.deps.openReader).not.toHaveBeenCalled();
+    expect(f.deps.createV5Reader).not.toHaveBeenCalled();
+    expect(f.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("keeps the original identity mode schema when the mode is omitted", async () => {
+    const f = setup();
+    const pending = runAccountObservationIdentityProbe(f.fixture.env, f.deps);
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    expect(result.schemaVersion).toBe("waia.account_observation_identity_probe.v1");
+    expect("observation" in result).toBe(false);
+    expect(f.deps.createV5Reader).not.toHaveBeenCalled();
+  });
+
+  it("bounds the full V5 read at 120 seconds and refuses success until cleanup has drained", async () => {
+    let settle!: () => void;
+    const reader: HtxV5ObservationReader = {
+      read: vi.fn((signal: AbortSignal) => new Promise<HtxV5AccountObservation>((_, reject) => {
+        signal.addEventListener("abort", () => reject(new AccountObservationReadFailure("READ_FAILED")), { once: true });
+      })),
+      dispose: vi.fn(),
+      settled: () => new Promise<void>(resolve => { settle = resolve; }),
+    };
+    const f = setup({ htxV5: true, v5Read: reader });
+    const env = { ...f.fixture.env, WAIA_OBSERVATION_PROBE_MODE: "v5-acceptance", WAIA_OBSERVATION_EXPECTED_HTX_UID: "7654321" };
+    const result = runAccountObservationIdentityProbe(env, f.deps).then(
+      value => ({ value }), error => ({ error }),
+    );
+    await vi.advanceTimersByTimeAsync(120_000);
+    await vi.advanceTimersByTimeAsync(7_000);
+    settle();
+    await expect(result).resolves.toMatchObject({ error: { code: "CLEANUP_TIMEOUT" } });
+    expect(reader.dispose).toHaveBeenCalledOnce();
+    expect(f.closeReader).toHaveBeenCalledOnce();
+    expect(f.closeCredential).toHaveBeenCalledOnce();
   });
 
   it("rejects missing CLI precondition before opening any resource", async () => {

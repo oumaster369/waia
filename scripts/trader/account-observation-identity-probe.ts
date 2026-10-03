@@ -12,17 +12,19 @@ import { createPostgresObservationReader } from "@/lib/trader/account-observatio
 import { parseAccountObservationAssignmentManifest } from "@/lib/trader/account-observation/assignment-manifest";
 import { probeObservationCredentialPool, probeObservationPool, observationPoolLimits } from "@/lib/trader/account-observation/host-role-probe";
 import { createHtxV5ReadTransport } from "@/lib/trader/account-observation/derivatives/htx-v5-read-transport";
+import { createHtxV5ObservationReader, type HtxV5ObservationReader } from "@/lib/trader/account-observation/derivatives/htx-v5-reader";
 import { AccountObservationReadFailure } from "@/lib/trader/account-observation/service";
 import { parseHtxV5AssetMode } from "@/lib/trader/account-observation/derivatives/htx-v5-read-contract";
 import { SecretsStoreMasterKeyProvider } from "@/lib/trader/security/secrets-store-master-key-provider";
 import { isProductionDeployment } from "@/lib/trader/security/deployment-tier";
 import type { Sql } from "postgres";
 import type { MasterKeyProvider } from "@/lib/trader/security/master-key-provider";
-import type { ObservationBinding } from "@/lib/trader/account-observation/types";
+import type { HtxV5AccountObservation, ObservationBinding } from "@/lib/trader/account-observation/types";
 import type { HtxObservationCredentialHandle } from "@/lib/trader/account-observation/htx-reader-opener";
 import { sameObservationBinding } from "@/lib/trader/account-observation/validation";
 
 const PROBE_DEADLINE_MS = 45_000;
+const V5_ACCEPTANCE_DEADLINE_MS = 120_000;
 const CLEANUP_DEADLINE_MS = 7_000;
 const READ_TIMEOUT_MS = 10_000;
 const MAX_RESPONSE_BYTES = 64 * 1024;
@@ -54,6 +56,7 @@ type PrivateRuntime = Readonly<{
   masterKey: string;
 }>;
 type Env = Readonly<Record<string, string | undefined>>;
+type ProbeMode = "identity" | "v5-acceptance";
 const refuse = (code: ProbeRefusal): never => { throw new AccountObservationIdentityProbeFailure(code); };
 
 function ensureLive(signal: AbortSignal): void { if (signal.aborted) refuse("TIMEOUT"); }
@@ -118,6 +121,12 @@ export function parseAccountObservationIdentityProbeEnv(env: Env): PrivateRuntim
   return Object.freeze(runtime);
 }
 
+function probeMode(env: Env): ProbeMode {
+  const value = env.WAIA_OBSERVATION_PROBE_MODE?.trim() ?? "identity";
+  if (value === "identity" || value === "v5-acceptance") return value;
+  return refuse("FAILED");
+}
+
 type SqlResource = Readonly<{ sql: Sql; close(): Promise<void> }>;
 type ProbeResult = Readonly<{
   schemaVersion: "waia.account_observation_identity_probe.v1";
@@ -130,6 +139,19 @@ type ProbeResult = Readonly<{
   checkedAt: number;
   responseGeneratedAtMs: number | null;
   receivedAt: number;
+}>;
+
+type V5AcceptanceResult = Readonly<{
+  schemaVersion: "waia.account_observation_v5_acceptance_probe.v1";
+  releaseSha: string;
+  manifestSha256: string;
+  binding: ObservationBinding;
+  htxUid: string;
+  permission: "readOnly";
+  expectedHtxUid: string;
+  observation: HtxV5AccountObservation;
+  observationReadStartedAtMs: number;
+  observationReadCompletedAtMs: number;
 }>;
 
 export type ProbeDependencies = Readonly<{
@@ -147,6 +169,7 @@ export type ProbeDependencies = Readonly<{
   createReader(sql: Sql): ReturnType<typeof createPostgresObservationReader>;
   createStore(input: Parameters<typeof createObservationCredentialStore>[0]): ReturnType<typeof createObservationCredentialStore>;
   createTransport(input: Parameters<typeof createHtxV5ReadTransport>[0]): ReturnType<typeof createHtxV5ReadTransport>;
+  createV5Reader(input: Parameters<typeof createHtxV5ObservationReader>[0]): HtxV5ObservationReader;
   parseMode(payload: string): ReturnType<typeof parseHtxV5AssetMode>;
   fetchImpl: typeof fetch;
   now(): number;
@@ -172,6 +195,7 @@ const productionDependencies: ProbeDependencies = {
   createReader: sql => createPostgresObservationReader(sql),
   createStore: input => createObservationCredentialStore(input),
   createTransport: input => createHtxV5ReadTransport(input),
+  createV5Reader: input => createHtxV5ObservationReader(input),
   parseMode: parseHtxV5AssetMode,
   fetchImpl: fetch,
   now: () => accountObservationClock.now(),
@@ -228,11 +252,13 @@ async function bounded<T>(promise: Promise<T>, ms: number, code: ProbeRefusal): 
 export async function runAccountObservationIdentityProbe(
   env: Env,
   dependencies: ProbeDependencies = productionDependencies,
-): Promise<ProbeResult> {
+): Promise<ProbeResult | V5AcceptanceResult> {
   const runtime = parseAccountObservationIdentityProbeEnv(env);
+  const selectedMode = probeMode(env);
+  const deadlineMs = selectedMode === "v5-acceptance" ? V5_ACCEPTANCE_DEADLINE_MS : PROBE_DEADLINE_MS;
   if (typeof dependencies.fetchImpl !== "function") refuse("FAILED");
   const controller = new AbortController();
-  const deadlineTimer = setTimeout(() => controller.abort(), PROBE_DEADLINE_MS);
+  const deadlineTimer = setTimeout(() => controller.abort(), deadlineMs);
   const signal = controller.signal;
   const opened: SqlResource[] = [];
   let closing = false;
@@ -241,7 +267,8 @@ export async function runAccountObservationIdentityProbe(
   let store: ReturnType<typeof createObservationCredentialStore> | undefined;
   let handle: HtxObservationCredentialHandle | undefined;
   let transport: ReturnType<typeof createHtxV5ReadTransport> | undefined;
-  let result: ProbeResult | undefined;
+  let v5Reader: HtxV5ObservationReader | undefined;
+  let result: ProbeResult | V5AcceptanceResult | undefined;
   let failure: ProbeRefusal | undefined;
   const openResource = async (open: (url: string) => Promise<SqlResource>, url: string) => {
     const opening = open(url);
@@ -270,6 +297,10 @@ export async function runAccountObservationIdentityProbe(
     ensureLive(signal);
     if (!trusted || trusted.configured.length !== 1) refuse("ASSIGNMENT_COUNT");
     const assignment = trusted.configured[0]!;
+    const expectedHtxUid = env.WAIA_OBSERVATION_EXPECTED_HTX_UID?.trim();
+    if (selectedMode === "v5-acceptance" && (!expectedHtxUid || !/^[1-9]\d{0,38}$/.test(expectedHtxUid) ||
+        assignment.config.htxV5?.enabled !== true || assignment.config.htxV5.expectedHtxUid !== expectedHtxUid))
+      refuse("HTX_IDENTITY_MISMATCH");
 
     readerResource = await openResource(dependencies.openReader, runtime.readerDatabaseUrl);
     ensureLive(signal);
@@ -311,6 +342,31 @@ export async function runAccountObservationIdentityProbe(
       authorizeOpen: source.authorizeOpen, clock: accountObservationClock, timeoutMs: READ_TIMEOUT_MS });
     handle = await store.openCredential(assignment.binding, signal);
     ensureLive(signal);
+    if (selectedMode === "v5-acceptance") {
+      v5Reader = dependencies.createV5Reader({ credential: handle, clock: accountObservationClock,
+        fetchImpl: dependencies.fetchImpl, timeoutMs: READ_TIMEOUT_MS, maxResponseBytes: MAX_RESPONSE_BYTES,
+        expectedHtxUid: expectedHtxUid!, ...(assignment.config.htxV5?.fillContracts
+          ? { contracts: assignment.config.htxV5.fillContracts } : {}), authorizeCurrent: source.authorizeOpen });
+      const observationReadStartedAtMs = dependencies.now();
+      let observation: HtxV5AccountObservation;
+      try { observation = await v5Reader.read(signal); }
+      catch (error) { refuse(signal.aborted ? "TIMEOUT" : safeTransportCode(error)); }
+      const observationReadCompletedAtMs = dependencies.now();
+      ensureLive(signal);
+      if (observation!.htxUid !== expectedHtxUid) refuse("HTX_IDENTITY_MISMATCH");
+      const currentAfter = await source.authorizeOpen(assignment.binding, signal);
+      ensureLive(signal);
+      const activeAfter = await reader.resolveActiveBinding(assignment.binding);
+      ensureLive(signal);
+      if (!currentAfter || !activeAfter || !sameObservationBinding(activeAfter, assignment.binding))
+        refuse("ASSIGNMENT_STALE");
+      result = Object.freeze({ schemaVersion: "waia.account_observation_v5_acceptance_probe.v1",
+        releaseSha: runtime.safe.releaseSha, manifestSha256: trusted.digest,
+        binding: Object.freeze({ ...assignment.binding }), htxUid: observation!.htxUid!,
+        permission: "readOnly", expectedHtxUid: expectedHtxUid!, observation: observation!,
+        observationReadStartedAtMs, observationReadCompletedAtMs });
+      return;
+    }
     transport = dependencies.createTransport({ credential: handle, clock: accountObservationClock,
       fetchImpl: dependencies.fetchImpl, timeoutMs: READ_TIMEOUT_MS, maxResponseBytes: MAX_RESPONSE_BYTES,
       authorizeCurrent: source.authorizeOpen,
@@ -339,11 +395,12 @@ export async function runAccountObservationIdentityProbe(
   };
 
   const run = work();
-  try { await bounded(run, PROBE_DEADLINE_MS, "TIMEOUT"); }
+  try { await bounded(run, deadlineMs, "TIMEOUT"); }
   catch (error) { failure = signal.aborted ? "TIMEOUT" : safeCode(error); controller.abort(); }
   finally {
     clearTimeout(deadlineTimer);
     closing = true;
+    try { v5Reader?.dispose(); } catch { failure = "CLEANUP_FAILED"; }
     try { handle?.dispose(); } catch { failure = "CLEANUP_FAILED"; }
     try { transport?.dispose(); } catch { failure = "CLEANUP_FAILED"; }
     try { store?.dispose(); } catch { failure = "CLEANUP_FAILED"; }
@@ -357,6 +414,7 @@ export async function runAccountObservationIdentityProbe(
     await duringCleanup(Promise.allSettled([run]));
     await duringCleanup(Promise.all([
       store?.settled() ?? Promise.resolve(),
+      v5Reader?.settled() ?? Promise.resolve(),
       transport?.settled() ?? Promise.resolve(),
     ]));
   } catch (error) { failure = safeCode(error) === "CLEANUP_TIMEOUT" ? "CLEANUP_TIMEOUT" : "CLEANUP_FAILED"; }
@@ -366,7 +424,7 @@ export async function runAccountObservationIdentityProbe(
   return result!;
 }
 
-export function renderIdentityProbeOutput(result: ProbeResult): string {
+export function renderIdentityProbeOutput(result: ProbeResult | V5AcceptanceResult): string {
   return JSON.stringify(result);
 }
 
