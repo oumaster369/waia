@@ -119,14 +119,14 @@ function pathTo(closure: Map<string, string[]>, target: string): string[] {
 
 const DERIVATIVES_TRANSPORT = "lib/trader/account-observation/derivatives/htx-account-transport.ts";
 
-/** Reviewed private account, position, and match-results POST reads are allowed, with a closed source shape.
- * Match-results bodies are the fixed trade_type/direct template plus the pinned fill assignment.
+/** Reviewed private account/position POST reads stay on their original closed lines.
+ * The match-results extension adds exactly four fixed routes and the fill boundary strings below.
  * Behavioral transport tests separately exercise family routing and admission refusal.
  * A renamed/generalized reader must receive a fresh authority review. */
 function derivativesBoundaryViolations(source: string): string[] {
   const violations: string[] = [];
   const endpoints = [...source.matchAll(/path:\s*"([^"\n]+)", body: Object\.freeze\((\{[^}]*\})\)/g)]
-    .map((match) => [match[1], JSON.parse(match[2]!.replace(/\b(margin_account|trade_type|direct):/g, '"$1":'))]);
+    .map((match) => [match[1], JSON.parse(match[2]!.replace(/margin_account:/, '"margin_account":'))]);
   const matchResultsTemplate = { trade_type: 0, direct: "next" };
   const expected = [
     ["/linear-swap-api/v1/swap_account_info", {}],
@@ -149,8 +149,9 @@ function derivativesBoundaryViolations(source: string): string[] {
     'input.host !== "api.hbdm.com"',
     'const host = input.host;',
     'if (!HTX_DERIVATIVES_ACCOUNT_FAMILIES.includes(family) || disposed || active || signal.aborted)',
-    'const { path, body: template } = (purpose === "account" ? endpoints : purpose === "positions" ? positionEndpoints : fillEndpoints)[family];',
-    'const body = purpose === "fills" ? matchResultsBody(family, template, contract, startTime, endTime, fromId) : template;',
+    'const { path, body } = (purpose === "account" ? endpoints : positionEndpoints)[family];',
+    'const { path: fillPath, body: template } = fillEndpoints[family];',
+    'const body = matchResultsBody(family, template, contract, startTime, endTime, fromId);',
     'template.trade_type !== 0 || template.direct !== "next" || Object.keys(template).length !== 2',
     'const filled: Record<string, string | number> = { contract, trade_type: 0, start_time: startTime, end_time: endTime, direct: "next" };',
     'if (family === "coin_delivery_futures") filled.symbol = contract.slice(0, -6);',
