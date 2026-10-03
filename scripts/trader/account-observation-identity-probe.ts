@@ -21,7 +21,7 @@ import type { Sql } from "postgres";
 import type { MasterKeyProvider } from "@/lib/trader/security/master-key-provider";
 import type { HtxV5AccountObservation, ObservationBinding } from "@/lib/trader/account-observation/types";
 import type { HtxObservationCredentialHandle } from "@/lib/trader/account-observation/htx-reader-opener";
-import { sameObservationBinding } from "@/lib/trader/account-observation/validation";
+import { htxV5AccountObservationSchema, sameObservationBinding } from "@/lib/trader/account-observation/validation";
 
 const PROBE_DEADLINE_MS = 45_000;
 const V5_ACCEPTANCE_DEADLINE_MS = 120_000;
@@ -143,9 +143,12 @@ type ProbeResult = Readonly<{
 
 type V5AcceptanceResult = Readonly<{
   schemaVersion: "waia.account_observation_v5_acceptance_probe.v1";
+  scope: "standalone-read-only-diagnostic";
+  writerAuthorization: false;
   releaseSha: string;
   manifestSha256: string;
   binding: ObservationBinding;
+  configurationRevision: string;
   htxUid: string;
   permission: "readOnly";
   expectedHtxUid: string;
@@ -248,7 +251,7 @@ async function bounded<T>(promise: Promise<T>, ms: number, code: ProbeRefusal): 
   } finally { if (timer) clearTimeout(timer); }
 }
 
-/** One existing manifest assignment, one strict-read-only metadata admission and one V5 mode GET. */
+/** One existing manifest assignment with either identity-only or finite full V5 read scope. */
 export async function runAccountObservationIdentityProbe(
   env: Env,
   dependencies: ProbeDependencies = productionDependencies,
@@ -299,7 +302,8 @@ export async function runAccountObservationIdentityProbe(
     const assignment = trusted.configured[0]!;
     const expectedHtxUid = env.WAIA_OBSERVATION_EXPECTED_HTX_UID?.trim();
     if (selectedMode === "v5-acceptance" && (!expectedHtxUid || !/^[1-9]\d{0,38}$/.test(expectedHtxUid) ||
-        assignment.config.htxV5?.enabled !== true || assignment.config.htxV5.expectedHtxUid !== expectedHtxUid))
+        (assignment.config.htxV5?.expectedHtxUid !== undefined &&
+          assignment.config.htxV5.expectedHtxUid !== expectedHtxUid)))
       refuse("HTX_IDENTITY_MISMATCH");
 
     readerResource = await openResource(dependencies.openReader, runtime.readerDatabaseUrl);
@@ -348,12 +352,15 @@ export async function runAccountObservationIdentityProbe(
         expectedHtxUid: expectedHtxUid!, ...(assignment.config.htxV5?.fillContracts
           ? { contracts: assignment.config.htxV5.fillContracts } : {}), authorizeCurrent: source.authorizeOpen });
       const observationReadStartedAtMs = dependencies.now();
-      let observation: HtxV5AccountObservation;
+      let observation: HtxV5AccountObservation | undefined;
       try { observation = await v5Reader.read(signal); }
       catch (error) { refuse(signal.aborted ? "TIMEOUT" : safeTransportCode(error)); }
       const observationReadCompletedAtMs = dependencies.now();
       ensureLive(signal);
-      if (observation!.htxUid !== expectedHtxUid) refuse("HTX_IDENTITY_MISMATCH");
+      let parsedObservation: HtxV5AccountObservation;
+      try { parsedObservation = htxV5AccountObservationSchema.parse(observation!); }
+      catch { refuse("HTX_INVALID_RESPONSE"); }
+      if (parsedObservation!.htxUid !== expectedHtxUid) refuse("HTX_IDENTITY_MISMATCH");
       const currentAfter = await source.authorizeOpen(assignment.binding, signal);
       ensureLive(signal);
       const activeAfter = await reader.resolveActiveBinding(assignment.binding);
@@ -361,9 +368,11 @@ export async function runAccountObservationIdentityProbe(
       if (!currentAfter || !activeAfter || !sameObservationBinding(activeAfter, assignment.binding))
         refuse("ASSIGNMENT_STALE");
       result = Object.freeze({ schemaVersion: "waia.account_observation_v5_acceptance_probe.v1",
+        scope: "standalone-read-only-diagnostic", writerAuthorization: false,
         releaseSha: runtime.safe.releaseSha, manifestSha256: trusted.digest,
-        binding: Object.freeze({ ...assignment.binding }), htxUid: observation!.htxUid!,
-        permission: "readOnly", expectedHtxUid: expectedHtxUid!, observation: observation!,
+        binding: Object.freeze({ ...assignment.binding }), configurationRevision: assignment.binding.configurationRevision,
+        htxUid: parsedObservation!.htxUid!, permission: "readOnly", expectedHtxUid: expectedHtxUid!,
+        observation: parsedObservation!,
         observationReadStartedAtMs, observationReadCompletedAtMs });
       return;
     }

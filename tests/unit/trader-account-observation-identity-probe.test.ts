@@ -121,7 +121,7 @@ function setup(options: { providerReady?: boolean; authorizations?: boolean[]; t
     fetchImpl,
     now: () => Date.now(),
   };
-  return { fixture, deps, fetchImpl, authorizeOpen, store, v5Reader, credential, closeReader, closeCredential };
+  return { fixture, deps, fetchImpl, authorizeOpen, source, reader, store, v5Reader, credential, closeReader, closeCredential };
 }
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-03T00:00:00Z")); });
@@ -146,14 +146,21 @@ describe("protected HTX identity probe", () => {
   });
 
   it("runs the bounded full V5 reader only with an exact manifest UID and returns parsed observation provenance", async () => {
-    const f = setup({ htxV5: true });
+    const f = setup();
     const env = { ...f.fixture.env, WAIA_OBSERVATION_PROBE_MODE: "v5-acceptance", WAIA_OBSERVATION_EXPECTED_HTX_UID: "7654321" };
     const pending = runAccountObservationIdentityProbe(env, f.deps);
     await vi.runAllTimersAsync();
     const result = await pending;
     expect(result).toMatchObject({ schemaVersion: "waia.account_observation_v5_acceptance_probe.v1",
+      scope: "standalone-read-only-diagnostic", writerAuthorization: false,
       htxUid: "7654321", expectedHtxUid: "7654321", permission: "readOnly",
+      configurationRevision: f.fixture.assigned.configurationRevision,
       manifestSha256: f.fixture.digest, observation: { schemaVersion: "htx-v5-observation/v1", htxUid: "7654321" } });
+    expect(f.fixture.config.htxV5).toBeUndefined();
+    expect(f.deps.createV5Reader).toHaveBeenCalledWith(expect.objectContaining({ expectedHtxUid: "7654321" }));
+    expect(f.source.loadAssignments).toHaveBeenCalledOnce();
+    expect(f.authorizeOpen).toHaveBeenCalledTimes(2);
+    expect(f.reader.resolveActiveBinding).toHaveBeenCalledTimes(2);
     expect(f.deps.createV5Reader).toHaveBeenCalledOnce();
     expect(f.v5Reader.read).toHaveBeenCalledOnce();
     expect(f.v5Reader.dispose).toHaveBeenCalledOnce();
@@ -172,7 +179,7 @@ describe("protected HTX identity probe", () => {
     ["missing expected UID", undefined],
     ["unexpected expected UID", "7654322"],
   ])("refuses V5 acceptance with %s before opening resources", async (_label, expectedUid) => {
-    const f = setup({ htxV5: true });
+    const f = setup({ ...(expectedUid === "7654322" ? { htxV5: true } : {}) });
     const env = { ...f.fixture.env, WAIA_OBSERVATION_PROBE_MODE: "v5-acceptance",
       ...(expectedUid ? { WAIA_OBSERVATION_EXPECTED_HTX_UID: expectedUid } : {}) };
     await expect(runAccountObservationIdentityProbe(env, f.deps)).rejects.toMatchObject({ code: "HTX_IDENTITY_MISMATCH" });
@@ -189,6 +196,14 @@ describe("protected HTX identity probe", () => {
     expect(result.schemaVersion).toBe("waia.account_observation_identity_probe.v1");
     expect("observation" in result).toBe(false);
     expect(f.deps.createV5Reader).not.toHaveBeenCalled();
+  });
+
+  it("rejects noncanonical V5 observation fields before they can enter diagnostic output", async () => {
+    const f = setup({ v5Observation: { schemaVersion: "htx-v5-observation/v1", htxUid: "7654321",
+      balance: { account: "private HTTP body or secret" } } });
+    const env = { ...f.fixture.env, WAIA_OBSERVATION_PROBE_MODE: "v5-acceptance", WAIA_OBSERVATION_EXPECTED_HTX_UID: "7654321" };
+    await expect(runAccountObservationIdentityProbe(env, f.deps)).rejects.toMatchObject({ code: "HTX_INVALID_RESPONSE" });
+    expect(f.authorizeOpen).toHaveBeenCalledOnce();
   });
 
   it("bounds the full V5 read at 120 seconds and refuses success until cleanup has drained", async () => {

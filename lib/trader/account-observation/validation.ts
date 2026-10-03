@@ -146,7 +146,7 @@ const v5FillPageScope = z.object({ pageSize: z.number().int().min(1).max(100),
     nextFrom: z.string().regex(/^(?:0|[1-9]\d{0,18})$/).nullable() }).strict()).max(8),
   completeness: z.literal("UNKNOWN") }).strict()
   .refine(scope => scope.queries.every(query => query.pagesRead <= scope.maxPagesPerContract));
-const htxV5 = z.object({
+export const htxV5AccountObservationSchema = z.object({
   schemaVersion: z.literal("htx-v5-observation/v1"), htxUid: z.string().regex(/^[1-9]\d{0,38}$/).nullable(),
   assetMode: v5ValueObservation(z.enum(["0", "1", "2"])),
   balance: v5ValueObservation(v5Balance),
@@ -429,7 +429,7 @@ const observation = z.discriminatedUnion("schemaVersion", [
     .extend({ schemaVersion: z.literal("account-observation/v2"), derivatives })
     .strict(),
   observationFields
-    .extend({ schemaVersion: z.literal("account-observation/v3"), htxV5: htxV5, derivatives: derivatives.optional() })
+    .extend({ schemaVersion: z.literal("account-observation/v3"), htxV5: htxV5AccountObservationSchema, derivatives: derivatives.optional() })
     .strict(),
 ]);
 export function sameObservationBinding(a: ObservationBinding, b: ObservationBinding) {
