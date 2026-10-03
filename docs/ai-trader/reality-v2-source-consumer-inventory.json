@@ -434,7 +434,7 @@
       {"path": "lib/trader/reality/v2/source-equivalence.ts","sha256": "de18d1efc3c9c415d0b2aaa7308f012b8e354832d0ebc3d49285b18b9090b5a8"},
       {"path": "lib/trader/research/create-in-memory-research-backtest-session.ts","sha256": "c0bacc828a6c2a6ae70c25315bf666826f41836e011981275f676a138374e820"},
       {"path": "lib/trader/research/execopp-qualification/historical-prerun-knowledge-bootstrap-v2.ts","sha256": "692a832a64cb87dc9469e3c97a2581953bcff8212db38ff8a3cc955aa18d8ec9"},
-      {"path": "lib/trader/research/research-modeled-stage-kernel-v1.ts","sha256": "20cf7bd55aa6ca573c6389063cb3311105cd3985dad882293be84ee420c66a5b"},
+      {"path": "lib/trader/research/research-modeled-stage-kernel-v1.ts","sha256": "9fd63efbd30809c69fb0a3d3527b3fd79c897e568ec43fa42ad29116b74c6aa3"},
       {"path": "lib/trader/risk/capital-limits-evaluator.ts","sha256": "0329acf0caa0011c918f807e91bc89790414f55b2682ed7ec6262aaf5b1caab6"},
       {"path": "lib/trader/risk/capital-limits.types.ts","sha256": "dd6811e6a8d9922b0e82b42b67195692fb47f406145d4814966f4616dbac9033"},
       {"path": "lib/trader/risk/decision.ts","sha256": "fb01f195a6d2f65190ec6f2aded23227d142b3b2231086c888d18f78c4932a95"},
