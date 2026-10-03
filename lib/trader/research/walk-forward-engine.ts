@@ -155,70 +155,19 @@ function serializeMetrics(metrics: ResearchValidationMetrics): string {
   return JSON.stringify(metrics);
 }
 
+/**
+ * A caller-supplied backtest is not a development stage. Registered train,
+ * validation, and walk-forward execution goes through the sealed modeled-stage
+ * binding (`runBoundDevelopmentModeledStagesV1`). This entry refuses before any
+ * window score or candidate write.
+ */
 export async function runWalkForwardValidation(
   input: RunWalkForwardValidationInput,
 ): Promise<WalkForwardValidationResult> {
-  if (!ALLOWED_WALK_FORWARD_STATUSES.has(input.candidate.status)) {
-    throw new WalkForwardValidationError(
-      `candidate status ${input.candidate.status} is not eligible for walk-forward validation`,
-    );
+  if (typeof input.runBacktest === "function") {
+    throw new WalkForwardValidationError("RESEARCH_DEVELOPMENT_STAGE_REFUSED:FORGED_CALLBACK");
   }
-
-  const windowCount = assertWalkForwardSplits(
-    input.trainBars,
-    input.validationBars,
-    input.oosBarCount,
-  );
-
-  if (windowCount === 0) {
-    throw new WalkForwardValidationError("walk-forward schedule produced zero windows");
-  }
-
-  const newId = input.newId ?? crypto.randomUUID.bind(crypto);
-  const windows: WalkForwardWindowResult[] = [];
-
-  for (let windowIndex = 0; windowIndex < windowCount; windowIndex += 1) {
-    const plan = buildWalkForwardWindowPlanAtIndex(
-      input.trainBars,
-      input.validationBars,
-      windowIndex,
-      input.oosBarCount,
-    );
-
-    const metrics = await input.runBacktest({
-      bars: plan.outOfSampleBars,
-      strategyId: input.candidate.strategyId,
-      strategyVersion: input.candidate.strategyVersion,
-      paramsJson: input.candidate.paramsJson,
-      windowIndex: plan.windowIndex,
-    });
-
-    await input.repository.insertWalkForwardWindow(input.context, {
-      id: newId(),
-      candidateId: input.candidate.id,
-      windowIndex: plan.windowIndex,
-      inSampleDigest: plan.inSampleDigest,
-      outOfSampleDigest: plan.outOfSampleDigest,
-      metricsJson: serializeMetrics(metrics),
-    });
-
-    windows.push({
-      windowIndex: plan.windowIndex,
-      inSampleDigest: plan.inSampleDigest,
-      outOfSampleDigest: plan.outOfSampleDigest,
-      metrics,
-    });
-  }
-
-  const regimeLabels = collectRegimeLabelsFromMetrics(windows.map((window) => window.metrics));
-
-  await input.repository.updateStrategyCandidateStatus(
-    input.context,
-    input.candidate.id,
-    "walk_forward_validated",
-  );
-
-  return { windows, regimeLabels };
+  throw new WalkForwardValidationError("RESEARCH_DEVELOPMENT_STAGE_REFUSED:SEALED_KERNEL_REQUIRED");
 }
 
 /** Slice metrics from the train-fitted lookback. Short windows score as zero trades. */
