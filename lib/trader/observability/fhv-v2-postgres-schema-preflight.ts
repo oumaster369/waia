@@ -48,6 +48,8 @@ export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 207 as const;
 // noncapital lease attribution. 0226 adds the durable LiveCapitalEnvelopeV2
 // producer tables. Amount columns have no default. None of them changes the
 // required207 read frontier or adds a required FHV table.
+// 0230 adds an EXECUTE-only spot inventory function. It is deferred and must
+// not be applied to production by this admission. It adds no required FHV table.
 const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag: string }[] = [
   { idx: 208, when: 1780000000208, tag: "0208_historical_terminal_receipts_v1" },
   { idx: 209, when: 1780000000209, tag: "0209_ai_twin_epistemic_persistence_v1" },
@@ -71,6 +73,7 @@ const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag:
   { idx: 227, when: 1780000000227, tag: "0227_trader_discovery_loop_postgres_v1" },
   { idx: 228, when: 1780000000228, tag: "0228_trader_discovery_loop_postgres_v1_rls" },
   { idx: 229, when: 1780000000229, tag: "0229_trader_observation_read_only_credential_v1" },
+  { idx: 230, when: 1780000000230, tag: "0230_trader_account_observation_spot_inventory_v1" },
 ];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [

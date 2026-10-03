@@ -7,6 +7,7 @@ import { afterAll, describe, expect, it } from "vitest";
 const directory = mkdtempSync(join(tmpdir(), "waia-account-observation-proof-"));
 const reportPath = join(directory, "report.json");
 const guard = "scripts/postgres-validation/assert-account-observation-test-results.mjs";
+const inventoryRoleGuard = "scripts/postgres-validation/assert-account-observation-inventory-role-results.mjs";
 const required = [
   "account-observation-migration-postgres.test.ts",
   "trader-account-observation-postgres.test.ts",
@@ -23,6 +24,10 @@ function runBody(body: string) {
   return spawnSync(process.execPath, [guard, reportPath], { encoding: "utf8" });
 }
 function run(report: unknown) { return runBody(JSON.stringify(report)); }
+function runInventoryBody(body: string) {
+  writeFileSync(reportPath, body);
+  return spawnSync(process.execPath, [inventoryRoleGuard, reportPath], { encoding: "utf8" });
+}
 afterAll(() => { rmSync(directory, { recursive: true, force: true }); });
 
 describe("mandatory PostgreSQL 17 account observation executed proof", () => {
@@ -76,6 +81,30 @@ describe("mandatory PostgreSQL 17 account observation executed proof", () => {
       const result = run({ testResults });
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("Required account observation proof");
+    }
+  });
+
+  it("requires all eight native inventory role proof cases to execute and pass", () => {
+    const name = "/workspace/tests/integration/account-observation-inventory-role-postgres.test.ts";
+    const assertions = [{ status: "passed" }, { status: "passed" }, { status: "passed" }, { status: "passed" }, { status: "passed" }, { status: "passed" }, { status: "passed" }, { status: "passed" }];
+    const accepted = runInventoryBody(JSON.stringify({ testResults: [{ name, status: "passed", assertionResults: assertions }] }));
+    expect(accepted.status).toBe(0);
+    expect(accepted.stdout).toContain("8 inventory role and policy cases, no skipped tests");
+    for (const report of [
+      { testResults: [{ name, status: "passed", assertionResults: assertions.slice(0, 3) }] },
+      { testResults: [{ name, status: "skipped", assertionResults: assertions }] },
+      { testResults: [{ name: name.replace("integration", "unit"), status: "passed", assertionResults: assertions }] },
+      { testResults: [{ name, status: "passed", assertionResults: [{ status: "passed" }, { status: "pending" }, ...assertions.slice(2)] }] },
+      { testResults: [{ name, status: "passed", assertionResults: assertions }, { name, status: "passed", assertionResults: assertions }] },
+    ]) {
+      const rejected = runInventoryBody(JSON.stringify(report));
+      expect(rejected.status).not.toBe(0);
+      expect(rejected.stderr).toContain("Required inventory role proof");
+    }
+    for (const body of ["", "{", "null", "{}", '{"testResults":[]}']) {
+      const rejected = runInventoryBody(body);
+      expect(rejected.status).not.toBe(0);
+      expect(rejected.stderr).toContain("Required inventory role proof");
     }
   });
 });

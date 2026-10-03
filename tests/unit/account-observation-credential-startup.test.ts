@@ -22,6 +22,7 @@ const required = ["original_session", "supported", "safe_login", "safe_role", "m
 function pool(overrides: Record<string, unknown> = {}) {
   const row: Record<string, unknown> = { login: LOGIN, ...Object.fromEntries(required.map(key => [key, true])),
     can_set: true, no_ciphertext: true, no_destructive: true, reader_no_writes: true, forced_rls: true,
+    inventory_execute_only: true,
     ...overrides };
   const statements: string[] = [];
   const tx = vi.fn(async (chunks: TemplateStringsArray) => {

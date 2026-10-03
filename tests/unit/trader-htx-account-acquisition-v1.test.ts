@@ -308,7 +308,7 @@ async function protectedAcquisitionFixture() {
         login: credential ? "waia_account_observation_credential_login" : "synthetic-reader",
         original_session: true, supported: state.supported, safe_login: true, safe_role: true,
         can_set: true, exclusive_role: true, no_ciphertext: true, no_destructive: true,
-        reader_no_writes: true, forced_rls: true, membership: true, no_direct_acl: true,
+        reader_no_writes: true, forced_rls: true, inventory_execute_only: true, membership: true, no_direct_acl: true,
         no_ownership: true, no_create: true, exact_projection: true, rls: true,
       }];
       if (text.includes("SELECT state.symbols")) return state.current ? [{ symbols: ["BTCUSDT"] }] : [];

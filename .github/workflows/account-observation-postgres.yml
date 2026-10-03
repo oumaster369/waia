@@ -104,3 +104,41 @@ jobs:
             tests/integration/account-observation-credential-postgres.test.ts \
             tests/integration/account-observation-risk-owner-postgres.test.ts
           node scripts/postgres-validation/assert-account-observation-test-results.mjs .tmp/account-observation-postgres-results.json
+
+  inventory-role-postgres17:
+    name: PostgreSQL 17 inventory role provenance and policy guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DEE960_LOCAL_PG17: "1"
+      DEE960_LOCAL_PG17_PORT: "55463"
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: waia_local_admin
+          POSTGRES_PASSWORD: local_validation_only
+          POSTGRES_DB: waia_dee960_local
+        ports:
+          - 55463:5432
+        options: >-
+          --health-cmd "pg_isready -U waia_local_admin -d waia_dee960_local"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Inventory role authority and wrong-tenant policy proof
+        run: |
+          mkdir -p .tmp
+          rm -f .tmp/inventory-role-postgres-results.json
+          pnpm test --run --reporter=default --reporter=json --outputFile=.tmp/inventory-role-postgres-results.json tests/integration/account-observation-inventory-role-postgres.test.ts
+          node scripts/postgres-validation/assert-account-observation-inventory-role-results.mjs .tmp/inventory-role-postgres-results.json

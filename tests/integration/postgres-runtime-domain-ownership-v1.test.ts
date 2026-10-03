@@ -107,9 +107,21 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
   }
   beforeAll(async () => {
     assertRecordedAnalysisTestDatabase(url); client = postgres(url!, { max: 4, debug: (_id, query, params) => trace.push({ query, params: [...params] }) });
-    expect(Number((await client`select count(*)::int n from drizzle.__drizzle_migrations`)[0]!.n)).toBe(230);
-    expect(await client`select created_at::text from drizzle.__drizzle_migrations order by created_at desc limit 2`)
-      .toEqual([{ created_at: "1780000000229" }, { created_at: "1780000000228" }]);
+    const migrationDirectory = "db/migrations_postgres";
+    const journal = JSON.parse(await readFile(path.join(migrationDirectory, "meta/_journal.json"), "utf8")) as {
+      entries: Array<{ idx: number; tag: string; when: number }>;
+    };
+    expect(journal.entries.at(-1)).toMatchObject({
+      idx: 230,
+      tag: "0230_trader_account_observation_spot_inventory_v1",
+      when: 1780000000230,
+    });
+    const expectedMigrationIdentity = await Promise.all(journal.entries.map(async (entry) => ({
+      hash: createHash("sha256").update(await readFile(path.join(migrationDirectory, `${entry.tag}.sql`))).digest("hex"),
+      created_at: String(entry.when),
+    })));
+    expect(await client`select hash, created_at::text from drizzle.__drizzle_migrations order by created_at`)
+      .toEqual(expectedMigrationIdentity);
   });
   beforeEach(async () => { userId = randomUUID(); organizationId = await seedWp13User(url!, userId, "DEE1136 synthetic domain proof");
     directory = await mkdtemp(path.join(tmpdir(), "dee1136-native-")); trace.length = 0; });
