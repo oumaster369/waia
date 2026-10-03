@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { drizzle } from "drizzle-orm/postgres-js";
+import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import { PgTransaction } from "drizzle-orm/pg-core";
 
 import { createHistoricalExecutionModelV1 } from "@/lib/trader/execution/historical-execution-model";
 import { computeStableJsonDigest } from "@/lib/trader/research/digest";
@@ -7,20 +10,31 @@ import {
   sealResearchDevelopmentStageRegistrationV1,
 } from "@/lib/trader/research/research-development-stage-binding-v1";
 import { RESEARCH_EXECUTABLE_ID_V1 } from "@/lib/trader/research/research-experiment-contract-v1";
+import { resolveCurrentResearchExecutableIdentityV1 } from "@/lib/trader/research/research-executable-runtime-identity-v1";
 import * as modeledStageKernel from "@/lib/trader/research/research-modeled-stage-kernel-v1";
-import type { OwnedResearchStageExecutorV1 } from "@/lib/trader/research/research-modeled-stage-kernel-v1";
 import type { ResearchModeledStageSourceV1 } from "@/lib/trader/research/research-modeled-stage-source-v1";
 import { deriveCurrentResearchTrainingPolicyV1 } from "@/lib/trader/research/research-training-policy-v1";
 
 const ATTEMPT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ORG_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-const SOURCE_SHA = "a".repeat(64);
+let SOURCE_SHA = "";
 const PIT_SHA = "b".repeat(64);
 const DATASET_SHA = "c".repeat(64);
 const TRAIN_PARTITION = "d".repeat(64);
 const VALIDATION_PARTITION = "e".repeat(64);
 const WALK_PARTITION = "1".repeat(64);
 const PARAMETERS = Object.freeze({ lookbackBars: 8, buyZscore: "-1.5", sellZscore: "0" });
+type TestTx = Pick<WaiaPostgresDb, "select" | "insert" | "update" | "execute">;
+
+beforeEach(() => {
+  vi.stubEnv("WAIA_RELEASE_SHA", "1234567890abcdef1234567890abcdef12345678");
+  vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "");
+  SOURCE_SHA = resolveCurrentResearchExecutableIdentityV1().sourceSha256;
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 function policy() {
   const current = deriveCurrentResearchTrainingPolicyV1();
@@ -35,6 +49,7 @@ function policy() {
 function spec(overrides: Record<string, unknown> = {}) {
   const resolved = policy();
   return {
+    organizationId: ORG_ID,
     executable: {
       id: RESEARCH_EXECUTABLE_ID_V1,
       sourceSha256: SOURCE_SHA,
@@ -56,6 +71,7 @@ function spec(overrides: Record<string, unknown> = {}) {
       validation: { contentSha256: VALIDATION_PARTITION },
       walkForward: [{ contentSha256: WALK_PARTITION }],
     },
+    replay: { historicalExecutionModelSha256: resolved.historicalExecutionModelSha256 },
     ...overrides,
   };
 }
@@ -74,7 +90,11 @@ function payload(
         parameters: PARAMETERS,
       },
       contentDigest: "2".repeat(64),
-      ledgerScope: { historicalRunId: "run-1", historicalAccountKey: "acct" },
+      ledgerScope: {
+        organizationId: ORG_ID,
+        historicalRunId: "run-1",
+        historicalAccountKey: "acct",
+      },
     },
     experiment: { spec: experimentSpec, specSha256: computeStableJsonDigest(experimentSpec) },
     partition: { contentSha256 },
@@ -84,8 +104,8 @@ function payload(
   } as unknown as ResearchModeledStageSourceV1;
 }
 
-function owned(db: ReturnType<typeof executor>["db"]): OwnedResearchStageExecutorV1 {
-  return db as unknown as OwnedResearchStageExecutorV1;
+function owned(db: ReturnType<typeof executor>["db"]): WaiaPostgresDb {
+  return db;
 }
 
 function stages() {
@@ -105,12 +125,15 @@ function registrationFor(experimentSpec = spec()) {
   });
 }
 
-function descriptor() {
+function descriptor(
+  descriptorPolicy = policy(),
+  model = createHistoricalExecutionModelV1(),
+) {
   return modeledStageKernel.sealOwnedResearchModeledStageDescriptorV1({
     attemptId: ATTEMPT_ID,
     trialIndex: 0,
-    policy: policy(),
-    model: createHistoricalExecutionModelV1(),
+    policy: descriptorPolicy,
+    model,
   });
 }
 
@@ -197,10 +220,15 @@ function executor(rows: readonly Record<string, unknown>[] = []) {
     return [];
   }
 
-  const db = {
-    ...ports,
-    execute: vi.fn(async (query: unknown) => apply(query, committed)),
-    transaction: vi.fn(async (run: (tx: OwnedResearchStageExecutorV1) => Promise<unknown>) => {
+  const db = drizzle.mock() as unknown as WaiaPostgresDb & {
+    select: typeof ports.select;
+    insert: typeof ports.insert;
+    update: typeof ports.update;
+    execute: ReturnType<typeof vi.fn>;
+    transaction: ReturnType<typeof vi.fn>;
+  };
+  const execute = vi.fn(async (query: unknown) => apply(query, committed));
+  const transaction = vi.fn(async (run: (tx: TestTx) => Promise<unknown>) => {
       let release: () => void = () => undefined;
       const gate = new Promise<void>((resolve) => {
         release = resolve;
@@ -212,16 +240,22 @@ function executor(rows: readonly Record<string, unknown>[] = []) {
       const tx = {
         ...ports,
         execute: vi.fn(async (query: unknown) => apply(query, pending)),
-      };
+      } as unknown as TestTx;
       try {
-        const result = await run(tx as unknown as OwnedResearchStageExecutorV1);
+        const result = await run(tx);
         committed.splice(0, committed.length, ...pending);
         return result;
       } finally {
         release();
       }
-    }),
-  };
+    });
+  Object.defineProperties(db, {
+    select: { value: ports.select, configurable: true },
+    insert: { value: ports.insert, configurable: true },
+    update: { value: ports.update, configurable: true },
+    execute: { value: execute, configurable: true },
+    transaction: { value: transaction, configurable: true },
+  });
   return { calls, db };
 }
 
@@ -276,6 +310,9 @@ describe("development modeled stage binding", () => {
         expect(receipt.provenance).toBe("RUNNER_OBSERVED");
         expect(receipt.executableId).toBe(RESEARCH_EXECUTABLE_ID_V1);
         expect(receipt.executableSourceSha256).toBe(SOURCE_SHA);
+        expect(receipt.historicalExecutionModelSha256).toBe(
+          policy().historicalExecutionModelSha256,
+        );
         expect(receipt.observedDecisionCount).toBe(1);
         expect(receipt.observedInvocationCount).toBe(1);
         expect(receipt.parametersSha256).toBe(computeStableJsonDigest(PARAMETERS));
@@ -288,6 +325,376 @@ describe("development modeled stage binding", () => {
     } finally {
       kernel.mockRestore();
     }
+  });
+
+  it("refuses a proposal digest that differs from the trusted runtime before any executor or kernel call", async () => {
+    const forgedSourceSha256 = "f".repeat(64);
+    const wrongRuntimeSpec = spec({
+      executable: { ...spec().executable, sourceSha256: forgedSourceSha256 },
+    });
+    const forgedPolicy = {
+      ...policy(),
+      requestedExecutableSourceSha256: forgedSourceSha256,
+    };
+    const { db, calls } = executor();
+    const kernel = vi
+      .spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1")
+      .mockResolvedValue(runnerResult() as never);
+
+    await expect(
+      runBoundDevelopmentModeledStagesV1({
+        executor: owned(db),
+        descriptor: descriptor(forgedPolicy as never),
+        registration: registrationFor(wrongRuntimeSpec),
+        stages: [
+          {
+            kind: "train",
+            windowIndex: 0,
+            payload: {
+              ...payload(TRAIN_PARTITION),
+              experiment: {
+                spec: wrongRuntimeSpec,
+                specSha256: computeStableJsonDigest(wrongRuntimeSpec),
+              },
+            } as unknown as ResearchModeledStageSourceV1,
+          },
+        ],
+      }),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:EVALUATOR_MISMATCH");
+
+    expect(kernel).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+    expect(db.execute).not.toHaveBeenCalled();
+    expect(db.transaction).not.toHaveBeenCalled();
+    kernel.mockRestore();
+  });
+
+  it("refuses a replay model digest that differs from the descriptor model before any executor or kernel call", async () => {
+    const wrongModelSpec = spec({
+      replay: { historicalExecutionModelSha256: "f".repeat(64) },
+    });
+    const { db, calls } = executor();
+    const kernel = vi.spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1");
+
+    await expect(
+      runBoundDevelopmentModeledStagesV1({
+        executor: owned(db),
+        descriptor: descriptor(),
+        registration: registrationFor(wrongModelSpec),
+        stages: [
+          {
+            kind: "train",
+            windowIndex: 0,
+            payload: {
+              ...payload(TRAIN_PARTITION),
+              experiment: {
+                spec: wrongModelSpec,
+                specSha256: computeStableJsonDigest(wrongModelSpec),
+              },
+            } as unknown as ResearchModeledStageSourceV1,
+          },
+        ],
+      }),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:REPLAY_MODEL_MISMATCH");
+
+    expect(kernel).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+    expect(db.execute).not.toHaveBeenCalled();
+    expect(db.transaction).not.toHaveBeenCalled();
+    kernel.mockRestore();
+  });
+
+  it("refuses a sealed policy whose model digest does not identify the actual descriptor model", async () => {
+    const wrongPolicy = {
+      ...policy(),
+      historicalExecutionModelSha256: "f".repeat(64),
+    };
+    const { db, calls } = executor();
+    const kernel = vi.spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1");
+
+    await expect(
+      runBoundDevelopmentModeledStagesV1({
+        executor: owned(db),
+        descriptor: descriptor(wrongPolicy as never),
+        registration: registrationFor(),
+        stages: [{ kind: "train", windowIndex: 0, payload: payload(TRAIN_PARTITION) }],
+      }),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:REPLAY_MODEL_MISMATCH");
+
+    expect(kernel).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+    expect(db.execute).not.toHaveBeenCalled();
+    expect(db.transaction).not.toHaveBeenCalled();
+    kernel.mockRestore();
+  });
+
+  it("refuses a non-D5 model even when the caller makes its declared digest self-consistent", async () => {
+    const model = { ...createHistoricalExecutionModelV1(), submitLatencyMs: 51 };
+    const modelSha256 = computeStableJsonDigest(model);
+    const alteredPolicy = {
+      ...policy(),
+      historicalExecutionModelSha256: modelSha256,
+    };
+    const declaredSpec = spec({ replay: { historicalExecutionModelSha256: modelSha256 } });
+    const { db, calls } = executor();
+    const kernel = vi.spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1");
+
+    await expect(
+      runBoundDevelopmentModeledStagesV1({
+        executor: owned(db),
+        descriptor: descriptor(alteredPolicy as never, model as never),
+        registration: registrationFor(declaredSpec),
+        stages: [
+          {
+            kind: "train",
+            windowIndex: 0,
+            payload: {
+              ...payload(TRAIN_PARTITION),
+              experiment: {
+                spec: declaredSpec,
+                specSha256: computeStableJsonDigest(declaredSpec),
+              },
+            } as unknown as ResearchModeledStageSourceV1,
+          },
+        ],
+      }),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:REPLAY_MODEL_MISMATCH");
+
+    expect(kernel).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+    expect(db.execute).not.toHaveBeenCalled();
+    expect(db.transaction).not.toHaveBeenCalled();
+    kernel.mockRestore();
+  });
+
+  it("accepts only a root Drizzle database and refuses nested or structural transaction shims", async () => {
+    const root = drizzle.mock() as unknown as WaiaPostgresDb & {
+      execute: ReturnType<typeof vi.fn>;
+      transaction: ReturnType<typeof vi.fn>;
+    };
+    root.execute = vi.fn();
+    root.transaction = vi.fn();
+    await expect(
+      runBoundDevelopmentModeledStagesV1({ executor: root } as never),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_INPUT");
+    expect(root.execute).not.toHaveBeenCalled();
+    expect(root.transaction).not.toHaveBeenCalled();
+
+    const nested = Object.create(PgTransaction.prototype);
+    const fake = { execute: vi.fn(), transaction: vi.fn() };
+    for (const executorValue of [nested, fake]) {
+      await expect(
+        runBoundDevelopmentModeledStagesV1({ executor: executorValue } as never),
+      ).rejects.toThrow("RESEARCH_ROOT_DATABASE_REQUIRED");
+    }
+    expect(fake.execute).not.toHaveBeenCalled();
+    expect(fake.transaction).not.toHaveBeenCalled();
+  });
+
+  it("refuses a proxied executor before Drizzle type checks can invoke proxy traps", async () => {
+    const { db } = executor();
+    let traps = 0;
+    const proxied = new Proxy(db, {
+      get() {
+        traps += 1;
+        throw new Error("EXECUTOR_PROXY_GET_TRAP");
+      },
+      getPrototypeOf() {
+        traps += 1;
+        throw new Error("EXECUTOR_PROXY_PROTOTYPE_TRAP");
+      },
+    });
+
+    await expect(
+      runBoundDevelopmentModeledStagesV1({
+        executor: proxied,
+        descriptor: descriptor(),
+        registration: registrationFor(),
+        stages: [{ kind: "train", windowIndex: 0, payload: payload(TRAIN_PARTITION) }],
+      }),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_INPUT");
+    expect(traps).toBe(0);
+    expect(db.execute).not.toHaveBeenCalled();
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  it("requires Object.prototype records for runner, registration, and stage inputs", async () => {
+    const { db, calls } = executor();
+    const base = {
+      executor: owned(db),
+      descriptor: descriptor(),
+      registration: registrationFor(),
+      stages: stages(),
+    };
+    const runnerWithInheritedPrototype = Object.assign(
+      Object.create({ inherited: true }),
+      base,
+    );
+    await expect(
+      runBoundDevelopmentModeledStagesV1(runnerWithInheritedPrototype as never),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_INPUT");
+
+    const registrationWithInheritedPrototype = Object.assign(
+      Object.create({ inherited: true }),
+      {
+        attemptId: ATTEMPT_ID,
+        trialIndex: 0,
+        specSha256: computeStableJsonDigest(spec()),
+        committedBeforeScoring: true,
+      },
+    );
+    expect(() =>
+      sealResearchDevelopmentStageRegistrationV1(registrationWithInheritedPrototype as never),
+    ).toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:LATE_REGISTRATION");
+
+    const stageWithInheritedPrototype = Object.assign(
+      Object.create({ inherited: true }),
+      stages()[0],
+    );
+    await expect(
+      runBoundDevelopmentModeledStagesV1({
+        ...base,
+        stages: [stageWithInheritedPrototype] as never,
+      }),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_INPUT");
+    expect(calls).toEqual([]);
+    expect(db.execute).not.toHaveBeenCalled();
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  it("authenticates the sealed descriptor before hashing it or touching the database", async () => {
+    const { db, calls } = executor();
+    const kernel = vi.spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1");
+    let descriptorGetterReads = 0;
+    const accessorDescriptor = Object.defineProperty({}, "model", {
+      enumerable: true,
+      get() {
+        descriptorGetterReads += 1;
+        return createHistoricalExecutionModelV1();
+      },
+    });
+    const copiedDescriptor = { ...descriptor() };
+    for (const descriptorValue of [accessorDescriptor, copiedDescriptor]) {
+      await expect(
+        runBoundDevelopmentModeledStagesV1({
+          executor: owned(db),
+          descriptor: descriptorValue as never,
+          registration: registrationFor(),
+          stages: [{ kind: "train", windowIndex: 0, payload: payload(TRAIN_PARTITION) }],
+        }),
+      ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_DESCRIPTOR");
+    }
+    expect(descriptorGetterReads).toBe(0);
+    expect(calls).toEqual([]);
+    expect(db.execute).not.toHaveBeenCalled();
+    expect(db.transaction).not.toHaveBeenCalled();
+    expect(kernel).not.toHaveBeenCalled();
+    kernel.mockRestore();
+  });
+
+  it("requires spec, source, and ledger organization identities to agree across stages", async () => {
+    const { db, calls } = executor();
+    const kernel = vi.spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1");
+    const wrongOrg = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const wrongOrgSpec = spec({ organizationId: wrongOrg });
+    const wrongSpecSource = {
+      ...payload(TRAIN_PARTITION),
+      experiment: {
+        spec: wrongOrgSpec,
+        specSha256: computeStableJsonDigest(wrongOrgSpec),
+      },
+    } as unknown as ResearchModeledStageSourceV1;
+    await expect(
+      runBoundDevelopmentModeledStagesV1({
+        executor: owned(db),
+        descriptor: descriptor(),
+        registration: registrationFor(wrongOrgSpec),
+        stages: [{ kind: "train", windowIndex: 0, payload: wrongSpecSource }],
+      }),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_PAYLOAD_IDENTITY");
+
+    const wrongLedgerSource = payload(TRAIN_PARTITION);
+    (wrongLedgerSource.scope.ledgerScope as Record<string, unknown>).organizationId = wrongOrg;
+    await expect(
+      runBoundDevelopmentModeledStagesV1({
+        executor: owned(db),
+        descriptor: descriptor(),
+        registration: registrationFor(),
+        stages: [{ kind: "train", windowIndex: 0, payload: wrongLedgerSource }],
+      }),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_PAYLOAD_IDENTITY");
+
+    const otherSpec = spec({ organizationId: wrongOrg });
+    const otherOrgSource = {
+      ...payload(WALK_PARTITION),
+      scope: {
+        identity: {
+          attemptId: ATTEMPT_ID,
+          trialIndex: 0,
+          organizationId: wrongOrg,
+          parameters: PARAMETERS,
+        },
+        contentDigest: "2".repeat(64),
+        ledgerScope: {
+          organizationId: wrongOrg,
+          historicalRunId: "run-other",
+          historicalAccountKey: "acct-other",
+        },
+      },
+      experiment: { spec: otherSpec, specSha256: computeStableJsonDigest(otherSpec) },
+    } as unknown as ResearchModeledStageSourceV1;
+    await expect(
+      runBoundDevelopmentModeledStagesV1({
+        executor: owned(db),
+        descriptor: descriptor(),
+        registration: registrationFor(),
+        stages: [
+          { kind: "train", windowIndex: 0, payload: payload(TRAIN_PARTITION) },
+          { kind: "walk-forward", windowIndex: 0, payload: otherOrgSource },
+        ],
+      }),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_PAYLOAD_IDENTITY");
+    expect(kernel).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+    expect(db.execute).not.toHaveBeenCalled();
+    expect(db.transaction).not.toHaveBeenCalled();
+    kernel.mockRestore();
+  });
+
+  it("rejects special, symbol, and non-enumerable payload keys during snapshotting", async () => {
+    const { db, calls } = executor();
+    const kernel = vi.spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1");
+    for (const key of ["__proto__", "constructor", "prototype"]) {
+      const hostile = payload(TRAIN_PARTITION);
+      Object.defineProperty(hostile, key, { value: "forbidden", enumerable: true });
+      await expect(
+        runBoundDevelopmentModeledStagesV1({
+          executor: owned(db),
+          descriptor: descriptor(),
+          registration: registrationFor(),
+          stages: [{ kind: "train", windowIndex: 0, payload: hostile }],
+        }),
+      ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_PAYLOAD");
+    }
+    const hidden = payload(TRAIN_PARTITION);
+    Object.defineProperty(hidden, "hidden", { value: true, enumerable: false });
+    const symbolKey = payload(TRAIN_PARTITION);
+    Object.defineProperty(symbolKey, Symbol("hidden"), { value: true, enumerable: true });
+    for (const hostile of [hidden, symbolKey]) {
+      await expect(
+        runBoundDevelopmentModeledStagesV1({
+          executor: owned(db),
+          descriptor: descriptor(),
+          registration: registrationFor(),
+          stages: [{ kind: "train", windowIndex: 0, payload: hostile }],
+        }),
+      ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_PAYLOAD");
+    }
+    expect(kernel).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+    expect(db.execute).not.toHaveBeenCalled();
+    expect(db.transaction).not.toHaveBeenCalled();
+    kernel.mockRestore();
   });
 
   it("refuses a second validation selection from the receipt the runner persisted", async () => {
@@ -319,6 +726,48 @@ describe("development modeled stage binding", () => {
     ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:REPEATED_VALIDATION_SELECTION");
     expect(kernelAgain).not.toHaveBeenCalled();
     expect(JSON.stringify(second.calls)).not.toContain("insert into");
+    kernelAgain.mockRestore();
+  });
+
+  it("rejects a stored validation receipt bound to a different replay model", async () => {
+    const kernel = vi
+      .spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1")
+      .mockResolvedValue(runnerResult() as never);
+    let validationReceipt: Record<string, unknown>;
+    try {
+      const result = await runBoundDevelopmentModeledStagesV1({
+        executor: owned(executor().db),
+        descriptor: descriptor(),
+        registration: registrationFor(),
+        stages: [
+          { kind: "validation", windowIndex: 0, payload: payload(VALIDATION_PARTITION) },
+        ],
+      });
+      validationReceipt = result[0] as unknown as Record<string, unknown>;
+    } finally {
+      kernel.mockRestore();
+    }
+
+    const { contentDigestHex: _oldDigest, ...receiptBody } = validationReceipt!;
+    const foreignBody = {
+      ...receiptBody,
+      historicalExecutionModelSha256: "f".repeat(64),
+    };
+    const foreignReceipt = JSON.stringify({
+      ...foreignBody,
+      contentDigestHex: computeStableJsonDigest(foreignBody),
+    });
+    const stored = executor([{ receipt_canonical_json: foreignReceipt }]);
+    const kernelAgain = vi.spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1");
+    await expect(
+      runBoundDevelopmentModeledStagesV1({
+        executor: owned(stored.db),
+        descriptor: descriptor(),
+        registration: registrationFor(),
+        stages: [{ kind: "train", windowIndex: 0, payload: payload(TRAIN_PARTITION) }],
+      }),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:REPLAY_MODEL_MISMATCH");
+    expect(kernelAgain).not.toHaveBeenCalled();
     kernelAgain.mockRestore();
   });
 
@@ -380,7 +829,11 @@ describe("development modeled stage binding", () => {
                     parameters: { ...PARAMETERS, lookbackBars: 5 },
                   },
                   contentDigest: "2".repeat(64),
-                  ledgerScope: { historicalRunId: "run-1", historicalAccountKey: "acct" },
+                  ledgerScope: {
+                    organizationId: ORG_ID,
+                    historicalRunId: "run-1",
+                    historicalAccountKey: "acct",
+                  },
                 },
               }),
             },
@@ -465,7 +918,7 @@ describe("development modeled stage binding", () => {
     expect(db.execute).not.toHaveBeenCalled();
   });
 
-  it("refuses an unsealed descriptor inside the kernel before a receipt write", async () => {
+  it("refuses an unsealed descriptor before any receipt transaction", async () => {
     const resolved = policy();
     const { db, calls } = executor();
     await expect(
@@ -480,11 +933,12 @@ describe("development modeled stage binding", () => {
         registration: registrationFor(),
         stages: [{ kind: "train", windowIndex: 0, payload: payload(TRAIN_PARTITION) }],
       }),
-    ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_DESCRIPTOR");
     const persisted = JSON.stringify(calls);
-    expect(persisted).toContain("pg_advisory_xact_lock");
-    expect(persisted).toContain("select receipt_canonical_json");
+    expect(persisted).not.toContain("pg_advisory_xact_lock");
+    expect(persisted).not.toContain("select receipt_canonical_json");
     expect(persisted).not.toContain("insert into");
+    expect(db.transaction).not.toHaveBeenCalled();
   });
 
   it("refuses a registration sealed with a score, bars, or a spec that was not committed", () => {
@@ -688,7 +1142,7 @@ describe("development modeled stage binding", () => {
           registration: registrationFor(),
           stages: [{ kind: "train", windowIndex: 0, payload: payload(TRAIN_PARTITION) }],
         }),
-      ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:SCIENTIFIC_QUALIFICATION_UNAVAILABLE");
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_DESCRIPTOR");
     }
     expect(reads).toBe(0);
     expect(calls).toEqual([]);

@@ -333,6 +333,14 @@ function isSealedDescriptor(value: unknown): value is ResearchModeledStageDescri
   return isPlainRecord(value) && mintedStageDescriptors.has(value) && descriptorShapeIsExact(value);
 }
 
+/** Runtime-only identity check for owners that must authenticate before reading
+ * descriptor fields or deriving an execution model digest. */
+export function assertSealedResearchModeledStageDescriptorV1(
+  value: unknown,
+): asserts value is ResearchModeledStageDescriptorV1 {
+  if (!isSealedDescriptor(value)) refuse("STAGE_INPUT");
+}
+
 /** Local stage position and the sealed absolute source bar index stay distinct.
  * A nonzero training start keeps `sourceBarIndex === firstSourceBarIndex + index`. */
 export function assertResearchModeledStageCycleAlignmentV1(

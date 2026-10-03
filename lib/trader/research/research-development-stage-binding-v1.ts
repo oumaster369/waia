@@ -4,8 +4,12 @@ enforceServerOnly();
 import { randomUUID } from "node:crypto";
 import { types as nodeUtilTypes } from "node:util";
 import { sql } from "drizzle-orm";
+import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
+import { assertModelMatchesD5 } from "@/lib/trader/execution/historical-execution-model";
 import { canonicalJsonString, computeStableJsonDigest } from "@/lib/trader/research/digest";
 import { RESEARCH_EXECUTABLE_ID_V1 } from "@/lib/trader/research/research-experiment-contract-v1";
+import { resolveCurrentResearchExecutableIdentityV1 } from "@/lib/trader/research/research-executable-runtime-identity-v1";
+import { assertResearchRootPostgresDbV1 } from "@/lib/trader/research/research-root-postgres-db-v1";
 import * as modeledStageKernel from "@/lib/trader/research/research-modeled-stage-kernel-v1";
 import type {
   OwnedResearchStageExecutorV1,
@@ -26,6 +30,7 @@ const REGISTRATION_KEYS = new Set([
   "specSha256",
   "committedBeforeScoring",
 ]);
+const FORBIDDEN_SNAPSHOT_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 const STAGE_KEYS = new Set(["kind", "windowIndex", "payload"]);
 const FORGED_CALLBACK_KEYS = new Set([
   "callback",
@@ -54,7 +59,8 @@ const VALIDATION_RESERVATION_V1 =
 
 export type DevelopmentStageKindV1 = "train" | "validation" | "walk-forward";
 
-/** Minted only before scoring. A copied object is not registration. */
+/** In-process registration assertion. A copied object is rejected; this token
+ * alone does not prove durable preregistration or source disclosure order. */
 export type ResearchDevelopmentStageRegistrationV1 = Readonly<{
   [REGISTRATION_BRAND]: true;
   attemptId: string;
@@ -73,6 +79,7 @@ export type ResearchDevelopmentStageReceiptV1 = Readonly<{
   experimentSpecSha256: string;
   executableId: typeof RESEARCH_EXECUTABLE_ID_V1;
   executableSourceSha256: string;
+  historicalExecutionModelSha256: string;
   featureSemantics: typeof FEATURE_SEMANTICS;
   replaySemantics: typeof REPLAY_SEMANTICS;
   parametersSha256: string;
@@ -93,6 +100,7 @@ export type ResearchDevelopmentStageReceiptV1 = Readonly<{
 }>;
 
 type ObservedStage = Readonly<{
+  organizationId: string;
   kind: DevelopmentStageKindV1;
   windowIndex: number;
   payload: ResearchModeledStageSourceV1;
@@ -103,6 +111,7 @@ type ObservedStage = Readonly<{
   partitionContentSha256: string;
   scopeContentDigest: string;
   executableSourceSha256: string;
+  historicalExecutionModelSha256: string;
 }>;
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -152,10 +161,24 @@ function snapshotPlainData(value: unknown, depth = 0, seen?: WeakSet<object>): u
     ) {
       refuse("STAGE_PAYLOAD");
     }
+    const names = Object.getOwnPropertyNames(value);
+    const indexes = new Set<string>();
+    for (const name of names) {
+      if (name === "length") continue;
+      if (FORBIDDEN_SNAPSHOT_KEYS.has(name) || !/^(?:0|[1-9]\d*)$/.test(name)) {
+        refuse("STAGE_PAYLOAD");
+      }
+      if (Number(name) >= lengthRead.value) refuse("STAGE_PAYLOAD");
+      indexes.add(name);
+    }
+    if (indexes.size !== lengthRead.value || Object.getOwnPropertySymbols(value).length !== 0) {
+      refuse("STAGE_PAYLOAD");
+    }
     const copy: unknown[] = [];
     for (let index = 0; index < lengthRead.value; index += 1) {
       const entry = readOwnProperty(value, String(index));
-      if (!entry.present || entry.accessor) refuse("STAGE_PAYLOAD");
+      const property = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!entry.present || entry.accessor || !property?.enumerable) refuse("STAGE_PAYLOAD");
       copy.push(snapshotPlainData(entry.value, depth + 1, visiting));
     }
     visiting.delete(value);
@@ -167,7 +190,9 @@ function snapshotPlainData(value: unknown, depth = 0, seen?: WeakSet<object>): u
   for (const name of Object.getOwnPropertyNames(value)) {
     const property = Object.getOwnPropertyDescriptor(value, name);
     if (
+      FORBIDDEN_SNAPSHOT_KEYS.has(name) ||
       !property ||
+      !property.enumerable ||
       property.get !== undefined ||
       property.set !== undefined ||
       !("value" in property)
@@ -181,9 +206,13 @@ function snapshotPlainData(value: unknown, depth = 0, seen?: WeakSet<object>): u
 }
 
 function refuseExtraKeys(record: object, allowed: ReadonlySet<string>): void {
-  for (const key of Object.keys(record)) {
+  if (Object.getPrototypeOf(record) !== Object.prototype) refuse("UNTRUSTED_STAGE_INPUT");
+  if (Object.getOwnPropertySymbols(record).length !== 0) refuse("UNTRUSTED_STAGE_INPUT");
+  for (const key of Object.getOwnPropertyNames(record)) {
     if (FORGED_CALLBACK_KEYS.has(key)) refuse("FORGED_CALLBACK");
     if (!allowed.has(key)) refuse("UNTRUSTED_STAGE_INPUT");
+    const property = Object.getOwnPropertyDescriptor(record, key);
+    if (!property?.enumerable) refuse("UNTRUSTED_STAGE_INPUT");
   }
 }
 
@@ -208,7 +237,13 @@ export function sealResearchDevelopmentStageRegistrationV1(
     committedBeforeScoring: true;
   }>,
 ): ResearchDevelopmentStageRegistrationV1 {
-  if (!isPlainRecord(input) || isProxyLike(input)) refuse("LATE_REGISTRATION");
+  if (
+    isProxyLike(input) ||
+    !isPlainRecord(input) ||
+    Object.getPrototypeOf(input) !== Object.prototype
+  ) {
+    refuse("LATE_REGISTRATION");
+  }
   refuseExtraKeys(input, REGISTRATION_KEYS);
   const attemptId = requireData(input, "attemptId");
   const trialIndex = requireData(input, "trialIndex");
@@ -272,7 +307,12 @@ function readRecord(parent: object, key: string, reason: string): Record<string,
   return read.value;
 }
 
-function observeStage(stage: object, descriptor: ResearchModeledStageDescriptorV1): ObservedStage {
+function observeStage(
+  stage: object,
+  descriptor: ResearchModeledStageDescriptorV1,
+  runtimeIdentity: ReturnType<typeof resolveCurrentResearchExecutableIdentityV1>,
+  actualModelSha256: string,
+): ObservedStage {
   refuseExtraKeys(stage, STAGE_KEYS);
   const kind = requireData(stage, "kind");
   const windowIndex = requireData(stage, "windowIndex");
@@ -289,7 +329,13 @@ function observeStage(stage: object, descriptor: ResearchModeledStageDescriptorV
   }
   if ((kind === "train" || kind === "validation") && windowIndex !== 0)
     refuse("PARTITION_MISMATCH");
-  if (!isPlainRecord(payloadValue) || isProxyLike(payloadValue)) refuse("STAGE_PAYLOAD");
+  if (
+    isProxyLike(payloadValue) ||
+    !isPlainRecord(payloadValue) ||
+    Object.getPrototypeOf(payloadValue) !== Object.prototype
+  ) {
+    refuse("STAGE_PAYLOAD");
+  }
   const payload = snapshotPlainData(payloadValue) as ResearchModeledStageSourceV1;
   const scope = readRecord(payload, "scope", "STAGE_PAYLOAD_IDENTITY");
   const identity = readRecord(scope, "identity", "STAGE_PAYLOAD_IDENTITY");
@@ -305,7 +351,31 @@ function observeStage(stage: object, descriptor: ResearchModeledStageDescriptorV
   const experiment = readRecord(payload, "experiment", "STAGE_PAYLOAD");
   const spec = snapshotPlainData(requireData(experiment, "spec"));
   if (!isPlainRecord(spec)) refuse("STAGE_PAYLOAD");
+  const specOrganizationId = requireData(spec, "organizationId");
+  const ledgerScope = readRecord(scope, "ledgerScope", "STAGE_PAYLOAD_IDENTITY");
+  const ledgerOrganizationId = requireData(ledgerScope, "organizationId");
+  if (
+    typeof specOrganizationId !== "string" ||
+    !UUID.test(specOrganizationId) ||
+    specOrganizationId.toLowerCase() !== organizationId.toLowerCase() ||
+    typeof ledgerOrganizationId !== "string" ||
+    !UUID.test(ledgerOrganizationId) ||
+    ledgerOrganizationId.toLowerCase() !== organizationId.toLowerCase()
+  ) {
+    refuse("STAGE_PAYLOAD_IDENTITY");
+  }
   const specSha256 = computeStableJsonDigest(spec);
+  const replay = readRecord(spec, "replay", "REPLAY_MODEL_MISMATCH");
+  const declaredModelSha256 = requireSha256(
+    requireData(replay, "historicalExecutionModelSha256"),
+    "REPLAY_MODEL_MISMATCH",
+  );
+  if (
+    declaredModelSha256 !== descriptor.policy.historicalExecutionModelSha256 ||
+    declaredModelSha256 !== actualModelSha256
+  ) {
+    refuse("REPLAY_MODEL_MISMATCH");
+  }
   const executable = readRecord(spec, "executable", "EVALUATOR_MISMATCH");
   const executableId = requireData(executable, "id");
   const featureSemantics = requireData(executable, "featureSemantics");
@@ -315,9 +385,10 @@ function observeStage(stage: object, descriptor: ResearchModeledStageDescriptorV
     "EVALUATOR_MISMATCH",
   );
   if (
-    executableId !== RESEARCH_EXECUTABLE_ID_V1 ||
-    featureSemantics !== FEATURE_SEMANTICS ||
-    replaySemantics !== REPLAY_SEMANTICS ||
+    executableId !== runtimeIdentity.executableId ||
+    featureSemantics !== runtimeIdentity.featureSemantics ||
+    replaySemantics !== runtimeIdentity.replaySemantics ||
+    executableSourceSha256 !== runtimeIdentity.sourceSha256 ||
     executableSourceSha256 !== descriptor.policy.requestedExecutableSourceSha256
   ) {
     refuse("EVALUATOR_MISMATCH");
@@ -381,6 +452,7 @@ function observeStage(stage: object, descriptor: ResearchModeledStageDescriptorV
     "STAGE_PAYLOAD_IDENTITY",
   );
   return Object.freeze({
+    organizationId: organizationId.toLowerCase(),
     kind,
     windowIndex,
     payload,
@@ -391,6 +463,7 @@ function observeStage(stage: object, descriptor: ResearchModeledStageDescriptorV
     partitionContentSha256,
     scopeContentDigest,
     executableSourceSha256,
+    historicalExecutionModelSha256: actualModelSha256,
   });
 }
 
@@ -401,6 +474,7 @@ function assertSameIdentities(stages: readonly ObservedStage[]): void {
   let previous: DevelopmentStageKindV1 | null = null;
   let previousWindow = -1;
   for (const stage of stages) {
+    if (stage.organizationId !== first.organizationId) refuse("STAGE_PAYLOAD_IDENTITY");
     const key = stage.kind === "walk-forward" ? `walk-forward:${stage.windowIndex}` : stage.kind;
     if (seen.has(key)) {
       refuse(stage.kind === "validation" ? "REPEATED_VALIDATION_SELECTION" : "REPEATED_STAGE");
@@ -457,6 +531,7 @@ function receiptBody(
     experimentSpecSha256: input.specSha256,
     executableId: RESEARCH_EXECUTABLE_ID_V1,
     executableSourceSha256: input.executableSourceSha256,
+    historicalExecutionModelSha256: input.historicalExecutionModelSha256,
     featureSemantics: FEATURE_SEMANTICS,
     replaySemantics: REPLAY_SEMANTICS,
     parametersSha256: input.parametersSha256,
@@ -506,7 +581,9 @@ function parseStoredValidation(raw: unknown): ResearchDevelopmentStageReceiptV1 
     body.capitalEligible !== false ||
     body.scientificQualified !== false ||
     body.provenance !== "RUNNER_OBSERVED" ||
-    body.executableId !== RESEARCH_EXECUTABLE_ID_V1
+    body.executableId !== RESEARCH_EXECUTABLE_ID_V1 ||
+    typeof body.historicalExecutionModelSha256 !== "string" ||
+    !SHA256.test(body.historicalExecutionModelSha256)
   ) {
     refuse("STORED_RECEIPT_INVALID");
   }
@@ -614,6 +691,9 @@ function assertStoredValidation(
   if (receipt.executableSourceSha256 !== observed.executableSourceSha256) {
     refuse("EVALUATOR_MISMATCH");
   }
+  if (receipt.historicalExecutionModelSha256 !== observed.historicalExecutionModelSha256) {
+    refuse("REPLAY_MODEL_MISMATCH");
+  }
   if (receipt.experimentSpecSha256 !== observed.specSha256) refuse("SPEC_MISMATCH");
   return null;
 }
@@ -694,11 +774,14 @@ function snapshotStageList(value: unknown): readonly object[] {
   const copy: object[] = [];
   for (let index = 0; index < length; index += 1) {
     const entry = readOwnProperty(value, String(index));
+    const property = Object.getOwnPropertyDescriptor(value, String(index));
     if (
       !entry.present ||
       entry.accessor ||
+      !property?.enumerable ||
+      isProxyLike(entry.value) ||
       !isPlainRecord(entry.value) ||
-      isProxyLike(entry.value)
+      Object.getPrototypeOf(entry.value) !== Object.prototype
     ) {
       refuse("STAGE_INPUT");
     }
@@ -721,21 +804,6 @@ function refuseUnlessFalseData(
   ) {
     refuse("SCIENTIFIC_QUALIFICATION_UNAVAILABLE");
   }
-}
-
-function requireTransaction(
-  executor: object,
-): <T>(run: (tx: OwnedResearchStageExecutorV1) => Promise<T>) => Promise<T> {
-  const transaction = readOwnProperty(executor, "transaction");
-  if (!transaction.present || transaction.accessor || typeof transaction.value !== "function") {
-    refuse("STAGE_INPUT");
-  }
-  const runTransaction = transaction.value as (
-    this: object,
-    run: (tx: OwnedResearchStageExecutorV1) => Promise<unknown>,
-  ) => Promise<unknown>;
-  return async (run) =>
-    (await runTransaction.call(executor, run)) as Awaited<ReturnType<typeof run>>;
 }
 
 async function lockValidationIdentity(
@@ -768,8 +836,9 @@ async function readValidationRows(
 
 /**
  * DEVELOPMENT train, validation, and walk-forward may run only through the sealed
- * modeled-stage kernel. The caller supplies an owned executor, a frozen descriptor,
- * a registration sealed before scoring, and already verified stage payloads.
+ * modeled-stage kernel. The caller supplies a root database, a frozen descriptor,
+ * an in-process registration assertion, and stage payloads. The production owner
+ * must still establish durable preregistration and source provenance before use.
  * Callbacks, mismatched params, evaluator, cost, or universe, late registration,
  * and a second validation selection refuse. Receipts record runner-observed
  * identities. `scientificQualified` and `capitalEligible` stay false. Blind
@@ -777,7 +846,7 @@ async function readValidationRows(
  */
 export async function runBoundDevelopmentModeledStagesV1(
   input: Readonly<{
-    executor: OwnedResearchStageExecutorV1;
+    executor: WaiaPostgresDb;
     descriptor: ResearchModeledStageDescriptorV1;
     registration: ResearchDevelopmentStageRegistrationV1;
     stages: readonly Readonly<{
@@ -787,10 +856,26 @@ export async function runBoundDevelopmentModeledStagesV1(
     }>[];
   }>,
 ): Promise<readonly ResearchDevelopmentStageReceiptV1[]> {
-  if (!isPlainRecord(input) || isProxyLike(input)) refuse("STAGE_INPUT");
+  if (
+    isProxyLike(input) ||
+    !isPlainRecord(input) ||
+    Object.getPrototypeOf(input) !== Object.prototype
+  ) {
+    refuse("STAGE_INPUT");
+  }
+  const suppliedExecutor = readOwnProperty(input, "executor");
+  if (!suppliedExecutor.present || suppliedExecutor.accessor) refuse("STAGE_INPUT");
+  const db = suppliedExecutor.value;
+  if (isProxyLike(db)) refuse("STAGE_INPUT");
+  assertResearchRootPostgresDbV1(db);
   refuseExtraKeys(input, CALL_KEYS);
   const executor = requireData(input, "executor");
   const descriptor = requireData(input, "descriptor");
+  try {
+    modeledStageKernel.assertSealedResearchModeledStageDescriptorV1(descriptor);
+  } catch {
+    refuse("STAGE_DESCRIPTOR");
+  }
   const registrationRead = readOwnProperty(input, "registration");
   if (!registrationRead.present || registrationRead.accessor) refuse("LATE_REGISTRATION");
   const registration = registrationRead.value;
@@ -811,9 +896,27 @@ export async function runBoundDevelopmentModeledStagesV1(
   ) {
     refuse("LATE_REGISTRATION");
   }
+  const runtimeIdentity = resolveCurrentResearchExecutableIdentityV1();
+  const actualModelSha256 = computeStableJsonDigest(requireData(descriptor, "model"));
+  if (
+    actualModelSha256 !== descriptor.policy.historicalExecutionModelSha256 ||
+    !SHA256.test(actualModelSha256)
+  ) {
+    refuse("REPLAY_MODEL_MISMATCH");
+  }
+  try {
+    assertModelMatchesD5(requireData(descriptor, "model") as Parameters<typeof assertModelMatchesD5>[0]);
+  } catch {
+    refuse("REPLAY_MODEL_MISMATCH");
+  }
   const stageList = snapshotStageList(stagesValue);
   const stages = stageList.map((stage) =>
-    observeStage(stage, descriptor as ResearchModeledStageDescriptorV1),
+    observeStage(
+      stage,
+      descriptor as ResearchModeledStageDescriptorV1,
+      runtimeIdentity,
+      actualModelSha256,
+    ),
   );
   assertSameIdentities(stages);
   if (stages.some((stage) => stage.specSha256 !== registration.specSha256))
@@ -825,12 +928,7 @@ export async function runBoundDevelopmentModeledStagesV1(
     if (typeof value !== "string" || !UUID.test(value)) refuse("STAGE_PAYLOAD_IDENTITY");
     return value;
   })();
-  if (!isPlainRecord(executor) || isProxyLike(executor)) refuse("STAGE_INPUT");
-  const execute = readOwnProperty(executor, "execute");
-  if (!execute.present || execute.accessor || typeof execute.value !== "function") {
-    refuse("STAGE_INPUT");
-  }
-  const runTransaction = requireTransaction(executor);
+  if (executor !== db) refuse("STAGE_INPUT");
   const includesValidation = stages.some((stage) => stage.kind === "validation");
   const reservationToken = includesValidation ? randomUUID() : null;
   const identity = { organizationId, attemptId, trialIndex };
@@ -838,7 +936,7 @@ export async function runBoundDevelopmentModeledStagesV1(
   // schema. This claim commits under the advisory lock before any stage score.
   if (reservationToken !== null) {
     const claim = reservationRecord(identity, reservationToken);
-    await runTransaction(async (tx) => {
+    await db.transaction(async (tx) => {
       await lockValidationIdentity(tx, organizationId, attemptId);
       const stored = await readValidationRows(tx, organizationId, attemptId);
       assertStoredValidation(stored, stages, attemptId, trialIndex, null);
@@ -853,7 +951,7 @@ export async function runBoundDevelopmentModeledStagesV1(
       `);
     });
   }
-  return runTransaction(async (tx) => {
+  return db.transaction(async (tx) => {
     await lockValidationIdentity(tx, organizationId, attemptId);
     const stored = await readValidationRows(tx, organizationId, attemptId);
     const reservationDigest = assertStoredValidation(
