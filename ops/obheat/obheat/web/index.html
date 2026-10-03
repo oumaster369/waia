@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OB-HEATMAP — стакан BTC и ETH</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0b0e14; color: #d7dde8; font: 14px/1.4 system-ui, sans-serif; }
+  body { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; height: 100vh; }
+  header, footer { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 8px 12px; }
+  header { border-bottom: 1px solid #222834; }
+  footer { border-top: 1px solid #222834; color: #9aa3b5; font-size: 12px; }
+  h1 { font-size: 16px; margin: 0 8px 0 0; font-weight: 650; letter-spacing: 0.02em; }
+  .group { display: flex; gap: 4px; align-items: center; }
+  button, label.n { background: #171c27; color: #d7dde8; border: 1px solid #2c3444; border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+  button.on { background: #243044; border-color: #6d8cff; color: #fff; }
+  button:focus-visible, input:focus-visible { outline: 2px solid #6d8cff; }
+  label.n input { width: 3.2em; margin-left: 6px; background: #0b0e14; color: inherit; border: 1px solid #2c3444; border-radius: 4px; padding: 2px 4px; }
+  a { color: #9eb6ff; }
+  .macro { height: 58px; border-bottom: 1px solid #222834; overflow: hidden; background: #0e121a; }
+  #stage { position: relative; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 320px; }
+  #plot { position: relative; min-width: 0; min-height: 0; }
+  aside { border-left: 1px solid #222834; background: #0e121a; padding: 10px; overflow: auto; }
+  aside h2 { font-size: 13px; margin: 0 0 8px; color: #fff; }
+  .card { border: 1px solid #222834; border-radius: 8px; padding: 8px; margin-bottom: 8px; background: #111722; }
+  .small { color: #9aa3b5; font-size: 12px; }
+  .row { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); padding: 2px 0; }
+  select, input[type=range] { background: #171c27; color: #d7dde8; border: 1px solid #2c3444; border-radius: 6px; padding: 4px 6px; }
+  canvas { width: 100%; height: 100%; display: block; }
+  #empty { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; color: #9aa3b5; }
+  #live { border-radius: 999px; padding: 2px 8px; border: 1px solid #2c3444; }
+  #live.on { color: #b6f5c8; border-color: #1f6b3a; }
+  #live.off { color: #ffb4b4; border-color: #6b2a2a; }
+  #hover { position: absolute; display: none; pointer-events: none; background: #111722; border: 1px solid #2c3444; border-radius: 6px; padding: 4px 6px; font-size: 12px; z-index: 2; }
+  .legend i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; }
+  .bid { background: #44e27f; } .ask { background: #f25c8a; } .mid { background: #f2d48a; } .liq { background: #d38bff; }
+  details.howto { margin: 8px 12px 0; background: #111722; border: 1px solid #2c3444; border-radius: 8px; }
+  details.howto summary { cursor: pointer; padding: 8px 12px; font-weight: 650; }
+  details.howto summary:focus-visible { outline: 2px solid #6d8cff; }
+  .howto { padding: 0 12px 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 16px; }
+  .howto i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; }
+  .howto h3 { margin: 0 0 4px; font-size: 13px; color: #fff; }
+  .howto p, .howto li { margin: 0 0 6px; color: #c5cedd; font-size: 13px; }
+  .howto ol { margin: 0; padding-left: 18px; }
+  #meaning .conclusion { margin: 0 0 8px; color: #fff; font-size: 15px; line-height: 1.35; }
+  .mark-add { color: #7dffa8; } .mark-pull { color: #ff9eb4; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OB-HEATMAP</h1>
+  <div class="group" id="symbols"></div>
+  <div class="group" id="venues"></div>
+  <div class="group" id="windows"></div>
+  <div class="group" id="layers"></div>
+  <select id="palette"><option value="coinglass">желто-зелено-фиолетовая</option><option value="side">bid/ask</option></select>
+  <label class="n">Яркие ≥ <input id="bright" type="number" min="1" max="120" value="1"> с</label>
+  <label class="n">Порог $ <input id="threshold" type="number" min="0" value="0"></label>
+  <a href="https://www.coinglass.com/pro/futures/LiquidationHeatMap" target="_blank" rel="noopener">Карта ликвидаций CoinGlass, BTC</a>
+  <span id="live">нет потока</span>
+  <span id="status"></span>
+</header>
+<details class="howto">
+  <summary>Как читать</summary>
+  <div class="howto">
+    <div>
+      <h3>Цвета</h3>
+      <p>Время идёт вправо, цена — вверх. Яркость — сколько долларов стоит в заявках: чем ярче, тем плотнее.</p>
+      <p><i class="legend bid"></i>Зелёный и синий — заявки на покупку (bid), обычно под ценой.</p>
+      <p><i class="legend ask"></i>Розовый и фиолетовый — заявки на продажу (ask), обычно над ценой.</p>
+      <p>Жёлтый — самые плотные уровни. Серый столбец — в эту секунду книга была с дырой. Это не ноль, данных просто нет.</p>
+      <p><i class="legend liq"></i>Фиолетовый ромб — реальная ликвидация с биржи. Пунктир — модельная оценка, не факт.</p>
+    </div>
+    <div>
+      <h3>Что такое стена</h3>
+      <p>Стена — крупная пачка заявок на одной цене. Снизу это поддержка: кто-то готов купить много. Сверху сопротивление: кто-то готов продать много.</p>
+      <p>Держится: яркая полоса остаётся на той же цене, пока рынок к ней подходит, и объём не тает. На графике это плюс <span class="mark-add">+</span>, если стену добавили.</p>
+      <p>Снимают: полоса бледнеет или исчезает, когда цена подходит — заявку убрали. На графике это минус <span class="mark-pull">−</span>. Такая опора слабая: её уже нет, когда до неё дошли.</p>
+    </div>
+    <div>
+      <h3>Ликвидации и магнит</h3>
+      <p>Кластер ликвидаций — оценка, не отчёт биржи. Недавний объём раскладывается по плечам 5, 10, 25, 50 и 100. Лонги оказываются ниже цены, шорты — выше.</p>
+      <p>Цена часто идёт туда, где есть что исполнить. Плотная стена — это встречный объём. Скопление ликвидаций — топливо: когда цена доходит до плеч, закрытия сами толкают её дальше. Поэтому ближайший крупный кластер называют магнитом.</p>
+    </div>
+    <div>
+      <h3>Три примера</h3>
+      <ol>
+        <li>Под ценой яркая зелёная полоса не бледнеет пятнадцать минут, и цена от неё отскакивает. Поддержка держится.</li>
+        <li>Полоса была яркой и за минуту стала пустой, пока цена к ней шла. Стену сняли, опираться на неё нельзя.</li>
+        <li>Под ценой плотный кластер лонгов, а bid-стен мало. Ближайший магнит снизу: цену может потянуть туда, чтобы закрыть плечи.</li>
+      </ol>
+    </div>
+  </div>
+</details>
+<div class="macro">
+  <div class="tradingview-widget-container">
+    <div class="tradingview-widget-container__widget"></div>
+    <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
+    {
+      "symbols": [
+        {"proName": "TVC:US10Y", "title": "US10Y"},
+        {"proName": "TVC:DXY", "title": "DXY"},
+        {"proName": "CME_MINI:NQ1!", "title": "NQ1!"},
+        {"proName": "TVC:GOLD", "title": "Золото"},
+        {"proName": "TVC:USOIL", "title": "Нефть"},
+        {"proName": "FX:USDJPY", "title": "USDJPY"}
+      ],
+      "showSymbolLogo": true,
+      "isTransparent": true,
+      "displayMode": "adaptive",
+      "colorTheme": "dark",
+      "locale": "ru"
+    }
+    </script>
+  </div>
+</div>
+<div id="stage">
+  <div id="plot">
+    <canvas id="map"></canvas>
+    <div id="hover"></div>
+    <div id="empty">Нет записанных секунд. Сборщик ещё не положил честную книгу.</div>
+  </div>
+  <aside>
+    <div class="card" id="meaning">
+      <h2>Что это значит сейчас</h2>
+      <p class="conclusion" id="conclusion">Ждём первую честную книгу.</p>
+      <div id="meaning-body" class="small"></div>
+    </div>
+    <div class="card">
+      <h2>Профиль и глубина</h2>
+      <div id="levels" class="small">Загрузка…</div>
+    </div>
+    <div class="card">
+      <h2>Крупнейшие стены</h2>
+      <div id="walls" class="small">Нет данных</div>
+    </div>
+    <div class="card">
+      <h2>Ликвидации, модель</h2>
+      <div class="small">Оценка, не биржевой факт. Реальные принты рисуются фиолетовыми ромбами.</div>
+      <div id="clusters" class="small"></div>
+    </div>
+  </aside>
+</div>
+<footer>
+  <span class="legend"><i class="bid"></i>покупка, bid</span>
+  <span class="legend"><i class="ask"></i>продажа, ask</span>
+  <span class="legend"><i class="mid"></i>последняя цена</span>
+  <span class="legend"><i class="liq"></i>ликвидация</span>
+  <span class="legend"><span class="mark-add">+</span> стену добавили</span>
+  <span class="legend"><span class="mark-pull">−</span> стену сняли</span>
+  <span>Московское время (UTC+3). Цвет — логарифм долларовой ликвидности; серый столбец значит «нет честной книги», не ноль. Estimated liquidation levels — модель, реальные ликвидации — отдельные принты.</span>
+</footer>
+<script>
+const WINDOWS = {
+  "1h": {minutes: 60, step: "5s", stepS: 5, label: "1ч"},
+  "4h": {minutes: 240, step: "15s", stepS: 15, label: "4ч"},
+  "12h": {minutes: 720, step: "1m", stepS: 60, label: "12ч"},
+  "24h": {minutes: 1440, step: "1m", stepS: 60, label: "24ч"},
+  "3d": {minutes: 4320, step: "5m", stepS: 300, label: "3д"}
+};
+const VENUE_LABEL = {ALL: "Все", BINANCE: "Binance perp", BYBIT: "Bybit perp", OKX: "OKX perp", HTX: "HTX", BITGET: "Bitget", GATE: "Gate", BINANCE_SPOT: "Binance spot", COINBASE: "Coinbase", OKX_SPOT: "OKX spot", BYBIT_SPOT: "Bybit spot"};
+const LAYERS = {book: "стакан", estimate: "ликв. модель", prints: "принты", candles: "свечи", vwap: "VWAP"};
+const state = {symbol: "BTCUSDT", venue: "ALL", window: "4h", minBright: 1, threshold: 0, palette: "coinglass", layers: {book: true, estimate: false, prints: false, candles: false, vwap: false}, columns: [], health: null, levels: null, hover: null, liquidity: null, stream: "off"};
+const token = new URLSearchParams(location.search).get("token");
+const canvas = document.getElementById("map");
+const ctx = canvas.getContext("2d");
+let source = null;
+
+function api(path) {
+  const headers = {};
+  if (token) headers.Authorization = "Bearer " + token;
+  const join = path.includes("?") ? "&" : "?";
+  const url = token ? path + join + "token=" + encodeURIComponent(token) : path;
+  return fetch(url, {headers, cache: "no-store"}).then(r => r.json());
+}
+
+function buttons(root, items, current, onPick) {
+  root.innerHTML = "";
+  for (const item of items) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = item.label;
+    button.className = item.id === current ? "on" : "";
+    button.addEventListener("click", () => onPick(item.id));
+    root.appendChild(button);
+  }
+}
+
+function renderControls() {
+  buttons(document.getElementById("symbols"), [
+    {id: "BTCUSDT", label: "BTC"},
+    {id: "ETHUSDT", label: "ETH"}
+  ], state.symbol, id => { state.symbol = id; reload(); });
+  buttons(document.getElementById("venues"), Object.entries(VENUE_LABEL).map(([id, label]) => ({id, label})), state.venue, id => { state.venue = id; reload(); });
+  buttons(document.getElementById("windows"), Object.entries(WINDOWS).map(([id, row]) => ({id, label: row.label})), state.window, id => { state.window = id; reload(); });
+  buttons(document.getElementById("layers"), Object.entries(LAYERS).map(([id, label]) => ({id, label})), "", id => { state.layers[id] = !state.layers[id]; renderControls(); draw(); });
+  for (const [id, on] of Object.entries(state.layers)) {
+    const b = [...document.getElementById("layers").children].find(x => x.textContent === LAYERS[id]);
+    if (b) b.className = on ? "on" : "";
+  }
+}
+
+document.getElementById("bright").addEventListener("input", (event) => {
+  state.minBright = Math.max(1, Number(event.target.value) || 1);
+  draw();
+});
+document.getElementById("threshold").addEventListener("input", (event) => { state.threshold = Math.max(0, Number(event.target.value) || 0); draw(); paintLevels(); });
+document.getElementById("palette").addEventListener("change", (event) => { state.palette = event.target.value; draw(); });
+
+function addSide(map, rows) {
+  for (const [price, coin, usd] of rows || []) {
+    const slot = map.get(price) || [0, 0];
+    slot[0] += coin; slot[1] += usd;
+    map.set(price, slot);
+  }
+}
+
+function mergeColumn(into, col) {
+  const trades = (into.trades || []).concat(col.trades || []);
+  const liquidations = (into.liquidations || []).concat(col.liquidations || []);
+  if (!col.book_ok || col.bids == null) {
+    into.trades = trades; into.liquidations = liquidations;
+    return;
+  }
+  if (!into.book_ok || into.bids == null) {
+    Object.assign(into, col, {trades, liquidations, ts: into.ts, _n: 1});
+    return;
+  }
+  const bids = new Map(); const asks = new Map();
+  addSide(bids, into.bids); addSide(bids, col.bids);
+  addSide(asks, into.asks); addSide(asks, col.asks);
+  into.bids = [...bids.entries()].sort((a, b) => a[0] - b[0]).map(([price, v]) => [price, v[0], v[1]]);
+  into.asks = [...asks.entries()].sort((a, b) => a[0] - b[0]).map(([price, v]) => [price, v[0], v[1]]);
+  into._n = (into._n || 1) + 1;
+  into.mid = into.mid + (col.mid - into.mid) / into._n;
+  into.book_ok = true;
+  into.trades = trades;
+  into.liquidations = liquidations;
+  if (into.visible && col.visible) into.visible = [Math.min(into.visible[0], col.visible[0]), Math.max(into.visible[1], col.visible[1])];
+  else into.visible = into.visible || col.visible;
+}
+
+function pushColumn(col) {
+  const step = WINDOWS[state.window].stepS;
+  const bin = Math.floor(col.ts / step) * step;
+  const last = state.columns[state.columns.length - 1];
+  if (!last || last.ts !== bin) state.columns.push({...col, ts: bin, trades: col.trades || [], liquidations: col.liquidations || []});
+  else mergeColumn(last, col);
+  const keep = WINDOWS[state.window].minutes * 60 / step + 2;
+  if (state.columns.length > keep) state.columns.splice(0, state.columns.length - keep);
+}
+
+async function reload() {
+  renderControls();
+  const win = WINDOWS[state.window];
+  const width = Math.max(320, Math.floor(canvas.clientWidth || window.innerWidth));
+  const q = `symbol=${state.symbol}&venue=${state.venue}&minutes=${win.minutes}&step=${win.step}&width=${width}`;
+  const heat = await api("heatmap?" + q);
+  state.columns = heat.format === "compact-v1" ? expandCompact(heat) : (heat.columns || []);
+  state.health = await api("health");
+  state.levels = await api(`levels?symbol=${state.symbol}&venue=${state.venue}&minutes=${win.minutes}`);
+  document.getElementById("empty").style.display = state.columns.length ? "none" : "flex";
+  draw();
+  listen();
+  paintStatus();
+  paintLevels();
+}
+
+function expandCompact(heat) {
+  const prices = heat.prices || [];
+  const times = heat.times || [];
+  const levels = heat.levels || prices.length;
+  const bid = decodeU16(heat.bid || "");
+  const ask = decodeU16(heat.ask || "");
+  const columns = [];
+  for (let x = 0; x < times.length; x++) {
+    const bids = [], asks = [];
+    for (let y = 0; y < levels; y++) {
+      const price = prices[y];
+      const b = bid[x * levels + y] || 0;
+      const a = ask[x * levels + y] || 0;
+      if (b) bids.push([price, 0, b]);
+      if (a) asks.push([price, 0, a]);
+    }
+    const priceStep = prices.length > 1 ? Math.abs(prices[1] - prices[0]) : 1;
+    columns.push({ts: times[x], venue: heat.venue, symbol: heat.symbol, book_ok: !!(heat.book_ok || [])[x], mid: (heat.mid || [])[x], step: priceStep, visible: null, bids, asks, trades: [], liquidations: []});
+  }
+  return columns;
+}
+
+function decodeU16(text) {
+  if (!text) return new Uint16Array();
+  const raw = atob(text);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return new Uint16Array(bytes.buffer);
+}
+
+function listen() {
+  if (source) source.close();
+  const win = WINDOWS[state.window];
+  let url = `stream?symbol=${state.symbol}&venue=${state.venue}`;
+  if (token) url += "&token=" + encodeURIComponent(token);
+  source = new EventSource(url);
+  source.onopen = () => { state.stream = "live"; paintStatus(); };
+  source.onerror = () => { state.stream = "stale"; paintStatus(); };
+  source.addEventListener("column", (event) => {
+    const payload = JSON.parse(event.data);
+    if (payload.column) pushColumn(payload.column);
+    if (payload.health) state.health = payload.health;
+    state.stream = "live";
+    document.getElementById("empty").style.display = state.columns.length ? "none" : "flex";
+    draw();
+    paintStatus();
+    paintMeaning();
+  });
+  source.addEventListener("liquidity", (event) => {
+    state.liquidity = JSON.parse(event.data);
+    paintLevels();
+    paintMeaning();
+  });
+}
+
+function paintStatus() {
+  const venues = (state.health && state.health.venues) || {};
+  const parts = Object.entries(venues).map(([name, row]) => {
+    const ok = row.book_ok && row.book_ok[state.symbol];
+    const rest = row.rest ? ` REST ${row.rest.requests}/${row.rest.blocked}` : "";
+    return `${VENUE_LABEL[name] || name} ${row.status || (ok ? "ok" : "stale")}, дыр ${row.gaps}${rest}`;
+  });
+  document.getElementById("status").textContent = parts.join(" · ");
+  const row = venues[state.venue] || {};
+  const pill = document.getElementById("live");
+  const bad = ["stale", "unavailable", "rate_limited", "resync"].includes(row.status) || state.stream !== "live";
+  pill.className = bad ? "off" : "on";
+  const label = {unavailable: "нет доступа", rate_limited: "лимит", resync: "ресинк", stale: "stale", ok: "live", partial: "частично"}[row.status] || state.stream;
+  pill.textContent = state.stream === "live" ? label : "поток оборван";
+}
+
+function fmtUsd(v) { return (v || 0).toLocaleString("ru-RU", {maximumFractionDigits: 0}); }
+
+function stepOf(price) {
+  return price > 2000 ? 10 : 0.5;
+}
+
+function usdNear(col, side, price) {
+  if (!col) return 0;
+  const rows = side === "bid" ? col.bids : col.asks;
+  const slack = (col.step || stepOf(price)) / 2;
+  let best = 0;
+  for (const row of rows || []) {
+    if (Math.abs(row[0] - price) <= slack) best = Math.max(best, row[2] || 0);
+  }
+  return best;
+}
+
+function atr14(cols) {
+  const minutes = new Map();
+  for (const col of cols) {
+    if (!col.mid) continue;
+    const key = Math.floor(col.ts / 60) * 60;
+    const slot = minutes.get(key) || {hi: col.mid, lo: col.mid, last: col.mid};
+    slot.hi = Math.max(slot.hi, col.mid);
+    slot.lo = Math.min(slot.lo, col.mid);
+    slot.last = col.mid;
+    minutes.set(key, slot);
+  }
+  const bars = [...minutes.keys()].sort((a, b) => a - b).map(key => minutes.get(key));
+  if (bars.length < 2) return null;
+  const ranges = [];
+  for (let i = 1; i < bars.length; i++) {
+    const prev = bars[i - 1].last;
+    ranges.push(Math.max(bars[i].hi - bars[i].lo, Math.abs(bars[i].hi - prev), Math.abs(bars[i].lo - prev)));
+  }
+  const tail = ranges.slice(-14);
+  const value = tail.reduce((sum, item) => sum + item, 0) / tail.length;
+  return value > 0 ? value : null;
+}
+
+function topWalls(limit) {
+  const raw = ((state.liquidity || {}).walls) || (((state.levels || {}).measured || {}).walls) || [];
+  return raw.filter(row => (row.usd || 0) >= state.threshold).sort((a, b) => (b.usd || 0) - (a.usd || 0)).slice(0, limit);
+}
+
+function wallEvents(cols) {
+  const amounts = [];
+  for (const col of cols) {
+    for (const row of (col.bids || []).concat(col.asks || [])) if ((row[2] || 0) > 0) amounts.push(row[2]);
+  }
+  amounts.sort((a, b) => a - b);
+  const cut = Math.max(state.threshold, percentile(amounts, 0.9));
+  const events = [];
+  let prev = new Map();
+  for (const col of cols) {
+    const now = new Map();
+    for (const side of ["bid", "ask"]) {
+      const rows = (side === "bid" ? col.bids : col.asks) || [];
+      const ranked = [...rows].sort((a, b) => (b[2] || 0) - (a[2] || 0)).slice(0, 15);
+      for (const row of ranked) {
+        if ((row[2] || 0) < cut) continue;
+        const key = side + ":" + row[0];
+        now.set(key, row[2]);
+        const before = prev.get(key) || 0;
+        if (before < cut * 0.45) events.push({ts: col.ts, price: row[0], side, kind: "add", usd: row[2]});
+      }
+    }
+    for (const [key, usd] of prev) {
+      if (usd < cut || now.has(key)) continue;
+      const split = key.indexOf(":");
+      events.push({ts: col.ts, price: Number(key.slice(split + 1)), side: key.slice(0, split), kind: "pull", usd});
+    }
+    prev = now;
+  }
+  const kept = [];
+  for (const event of events) {
+    const last = kept[kept.length - 1];
+    if (last && last.kind === event.kind && last.side === event.side && Math.abs(last.price - event.price) <= stepOf(event.price)) continue;
+    kept.push(event);
+  }
+  return kept.slice(-16);
+}
+
+function holdOf(wall, cols, lastTs) {
+  if (!wall || !cols.length) return "unknown";
+  const past = [...cols].reverse().find(col => col.book_ok && col.ts <= lastTs - 15 * 60) || cols.find(col => col.book_ok);
+  const now = [...cols].reverse().find(col => col.book_ok);
+  const before = usdNear(past, wall.side, wall.price);
+  const after = usdNear(now, wall.side, wall.price) || wall.usd || 0;
+  if (before <= 0) return "added";
+  if (after < before * 0.7) return "pulled";
+  return "holding";
+}
+
+function distText(price, last, atr) {
+  if (!last) return "";
+  const pct = (price - last) / last * 100;
+  const pctText = `${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`;
+  if (!atr) return pctText;
+  const units = Math.abs(price - last) / atr;
+  return `${pctText}, ${units.toFixed(1)} ATR`;
+}
+
+function paintMeaning() {
+  const box = document.getElementById("meaning-body");
+  const line = document.getElementById("conclusion");
+  const liq = state.liquidity || {};
+  const last = liq.last || liq.mid || ((state.levels || {}).mid) || null;
+  const cols = state.columns || [];
+  if (!last) {
+    line.textContent = "Ждём первую честную книгу.";
+    box.innerHTML = "";
+    return;
+  }
+  const walls = topWalls(10);
+  const support = walls.filter(row => row.side === "bid" && row.price < last).sort((a, b) => b.price - a.price)[0] || null;
+  const resist = walls.filter(row => row.side === "ask" && row.price > last).sort((a, b) => a.price - b.price)[0] || null;
+  const clusters = (liq.liquidation_clusters || (((state.levels || {}).estimated || {}).liquidation_clusters) || [])
+    .filter(row => (row.usd || 0) >= state.threshold);
+  const liqBelow = clusters.filter(row => row.price < last && (row.side === "longs" || row.side === "long")).sort((a, b) => b.price - a.price)[0] || null;
+  const liqAbove = clusters.filter(row => row.price > last && (row.side === "shorts" || row.side === "short")).sort((a, b) => a.price - b.price)[0] || null;
+  const atr = atr14(cols);
+  const lastTs = cols.length ? cols[cols.length - 1].ts : (liq.ts || 0);
+  const supportHold = holdOf(support, cols, lastTs);
+  const resistHold = holdOf(resist, cols, lastTs);
+  const major = walls.slice(0, 10).map(wall => holdOf(wall, cols, lastTs));
+  const pulled = major.filter(item => item === "pulled").length;
+  const holding = major.filter(item => item === "holding" || item === "added").length;
+  const stance = !major.length ? "крупных стен в окне не видно" : pulled > holding ? "крупные стены за 15 минут снимают" : "крупные стены за 15 минут держатся";
+  const measured = ((state.levels || {}).measured || {}).imbalance;
+  let imbalance = measured;
+  if (imbalance == null) {
+    const col = [...cols].reverse().find(item => item.book_ok && item.mid);
+    if (col) {
+      let bid = 0, ask = 0;
+      for (const row of col.bids || []) if (row[0] >= col.mid * 0.98) bid += row[2] || 0;
+      for (const row of col.asks || []) if (row[0] <= col.mid * 1.02) ask += row[2] || 0;
+      imbalance = bid + ask > 0 ? (bid - ask) / (bid + ask) : null;
+    }
+  }
+  const imbalanceText = imbalance == null ? "нет данных" : `${imbalance > 0 ? "перевес покупок" : "перевес продаж"} ${(imbalance * 100).toFixed(0)}%`;
+  const verb = {holding: "держится", pulled: "снимают", added: "только появилась", unknown: "мало истории"};
+  function wallLine(title, wall, how) {
+    if (!wall) return `<div class="row"><span>${title}</span><span>нет крупной</span></div>`;
+    return `<div class="row"><span>${title} ${fmtPrice(wall.price)}</span><span>$${fmtUsd(wall.usd)} · ${distText(wall.price, last, atr)} · ${verb[how] || ""}</span></div>`;
+  }
+  function clusterLine(title, row) {
+    if (!row) return `<div class="row"><span>${title}</span><span>нет</span></div>`;
+    const name = row.price < last ? "лонги" : "шорты";
+    return `<div class="row"><span>${title} ${fmtPrice(row.price)}</span><span>${name} $${fmtUsd(row.usd)} · ${distText(row.price, last, atr)}</span></div>`;
+  }
+  const magnet = liqBelow && (!liqAbove || Math.abs(liqBelow.price - last) <= Math.abs(liqAbove.price - last)) ? liqBelow : liqAbove;
+  const bits = [];
+  if (magnet) {
+    const where = magnet.price < last ? "снизу" : "сверху";
+    const who = magnet.price < last ? "лонги" : "шорты";
+    bits.push(`Ближайший магнит ${where} ${fmtPrice(magnet.price)} — ${who} на $${fmtUsd(magnet.usd)}`);
+  }
+  if (support) {
+    const near = walls.filter(row => row.side === "bid" && row.price <= support.price && (support.price - row.price) / last < 0.0015);
+    const low = near.length ? Math.min(...near.map(row => row.price)) : support.price;
+    const span = Math.abs(low - support.price) > stepOf(last) ? `${fmtPrice(low)}–${fmtPrice(support.price)}` : fmtPrice(support.price);
+    bits.push(`поддержка ${span} ${verb[supportHold] || "держится"}`);
+  }
+  line.textContent = (bits.length ? bits.join("; ") + "." : "Крупных стен и кластеров рядом с ценой не видно.");
+  box.innerHTML = wallLine("Поддержка", support, supportHold) + wallLine("Сопротивление", resist, resistHold) + clusterLine("Ликвидации снизу", liqBelow) + clusterLine("Ликвидации сверху", liqAbove) + `<div class="row"><span>Стакан ±2%</span><span>${imbalanceText}</span></div>` + `<div class="row"><span>15 минут</span><span>${stance}</span></div>`;
+}
+
+function paintLevels() {
+  const data = state.levels || {};
+  const measured = data.measured || {};
+  const depth = measured.depth || {};
+  document.getElementById("levels").innerHTML = Object.entries(depth).map(([k, v]) => v ? `<div class="row"><span>±${k}</span><span>bid $${fmtUsd(v.bid_usd)} / ask $${fmtUsd(v.ask_usd)}</span></div>` : "").join("") +
+    `<div class="row"><span>Дисбаланс ±2%</span><span>${measured.imbalance == null ? "нет данных" : (measured.imbalance * 100).toFixed(1) + "%"}</span></div>`;
+  const walls = (measured.walls || []).filter(x => (x.usd || 0) >= state.threshold).slice(0, 12);
+  document.getElementById("walls").innerHTML = walls.length ? walls.map(w => `<div class="row"><span>${w.side} ${w.price}</span><span>$${fmtUsd(w.usd)}</span></div>`).join("") : "Нет данных";
+  const clusters = (((data.estimated || {}).liquidation_clusters) || []).filter(x => (x.usd || 0) >= state.threshold).slice(0, 12);
+  document.getElementById("clusters").innerHTML = clusters.map(c => `<div class="row"><span>${c.side} ${c.price}</span><span>$${fmtUsd(c.usd)}</span></div>`).join("");
+  paintMeaning();
+}
+
+function percentile(values, p) {
+  if (!values.length) return 1;
+  const index = Math.min(values.length - 1, Math.max(0, Math.floor(p * (values.length - 1))));
+  return values[index] || 1;
+}
+
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  canvas.width = Math.max(1, Math.floor(width * dpr));
+  canvas.height = Math.max(1, Math.floor(height * dpr));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const cols = state.columns;
+  if (!cols.length) { ctx.clearRect(0, 0, width, height); return; }
+  const tail = cols[cols.length - 1];
+  const sig = [cols.length, cols[0].ts, tail.ts, width, height, state.palette, state.threshold, state.minBright, state.symbol, state.venue, state.window].join("|");
+  if (state.hover && state._sig === sig && state._shot && state._geom) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(state._shot, 0, 0);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const g = state._geom;
+    paintCrosshair(state.hover, g.cols, g.yOf, g.xOf, g.padL, g.padT, g.plotW, g.plotH, g.minP, g.maxP);
+    return;
+  }
+  ctx.clearRect(0, 0, width, height);
+  const ladderW = 168;
+  const padL = 64;
+  const padR = 8;
+  const padT = 12;
+  const padB = 22;
+  const plotW = Math.max(10, width - padL - ladderW - padR);
+  const plotH = Math.max(10, height - padT - padB);
+  if (!cols.length) return;
+  const prices = [];
+  const usd = [];
+  for (const col of cols) {
+    if (col.mid) prices.push(col.mid);
+    for (const row of (col.bids || [])) { prices.push(row[0]); if (row[2] > 0) usd.push(row[2]); }
+    for (const row of (col.asks || [])) { prices.push(row[0]); if (row[2] > 0) usd.push(row[2]); }
+    for (const row of (col.trades || [])) prices.push(row.price);
+    for (const row of (col.liquidations || [])) prices.push(row.price);
+  }
+  usd.sort((a, b) => a - b);
+  const p95 = percentile(usd, 0.95);
+  const p75 = percentile(usd, 0.75);
+  const bright = new Map();
+  if (state.minBright > 1) {
+    for (const col of cols) {
+      for (const [side, rows] of [["b", col.bids], ["a", col.asks]]) {
+        for (const row of rows || []) {
+          if (row[2] >= p75) bright.set(side + row[0], (bright.get(side + row[0]) || 0) + 1);
+        }
+      }
+    }
+  }
+  let minP = Math.min(...prices);
+  let maxP = Math.max(...prices);
+  if (!Number.isFinite(minP) || minP === maxP) { minP -= 1; maxP += 1; }
+  const yOf = price => padT + (maxP - price) / (maxP - minP) * plotH;
+  const xOf = index => padL + (index + 0.5) / cols.length * plotW;
+  const cellW = plotW / cols.length;
+  ctx.fillStyle = "#10141c";
+  ctx.fillRect(padL, padT, plotW, plotH);
+  cols.forEach((col, index) => {
+    const x = padL + index / cols.length * plotW;
+    if (!col.book_ok || col.bids == null) {
+      ctx.fillStyle = "rgba(120,130,150,0.18)";
+      ctx.fillRect(x, padT, Math.max(1, cellW), plotH);
+      return;
+    }
+    if (col.visible) {
+      const y1 = yOf(col.visible[1]);
+      const y2 = yOf(col.visible[0]);
+      ctx.fillStyle = "rgba(255,255,255,0.025)";
+      ctx.fillRect(x, y1, Math.max(1, cellW), Math.max(1, y2 - y1));
+    }
+    const paint = (rows, side, color) => {
+      for (const row of rows || []) {
+        if (state.minBright > 1 && (bright.get(side + row[0]) || 0) < state.minBright) continue;
+        if (row[2] < state.threshold || !state.layers.book) continue;
+        const t = Math.max(0.08, Math.min(1, Math.log10(1 + row[2]) / Math.log10(1 + p95)));
+        ctx.fillStyle = state.palette === "coinglass" ? heatColor(t, side) : color.replace("A", t.toFixed(3));
+        const y = yOf(row[0] + (col.step || 0));
+        const h = Math.max(1, yOf(row[0]) - y);
+        ctx.fillRect(x, y, Math.max(1, cellW), h);
+      }
+    };
+    paint(col.bids, "b", "rgba(18,180,110,A)");
+    paint(col.asks, "a", "rgba(220,70,70,A)");
+  });
+  if (state.layers.estimate) drawEstimatedClusters(yOf, padL, padL + plotW);
+  if (state.layers.candles) drawCandles(cols, xOf, yOf, Math.max(2, cellW * 0.34));
+  ctx.beginPath();
+  ctx.strokeStyle = "#f2d48a";
+  ctx.lineWidth = 1.4;
+  let started = false;
+  cols.forEach((col, index) => {
+    if (!col.mid) { started = false; return; }
+    const x = xOf(index); const y = yOf(col.mid);
+    if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  if (state.layers.vwap) drawVwap(cols, xOf, yOf);
+  const tradeUsd = cols.flatMap(col => col.trades || []).map(row => row.usd || 0).filter(v => v > 0).sort((a, b) => a - b);
+  const tradeCut = percentile(tradeUsd, 0.9);
+  const tradeMax = tradeUsd.length ? tradeUsd[tradeUsd.length - 1] : 1;
+  cols.forEach((col, index) => {
+    for (const row of col.trades || []) {
+      if (!state.layers.prints || (row.usd || 0) < Math.max(tradeCut, state.threshold)) continue;
+      const radius = 3 + 9 * Math.sqrt((row.usd || 0) / tradeMax);
+      ctx.beginPath();
+      ctx.fillStyle = row.side === "buy" ? "rgba(120,220,255,0.85)" : "rgba(255,170,90,0.9)";
+      ctx.arc(xOf(index), yOf(row.price), radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (const row of col.liquidations || []) {
+      if (!state.layers.prints) continue;
+      const y = yOf(row.price); const x = xOf(index); const s = 6;
+      ctx.beginPath();
+      ctx.strokeStyle = "#d38bff";
+      ctx.lineWidth = 1.5;
+      ctx.moveTo(x, y - s); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s, y); ctx.closePath();
+      ctx.stroke();
+    }
+  });
+  const last = [...cols].reverse().find(col => col.book_ok && col.bids);
+  const ladderX = padL + plotW + 10;
+  ctx.fillStyle = "#10141c";
+  ctx.fillRect(ladderX, padT, ladderW - 16, plotH);
+  if (last) {
+    const levels = [];
+    for (const row of last.bids || []) levels.push({price: row[0], usd: row[2], side: "bid"});
+    for (const row of last.asks || []) levels.push({price: row[0], usd: row[2], side: "ask"});
+    const maxUsd = Math.max(1, ...levels.map(row => row.usd));
+    for (const row of levels) {
+      const y = yOf(row.price);
+      const w = (row.usd / maxUsd) * (ladderW - 28);
+      ctx.fillStyle = row.side === "bid" ? "rgba(18,180,110,0.85)" : "rgba(220,70,70,0.85)";
+      ctx.fillRect(ladderX + 4, y - 2, Math.max(1, w), 4);
+    }
+    if (last.mid) {
+      ctx.strokeStyle = "#f2d48a";
+      ctx.beginPath();
+      ctx.moveTo(ladderX, yOf(last.mid));
+      ctx.lineTo(ladderX + ladderW - 20, yOf(last.mid));
+      ctx.stroke();
+    }
+  }
+  ctx.fillStyle = "#0b0e14";
+  ctx.fillRect(0, padT, padL - 2, plotH);
+  ctx.font = "12px system-ui, sans-serif";
+  for (let tick = 0; tick <= 8; tick++) {
+    const price = maxP - (maxP - minP) * tick / 8;
+    const y = yOf(price);
+    ctx.fillStyle = "#9aa3b5";
+    ctx.fillText(fmtPrice(price), 4, y + 4);
+    ctx.strokeStyle = "rgba(255,255,255,0.06)";
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+  }
+  const lastCol = [...cols].reverse().find(col => col.mid);
+  if (lastCol && lastCol.mid) {
+    const y = yOf(lastCol.mid);
+    ctx.strokeStyle = "#ffe38a";
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+    const text = "last " + fmtPrice(lastCol.mid);
+    const tw = ctx.measureText(text).width + 10;
+    ctx.fillStyle = "#3a2f12";
+    ctx.fillRect(padL + plotW - tw, y - 16, tw, 16);
+    ctx.fillStyle = "#ffe38a";
+    ctx.fillText(text, padL + plotW - tw + 5, y - 4);
+    const bid = bestPrice(lastCol.bids, Math.max);
+    const ask = bestPrice(lastCol.asks, Math.min);
+    ctx.font = "11px system-ui, sans-serif";
+    if (bid) { ctx.fillStyle = "#7dffa8"; ctx.fillText("bid " + fmtPrice(bid), padL + 6, yOf(bid) - 2); }
+    if (ask) { ctx.fillStyle = "#ff9eb4"; ctx.fillText("ask " + fmtPrice(ask), padL + 6, yOf(ask) + 12); }
+  }
+  labelWalls(yOf, padL, plotW);
+  drawWallEvents(cols, xOf, yOf);
+  if (state.hover) paintCrosshair(state.hover, cols, yOf, xOf, padL, padT, plotW, plotH, minP, maxP);
+  const fmtTime = ts => new Date((ts + 3 * 3600) * 1000).toISOString().slice(11, 16) + " МСК";
+  ctx.fillText(fmtTime(cols[cols.length - 1].ts), padL + plotW - 80, height - 6);
+  ctx.fillText(fmtTime(cols[0].ts), padL, height - 6);
+  ctx.fillText("стакан", ladderX, height - 6);
+  if (!state.hover) {
+    const shot = state._shot && state._shot.width === canvas.width ? state._shot : document.createElement("canvas");
+    shot.width = canvas.width;
+    shot.height = canvas.height;
+    shot.getContext("2d").drawImage(canvas, 0, 0);
+    state._shot = shot;
+    state._sig = sig;
+    state._geom = {cols, yOf, xOf, padL, padT, plotW, plotH, minP, maxP};
+  }
+}
+
+function fmtPrice(price) {
+  return Number(price).toLocaleString("ru-RU", {maximumFractionDigits: price > 200 ? 0 : 2});
+}
+function bestPrice(rows, pick) {
+  const prices = (rows || []).map(row => row[0]).filter(v => v != null);
+  return prices.length ? pick(...prices) : null;
+}
+function labelWalls(yOf, left, plotW) {
+  const walls = topWalls(10).sort((a, b) => b.price - a.price);
+  ctx.font = "11px system-ui, sans-serif";
+  let lastY = -999;
+  for (const wall of walls) {
+    let y = yOf(wall.price);
+    if (y - lastY < 12) y = lastY + 12;
+    lastY = y;
+    ctx.fillStyle = wall.side === "bid" ? "rgba(125,255,168,0.95)" : "rgba(255,158,180,0.95)";
+    const trend = wall.trend === "growing" ? " ↑" : wall.trend === "pulled" ? " ↓" : "";
+    const name = wall.side === "bid" ? "поддержка" : "сопротивл.";
+    ctx.fillText(`${name} ${fmtPrice(wall.price)} $${fmtUsd(wall.usd)}${trend}`, left + plotW - 188, y);
+  }
+  const clusters = (state.liquidity && state.liquidity.liquidation_clusters) || (((state.levels || {}).estimated || {}).liquidation_clusters) || [];
+  clusters.filter(row => (row.usd || 0) >= state.threshold).slice(0, 3).forEach(row => {
+    ctx.fillStyle = "#d38bff";
+    const name = row.side === "longs" || row.side === "long" ? "лонги" : "шорты";
+    ctx.fillText(`${name} ${fmtPrice(row.price)} $${fmtUsd(row.usd)}`, left + 8, yOf(row.price));
+  });
+}
+function drawWallEvents(cols, xOf, yOf) {
+  ctx.font = "bold 13px system-ui, sans-serif";
+  for (const event of wallEvents(cols)) {
+    const index = cols.findIndex(col => col.ts === event.ts);
+    if (index < 0) continue;
+    ctx.fillStyle = event.kind === "add" ? "#7dffa8" : "#ff9eb4";
+    ctx.fillText(event.kind === "add" ? "+" : "−", xOf(index) - 4, yOf(event.price) - 3);
+  }
+}
+function paintCrosshair(hover, cols, yOf, xOf, padL, padT, plotW, plotH, minP, maxP) {
+  if (hover.x < padL || hover.x > padL + plotW || hover.y < padT || hover.y > padT + plotH) {
+    document.getElementById("hover").style.display = "none";
+    return;
+  }
+  const price = maxP - (hover.y - padT) / plotH * (maxP - minP);
+  const index = Math.min(cols.length - 1, Math.max(0, Math.floor((hover.x - padL) / plotW * cols.length)));
+  const col = cols[index];
+  const nearest = nearestLevel(col, price);
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath(); ctx.moveTo(hover.x, padT); ctx.lineTo(hover.x, padT + plotH); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(padL, hover.y); ctx.lineTo(padL + plotW, hover.y); ctx.stroke();
+  ctx.restore();
+  const tip = document.getElementById("hover");
+  const usdText = nearest ? `$${fmtUsd(nearest.usd)} ${nearest.side}` : "нет уровня";
+  tip.textContent = `${fmtPrice(price)} · ${usdText}`;
+  tip.style.display = "block";
+  tip.style.left = Math.min(hover.x + 12, padL + plotW - 140) + "px";
+  tip.style.top = Math.max(8, hover.y - 28) + "px";
+}
+function nearestLevel(col, price) {
+  if (!col) return null;
+  let best = null;
+  for (const [side, rows] of [["bid", col.bids], ["ask", col.asks]]) {
+    for (const row of rows || []) {
+      const dist = Math.abs(row[0] - price);
+      if (!best || dist < best.dist) best = {dist, usd: row[2], side, price: row[0]};
+    }
+  }
+  if (!best) return null;
+  const span = Math.max(1, (col.step || 1) * 3);
+  return best.dist <= span ? best : {usd: 0, side: "", price};
+}
+function heatColor(t, side) {
+  const a = t.toFixed(3);
+  if (t > 0.74) return `rgba(255,231,87,${a})`;
+  if (t > 0.38) return side === "b" ? `rgba(97,255,120,${a})` : `rgba(190,92,255,${a})`;
+  return side === "b" ? `rgba(42,139,255,${a})` : `rgba(113,69,255,${a})`;
+}
+
+function drawVwap(cols, xOf, yOf) {
+  ctx.beginPath(); ctx.strokeStyle = "rgba(120,220,255,0.85)"; ctx.lineWidth = 1;
+  let started = false;
+  cols.forEach((col, index) => {
+    let usd = 0, qty = 0;
+    for (const row of col.trades || []) { usd += row.usd || 0; qty += (row.usd || 0) / (row.price || 1); }
+    if (!usd || !qty) { started = false; return; }
+    const y = yOf(usd / qty); const x = xOf(index);
+    if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+function drawCandles(cols, xOf, yOf, halfW) {
+  for (let i = 0; i < cols.length; i++) {
+    const col = cols[i];
+    const prices = (col.trades || []).map(t => t.price).filter(Boolean);
+    if (!prices.length && col.mid) prices.push(col.mid);
+    if (!prices.length) continue;
+    const open = prices[0], close = prices[prices.length - 1], high = Math.max(...prices), low = Math.min(...prices);
+    const x = xOf(i), up = close >= open;
+    ctx.strokeStyle = up ? "rgba(180,255,205,0.72)" : "rgba(255,150,170,0.72)";
+    ctx.fillStyle = up ? "rgba(80,220,120,0.28)" : "rgba(240,80,120,0.28)";
+    ctx.beginPath(); ctx.moveTo(x, yOf(high)); ctx.lineTo(x, yOf(low)); ctx.stroke();
+    const y1 = yOf(Math.max(open, close)), y2 = yOf(Math.min(open, close));
+    ctx.fillRect(x - halfW, y1, halfW * 2, Math.max(1, y2 - y1));
+  }
+}
+
+function drawEstimatedClusters(yOf, left, right) {
+  const clusters = (((state.levels || {}).estimated || {}).liquidation_clusters || [])
+    .filter(x => (x.usd || 0) >= state.threshold)
+    .slice(0, 18);
+  const maxUsd = Math.max(1, ...clusters.map(x => x.usd || 0));
+  for (const row of clusters) {
+    const y = yOf(row.price);
+    const alpha = Math.max(0.12, Math.min(0.55, (row.usd || 0) / maxUsd));
+    ctx.strokeStyle = row.side === "longs" ? `rgba(255,214,76,${alpha})` : `rgba(190,92,255,${alpha})`;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+window.addEventListener("resize", () => { state._cells = null; draw(); });
+canvas.addEventListener("mousemove", (event) => {
+  const rect = canvas.getBoundingClientRect();
+  state.hover = {x: event.clientX - rect.left, y: event.clientY - rect.top};
+  draw();
+});
+canvas.addEventListener("mouseleave", () => {
+  state.hover = null;
+  document.getElementById("hover").style.display = "none";
+  draw();
+});
+renderControls();
+reload();
+setInterval(async () => { state.health = await api("health"); state.levels = await api(`levels?symbol=${state.symbol}&venue=${state.venue}&minutes=${WINDOWS[state.window].minutes}`); paintStatus(); paintLevels(); }, 5000);
+</script>
+</body>
+</html>
