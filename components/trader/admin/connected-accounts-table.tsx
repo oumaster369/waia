@@ -12,7 +12,9 @@ import { WaiaSurface } from "@/components/waia/waia-surface";
 import {
   ACCOUNT_OBSERVATION_STALE_AFTER_MS,
   ageLabel,
+  summarizeFuturesBalance,
   summarizeCabinetObservation,
+  type FuturesBalanceSummary,
 } from "@/lib/trader/account-observation/cabinet-view";
 import {
   observationBindingSchema,
@@ -26,6 +28,7 @@ type RowView = ConnectedHtxAccountDto & {
   usdtLocked: string | null;
   openOrdersCount: number | null;
   lastTickMs: number | null;
+  futures: FuturesBalanceSummary | null;
 };
 
 /** Operator list refresh. Must stay slower than one HTX cabinet tick. */
@@ -36,6 +39,7 @@ const EMPTY_OBSERVATION = {
   usdtLocked: null,
   openOrdersCount: null,
   lastTickMs: null,
+  futures: null,
 } as const;
 
 function freshnessLabel(row: RowView, nowMs: number): string {
@@ -58,7 +62,10 @@ async function readObservationRow(
   account: ConnectedHtxAccountDto,
   signal: AbortSignal,
 ): Promise<
-  Pick<RowView, "observation" | "usdtFree" | "usdtLocked" | "openOrdersCount" | "lastTickMs">
+  Pick<
+    RowView,
+    "observation" | "usdtFree" | "usdtLocked" | "openOrdersCount" | "lastTickMs" | "futures"
+  >
 > {
   const empty = EMPTY_OBSERVATION;
   const bindingParams = new URLSearchParams({
@@ -88,16 +95,84 @@ async function readObservationRow(
   if (!observationResponse.ok) {
     return { observation: "unavailable", ...empty };
   }
-  const summary = summarizeCabinetObservation(
-    parseAccountObservation(await observationResponse.json()),
-  );
+  const snapshot = parseAccountObservation(await observationResponse.json());
+  const summary = summarizeCabinetObservation(snapshot);
   return {
     observation: "ready",
     usdtFree: summary.usdtFree,
     usdtLocked: summary.usdtLocked,
     openOrdersCount: summary.openOrdersCount,
     lastTickMs: summary.lastTickMs,
+    futures: summarizeFuturesBalance(snapshot, Date.now()),
   };
+}
+
+function futuresReadLabel(summary: FuturesBalanceSummary, nowMs: number): string {
+  if (
+    summary.readCompletedAtMs === null ||
+    !Number.isFinite(summary.readCompletedAtMs) ||
+    summary.readCompletedAtMs > nowMs
+  ) {
+    return "Время чтения неизвестно";
+  }
+  const stale = nowMs - summary.readCompletedAtMs >= ACCOUNT_OBSERVATION_STALE_AFTER_MS;
+  return `${stale ? "Устаревший срез" : "Срез"} · ${new Date(summary.readCompletedAtMs).toLocaleString("ru-RU")}`;
+}
+
+function FuturesCell({ row, nowMs }: { row: RowView; nowMs: number }) {
+  const href = drillHref(row);
+  if (row.observation === "loading") return <span>Загрузка</span>;
+  if (row.observation === "waiting") return <span>Ожидается первый снимок</span>;
+  if (row.observation === "unavailable" || !row.futures) {
+    return (
+      <div className="space-y-1">
+        <p>Данные фьючерсов недоступны</p>
+        <Link className="underline-offset-2 hover:underline" href={href}>
+          Детали счета
+        </Link>
+      </div>
+    );
+  }
+
+  const summary = row.futures;
+  if (
+    summary.equityUsd === null ||
+    summary.availableMarginUsd === null ||
+    summary.profitUnrealUsd === null
+  ) {
+    return (
+      <div className="space-y-1">
+        <p>
+          {summary.hasLegacyDerivatives
+            ? "Проверьте раздельные данные в деталях"
+            : summary.hasFuturesProjection
+              ? "Баланс фьючерсов недоступен"
+              : "Данные фьючерсов не получены"}
+        </p>
+        {summary.readCompletedAtMs !== null ? (
+          <p className="text-muted-foreground text-xs">{futuresReadLabel(summary, nowMs)}</p>
+        ) : null}
+        <Link className="text-muted-foreground underline-offset-2 hover:underline" href={href}>
+          Открыть детали
+        </Link>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      <p>
+        Капитал HTX: <span className="font-mono">{summary.equityUsd} USD</span>
+      </p>
+      <p>
+        Доступная маржа: <span className="font-mono">{summary.availableMarginUsd} USD</span>
+      </p>
+      <p>
+        Нереализованный результат HTX:{" "}
+        <span className="font-mono">{summary.profitUnrealUsd} USD</span>
+      </p>
+      <p className="text-muted-foreground text-xs">{futuresReadLabel(summary, nowMs)}</p>
+    </div>
+  );
 }
 
 export function ConnectedAccountsTable() {
@@ -144,7 +219,11 @@ export function ConnectedAccountsTable() {
         const previous = new Map(current.map((row) => [row.credentialId, row]));
         return accounts.map((account) => {
           const prior = previous.get(account.credentialId);
-          return prior
+          const sameAccount =
+            prior &&
+            prior.organizationId === account.organizationId &&
+            prior.exchangeAccountId === account.exchangeAccountId;
+          return sameAccount
             ? { ...prior, accountName: account.accountName, updatedAt: account.updatedAt }
             : {
                 ...account,
@@ -214,9 +293,10 @@ export function ConnectedAccountsTable() {
                 <th className="py-2 pr-3 font-medium">HTX</th>
                 <th className="py-2 pr-3 font-medium">Status</th>
                 <th className="py-2 pr-3 font-medium">Age</th>
-                <th className="py-2 pr-3 font-medium">USDT free</th>
-                <th className="py-2 pr-3 font-medium">USDT locked</th>
-                <th className="py-2 font-medium">Open orders</th>
+                <th className="py-2 pr-3 font-medium">Спот USDT · доступно</th>
+                <th className="py-2 pr-3 font-medium">Спот USDT · в ордерах</th>
+                <th className="py-2 pr-3 font-medium">Спот · открытые ордера</th>
+                <th className="py-2 font-medium">Фьючерсы · USD</th>
               </tr>
             </thead>
             <tbody>
@@ -236,6 +316,9 @@ export function ConnectedAccountsTable() {
                   <td className="py-2 pr-3 font-mono">{row.usdtLocked ?? "—"}</td>
                   <td className="py-2 font-mono">
                     {row.openOrdersCount === null ? "—" : String(row.openOrdersCount)}
+                  </td>
+                  <td className="py-2">
+                    <FuturesCell row={row} nowMs={nowMs} />
                   </td>
                 </tr>
               ))}

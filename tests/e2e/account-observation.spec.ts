@@ -462,6 +462,90 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(adminPanel.getByText("BTC · BTC-USDT", { exact: true })).toHaveCount(0);
   await expect(tenantPanel.getByRole("region", { name: "HTX futures snapshot" })).toHaveCount(0);
   await expect(adminPanel.getByRole("region", { name: "HTX futures snapshot" })).toHaveCount(0);
+
+  // Restore the local fixture after the revocation case, then capture the mounted
+  // Spot/Futures cabinet and Admin index at desktop and mobile widths.
+  denied = false;
+  streamFailed = false;
+  await page.goto("/trader");
+  const restoredTenantPanel = page.getByRole("region", {
+    name: "Account observation",
+    exact: true,
+  });
+  await expect(restoredTenantPanel.getByText(observation().observationId)).toBeVisible();
+  await expect(restoredTenantPanel.getByRole("region", { name: "Спот" })).toBeVisible();
+  await expect(restoredTenantPanel.getByRole("region", { name: "Фьючерсы" })).toBeVisible();
+  await expect(restoredTenantPanel.getByText("Total equity (USD)")).toBeVisible();
+  await page.screenshot({
+    path: "test-results/account-observation-cabinet-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await restoredTenantPanel
+    .getByRole("heading", { name: "Фьючерсы", exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: "test-results/account-observation-cabinet-mobile.png",
+  });
+
+  await admin.route("**/api/trader/admin/connected-accounts", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        accounts: [
+          {
+            organizationId: binding.organizationId,
+            accountName: "Local demo cabinet",
+            credentialId: binding.credentialId,
+            exchangeAccountId: binding.exchangeAccountId,
+            venue: "htx",
+            status: "active",
+            updatedAt: new Date(started).toISOString(),
+          },
+        ],
+      }),
+    }),
+  );
+  await admin.goto("/admin/account-observation");
+  const adminIndex = admin.getByTestId("admin-connected-accounts");
+  await expect(
+    adminIndex.getByRole("columnheader", { name: "Спот USDT · доступно" }),
+  ).toBeVisible();
+  await expect(adminIndex.getByRole("columnheader", { name: "Фьючерсы · USD" })).toBeVisible();
+  await expect(adminIndex.getByText("Капитал HTX: 1000.25 USD")).toBeVisible();
+  await expect(adminIndex.getByText("Доступная маржа: 997.25 USD")).toBeVisible();
+  await expect(adminIndex.getByText("Нереализованный результат HTX: -0.25 USD")).toBeVisible();
+  await admin.screenshot({
+    path: "test-results/account-observation-admin-desktop.png",
+    fullPage: true,
+  });
+  await admin.setViewportSize({ width: 390, height: 844 });
+  await adminIndex.scrollIntoViewIfNeeded();
+  await adminIndex.evaluate((table) => {
+    const scroller = table.parentElement;
+    if (scroller) scroller.scrollLeft = scroller.scrollWidth;
+  });
+  await expect(adminIndex.getByText("Капитал HTX: 1000.25 USD")).toBeVisible();
+  await admin.screenshot({
+    path: "test-results/account-observation-admin-mobile.png",
+  });
+  await admin.goto("/admin/accounts");
+  const accountsObservationLink = admin.getByRole("link", {
+    name: "Спот и фьючерсы подключённых счетов",
+  });
+  await expect(accountsObservationLink).toBeVisible();
+  await accountsObservationLink.click();
+  await expect(admin.getByTestId("admin-connected-accounts")).toBeVisible();
+  const adminNav = admin.getByRole("navigation", { name: "Консоль администратора AI-TRADER" });
+  await expect(adminNav.getByRole("link", { name: "Счета", exact: true })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(adminNav.getByRole("link", { name: "Обзор", exact: true })).not.toHaveAttribute(
+    "aria-current",
+    "page",
+  );
   await admin.close();
 });
 

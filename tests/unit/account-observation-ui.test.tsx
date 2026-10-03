@@ -8,7 +8,10 @@ import type {
   DerivativesAccountObservation,
 } from "@/lib/trader/account-observation/types";
 import { HTX_DERIVATIVES_ACCOUNT_FAMILIES } from "@/lib/trader/account-observation/derivatives/types";
-import type { HtxDerivativesAccountFamily, HtxDerivativesAccountRow } from "@/lib/trader/account-observation/derivatives/types";
+import type {
+  HtxDerivativesAccountFamily,
+  HtxDerivativesAccountRow,
+} from "@/lib/trader/account-observation/derivatives/types";
 import { AccountObservationPanel } from "@/components/trader/account-observation/account-observation-panel";
 import { ACCOUNT_OBSERVATION_STALE_AFTER_MS } from "@/lib/trader/account-observation/cabinet-view";
 import { parseAccountObservation } from "@/lib/trader/account-observation/validation";
@@ -54,27 +57,90 @@ function observation(patch: Partial<AccountObservation> = {}): AccountObservatio
 }
 function derivatives(): DerivativesAccountObservation {
   const accounts: Record<HtxDerivativesAccountFamily, HtxDerivativesAccountRow[]> = {
-    usdt_isolated_perpetual: [{ accountCode: "BTC-USDT", collateralAsset: "USDT", marginMode: "isolated",
-      marginBalance: "0", marginAvailable: "0", withdrawAvailable: null,
-      marginPosition: null, marginFrozen: null, marginStatic: null,
-      realizedPnl: null, unrealizedPnl: "-0.000000000000000001", riskRate: null, liquidationPrice: null, leverage: null }],
-    usdt_cross_shared: [{ accountCode: "USDT", collateralAsset: "USDT", marginMode: "cross",
-      marginBalance: "10000", marginAvailable: null, withdrawAvailable: "9000",
-      marginPosition: null, marginFrozen: null, marginStatic: null,
-      realizedPnl: null, unrealizedPnl: null, riskRate: null, liquidationPrice: null, leverage: null }],
-    coin_perpetual: [{ accountCode: "THETA-USD", collateralAsset: "THETA", marginMode: null,
-      marginBalance: "1.25", marginAvailable: "0", withdrawAvailable: null,
-      marginPosition: null, marginFrozen: null, marginStatic: null,
-      realizedPnl: null, unrealizedPnl: null, riskRate: null, liquidationPrice: null, leverage: null }],
-    coin_delivery_futures: [{ accountCode: "BTC", collateralAsset: "BTC", marginMode: null,
-      marginBalance: "0.5", marginAvailable: "0", withdrawAvailable: null,
-      marginPosition: null, marginFrozen: null, marginStatic: null,
-      realizedPnl: null, unrealizedPnl: null, riskRate: null, liquidationPrice: null, leverage: null }],
+    usdt_isolated_perpetual: [
+      {
+        accountCode: "BTC-USDT",
+        collateralAsset: "USDT",
+        marginMode: "isolated",
+        marginBalance: "0",
+        marginAvailable: "0",
+        withdrawAvailable: null,
+        marginPosition: null,
+        marginFrozen: null,
+        marginStatic: null,
+        realizedPnl: null,
+        unrealizedPnl: "-0.000000000000000001",
+        riskRate: null,
+        liquidationPrice: null,
+        leverage: null,
+      },
+    ],
+    usdt_cross_shared: [
+      {
+        accountCode: "USDT",
+        collateralAsset: "USDT",
+        marginMode: "cross",
+        marginBalance: "10000",
+        marginAvailable: null,
+        withdrawAvailable: "9000",
+        marginPosition: null,
+        marginFrozen: null,
+        marginStatic: null,
+        realizedPnl: null,
+        unrealizedPnl: null,
+        riskRate: null,
+        liquidationPrice: null,
+        leverage: null,
+      },
+    ],
+    coin_perpetual: [
+      {
+        accountCode: "THETA-USD",
+        collateralAsset: "THETA",
+        marginMode: null,
+        marginBalance: "1.25",
+        marginAvailable: "0",
+        withdrawAvailable: null,
+        marginPosition: null,
+        marginFrozen: null,
+        marginStatic: null,
+        realizedPnl: null,
+        unrealizedPnl: null,
+        riskRate: null,
+        liquidationPrice: null,
+        leverage: null,
+      },
+    ],
+    coin_delivery_futures: [
+      {
+        accountCode: "BTC",
+        collateralAsset: "BTC",
+        marginMode: null,
+        marginBalance: "0.5",
+        marginAvailable: "0",
+        withdrawAvailable: null,
+        marginPosition: null,
+        marginFrozen: null,
+        marginStatic: null,
+        realizedPnl: null,
+        unrealizedPnl: null,
+        riskRate: null,
+        liquidationPrice: null,
+        leverage: null,
+      },
+    ],
   };
-  const families: DerivativesAccountFamilyObservation[] = HTX_DERIVATIVES_ACCOUNT_FAMILIES.map((family) => ({
-    family, status: "COMPLETE", accounts: accounts[family], readStartedAtMs: now - 80,
-    readCompletedAtMs: now - 70, responseGeneratedAtMs: now - 75, error: null,
-  }));
+  const families: DerivativesAccountFamilyObservation[] = HTX_DERIVATIVES_ACCOUNT_FAMILIES.map(
+    (family) => ({
+      family,
+      status: "COMPLETE",
+      accounts: accounts[family],
+      readStartedAtMs: now - 80,
+      readCompletedAtMs: now - 70,
+      responseGeneratedAtMs: now - 75,
+      error: null,
+    }),
+  );
   return { schemaVersion: "htx-derivatives-observation/v1", families };
 }
 function observationV2(): AccountObservation {
@@ -359,6 +425,11 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
     render(<AccountObservationPanel view={view} />);
     expect(screen.getByText("obs-a")).toBeInTheDocument();
     expect(screen.getByText("BTC: free 1, locked 0.1, total 1.1")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Спот" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Фьючерсы" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Спот" })).toContainElement(
+      screen.getByText("No working orders."),
+    );
     expect(screen.getByText("No working orders.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Trades" })).toBeInTheDocument();
     expect(screen.queryByText("Trades · BTCUSDT")).not.toBeInTheDocument();
@@ -372,44 +443,83 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
   });
   it("renders legacy v1 as NOT_CONFIGURED and saved v2 families through the shared panel", () => {
     const legacy = observation();
-    render(<AccountObservationPanel view={{ status: "CURRENT", observation: legacy, stale: false }} />);
-    expect(screen.getAllByText("This account family is not configured for collection.")).toHaveLength(4);
+    render(
+      <AccountObservationPanel view={{ status: "CURRENT", observation: legacy, stale: false }} />,
+    );
+    expect(
+      screen.getAllByText("This account family is not configured for collection."),
+    ).toHaveLength(4);
     cleanup();
-    const saved = { ...observationV2(),
+    const saved = {
+      ...observationV2(),
       observationId: "33333333-3333-4333-8333-333333333333",
-      binding: { ...binding, organizationId: "11111111-1111-4111-8111-111111111111",
-        credentialId: "22222222-2222-4222-8222-222222222222" } };
-    render(<AccountObservationPanel view={{ status: "CURRENT", observation: saved, stale: false }} />);
-    expect(screen.getByTestId("derivatives-status-usdt_isolated_perpetual")).toHaveTextContent("CURRENT");
+      binding: {
+        ...binding,
+        organizationId: "11111111-1111-4111-8111-111111111111",
+        credentialId: "22222222-2222-4222-8222-222222222222",
+      },
+    };
+    render(
+      <AccountObservationPanel view={{ status: "CURRENT", observation: saved, stale: false }} />,
+    );
+    expect(screen.getByTestId("derivatives-status-usdt_isolated_perpetual")).toHaveTextContent(
+      "CURRENT",
+    );
     expect(screen.getByTestId("derivatives-status-usdt_cross_shared")).toHaveTextContent("CURRENT");
     expect(screen.getByTestId("derivatives-status-coin_perpetual")).toHaveTextContent("CURRENT");
-    expect(screen.getByTestId("derivatives-status-coin_delivery_futures")).toHaveTextContent("CURRENT");
+    expect(screen.getByTestId("derivatives-status-coin_delivery_futures")).toHaveTextContent(
+      "CURRENT",
+    );
     expect(screen.getByText("THETA-USD · THETA")).toBeInTheDocument();
     expect(screen.getAllByText("10000")).toHaveLength(1);
     cleanup();
     render(<AccountObservationPanel view={{ status: "STALE", observation: saved, stale: true }} />);
-    expect(screen.getByTestId("derivatives-status-usdt_isolated_perpetual")).toHaveTextContent("STALE");
+    expect(screen.getByTestId("derivatives-status-usdt_isolated_perpetual")).toHaveTextContent(
+      "STALE",
+    );
     expect(screen.getByTestId("derivatives-status-usdt_cross_shared")).toHaveTextContent("STALE");
     expect(screen.getByTestId("derivatives-status-coin_perpetual")).toHaveTextContent("STALE");
-    expect(screen.getByTestId("derivatives-status-coin_delivery_futures")).toHaveTextContent("STALE");
-    expect(screen.getAllByText("Showing the last received account read; it may be out of date.")).toHaveLength(4);
+    expect(screen.getByTestId("derivatives-status-coin_delivery_futures")).toHaveTextContent(
+      "STALE",
+    );
+    expect(
+      screen.getAllByText("Showing the last received account read; it may be out of date."),
+    ).toHaveLength(4);
   });
   it("marks an old family read stale inside a newer collection and preserves global stale override", () => {
-    const saved = { ...observationV2(),
+    const saved = {
+      ...observationV2(),
       observationId: "33333333-3333-4333-8333-333333333333",
-      binding: { ...binding, organizationId: "11111111-1111-4111-8111-111111111111",
-        credentialId: "22222222-2222-4222-8222-222222222222" } };
-    const families = saved.derivatives!.families.map((item, index) => index === 0
-      ? { ...item, readStartedAtMs: now - ACCOUNT_OBSERVATION_STALE_AFTER_MS - 10,
-          readCompletedAtMs: now - ACCOUNT_OBSERVATION_STALE_AFTER_MS - 1,
-          responseGeneratedAtMs: now - ACCOUNT_OBSERVATION_STALE_AFTER_MS - 5,
-          status: "PARTIAL" as const, error: null }
-      : item);
-    const mixed = parseAccountObservation({ ...saved, status: "PARTIAL",
+      binding: {
+        ...binding,
+        organizationId: "11111111-1111-4111-8111-111111111111",
+        credentialId: "22222222-2222-4222-8222-222222222222",
+      },
+    };
+    const families = saved.derivatives!.families.map((item, index) =>
+      index === 0
+        ? {
+            ...item,
+            readStartedAtMs: now - ACCOUNT_OBSERVATION_STALE_AFTER_MS - 10,
+            readCompletedAtMs: now - ACCOUNT_OBSERVATION_STALE_AFTER_MS - 1,
+            responseGeneratedAtMs: now - ACCOUNT_OBSERVATION_STALE_AFTER_MS - 5,
+            status: "PARTIAL" as const,
+            error: null,
+          }
+        : item,
+    );
+    const mixed = parseAccountObservation({
+      ...saved,
+      status: "PARTIAL",
       collectionStartedAtMs: now - ACCOUNT_OBSERVATION_STALE_AFTER_MS - 20,
-      derivatives: { ...saved.derivatives!, families } });
-    render(<AccountObservationPanel view={{ status: "CURRENT", observation: mixed, stale: false }} />);
-    expect(screen.getByTestId("derivatives-status-usdt_isolated_perpetual")).toHaveTextContent("STALE · PARTIAL");
+      derivatives: { ...saved.derivatives!, families },
+    });
+    render(
+      <AccountObservationPanel view={{ status: "CURRENT", observation: mixed, stale: false }} />,
+    );
+    expect(screen.getByTestId("derivatives-status-usdt_isolated_perpetual")).toHaveTextContent(
+      "STALE · PARTIAL",
+    );
     expect(screen.getByTestId("derivatives-status-usdt_cross_shared")).toHaveTextContent("CURRENT");
     cleanup();
     render(<AccountObservationPanel view={{ status: "STALE", observation: mixed, stale: true }} />);
