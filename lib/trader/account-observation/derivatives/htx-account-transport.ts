@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { buildSignedPostQueryString, formatHtxTimestamp } from "@/lib/trader/connectors/htx/signing";
 import { AccountObservationReadFailure } from "../service";
 import type { ObservationClock } from "../types";
-import { HTX_DERIVATIVES_ACCOUNT_FAMILIES, type HtxDerivativesAccountFamily,
+import { HTX_DERIVATIVES_ACCOUNT_FAMILIES, HTX_DERIVATIVES_FILL_LOOKBACK_MS, isHtxDerivativesFillContract, type HtxDerivativesAccountFamily,
   type HtxDerivativesObservationBinding, type HtxDerivativesReadAdmissionRequest } from "./types";
 
 const endpoints: Readonly<Record<HtxDerivativesAccountFamily, Readonly<{ path: string; body: Readonly<Record<string, string>> }>>> = Object.freeze({
@@ -18,21 +18,49 @@ const positionEndpoints: Readonly<Record<HtxDerivativesAccountFamily, Readonly<{
   coin_perpetual: { path: "/swap-api/v1/swap_position_info", body: Object.freeze({}) },
   coin_delivery_futures: { path: "/api/v1/contract_position_info", body: Object.freeze({}) },
 });
+/** Invariant match-results template. Contract, window, symbol, and from_id are filled only by matchResultsBody. */
+const fillEndpoints: Readonly<Record<HtxDerivativesAccountFamily, Readonly<{ path: string; body: Readonly<Record<string, string | number>> }>>> = Object.freeze({
+  usdt_isolated_perpetual: { path: "/linear-swap-api/v3/swap_matchresults", body: Object.freeze({ "trade_type": 0, "direct": "next" }) },
+  usdt_cross_shared: { path: "/linear-swap-api/v3/swap_cross_matchresults", body: Object.freeze({ "trade_type": 0, "direct": "next" }) },
+  coin_perpetual: { path: "/swap-api/v3/swap_matchresults", body: Object.freeze({ "trade_type": 0, "direct": "next" }) },
+  coin_delivery_futures: { path: "/api/v3/contract_matchresults", body: Object.freeze({ "trade_type": 0, "direct": "next" }) },
+});
+export const HTX_DERIVATIVES_READ_ONLY_POST_PATHS: readonly string[] = Object.freeze([
+  ...Object.values(endpoints).map((endpoint) => endpoint.path),
+  ...Object.values(positionEndpoints).map((endpoint) => endpoint.path),
+  ...Object.values(fillEndpoints).map((endpoint) => endpoint.path),
+]);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const fail = (code: "READ_FAILED" | "INVALID_RESPONSE" | "PERMISSION_DENIED" | "TIMEOUT" | "RATE_LIMITED"): never => {
   throw new AccountObservationReadFailure(code);
 };
 
+function matchResultsBody(family: HtxDerivativesAccountFamily, template: Readonly<Record<string, string | number>>, contract: string, startTime: number, endTime: number, fromId: string | undefined): Readonly<Record<string, string | number>> {
+  if (template.trade_type !== 0 || template.direct !== "next" || Object.keys(template).length !== 2 ||
+    !isHtxDerivativesFillContract(family, contract) ||
+    !Number.isSafeInteger(startTime) || !Number.isSafeInteger(endTime) ||
+    endTime <= startTime || endTime - startTime > HTX_DERIVATIVES_FILL_LOOKBACK_MS) fail("INVALID_RESPONSE");
+  const filled: Record<string, string | number> = { contract, trade_type: 0, start_time: startTime, end_time: endTime, direct: "next" };
+  if (family === "coin_delivery_futures") filled.symbol = contract.slice(0, -6);
+  if (fromId !== undefined) {
+    if (!/^[1-9]\d{0,15}$/.test(fromId) || !Number.isSafeInteger(Number(fromId))) fail("INVALID_RESPONSE");
+    filled.from_id = Number(fromId);
+  }
+  return Object.freeze(filled);
+}
+
 export type HtxDerivativesAccountTransport = Readonly<{
   binding: HtxDerivativesObservationBinding;
   readAccount(family: HtxDerivativesAccountFamily, signal: AbortSignal): Promise<string>;
   readPositions(family: HtxDerivativesAccountFamily, signal: AbortSignal): Promise<string>;
+  readFills(family: HtxDerivativesAccountFamily, contract: string, startTime: number, endTime: number, fromId: string | undefined, signal: AbortSignal): Promise<string>;
   dispose(): void;
   settled(): Promise<void>;
 }>;
 
-/** Only four fixed private account-info POSTs are expressible. No generic path/body,
- * credentials lookup, env fallback, futures order capability, or default fetch. */
+/** Fixed private account, position, and match-results POSTs only. Match-results bodies stay the
+ * closed template (contract, trade_type 0, window, direct next, delivery symbol, optional from_id).
+ * No generic path/body, credentials lookup, env fallback, order, cancel, transfer, or default fetch. */
 export function createHtxDerivativesAccountTransport(input: Readonly<{
   binding: HtxDerivativesObservationBinding;
   accessKey: string;
@@ -80,9 +108,7 @@ export function createHtxDerivativesAccountTransport(input: Readonly<{
   };
   const dispose = () => { disposed = true; active?.abort(); accessKey = ""; secret = ""; };
 
-  async function read(family: HtxDerivativesAccountFamily, purpose: "account" | "positions", signal: AbortSignal): Promise<string> {
-    if (!HTX_DERIVATIVES_ACCOUNT_FAMILIES.includes(family) || disposed || active || signal.aborted) return fail("PERMISSION_DENIED");
-    const { path, body } = (purpose === "account" ? endpoints : positionEndpoints)[family];
+  async function postFixed(family: HtxDerivativesAccountFamily, path: string, body: Readonly<Record<string, string | number>>, signal: AbortSignal): Promise<string> {
     const admissionRequest: HtxDerivativesReadAdmissionRequest = Object.freeze({ binding, family, accessKeySha256: keyDigest });
     const controller = new AbortController(); active = controller;
     const cancel = () => controller.abort(); signal.addEventListener("abort", cancel, { once: true });
@@ -165,9 +191,24 @@ export function createHtxDerivativesAccountTransport(input: Readonly<{
     }
   }
 
+  async function read(family: HtxDerivativesAccountFamily, purpose: "account" | "positions", signal: AbortSignal): Promise<string> {
+    if (!HTX_DERIVATIVES_ACCOUNT_FAMILIES.includes(family) || disposed || active || signal.aborted) return fail("PERMISSION_DENIED");
+    const { path, body } = (purpose === "account" ? endpoints : positionEndpoints)[family];
+    return postFixed(family, path, body, signal);
+  }
+
+  async function readMatchResults(family: HtxDerivativesAccountFamily, contract: string, startTime: number, endTime: number, fromId: string | undefined, signal: AbortSignal): Promise<string> {
+    if (!HTX_DERIVATIVES_ACCOUNT_FAMILIES.includes(family) || disposed || active || signal.aborted) return fail("PERMISSION_DENIED");
+    const { path: fillPath, body: template } = fillEndpoints[family];
+    const body = matchResultsBody(family, template, contract, startTime, endTime, fromId);
+    return postFixed(family, fillPath, body, signal);
+  }
+
   return Object.freeze({ binding,
     readAccount: (family: HtxDerivativesAccountFamily, signal: AbortSignal) => read(family, "account", signal),
     readPositions: (family: HtxDerivativesAccountFamily, signal: AbortSignal) => read(family, "positions", signal),
+    readFills: (family: HtxDerivativesAccountFamily, contract: string, startTime: number, endTime: number, fromId: string | undefined, signal: AbortSignal) =>
+      readMatchResults(family, contract, startTime, endTime, fromId, signal),
     dispose, async settled() {
     dispose();
     while (pending.size) await Promise.allSettled([...pending]);

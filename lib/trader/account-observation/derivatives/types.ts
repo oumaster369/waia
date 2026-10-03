@@ -6,7 +6,7 @@ export const HTX_DERIVATIVES_ACCOUNT_FAMILIES = [
   "coin_delivery_futures",
 ] as const;
 
-export type HtxDerivativesAccountFamily = typeof HTX_DERIVATIVES_ACCOUNT_FAMILIES[number];
+export type HtxDerivativesAccountFamily = (typeof HTX_DERIVATIVES_ACCOUNT_FAMILIES)[number];
 
 export type HtxDerivativesObservationBinding = Readonly<{
   organizationId: string;
@@ -75,3 +75,55 @@ export type HtxDerivativesPositionsSnapshot = Readonly<{
   /** HTX ts labels response generation, not per-position freshness. */
   responseGeneratedAtMs: number | null;
 }>;
+
+/** Official match-results queries allow 48 hours. This display uses a stricter window. */
+export const HTX_DERIVATIVES_FILL_LOOKBACK_MS = 86_400_000;
+export const HTX_DERIVATIVES_FILL_MAX_PAGES = 3;
+export const HTX_DERIVATIVES_FILL_MAX_ROWS = 100;
+export const HTX_DERIVATIVES_FILL_CONTRACT_LIMIT = 8;
+
+/** Closed contract identity for fill history. Open positions are not this set. */
+export type HtxDerivativesFillContract = Readonly<{
+  family: HtxDerivativesAccountFamily;
+  contract: string;
+}>;
+
+/** One executed fill. `id` is the unique fill identity; match and order ids are not. */
+export type HtxDerivativesFillRow = Readonly<{
+  id: string;
+  matchId: string | null;
+  orderId: string | null;
+  symbol: string;
+  contractCode: string;
+  contractType: string | null;
+  direction: "buy" | "sell";
+  offset: "open" | "close" | "both";
+  volume: string | null;
+  price: string | null;
+  fee: string | null;
+  feeAsset: string | null;
+  realizedPnl: string | null;
+  offsetPnl: string | null;
+  executedAtMs: number | null;
+  orderSource: string | null;
+}>;
+
+export type HtxDerivativesFillsPage = Readonly<{
+  schemaVersion: "htx-derivatives-fills/v1";
+  family: HtxDerivativesAccountFamily;
+  contractCode: string;
+  fills: readonly HtxDerivativesFillRow[];
+  /** Safe max query_id for the next page. Null means pagination cannot continue. */
+  nextFromId: string | null;
+  responseGeneratedAtMs: number | null;
+}>;
+
+export function isHtxDerivativesFillContract(
+  family: HtxDerivativesAccountFamily,
+  contract: string,
+): boolean {
+  if (family === "usdt_isolated_perpetual") return /^[A-Z0-9]+-USDT$/.test(contract);
+  if (family === "usdt_cross_shared") return /^[A-Z0-9]+-USDT(?:-\d{6})?$/.test(contract);
+  if (family === "coin_perpetual") return /^[A-Z0-9]+-USD$/.test(contract);
+  return /^[A-Z0-9]+\d{6}$/.test(contract);
+}

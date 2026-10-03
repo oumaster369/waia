@@ -19,7 +19,10 @@ import type {
   InsertRetirementRecordRow,
   InsertStrategySynthesisRow,
   InsertStructureClusterRow,
+  InsertStructureClusterV2Row,
 } from "@/lib/trader/discovery/discovery-record.types";
+import { canonicalJsonString } from "@/lib/trader/paper/serialize-paper-evaluation-export";
+import { assertValidStructureClusterV2 } from "@/lib/trader/discovery/structure-cluster-v2";
 import {
   orgScopedWhere,
   requireOrgContext,
@@ -167,25 +170,81 @@ export async function insertDiscoveryObservationPostgres(
 export async function insertDiscoveryStructureClusterPostgres(
   ex: PgWriteExecutor,
   context: OrgContext,
-  row: InsertStructureClusterRow,
+  row: InsertStructureClusterRow | InsertStructureClusterV2Row,
 ) {
   const scoped = requireOrgContext(context.organizationId);
-  await ex.insert(pgSchema.traderDiscoveryStructureCluster).values({
-    id: row.id,
-    organizationId: scoped.organizationId,
-    campaignId: row.campaignId,
-    signatureKey: row.signatureKey,
-    payloadJson: row.payloadJson,
-    contentDigest: row.contentDigest,
-    createdAt: row.createdAt,
-  });
+  let values: {
+    id: string;
+    organizationId: string;
+    campaignId: string;
+    signatureKey: string;
+    payloadJson: string;
+    contentDigest: string;
+    createdAt: Date | undefined;
+  };
+  if ("cluster" in row) {
+    const structureClusterInput = row.cluster;
+    const createdAt = row.createdAt === undefined ? undefined : new Date(row.createdAt.getTime());
+    assertValidStructureClusterV2(structureClusterInput);
+    // Capture the entire validated artifact synchronously. The campaign lookup
+    // below awaits I/O, during which a caller could otherwise mutate nested
+    // fields and make the inserted row differ from the object we validated.
+    const structureCluster = JSON.parse(
+      canonicalJsonString(structureClusterInput),
+    ) as typeof structureClusterInput;
+    assertValidStructureClusterV2(structureCluster);
+    const [campaign] = await ex
+      .select({
+        id: pgSchema.traderDiscoveryResearchCampaign.id,
+        organizationId: pgSchema.traderDiscoveryResearchCampaign.organizationId,
+        contentDigest: pgSchema.traderDiscoveryResearchCampaign.contentDigest,
+        currentState: pgSchema.traderDiscoveryResearchCampaign.currentState,
+      })
+      .from(pgSchema.traderDiscoveryResearchCampaign)
+      .where(
+        and(
+          eq(pgSchema.traderDiscoveryResearchCampaign.id, structureCluster.campaignRef.campaignId),
+          orgScopedWhere(pgSchema.traderDiscoveryResearchCampaign.organizationId, scoped),
+        ),
+      )
+      .limit(1);
+    if (!campaign) {
+      throw new Error("STRUCTURE_CLUSTER_V2_INVALID:CAMPAIGN_NOT_IN_ORG");
+    }
+    if (
+      campaign.contentDigest !== structureCluster.campaignRef.campaignDigest ||
+      campaign.currentState !== structureCluster.campaignRef.state
+    ) {
+      throw new Error("STRUCTURE_CLUSTER_V2_INVALID:CAMPAIGN_IDENTITY");
+    }
+    values = {
+      id: structureCluster.clusterId,
+      organizationId: scoped.organizationId,
+      campaignId: structureCluster.campaignRef.campaignId,
+      signatureKey: structureCluster.signature.signatureKey,
+      payloadJson: canonicalJsonString(structureCluster),
+      contentDigest: structureCluster.contentDigest,
+      createdAt,
+    };
+  } else {
+    values = {
+      id: row.id,
+      organizationId: scoped.organizationId,
+      campaignId: row.campaignId,
+      signatureKey: row.signatureKey,
+      payloadJson: row.payloadJson,
+      contentDigest: row.contentDigest,
+      createdAt: row.createdAt,
+    };
+  }
+  await ex.insert(pgSchema.traderDiscoveryStructureCluster).values(values);
   return assertInserted(
     await ex
       .select()
       .from(pgSchema.traderDiscoveryStructureCluster)
       .where(
         and(
-          eq(pgSchema.traderDiscoveryStructureCluster.id, row.id),
+          eq(pgSchema.traderDiscoveryStructureCluster.id, values.id),
           orgScopedWhere(pgSchema.traderDiscoveryStructureCluster.organizationId, scoped),
         ),
       )

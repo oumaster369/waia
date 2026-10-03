@@ -10,6 +10,7 @@ import postgres from "postgres";
 import * as pgSchema from "@/db/schema.postgres";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { ensureUserCoreSeedPostgres } from "@/lib/waia-core/provisioning/postgres";
+import { createPostgresAccountExecutorLeaseV1 } from "@/lib/trader/execution/account-executor-lease-postgres-v1";
 import { createOrdinaryPaperOrderRepositoryFromExecutorPostgres } from "@/lib/trader/execution/ordinary-paper-order-repository-postgres";
 import {
   runScheduledNoncapitalPaperLoopFromEnv,
@@ -619,5 +620,85 @@ describe.skipIf(!enabled || !url)("DEE-1205 closed scheduled noncapital owner on
     expect((await counts(organizationB)).receipts).toBe(1);
     await expectNoExecutionEffects(organizationA);
     await expectNoExecutionEffects(organizationB);
+  }, 60_000);
+
+  async function advisoryLockCounts(): Promise<{ executorLocks: number; ownerLocks: number }> {
+    const rows = await witnessSql<{ executor_locks: number; owner_locks: number }[]>`
+      SELECT
+        count(*) FILTER (WHERE classid = 1151 AND objsubid = 2)::int AS executor_locks,
+        count(*) FILTER (WHERE classid = 1125001 AND objsubid = 2)::int AS owner_locks
+      FROM pg_locks
+      WHERE locktype = 'advisory' AND granted
+    `;
+    return {
+      executorLocks: rows[0]?.executor_locks ?? 0,
+      ownerLocks: rows[0]?.owner_locks ?? 0,
+    };
+  }
+
+  it("keeps a held paper executor lease independent of scheduled owner startup, repeated jobs, and lease restart", async () => {
+    installPublicPoll();
+    const accountId = "dee1205-synthetic-paper-account";
+    const firstPool = postgres(url!, { max: 1, prepare: false });
+    const firstSession = await firstPool.reserve();
+    const firstLease = createPostgresAccountExecutorLeaseV1(firstSession);
+    const fence = await firstLease.claim({
+      organizationId: currentOrg,
+      accountId,
+      holderId: "dee1201-scheduled-overlap",
+    });
+    let firstPoolClosed = false;
+    expect(fence).not.toBeNull();
+    try {
+      const started = await runScheduledNoncapitalPaperLoopFromEnv(envFor(currentOrg));
+      expect(started).toMatchObject({
+        status: "COMMITTED",
+        report: { startupReconciledOrders: 0, strategySubmittedCount: 0 },
+      });
+      expect(await firstLease.holds(fence!)).toBe(true);
+      expect(await advisoryLockCounts()).toEqual({ executorLocks: 1, ownerLocks: 0 });
+
+      const repeated = await runScheduledNoncapitalPaperLoopFromEnv(envFor(currentOrg));
+      expect(repeated.status).toBe("REPLAYED");
+      expect(await firstLease.holds(fence!)).toBe(true);
+      expect((await counts()).receipts).toBe(1);
+      await expectNoExecutionEffects();
+
+      // Backend loss, not an explicit unlock, is the restart. The scheduled
+      // owner uses its own pool and must keep replaying the same receipt.
+      firstSession.release();
+      await firstPool.end({ timeout: 5 });
+      firstPoolClosed = true;
+
+      const restartedPool = postgres(url!, { max: 1, prepare: false });
+      const restartedSession = await restartedPool.reserve();
+      const restartedLease = createPostgresAccountExecutorLeaseV1(restartedSession);
+      let restartedFence: Awaited<ReturnType<typeof restartedLease.claim>> = null;
+      try {
+        restartedFence = await restartedLease.claim({
+          organizationId: currentOrg.toUpperCase(),
+          accountId,
+          holderId: "dee1201-after-restart",
+        });
+        expect(restartedFence).not.toBeNull();
+        const afterRestart = await runScheduledNoncapitalPaperLoopFromEnv(envFor(currentOrg));
+        expect(afterRestart.status).toBe("REPLAYED");
+        expect((await counts()).receipts).toBe(1);
+        await expectNoExecutionEffects();
+        expect(await restartedLease.holds(restartedFence!)).toBe(true);
+        await restartedLease.release(restartedFence!);
+        restartedFence = null;
+      } finally {
+        if (restartedFence) await restartedLease.release(restartedFence);
+        restartedSession.release();
+        await restartedPool.end({ timeout: 5 });
+      }
+      expect(await advisoryLockCounts()).toEqual({ executorLocks: 0, ownerLocks: 0 });
+    } finally {
+      if (!firstPoolClosed) {
+        firstSession.release();
+        await firstPool.end({ timeout: 5 });
+      }
+    }
   }, 60_000);
 });
