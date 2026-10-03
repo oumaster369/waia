@@ -723,6 +723,217 @@ describe("owned research modeled stage kernel", () => {
     expect(policy.capitalEligible).toBe(false);
   });
 
+  it("refuses a stateful organizationId or contentDigest before any executor method", async () => {
+    const { descriptor } = sealed();
+    const db = executor();
+    let organizationReads = 0;
+    const organizationId = {
+      trim() {
+        organizationReads += 1;
+        return organizationReads === 1 ? ORG_ID : "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+      },
+      valueOf() {
+        organizationReads += 1;
+        return "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+      },
+      toString() {
+        organizationReads += 1;
+        return "ffffffff-ffff-4fff-8fff-ffffffffffff";
+      },
+      [Symbol.toPrimitive]() {
+        organizationReads += 1;
+        return "11111111-1111-4111-8111-111111111111";
+      },
+    };
+    let digestReads = 0;
+    const contentDigest = {
+      [Symbol.toPrimitive]() {
+        digestReads += 1;
+        return digestReads === 1 ? "ab" : "changed-digest";
+      },
+      toJSON() {
+        digestReads += 1;
+        return digestReads === 1 ? "ab" : "changed-digest";
+      },
+      valueOf() {
+        digestReads += 1;
+        return "changed-digest";
+      },
+      toString() {
+        digestReads += 1;
+        return "changed-digest";
+      },
+    };
+    await expect(
+      runOwnedResearchModeledStageV1({
+        executor: db,
+        descriptor,
+        payload: stagePayload({
+          scope: {
+            identity: {
+              attemptId: ATTEMPT_ID,
+              trialIndex: 0,
+              organizationId,
+              parameters: { lookbackBars: 2, buyZscore: "-1.5", sellZscore: "0" },
+            },
+            ledgerScope: {
+              organizationId: ORG_ID,
+              historicalRunId: "run-1",
+              historicalAccountKey: "acct",
+            },
+            contentDigest: "ab",
+          },
+        }) as never,
+      }),
+    ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
+    await expect(
+      runOwnedResearchModeledStageV1({
+        executor: db,
+        descriptor,
+        payload: stagePayload({
+          scope: {
+            identity: {
+              attemptId: ATTEMPT_ID,
+              trialIndex: 0,
+              organizationId: ORG_ID,
+              parameters: { lookbackBars: 2, buyZscore: "-1.5", sellZscore: "0" },
+            },
+            ledgerScope: {
+              organizationId: ORG_ID,
+              historicalRunId: "run-1",
+              historicalAccountKey: "acct",
+            },
+            contentDigest,
+          },
+        }) as never,
+      }),
+    ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
+    expect(organizationReads).toBe(0);
+    expect(digestReads).toBe(0);
+    expectExecutorUntouched(db);
+  });
+
+  it("refuses proxy organizationId and contentDigest values before any executor method", async () => {
+    const { descriptor } = sealed();
+    const db = executor();
+    const traps = { count: 0 };
+    const handler: ProxyHandler<object> = {
+      get() {
+        traps.count += 1;
+        return undefined;
+      },
+      apply() {
+        traps.count += 1;
+        return undefined;
+      },
+      ownKeys() {
+        traps.count += 1;
+        return [];
+      },
+      getOwnPropertyDescriptor() {
+        traps.count += 1;
+        return undefined;
+      },
+      has() {
+        traps.count += 1;
+        return false;
+      },
+      getPrototypeOf() {
+        traps.count += 1;
+        return Object.prototype;
+      },
+    };
+    const organizationProxy = new Proxy({ trim: () => ORG_ID }, handler);
+    const digestProxy = new Proxy({ [Symbol.toPrimitive]: () => "ab" }, handler);
+    await expect(
+      runOwnedResearchModeledStageV1({
+        executor: db,
+        descriptor,
+        payload: stagePayload({
+          scope: {
+            identity: {
+              attemptId: ATTEMPT_ID,
+              trialIndex: 0,
+              organizationId: organizationProxy,
+              parameters: { lookbackBars: 2, buyZscore: "-1.5", sellZscore: "0" },
+            },
+            ledgerScope: {
+              organizationId: ORG_ID,
+              historicalRunId: "run-1",
+              historicalAccountKey: "acct",
+            },
+            contentDigest: "ab",
+          },
+        }) as never,
+      }),
+    ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
+    await expect(
+      runOwnedResearchModeledStageV1({
+        executor: db,
+        descriptor,
+        payload: stagePayload({
+          scope: {
+            identity: {
+              attemptId: ATTEMPT_ID,
+              trialIndex: 0,
+              organizationId: ORG_ID,
+              parameters: { lookbackBars: 2, buyZscore: "-1.5", sellZscore: "0" },
+            },
+            ledgerScope: {
+              organizationId: ORG_ID,
+              historicalRunId: "run-1",
+              historicalAccountKey: "acct",
+            },
+            contentDigest: digestProxy,
+          },
+        }) as never,
+      }),
+    ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
+    expect(traps.count).toBe(0);
+    expectExecutorUntouched(db);
+  });
+
+  it("refuses a proxy sealer input before any proxy trap", () => {
+    const policy = resolvedPolicy();
+    const model = createHistoricalExecutionModelV1();
+    let traps = 0;
+    const input = new Proxy(
+      { attemptId: ATTEMPT_ID, trialIndex: 0, policy, model },
+      {
+        get() {
+          traps += 1;
+          return undefined;
+        },
+        ownKeys() {
+          traps += 1;
+          return [];
+        },
+        getOwnPropertyDescriptor() {
+          traps += 1;
+          return undefined;
+        },
+        has() {
+          traps += 1;
+          return false;
+        },
+        getPrototypeOf() {
+          traps += 1;
+          return Object.prototype;
+        },
+        set() {
+          traps += 1;
+          return false;
+        },
+      },
+    );
+    expect(() => sealOwnedResearchModeledStageDescriptorV1(input as never)).toThrow(
+      "RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_DESCRIPTOR",
+    );
+    expect(traps).toBe(0);
+    expect(policy.scientificQualified).toBe(false);
+    expect(policy.capitalEligible).toBe(false);
+  });
+
   it("keeps the local stage index separate from a nonzero absolute source bar index", () => {
     const close = "2026-01-01T00:05:00.000Z";
     expect(assertResearchModeledStageCycleAlignmentV1(4, 0, 4, close, close)).toEqual({

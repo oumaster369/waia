@@ -144,6 +144,16 @@ function readRequiredData(
   return read.value;
 }
 
+/** One descriptor read. Objects, proxies, and boxed strings are not captured:
+ * later `trim` and hashing would re-enter a stateful value. */
+function readCapturedString(record: object, key: string): string {
+  const read = readOwnProperty(record, key);
+  if (!read.present || read.accessor || isProxyLike(read.value) || typeof read.value !== "string") {
+    refuse("STAGE_INPUT");
+  }
+  return read.value;
+}
+
 function isArrayPrototype(value: object): boolean {
   return Object.getPrototypeOf(value) === Array.prototype;
 }
@@ -247,7 +257,7 @@ export function sealOwnedResearchModeledStageDescriptorV1(
     model: HistoricalExecutionModel;
   }>,
 ): ResearchModeledStageDescriptorV1 {
-  if (!isPlainRecord(input)) refuse("STAGE_DESCRIPTOR");
+  if (!isPlainRecord(input) || isProxyLike(input)) refuse("STAGE_DESCRIPTOR");
   for (const key of ownKeys(input)) {
     if (
       typeof key !== "string" ||
@@ -401,16 +411,12 @@ function assertOwnedResearchModeledStageCallV1(
   const experimentRead = readOwnProperty(payload, "experiment");
   const ledgerScopeRead = readOwnProperty(scope, "ledgerScope");
   const parametersRead = readOwnProperty(identity, "parameters");
-  const organizationRead = readOwnProperty(identity, "organizationId");
-  const contentDigestRead = readOwnProperty(scope, "contentDigest");
   if (
     barsRead.accessor ||
     cyclesRead.accessor ||
     experimentRead.accessor ||
     ledgerScopeRead.accessor ||
     parametersRead.accessor ||
-    organizationRead.accessor ||
-    contentDigestRead.accessor ||
     isProxyLike(barsRead.value) ||
     isProxyLike(cyclesRead.value) ||
     isProxyLike(experimentRead.value) ||
@@ -422,12 +428,14 @@ function assertOwnedResearchModeledStageCallV1(
   if (!isPlainRecord(experimentRead.value)) refuse("STAGE_INPUT");
   const specRead = readOwnProperty(experimentRead.value, "spec");
   if (!specRead.present || specRead.accessor || isProxyLike(specRead.value)) refuse("STAGE_INPUT");
+  const organizationId = readCapturedString(identity, "organizationId");
+  const scopeContentDigest = readCapturedString(scope, "contentDigest");
   return {
     executor: executor as OwnedResearchStageExecutorV1,
     descriptor,
     scopeContentDigest:
-      contentDigestRead.value as ResearchModeledStageSourceV1["scope"]["contentDigest"],
-    organizationId: organizationRead.value as string,
+      scopeContentDigest as ResearchModeledStageSourceV1["scope"]["contentDigest"],
+    organizationId,
     parameters: snapshotPlainData(
       parametersRead.value,
       "STAGE_INPUT",
