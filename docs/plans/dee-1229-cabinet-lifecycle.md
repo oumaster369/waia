@@ -12,7 +12,7 @@ state:
   prNumber: 764
   prUrl: https://github.com/oumaster369/waia/pull/764
   lastValidatedGitSha: c94d69cb69db3c999f5f4d692f6e4fd34d5fda2b
-  nextAction: "Pass canonical document validation and all applicable CI; refresh independent review and merge admission on the final head."
+  nextAction: "Verify concurrent-tab recovery fixes, pass all applicable CI, and refresh exact-head independent review including inline review threads before merge admission."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -34,7 +34,8 @@ Implement a stable account selector, explicit replacement and disconnect control
 - Adding a connection does not silently replace an existing active credential. Explicit replacement supplies the selected credential ID to the existing server guard.
 - Replacing or disconnecting changes WAIA's stored connection only. It does not revoke the HTX API key or stop an external executor. The replaced record remains in history.
 - One active key per organization, venue and account remains the server contract. This change does not add a second simultaneous observation key or authorize trading.
-- After a timeout or partial enrollment error, refresh the metadata to discover a potentially committed connection; do not automatically resubmit secret-bearing requests.
+- After a timeout or partial enrollment error, refresh metadata once without attributing another tab's new credential to this request. An active replacement retains its requested account; an ambiguous new connection or revoked-account reconnect requires an explicit account choice, even if only one account is returned. Do not automatically resubmit secret-bearing requests.
+- Disconnect confirmation is bound to the exact credential ID. A replacement on another tab requires fresh confirmation before that replacement can be disconnected. Replacement editing and disconnect confirmation cannot remain open together.
 - Secret inputs clear after successful submission, cancellation or changing the target; never enter browser persistence, URLs, logs or snapshots.
 
 ## Acceptance
