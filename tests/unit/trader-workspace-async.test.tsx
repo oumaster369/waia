@@ -65,7 +65,7 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     fireEvent.submit(screen.getByTestId("trader-connect-form"));
     await waitFor(() => expect(screen.getByRole("button", { name: "Подключить HTX" })).toBeEnabled());
     expect(screen.getByRole("alert")).not.toHaveTextContent("secret transport details");
-    expect(screen.getByRole("alert")).toHaveTextContent("проверьте его перед повторной отправкой ключа");
+    expect(screen.getByRole("alert")).toHaveTextContent("Проверьте состояние подключения перед повторной отправкой ключа");
   });
   it("fences a retired mount and does not start credential requests after it resolves", async () => {
     const fetcher = setup();
@@ -197,7 +197,7 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     expect(screen.queryByText("Separate shared observation")).not.toBeInTheDocument();
   });
 
-  it("ignores a connect completion after the user switches to another account", async () => {
+  it("locks account selection while connect is pending so completion cannot switch the viewed account", async () => {
     const fetcher = setup(false);
     fetcher.mockImplementation(async (input) => String(input) === "/api/trader/exchange-credentials"
       ? json({ credentials: [credential, secondCredential] }) : json({}));
@@ -210,13 +210,13 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     let finish!: (response: Response) => void;
     fetcher.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
     fireEvent.submit(screen.getByTestId("trader-connect-form"));
-    fireEvent.change(selector, { target: { value: secondCredential.exchangeAccountId } });
+    expect(selector).toBeDisabled();
     await act(async () => finish(json({ ...credential, id: "stale-connect-result" })));
     await settle();
-    expect(screen.getByTestId("trader-account-select")).toHaveValue("456");
-    expect(screen.getByTestId("trader-credential-account-id")).toHaveTextContent("456");
+    expect(screen.getByTestId("trader-account-select")).toHaveValue("123");
+    expect(screen.getByTestId("trader-credential-account-id")).toHaveTextContent("123");
     expect(screen.queryByText("stale-connect-result")).not.toBeInTheDocument();
-    expect(fetcher.mock.calls.filter(([url]) => String(url) === "/api/trader/exchange-credentials")).toHaveLength(1);
+    expect(fetcher.mock.calls.filter(([url]) => String(url) === "/api/trader/exchange-credentials")).toHaveLength(2);
   });
 
   it("clears replacement key fields when the user cancels", async () => {
@@ -257,7 +257,7 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     fireEvent.change(screen.getByLabelText("HTX Secret Key"), { target: { value: "one-time-secret" } });
     fireEvent.submit(screen.getByTestId("trader-connect-form"));
     await waitFor(() => expect(screen.getByTestId("trader-credential-status")).toHaveTextContent("Активен в WAIA"));
-    expect(screen.getByRole("alert")).toHaveTextContent("Состояние обновлено; проверьте статус перед повторной отправкой ключа");
+    expect(screen.getByRole("alert")).toHaveTextContent("Не удалось завершить запрос. Проверьте состояние подключения перед повторной отправкой ключа.");
     expect(connectCalls).toBe(1);
     expect(fetcher.mock.calls.filter(([url]) => String(url) === "/api/trader/exchange-credentials")).toHaveLength(2);
     expect(screen.getByTestId("trader-account-select")).toHaveValue("456");
@@ -288,5 +288,59 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     await waitFor(() => expect(screen.getByTestId("trader-account-select")).toHaveValue("456"));
     expect(screen.getByTestId("trader-credential-account-id")).toHaveTextContent("456");
     expect(screen.getByTestId("trader-account-status")).toHaveTextContent("HTX подключен в WAIA");
+  });
+
+  it("requires a fresh account choice when partial enrollment adds multiple active accounts", async () => {
+    let stored = false;
+    const firstNew = { ...credential, id: "new-one", exchangeAccountId: "789" };
+    const secondNew = { ...credential, id: "new-two", exchangeAccountId: "987" };
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url === "/api/trader/exchange-credentials") {
+        return json({ credentials: stored ? [credential, firstNew, secondNew] : [credential] });
+      }
+      if (url.endsWith("/connect")) {
+        stored = true;
+        return new Response(JSON.stringify({ error: { code: "INTERNAL_ERROR", message: "capacity" } }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return json({});
+    });
+    vi.stubGlobal("fetch", fetcher);
+    render(<TraderWorkspace />);
+    await screen.findByTestId("trader-replace-button");
+    fireEvent.click(screen.getByTestId("trader-replace-button"));
+    fireEvent.change(screen.getByLabelText("HTX Access Key"), { target: { value: "one-time-key" } });
+    fireEvent.change(screen.getByLabelText("HTX Secret Key"), { target: { value: "one-time-secret" } });
+    fireEvent.submit(screen.getByTestId("trader-connect-form"));
+    await waitFor(() => expect(screen.getByTestId("trader-account-selection-prompt")).toBeInTheDocument());
+    expect(screen.getByTestId("trader-account-select")).toHaveValue("");
+    expect(screen.queryByTestId("trader-connect-form")).not.toBeInTheDocument();
+  });
+
+  it("refreshes an ambiguous revoke result and clears confirmation when metadata shows it was revoked", async () => {
+    let revoked = false;
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/trader/exchange-credentials") {
+        return json({ credentials: [revoked ? { ...credential, status: "revoked" } : credential] });
+      }
+      if (init?.method === "DELETE") {
+        revoked = true;
+        throw new Error("response lost after commit");
+      }
+      return json({});
+    });
+    vi.stubGlobal("fetch", fetcher);
+    render(<TraderWorkspace />);
+    await screen.findByTestId("trader-disconnect-button");
+    fireEvent.click(screen.getByTestId("trader-disconnect-button"));
+    fireEvent.click(screen.getByTestId("trader-disconnect-confirm"));
+    await waitFor(() => expect(screen.getByTestId("trader-credential-status")).toHaveTextContent("Отозван в WAIA"));
+    expect(screen.getByRole("alert")).toHaveTextContent("Не удалось подтвердить результат запроса");
+    expect(screen.queryByRole("group", { name: "Подтвердить отключение" })).not.toBeInTheDocument();
+    expect(fetcher.mock.calls.filter(([url]) => String(url) === "/api/trader/exchange-credentials")).toHaveLength(2);
   });
 });

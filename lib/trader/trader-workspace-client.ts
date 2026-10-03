@@ -102,6 +102,7 @@ export async function revokeExchangeCredentialClient(
     response = await fetch(`/api/trader/exchange-credentials/${encodeURIComponent(credentialId)}`, {
       method: "DELETE",
       credentials: "same-origin",
+      signal: AbortSignal.timeout(HTX_CONNECT_CLIENT_TIMEOUT_MS),
     });
   } catch {
     return { kind: "err", status: 0, displayMessage: "Disconnect did not complete. Refresh and retry." };
@@ -117,9 +118,15 @@ export async function revokeExchangeCredentialClient(
 export async function listExchangeCredentialsClient(): Promise<
   TraderClientOk<CredentialMetadataDto[]> | TraderClientErr
 > {
-  const response = await fetch("/api/trader/exchange-credentials", {
-    credentials: "same-origin",
-  });
+  let response: Response;
+  try {
+    response = await fetch("/api/trader/exchange-credentials", {
+      credentials: "same-origin",
+      signal: AbortSignal.timeout(HTX_CONNECT_CLIENT_TIMEOUT_MS),
+    });
+  } catch {
+    return { kind: "err", status: 0, displayMessage: "Could not load connected accounts." };
+  }
   const raw = await readJson(response);
   if (!response.ok) {
     return errFromResponse(response.status, raw);

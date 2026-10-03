@@ -124,7 +124,7 @@ function credentialAccountOptions(credentials: readonly CredentialMetadataDto[])
 }
 
 function credentialRequestError(code: string | undefined, status: number): string {
-  if (status === 0) return "Не удалось получить подтверждение. Состояние подключения обновлено; проверьте его перед повторной отправкой ключа.";
+  if (status === 0) return "Не удалось подтвердить результат запроса. Проверьте состояние подключения перед повторной отправкой ключа.";
   switch (code) {
     case "CREDENTIAL_CONFLICT": return "Состояние аккаунта изменилось. Обновите список и повторите действие.";
     case "CREDENTIAL_NOT_FOUND": return "Подключение не найдено. Обновите список аккаунтов.";
@@ -133,7 +133,7 @@ function credentialRequestError(code: string | undefined, status: number): strin
     case "FORBIDDEN": return "У этого аккаунта нет доступа к AI-TRADER.";
     case "CSRF_INVALID": return "Запрос отклонён. Обновите страницу и повторите действие.";
     case "MASTER_KEY_NOT_READY": return "Сохранение подключений временно недоступно. Попробуйте позже.";
-    default: return "Не удалось завершить запрос. Состояние обновлено; проверьте статус перед повторной отправкой ключа.";
+    default: return "Не удалось завершить запрос. Проверьте состояние подключения перед повторной отправкой ключа.";
   }
 }
 
@@ -150,6 +150,7 @@ function ExchangeTraderWorkspace() {
   const [apiKey, setApiKey] = React.useState("");
   const [apiSecret, setApiSecret] = React.useState("");
   const [accountLabel, setAccountLabel] = React.useState("");
+  const mutationBusy = connecting || disconnecting;
   const scope = React.useRef(0);
   const selectedAccountIdRef = React.useRef("");
   const credentialIdsRef = React.useRef(new Set<string>());
@@ -161,35 +162,44 @@ function ExchangeTraderWorkspace() {
   const selectedAccount = accountOptions.find((account) => account.accountId === selectedAccountId);
   const selectedCredential = selectedAccount?.credential;
 
-  const loadWorkspace = React.useCallback(async (clearError = true, preferNewActive = false) => {
+  const loadWorkspace = React.useCallback(async (clearError = true, preferNewActive = false): Promise<CredentialMetadataDto[] | null> => {
     const generation = ++scope.current;
     pending.current.clear();
     setConnecting(false);
+    setDisconnecting(false);
     setLoading(true);
     if (clearError) setErrorMessage(null);
     try {
       const result = await listExchangeCredentialsClient();
-      if (scope.current !== generation) return;
+      if (scope.current !== generation) return null;
       if (result.kind === "err") {
         setErrorMessage(credentialRequestError(result.code, result.status));
         setCredentials([]);
-        return;
+        return null;
       }
       assertNoSecretsInPayload(JSON.stringify(result.data));
       setCredentials(result.data);
       const options = credentialAccountOptions(result.data);
       const previousSelection = selectedAccountIdRef.current;
       const newlyActive = preferNewActive
-        ? result.data.find((credential) => credential.status === "active" && !credentialIdsRef.current.has(credential.id))
-        : undefined;
-      const retained = newlyActive?.exchangeAccountId ?? (options.some((account) => account.accountId === previousSelection)
+        ? result.data.filter((credential) => credential.status === "active" && !credentialIdsRef.current.has(credential.id))
+        : [];
+      const retained = (newlyActive.length === 1 ? newlyActive[0]!.exchangeAccountId : "") || (options.some((account) => account.accountId === previousSelection)
         ? previousSelection
         : !previousSelection && options.length === 1 ? options[0]!.accountId : "");
+      const selectionRequired = preferNewActive && newlyActive.length > 1;
+      const nextSelection = selectionRequired ? "" : retained;
+      if (preferNewActive) {
+        setAddingNewAccount(false);
+        setEditingReplacement(false);
+      }
       credentialIdsRef.current = new Set(result.data.map((credential) => credential.id));
-      selectedAccountIdRef.current = retained;
-      setSelectedAccountId(retained);
+      selectedAccountIdRef.current = nextSelection;
+      setSelectedAccountId(nextSelection);
+      return result.data;
     } catch {
       if (scope.current === generation) setErrorMessage(asyncError);
+      return null;
     } finally {
       if (scope.current === generation) setLoading(false);
     }
@@ -225,7 +235,7 @@ function ExchangeTraderWorkspace() {
     setPending: (value: boolean) => void,
     work: (isCurrent: () => boolean) => Promise<void>,
   ) => {
-    if (pending.current.has(name)) return;
+    if (pending.current.size > 0 || pending.current.has(name)) return;
     const owner = {};
     pending.current.set(name, owner);
     const generation = scope.current;
@@ -306,7 +316,16 @@ function ExchangeTraderWorkspace() {
       const result = await revokeExchangeCredentialClient(credentialId);
       if (!isCurrent()) return;
       if (result.kind === "err") {
-        setErrorMessage(credentialRequestError(result.code, result.status));
+        const displayMessage = credentialRequestError(result.code, result.status);
+        const refresh = loadWorkspace(false);
+        const refreshGeneration = scope.current;
+        const refreshedCredentials = await refresh;
+        if (scope.current !== refreshGeneration) return;
+        const stillActive = refreshedCredentials?.some((credential) =>
+          credential.exchangeAccountId === selectedAccountIdRef.current && credential.status === "active",
+        );
+        if (refreshedCredentials && !stillActive) setConfirmDisconnect(false);
+        setErrorMessage(displayMessage);
         return;
       }
       assertNoSecretsInPayload(JSON.stringify(result.data));
@@ -370,6 +389,7 @@ function ExchangeTraderWorkspace() {
                     id="trader-account-select"
                     data-testid="trader-account-select"
                     value={selectedAccountId}
+                    disabled={mutationBusy}
                     onChange={(event) => selectAccount(event.target.value)}
                     className="border-input bg-background mt-1 h-9 w-full rounded-md border px-3 text-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                   >
@@ -382,7 +402,7 @@ function ExchangeTraderWorkspace() {
                   </select>
                 </div>
                 {!addingNewAccount ? (
-                  <Button type="button" variant="outline" onClick={() => {
+                  <Button type="button" variant="outline" disabled={mutationBusy} onClick={() => {
                     selectAccount("");
                     setAddingNewAccount(true);
                   }}>
@@ -393,7 +413,7 @@ function ExchangeTraderWorkspace() {
             </section>
           ) : null}
 
-          {accountOptions.length > 1 && !selectedCredential && !addingNewAccount ? (
+          {accountOptions.length > 0 && !selectedCredential && !addingNewAccount ? (
             <div className="border-border bg-muted/10 rounded-lg border p-4 text-sm" data-testid="trader-account-selection-prompt">
               Выберите аккаунт, чтобы просмотреть его статус и историю, или подключите другой.
             </div>
@@ -406,12 +426,12 @@ function ExchangeTraderWorkspace() {
                 {selectedCredential.status === "active" ? (
                   <div className="mt-4">
                     {!editingReplacement && !confirmDisconnect ? (
-                      <Button type="button" variant="outline" onClick={() => setEditingReplacement(true)} data-testid="trader-replace-button">
+                      <Button type="button" variant="outline" disabled={mutationBusy} onClick={() => setEditingReplacement(true)} data-testid="trader-replace-button">
                         Заменить подключение
                       </Button>
                     ) : null}
                     {!confirmDisconnect ? (
-                      <Button type="button" variant="outline" disabled={disconnecting}
+                      <Button type="button" variant="outline" disabled={mutationBusy}
                         onClick={() => setConfirmDisconnect(true)} data-testid="trader-disconnect-button">
                         Отключить подключение
                       </Button>
@@ -423,7 +443,7 @@ function ExchangeTraderWorkspace() {
                             onClick={handleDisconnect} data-testid="trader-disconnect-confirm">
                             {disconnecting ? "Отключение…" : "Подтвердить отключение"}
                           </Button>
-                          <Button type="button" variant="outline" disabled={disconnecting}
+                          <Button type="button" variant="outline" disabled={mutationBusy}
                             onClick={() => setConfirmDisconnect(false)}>Отмена</Button>
                         </div>
                       </div>
@@ -485,13 +505,13 @@ function ExchangeTraderWorkspace() {
                       value={accountLabel} onChange={(e) => setAccountLabel(e.target.value)} />
                   </div>
                   <PermissionExplainer />
-                  <Button type="submit" disabled={connecting} data-testid="trader-connect-submit" className="w-full">
+                  <Button type="submit" disabled={mutationBusy} data-testid="trader-connect-submit" className="w-full">
                     {connecting ? "Подключение…" : selectedCredential?.status === "active"
                       ? "Заменить подключение"
                       : "Подключить HTX"}
                   </Button>
                   {selectedCredential?.status === "active" || addingNewAccount ? (
-                    <Button type="button" variant="outline" disabled={connecting} onClick={cancelConnect}>
+                    <Button type="button" variant="outline" disabled={mutationBusy} onClick={cancelConnect}>
                       Отмена
                     </Button>
                   ) : null}
