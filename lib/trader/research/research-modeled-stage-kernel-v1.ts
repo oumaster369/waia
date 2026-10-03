@@ -83,6 +83,9 @@ const UNTRUSTED_STAGE_CALL_KEYS = new Set<string>([
   "model",
 ]);
 const UNTRUSTED_STAGE_DESCRIPTOR_KEYS = new Set<string>(UNTRUSTED_STAGE_AUTHORITY_KEYS);
+/** Own keys that must never be copied. Assignment to `__proto__` invokes the
+ * Object.prototype setter; `constructor` and `prototype` are the same family. */
+const FORBIDDEN_SNAPSHOT_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 type ResolvedTrainingPolicy = ReturnType<typeof resolveResearchTrainingPolicyV1>;
 type HistoricalExecutionModel = ReturnType<typeof createHistoricalExecutionModelV1>;
@@ -101,8 +104,9 @@ export type ResearchModeledStageDescriptorV1 = Readonly<{
   model: HistoricalExecutionModel;
 }>;
 
-function ownKeys(value: object): string[] {
-  return Object.keys(value);
+/** Every own string and symbol. `Object.keys` would miss non-enumerable keys and symbols. */
+function ownKeys(value: object): Array<string | symbol> {
+  return [...Object.getOwnPropertyNames(value), ...Object.getOwnPropertySymbols(value)];
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -149,6 +153,13 @@ function isRecordPrototype(value: object): boolean {
   return prototype === Object.prototype;
 }
 
+/** Plain data: Object.prototype, no proxy, no forbidden own keys, no symbols. */
+function isPlainDataObject(value: unknown): value is Record<string, unknown> {
+  if (!isPlainRecord(value) || isProxyLike(value) || !isRecordPrototype(value)) return false;
+  if (Object.getOwnPropertySymbols(value).length !== 0) return false;
+  return Object.getOwnPropertyNames(value).every((name) => !FORBIDDEN_SNAPSHOT_KEYS.has(name));
+}
+
 /** One walk, one read per own data field. The result shares nothing mutable with `value`. */
 function snapshotPlainData(
   value: unknown,
@@ -184,7 +195,7 @@ function snapshotPlainData(
     const indexes = new Set<string>();
     for (const name of names) {
       if (name === "length") continue;
-      if (!/^(?:0|[1-9]\d*)$/.test(name)) refuse(reason);
+      if (FORBIDDEN_SNAPSHOT_KEYS.has(name) || !/^(?:0|[1-9]\d*)$/.test(name)) refuse(reason);
       const index = Number(name);
       if (index >= length) refuse(reason);
       indexes.add(name);
@@ -201,8 +212,11 @@ function snapshotPlainData(
   }
   if (!isRecordPrototype(value)) refuse(reason);
   if (Object.getOwnPropertySymbols(value).length !== 0) refuse(reason);
-  const copy: Record<string, unknown> = {};
+  // `Object.create(Object.prototype)` plus defineProperty: assignment would
+  // invoke the `__proto__` setter for an own key produced by JSON.parse.
+  const copy: Record<string, unknown> = Object.create(Object.prototype);
   for (const name of Object.getOwnPropertyNames(value)) {
+    if (FORBIDDEN_SNAPSHOT_KEYS.has(name)) refuse(reason);
     const property = Object.getOwnPropertyDescriptor(value, name);
     if (
       !property ||
@@ -212,7 +226,12 @@ function snapshotPlainData(
     ) {
       refuse(reason);
     }
-    copy[name] = snapshotPlainData(property.value, reason, depth + 1, visiting);
+    Object.defineProperty(copy, name, {
+      value: snapshotPlainData(property.value, reason, depth + 1, visiting),
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
   }
   visiting.delete(value);
   return Object.freeze(copy);
@@ -230,7 +249,11 @@ export function sealOwnedResearchModeledStageDescriptorV1(
 ): ResearchModeledStageDescriptorV1 {
   if (!isPlainRecord(input)) refuse("STAGE_DESCRIPTOR");
   for (const key of ownKeys(input)) {
-    if (UNTRUSTED_STAGE_DESCRIPTOR_KEYS.has(key) || !STAGE_DESCRIPTOR_KEYS.has(key)) {
+    if (
+      typeof key !== "string" ||
+      UNTRUSTED_STAGE_DESCRIPTOR_KEYS.has(key) ||
+      !STAGE_DESCRIPTOR_KEYS.has(key)
+    ) {
       refuse("UNTRUSTED_STAGE_DESCRIPTOR");
     }
   }
@@ -286,6 +309,8 @@ function descriptorShapeIsExact(value: object): boolean {
     )
       return false;
   }
+  const policy = readOwnProperty(value, "policy");
+  if (!policy.present || policy.accessor || !isPlainDataObject(policy.value)) return false;
   const symbols = Object.getOwnPropertySymbols(value);
   if (symbols.length !== 1 || symbols[0] !== STAGE_DESCRIPTOR_BRAND) return false;
   const brand = Object.getOwnPropertyDescriptor(value, STAGE_DESCRIPTOR_BRAND);
@@ -332,8 +357,13 @@ function assertOwnedResearchModeledStageCallV1(
 } {
   if (!isPlainRecord(input) || isProxyLike(input)) refuse("STAGE_INPUT");
   for (const key of ownKeys(input)) {
-    if (UNTRUSTED_STAGE_CALL_KEYS.has(key) || !STAGE_CALL_KEYS.has(key))
+    if (
+      typeof key !== "string" ||
+      UNTRUSTED_STAGE_CALL_KEYS.has(key) ||
+      !STAGE_CALL_KEYS.has(key)
+    ) {
       refuse("UNTRUSTED_STAGE_INPUT");
+    }
   }
   const executor = readRequiredData(input, "executor");
   const descriptor = readRequiredData(input, "descriptor");

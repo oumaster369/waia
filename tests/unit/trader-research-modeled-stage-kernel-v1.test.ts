@@ -80,6 +80,25 @@ function payload(attemptId = ATTEMPT_ID, trialIndex = 0): ResearchModeledStageSo
   return { scope: { identity: { attemptId, trialIndex } } } as ResearchModeledStageSourceV1;
 }
 
+/** JSON.parse defines an own `__proto__` data property. Assignment would not. */
+function jsonOwnProto(extra: Record<string, unknown> = {}): object {
+  const tail = Object.entries(extra)
+    .map(([key, value]) => `${JSON.stringify(key)}:${JSON.stringify(value)}`)
+    .join(",");
+  const json =
+    tail.length === 0
+      ? '{"__proto__":{"scientificQualified":true,"declaredQuantityCap":"999"}}'
+      : `{"__proto__":{"scientificQualified":true,"declaredQuantityCap":"999"},${tail}}`;
+  return JSON.parse(json) as object;
+}
+
+function expectExecutorUntouched(db: ReturnType<typeof executor>) {
+  expect(db.select).not.toHaveBeenCalled();
+  expect(db.insert).not.toHaveBeenCalled();
+  expect(db.update).not.toHaveBeenCalled();
+  expect(db.execute).not.toHaveBeenCalled();
+}
+
 describe("owned research modeled stage kernel", () => {
   it("seals a descriptor that stays scientifically unqualified", () => {
     const { policy, descriptor } = sealed();
@@ -511,6 +530,10 @@ describe("owned research modeled stage kernel", () => {
     expect(descriptor.policy.scientificQualified).toBe(false);
     expect(descriptor.policy.capitalEligible).toBe(false);
     expect(descriptor.policy.portfolio.runConfig.startingBalanceUsdt).not.toBe("1");
+    expect(Object.getPrototypeOf(descriptor.policy)).toBe(Object.prototype);
+    expect(Object.hasOwn(descriptor.policy, "__proto__")).toBe(false);
+    expect(Object.hasOwn(descriptor.policy, "constructor")).toBe(false);
+    expect(Object.hasOwn(descriptor.policy, "prototype")).toBe(false);
     expect(Object.isFrozen(descriptor.policy)).toBe(true);
     expect(Object.isFrozen(descriptor.model)).toBe(true);
 
@@ -531,6 +554,173 @@ describe("owned research modeled stage kernel", () => {
       }),
     ).toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_DESCRIPTOR");
     expect(reads).toBe(0);
+  });
+
+  it("refuses an own __proto__ key from JSON.parse at policy, payload, bars, and cycles snapshots before the executor", async () => {
+    const db = executor();
+    const model = createHistoricalExecutionModelV1();
+    const { descriptor } = sealed();
+    const close = "2026-01-01T00:01:00.000Z";
+    const sample = jsonOwnProto({ declaredQuantityCap: "0.5" });
+    expect(Object.getPrototypeOf(sample)).toBe(Object.prototype);
+    expect(Object.getOwnPropertyDescriptor(sample, "__proto__")?.value).toMatchObject({
+      scientificQualified: true,
+      declaredQuantityCap: "999",
+    });
+
+    const policyBase = JSON.parse(JSON.stringify(resolvedPolicy())) as Record<string, unknown>;
+    expect(() =>
+      sealOwnedResearchModeledStageDescriptorV1({
+        attemptId: ATTEMPT_ID,
+        trialIndex: 0,
+        policy: jsonOwnProto(policyBase) as never,
+        model,
+      }),
+    ).toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_DESCRIPTOR");
+    expect(() =>
+      sealOwnedResearchModeledStageDescriptorV1({
+        attemptId: ATTEMPT_ID,
+        trialIndex: 0,
+        policy: resolvedPolicy(),
+        model: jsonOwnProto({ venue: "caller" }) as never,
+      }),
+    ).toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_DESCRIPTOR");
+
+    const identity = {
+      attemptId: ATTEMPT_ID,
+      trialIndex: 0,
+      organizationId: ORG_ID,
+      parameters: { lookbackBars: 2, buyZscore: "-1.5", sellZscore: "0" },
+    };
+    const ledgerScope = {
+      organizationId: ORG_ID,
+      historicalRunId: "run-1",
+      historicalAccountKey: "acct",
+    };
+    const payloadSnapshots = [
+      stagePayload({
+        scope: {
+          identity: { ...identity, parameters: jsonOwnProto({ lookbackBars: 2 }) },
+          ledgerScope,
+          contentDigest: "ab",
+        },
+      }),
+      stagePayload({
+        scope: {
+          identity,
+          ledgerScope: jsonOwnProto(ledgerScope),
+          contentDigest: "ab",
+        },
+      }),
+      stagePayload({
+        experiment: { spec: jsonOwnProto({ universe: { symbol: "BTCUSDT" } }) },
+      }),
+      stagePayload({ bars: jsonOwnProto({ close: "1" }) }),
+      stagePayload({
+        cycles: jsonOwnProto({ cycleId: "cycle-1", barIndex: 0 }),
+      }),
+      stagePayload({
+        bars: [jsonOwnProto({ close: "1", barCloseTime: close })],
+      }),
+      stagePayload({
+        cycles: [
+          jsonOwnProto({
+            cycleId: "cycle-1",
+            barIndex: 0,
+            closedBar: { barCloseTime: close },
+          }),
+        ],
+      }),
+    ];
+    for (const body of payloadSnapshots) {
+      await expect(
+        runOwnedResearchModeledStageV1({
+          executor: db,
+          descriptor,
+          payload: body as never,
+        }),
+      ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
+    }
+    expectExecutorUntouched(db);
+    expect("scientificQualified" in Object.prototype).toBe(false);
+    expect("declaredQuantityCap" in Object.prototype).toBe(false);
+  });
+
+  it("refuses own constructor and prototype keys in a snapshotted policy and bar", async () => {
+    const db = executor();
+    const model = createHistoricalExecutionModelV1();
+    const { descriptor } = sealed();
+    for (const key of ["constructor", "prototype"] as const) {
+      const policy = JSON.parse(
+        `{"${key}":{"scientificQualified":true,"declaredQuantityCap":"999"},"declaredQuantityCap":"0.5","scientificQualified":false,"capitalEligible":false}`,
+      );
+      expect(() =>
+        sealOwnedResearchModeledStageDescriptorV1({
+          attemptId: ATTEMPT_ID,
+          trialIndex: 0,
+          policy: policy as never,
+          model,
+        }),
+      ).toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_DESCRIPTOR");
+      await expect(
+        runOwnedResearchModeledStageV1({
+          executor: db,
+          descriptor,
+          payload: stagePayload({
+            bars: [JSON.parse(`{"${key}":{"scientificQualified":true},"close":"1"}`)],
+          }) as never,
+        }),
+      ).rejects.toThrow("RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:STAGE_INPUT");
+    }
+    expectExecutorUntouched(db);
+    expect(descriptor.policy.scientificQualified).toBe(false);
+    expect(descriptor.policy.capitalEligible).toBe(false);
+  });
+
+  it("refuses non-enumerable and symbol keys on the call and the sealer before the executor", async () => {
+    const { descriptor, policy } = sealed();
+    const model = createHistoricalExecutionModelV1();
+    const db = executor();
+    const hiddenCall = { executor: db, descriptor, payload: payload() };
+    Object.defineProperty(hiddenCall, "scientificQualified", {
+      value: true,
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    });
+    await expect(runOwnedResearchModeledStageV1(hiddenCall as never)).rejects.toThrow(
+      "RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:UNTRUSTED_STAGE_INPUT",
+    );
+
+    const symbolCall = { executor: db, descriptor, payload: payload() };
+    Object.defineProperty(symbolCall, Symbol("capitalEligible"), {
+      value: true,
+      enumerable: false,
+      configurable: true,
+    });
+    await expect(runOwnedResearchModeledStageV1(symbolCall as never)).rejects.toThrow(
+      "RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:UNTRUSTED_STAGE_INPUT",
+    );
+
+    const hiddenSeal = { attemptId: ATTEMPT_ID, trialIndex: 0, policy, model };
+    Object.defineProperty(hiddenSeal, "bars", {
+      value: [{ close: "1" }],
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    });
+    expect(() => sealOwnedResearchModeledStageDescriptorV1(hiddenSeal as never)).toThrow(
+      "RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:UNTRUSTED_STAGE_DESCRIPTOR",
+    );
+
+    const symbolSeal = { attemptId: ATTEMPT_ID, trialIndex: 0, policy, model };
+    Object.defineProperty(symbolSeal, Symbol("stageLabel"), { value: "BLIND" });
+    expect(() => sealOwnedResearchModeledStageDescriptorV1(symbolSeal as never)).toThrow(
+      "RESEARCH_TRAINING_DIAGNOSTIC_REFUSED:UNTRUSTED_STAGE_DESCRIPTOR",
+    );
+    expectExecutorUntouched(db);
+    expect(policy.scientificQualified).toBe(false);
+    expect(policy.capitalEligible).toBe(false);
   });
 
   it("keeps the local stage index separate from a nonzero absolute source bar index", () => {
