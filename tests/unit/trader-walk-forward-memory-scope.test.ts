@@ -119,25 +119,26 @@ describe("trader walk-forward memory scope (DEE-367)", () => {
     }
   });
 
-  it("runWalkForwardValidation does not call bulk buildWalkForwardWindowPlans", async () => {
+  it("runWalkForwardValidation refuses a caller backtest without planning windows", async () => {
     const bulkSpy = vi.spyOn(walkForwardEngine, "buildWalkForwardWindowPlans");
+    const runBacktest = vi.fn().mockResolvedValue(buildMetrics(["RANGE"]));
 
-    await runWalkForwardValidation({
-      context: { organizationId: ORG_ID },
-      candidate: buildCandidate(),
-      trainBars: buildBars(10),
-      validationBars: buildBars(4),
-      oosBarCount: 2,
-      runBacktest: vi
-        .fn()
-        .mockResolvedValueOnce(buildMetrics(["RANGE"]))
-        .mockResolvedValueOnce(buildMetrics(["CHOP", "TREND_BEAR"])),
-      repository: {
-        insertWalkForwardWindow: vi.fn().mockResolvedValue(undefined),
-        updateStrategyCandidateStatus: vi.fn().mockResolvedValue(undefined),
-      },
-    });
+    await expect(
+      runWalkForwardValidation({
+        context: { organizationId: ORG_ID },
+        candidate: buildCandidate(),
+        trainBars: buildBars(10),
+        validationBars: buildBars(4),
+        oosBarCount: 2,
+        runBacktest,
+        repository: {
+          insertWalkForwardWindow: vi.fn().mockResolvedValue(undefined),
+          updateStrategyCandidateStatus: vi.fn().mockResolvedValue(undefined),
+        },
+      }),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:FORGED_CALLBACK");
 
+    expect(runBacktest).not.toHaveBeenCalled();
     expect(bulkSpy).not.toHaveBeenCalled();
     bulkSpy.mockRestore();
   });

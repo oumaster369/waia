@@ -8,7 +8,6 @@ import {
 import {
   buildWalkForwardWindowPlanAtIndex,
   buildWalkForwardWindowPlans,
-  computeWalkForwardEvidenceDigest,
   runWalkForwardValidation,
 } from "@/lib/trader/research/walk-forward-engine";
 import type {
@@ -85,69 +84,86 @@ describe("trader walk-forward (RI-P3)", () => {
     expect(plans[3]?.outOfSampleBars).toEqual(validationBars.slice(6, 8));
   });
 
-  it("runWalkForwardValidation persists per-window metrics and updates candidate status", async () => {
-    const trainBars = buildBars(10);
-    const validationBars = buildBars(4);
-    const metricsByWindow = [buildMetrics(["RANGE"]), buildMetrics(["CHOP", "TREND_BEAR"])];
-
+  it("runWalkForwardValidation refuses a caller backtest before any window write", async () => {
     const insertWalkForwardWindow = vi.fn().mockResolvedValue(undefined);
     const updateStrategyCandidateStatus = vi.fn().mockResolvedValue(undefined);
-    const runBacktest = vi
-      .fn()
-      .mockResolvedValueOnce(metricsByWindow[0])
-      .mockResolvedValueOnce(metricsByWindow[1]);
+    const runBacktest = vi.fn().mockResolvedValue(buildMetrics(["RANGE"]));
 
-    const result = await runWalkForwardValidation({
-      context: { organizationId: ORG_ID },
-      candidate: buildCandidate(),
-      trainBars,
-      validationBars,
-      oosBarCount: 2,
-      runBacktest,
-      repository: {
-        insertWalkForwardWindow,
-        updateStrategyCandidateStatus,
-      },
-      newId: () => "00000000-0000-4000-8000-00000000c010",
-    });
+    await expect(
+      runWalkForwardValidation({
+        context: { organizationId: ORG_ID },
+        candidate: buildCandidate(),
+        trainBars: buildBars(10),
+        validationBars: buildBars(4),
+        oosBarCount: 2,
+        runBacktest,
+        repository: {
+          insertWalkForwardWindow,
+          updateStrategyCandidateStatus,
+        },
+        newId: () => "00000000-0000-4000-8000-00000000c010",
+      }),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:FORGED_CALLBACK");
 
-    expect(runBacktest).toHaveBeenCalledTimes(2);
-    expect(runBacktest.mock.calls[0]?.[0]).toMatchObject({ windowIndex: 0 });
-    expect(runBacktest.mock.calls[1]?.[0]).toMatchObject({ windowIndex: 1 });
-    expect(insertWalkForwardWindow).toHaveBeenCalledTimes(2);
-    expect(updateStrategyCandidateStatus).toHaveBeenCalledWith(
-      { organizationId: ORG_ID },
-      CANDIDATE_ID,
-      "walk_forward_validated",
-    );
-    expect(result.windows).toHaveLength(2);
-    expect(result.regimeLabels).toEqual(["CHOP", "RANGE", "TREND_BEAR"]);
-    expect(computeWalkForwardEvidenceDigest(result.windows)).toMatch(/^[a-f0-9]{64}$/);
+    expect(runBacktest).not.toHaveBeenCalled();
+    expect(insertWalkForwardWindow).not.toHaveBeenCalled();
+    expect(updateStrategyCandidateStatus).not.toHaveBeenCalled();
   });
 
-  it("runWalkForwardValidation completes when window metrics lack multi-regime coverage", async () => {
+  it("runWalkForwardValidation does not accept caller metrics as walk-forward evidence", async () => {
     const insertWalkForwardWindow = vi.fn().mockResolvedValue(undefined);
     const updateStrategyCandidateStatus = vi.fn().mockResolvedValue(undefined);
+    const runBacktest = vi.fn().mockResolvedValue(buildMetrics(["TREND_BULL"]));
 
-    const result = await runWalkForwardValidation({
+    await expect(
+      runWalkForwardValidation({
+        context: { organizationId: ORG_ID },
+        candidate: buildCandidate(),
+        trainBars: buildBars(10),
+        validationBars: buildBars(2),
+        oosBarCount: 2,
+        runBacktest,
+        repository: {
+          insertWalkForwardWindow,
+          updateStrategyCandidateStatus,
+        },
+      }),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:FORGED_CALLBACK");
+
+    expect(runBacktest).not.toHaveBeenCalled();
+    expect(updateStrategyCandidateStatus).not.toHaveBeenCalled();
+  });
+
+  it("runWalkForwardValidation refuses a runBacktest getter without invoking it", async () => {
+    let reads = 0;
+    const insertWalkForwardWindow = vi.fn().mockResolvedValue(undefined);
+    const updateStrategyCandidateStatus = vi.fn().mockResolvedValue(undefined);
+    const input = {
       context: { organizationId: ORG_ID },
       candidate: buildCandidate(),
       trainBars: buildBars(10),
-      validationBars: buildBars(2),
+      validationBars: buildBars(4),
       oosBarCount: 2,
-      runBacktest: vi.fn().mockResolvedValue(buildMetrics(["TREND_BULL"])),
       repository: {
         insertWalkForwardWindow,
         updateStrategyCandidateStatus,
       },
+    };
+    Object.defineProperty(input, "runBacktest", {
+      configurable: true,
+      enumerable: true,
+      get() {
+        reads += 1;
+        return vi.fn().mockResolvedValue(buildMetrics(["RANGE"]));
+      },
     });
 
-    expect(updateStrategyCandidateStatus).toHaveBeenCalledWith(
-      { organizationId: ORG_ID },
-      CANDIDATE_ID,
-      "walk_forward_validated",
-    );
-    expect(result.regimeLabels).toEqual(["TREND_BULL"]);
+    await expect(
+      runWalkForwardValidation(input as unknown as Parameters<typeof runWalkForwardValidation>[0]),
+    ).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:FORGED_CALLBACK");
+    expect(reads).toBe(0);
+    expect(insertWalkForwardWindow).not.toHaveBeenCalled();
+    expect(updateStrategyCandidateStatus).not.toHaveBeenCalled();
   });
 });
 
