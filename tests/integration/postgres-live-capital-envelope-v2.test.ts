@@ -130,6 +130,50 @@ describe.skipIf(!enabled)("DEE-1145 durable LiveCapitalEnvelopeV2", () => {
     await client?.end({ timeout: 5 });
   });
 
+  it("DEE-1150 binds the first captured command and refuses changed retries without effects", async () => {
+    const { organizationId } = await seed();
+    const accountId = "acct-command-conflict-before-seal";
+    const issued = command(organizationId, accountId);
+    const request = { command: issued, boundOrganizationId: organizationId,
+      observed: watch(issued),
+      sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED };
+    await advanceLiveCapitalEnvelopeStageV2(client, { ...request, stage: "CAPTURED" });
+    const before = await counts(organizationId);
+    await expect(advanceLiveCapitalEnvelopeStageV2(client, {
+      ...request, command: { ...issued, capitalNotional: "20" }, stage: "SEALED",
+    })).rejects.toThrow("ENVELOPE_COMMAND_CONFLICT");
+    expect(await counts(organizationId)).toEqual(before);
+    const published = await produceLiveCapitalEnvelopeV2(client, request);
+    expect(published.decision).toBe("PUBLISHED");
+    const replayed = await produceLiveCapitalEnvelopeV2(client, request);
+    expect(replayed).toMatchObject({ ...published, replayed: true });
+    expect(await stageCount(organizationId, issued.commandId, "CAPTURED")).toBe(1);
+  });
+
+  it("DEE-1150 invalid command retries cannot burn or substitute a published envelope", async () => {
+    const { organizationId } = await seed();
+    const accountId = "acct-command-conflict-published";
+    const issued = command(organizationId, accountId);
+    const request = { command: issued, boundOrganizationId: organizationId,
+      observed: watch(issued),
+      sourceMethodQualified: TEST_HUMAN_SOURCE_METHOD_QUALIFIED };
+    const published = await produceLiveCapitalEnvelopeV2(client, request);
+    expect(published.decision).toBe("PUBLISHED");
+    const before = await counts(organizationId);
+    for (const patch of [
+      { capitalNotional: "20" }, { lossLimitNotional: "2" },
+      { policyDigest: "ef".repeat(32) }, { validUntilUtc: "2098-01-01T00:00:00.000Z" },
+    ]) {
+      await expect(produceLiveCapitalEnvelopeV2(client, {
+        ...request, command: { ...issued, ...patch },
+      })).rejects.toThrow("ENVELOPE_COMMAND_CONFLICT");
+      expect(await counts(organizationId)).toEqual(before);
+      expect(await gateLiveCapitalIssueV2(client, organizationId, accountId, request.observed))
+        .toMatchObject({ decision: "BASIS_BOUND", envelopeDigest: published.envelopeDigest,
+          basisDigest: published.basisDigest, allowanceId: null, orderId: null });
+    }
+  });
+
   it("restarts before and after each durable stage without a second effect", async () => {
     for (let stop = 0; stop < LIVE_CAPITAL_ENVELOPE_STAGES_V2.length; stop += 1) {
       const { organizationId } = await seed();

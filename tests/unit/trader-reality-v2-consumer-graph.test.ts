@@ -170,24 +170,50 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
   it("pins only the closed derivatives account-info transport outside canonical financial authority", () => {
     const inventory = JSON.parse(readFileSync(INVENTORY, "utf8"));
     const file = "lib/trader/account-observation/derivatives/htx-account-transport.ts";
-    const rules = inventory.consumerRules.filter((rule: { pathPattern: string }) => new RegExp(rule.pathPattern).test(file));
-    expect(rules).toEqual([expect.objectContaining({ id: "ACCOUNT_OBSERVATION_DERIVATIVES_TRANSPORT",
-      pathPattern: "^lib/trader/account-observation/derivatives/htx-account-transport\\.ts$",
-      disposition: "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY" })]);
+    const rules = inventory.consumerRules.filter((rule: { pathPattern: string }) =>
+      new RegExp(rule.pathPattern).test(file),
+    );
+    expect(rules).toEqual([
+      expect.objectContaining({
+        id: "ACCOUNT_OBSERVATION_DERIVATIVES_TRANSPORT",
+        pathPattern: "^lib/trader/account-observation/derivatives/htx-account-transport\\.ts$",
+        disposition: "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
+      }),
+    ]);
     expect(inventory.admittedBoundaryFiles).not.toContain(file);
-    expect(new RegExp(rules[0].pathPattern).test("lib/trader/account-observation/derivatives/order-transport.ts")).toBe(false);
+    expect(
+      new RegExp(rules[0].pathPattern).test(
+        "lib/trader/account-observation/derivatives/order-transport.ts",
+      ),
+    ).toBe(false);
     const body = readFileSync(join(ROOT, file), "utf8");
-    expect(detectConnectorMethodReferencesInSource(body, file, ["placeOrder", "cancelOrder", "amendOrder", "submitOrder"]))
-      .toEqual([]);
-    expect(body).not.toMatch(/process\.env|globalThis\.fetch|HtxRestClient|import\s*\(|require\s*\(/);
+    expect(
+      detectConnectorMethodReferencesInSource(body, file, [
+        "placeOrder",
+        "cancelOrder",
+        "amendOrder",
+        "submitOrder",
+      ]),
+    ).toEqual([]);
+    expect(body).not.toMatch(
+      /process\.env|globalThis\.fetch|HtxRestClient|import\s*\(|require\s*\(/,
+    );
     const ast = ts.createSourceFile(file, body, ts.ScriptTarget.Latest, true);
-    const connectorImports = ast.statements.filter(ts.isImportDeclaration)
-      .filter(statement => (statement.moduleSpecifier as ts.StringLiteral).text.includes("/connectors/"));
+    const connectorImports = ast.statements
+      .filter(ts.isImportDeclaration)
+      .filter((statement) =>
+        (statement.moduleSpecifier as ts.StringLiteral).text.includes("/connectors/"),
+      );
     expect(connectorImports).toHaveLength(1);
-    expect((connectorImports[0].moduleSpecifier as ts.StringLiteral).text).toBe("@/lib/trader/connectors/htx/signing");
+    expect((connectorImports[0].moduleSpecifier as ts.StringLiteral).text).toBe(
+      "@/lib/trader/connectors/htx/signing",
+    );
     const bindings = connectorImports[0].importClause?.namedBindings;
-    expect(bindings && ts.isNamedImports(bindings) && bindings.elements.map(element => element.name.text))
-      .toEqual(["buildSignedPostQueryString", "formatHtxTimestamp"]);
+    expect(
+      bindings &&
+        ts.isNamedImports(bindings) &&
+        bindings.elements.map((element) => element.name.text),
+    ).toEqual(["buildSignedPostQueryString", "formatHtxTimestamp"]);
   });
 
   it("excludes exactly the three normalized account-observation consumers without Reality or venue-write authority", () => {
@@ -223,29 +249,67 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
       for (const statement of ast.statements) {
         if (ts.isImportDeclaration(statement)) {
           const moduleName = (statement.moduleSpecifier as ts.StringLiteral).text;
-          if (file.endsWith("/service.ts") && ["./derivatives/types", "./validation"].includes(moduleName)) {
+          if (
+            file.endsWith("/service.ts") &&
+            ["./derivatives/types", "./validation"].includes(moduleName)
+          ) {
             const bindings = statement.importClause?.namedBindings;
             expect(statement.importClause?.name).toBeUndefined();
-            expect(bindings && ts.isNamedImports(bindings) && bindings.elements.map(element => ({
-              name: element.name.text, original: element.propertyName?.text, typeOnly: element.isTypeOnly,
-            }))).toEqual(moduleName === "./derivatives/types" ? [
-              { name: "HTX_DERIVATIVES_ACCOUNT_FAMILIES", original: undefined, typeOnly: false },
-              { name: "HtxDerivativesAccountFamily", original: undefined, typeOnly: true },
-              { name: "HtxDerivativesAccountRow", original: undefined, typeOnly: true },
-              { name: "HtxDerivativesPositionRow", original: undefined, typeOnly: true },
-            ] : [
-              { name: "deriveAccountObservationStatus", original: undefined, typeOnly: false },
-              { name: "parseAccountObservation", original: undefined, typeOnly: false },
-              { name: "sameObservationBinding", original: undefined, typeOnly: false },
-            ]);
+            expect(
+              bindings &&
+                ts.isNamedImports(bindings) &&
+                bindings.elements.map((element) => ({
+                  name: element.name.text,
+                  original: element.propertyName?.text,
+                  typeOnly: element.isTypeOnly,
+                })),
+            ).toEqual(
+              moduleName === "./derivatives/types"
+                ? [
+                    {
+                      name: "HTX_DERIVATIVES_ACCOUNT_FAMILIES",
+                      original: undefined,
+                      typeOnly: false,
+                    },
+                    {
+                      name: "HTX_DERIVATIVES_FILL_CONTRACT_LIMIT",
+                      original: undefined,
+                      typeOnly: false,
+                    },
+                    { name: "HTX_DERIVATIVES_FILL_MAX_ROWS", original: undefined, typeOnly: false },
+                    { name: "isHtxDerivativesFillContract", original: undefined, typeOnly: false },
+                    { name: "HtxDerivativesAccountFamily", original: undefined, typeOnly: true },
+                    { name: "HtxDerivativesAccountRow", original: undefined, typeOnly: true },
+                    { name: "HtxDerivativesFillRow", original: undefined, typeOnly: true },
+                    { name: "HtxDerivativesPositionRow", original: undefined, typeOnly: true },
+                  ]
+                : [
+                    {
+                      name: "deriveAccountObservationStatus",
+                      original: undefined,
+                      typeOnly: false,
+                    },
+                    { name: "parseAccountObservation", original: undefined, typeOnly: false },
+                    { name: "sameObservationBinding", original: undefined, typeOnly: false },
+                  ],
+            );
             continue;
           }
           if (file.endsWith("/types.ts") && moduleName === "./derivatives/types") {
             expect(statement.importClause?.isTypeOnly).toBe(true);
             const bindings = statement.importClause?.namedBindings;
             expect(statement.importClause?.name).toBeUndefined();
-            expect(bindings && ts.isNamedImports(bindings) && bindings.elements.map(element => element.name.text))
-              .toEqual(["HtxDerivativesAccountFamily", "HtxDerivativesAccountRow", "HtxDerivativesAccountSnapshot", "HtxDerivativesPositionRow"]);
+            expect(
+              bindings &&
+                ts.isNamedImports(bindings) &&
+                bindings.elements.map((element) => element.name.text),
+            ).toEqual([
+              "HtxDerivativesAccountFamily",
+              "HtxDerivativesAccountRow",
+              "HtxDerivativesAccountSnapshot",
+              "HtxDerivativesFillRow",
+              "HtxDerivativesPositionRow",
+            ]);
             continue;
           }
           if (
@@ -439,8 +503,14 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
 
 describe("Reality V2 per-file source/consumer content pins (DEE-1157)", () => {
   const validPins = [
-    { path: "lib/a.ts", sha256: "8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8" },
-    { path: "lib/b.ts", sha256: "f44e64e75f3948e9f73f8dfa94721c4ce8cbb4f265c4790c702b2d41cfbf2753" },
+    {
+      path: "lib/a.ts",
+      sha256: "8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8",
+    },
+    {
+      path: "lib/b.ts",
+      sha256: "f44e64e75f3948e9f73f8dfa94721c4ce8cbb4f265c4790c702b2d41cfbf2753",
+    },
   ];
   const fixture = () => {
     const files = new Map([
@@ -456,22 +526,80 @@ describe("Reality V2 per-file source/consumer content pins (DEE-1157)", () => {
     expect(() => assertPerFileContentPins(["lib/a.ts", "lib/b.ts"], validPins, read)).not.toThrow();
     read.mockClear();
     files.set("lib/a.ts", Buffer.from("changed"));
-    expect(() => assertPerFileContentPins(["lib/a.ts", "lib/b.ts"], validPins, read)).toThrow(/pin mismatch: lib\/a.ts/);
+    expect(() => assertPerFileContentPins(["lib/a.ts", "lib/b.ts"], validPins, read)).toThrow(
+      /pin mismatch: lib\/a.ts/,
+    );
     expect(read).toHaveBeenCalledWith("lib/a.ts");
   });
 
   it.each([
-    { label: "missing pin", paths: ["lib/a.ts", "lib/b.ts"], entries: [validPins[0]], message: /missing pins for discovered files=lib\/b\.ts/ },
-    { label: "missing discovered file", paths: ["lib/a.ts"], entries: validPins, message: /stale pins for undiscovered files=lib\/b\.ts/ },
-    { label: "extra discovered caller", paths: ["lib/a.ts", "lib/b.ts", "lib/c.ts"], entries: validPins, message: /missing pins for discovered files=lib\/c\.ts/ },
-    { label: "stale extra pin", paths: ["lib/a.ts", "lib/b.ts"], entries: [...validPins, { path: "lib/c.ts", sha256: "0".repeat(64) }], message: /stale pins for undiscovered files=lib\/c\.ts/ },
-    { label: "same-count replacement", paths: ["lib/a.ts", "lib/c.ts"], entries: validPins, message: /missing pins for discovered files=lib\/c\.ts; stale pins for undiscovered files=lib\/b\.ts/ },
-    { label: "duplicate pin", paths: ["lib/a.ts", "lib/b.ts"], entries: [validPins[0], validPins[0]], message: /duplicate paths/ },
-    { label: "malformed digest", paths: ["lib/a.ts", "lib/b.ts"], entries: [validPins[0], { path: "lib/b.ts", sha256: "A".repeat(64) }], message: /malformed at entry 1/ },
-    { label: "malformed path", paths: ["lib/a.ts", "lib/b.ts"], entries: [validPins[0], { path: "../b.ts", sha256: validPins[1]!.sha256 }], message: /malformed at entry 1/ },
-    { label: "non-string path", paths: ["lib/a.ts", "lib/b.ts"], entries: [validPins[0], { path: 7, sha256: validPins[1]!.sha256 }], message: /malformed at entry 1/ },
-    { label: "non-string digest", paths: ["lib/a.ts", "lib/b.ts"], entries: [validPins[0], { path: "lib/b.ts", sha256: 7 }], message: /malformed at entry 1/ },
-    { label: "malformed entry", paths: ["lib/a.ts", "lib/b.ts"], entries: [validPins[0], null], message: /malformed at entry 1/ },
+    {
+      label: "missing pin",
+      paths: ["lib/a.ts", "lib/b.ts"],
+      entries: [validPins[0]],
+      message: /missing pins for discovered files=lib\/b\.ts/,
+    },
+    {
+      label: "missing discovered file",
+      paths: ["lib/a.ts"],
+      entries: validPins,
+      message: /stale pins for undiscovered files=lib\/b\.ts/,
+    },
+    {
+      label: "extra discovered caller",
+      paths: ["lib/a.ts", "lib/b.ts", "lib/c.ts"],
+      entries: validPins,
+      message: /missing pins for discovered files=lib\/c\.ts/,
+    },
+    {
+      label: "stale extra pin",
+      paths: ["lib/a.ts", "lib/b.ts"],
+      entries: [...validPins, { path: "lib/c.ts", sha256: "0".repeat(64) }],
+      message: /stale pins for undiscovered files=lib\/c\.ts/,
+    },
+    {
+      label: "same-count replacement",
+      paths: ["lib/a.ts", "lib/c.ts"],
+      entries: validPins,
+      message:
+        /missing pins for discovered files=lib\/c\.ts; stale pins for undiscovered files=lib\/b\.ts/,
+    },
+    {
+      label: "duplicate pin",
+      paths: ["lib/a.ts", "lib/b.ts"],
+      entries: [validPins[0], validPins[0]],
+      message: /duplicate paths/,
+    },
+    {
+      label: "malformed digest",
+      paths: ["lib/a.ts", "lib/b.ts"],
+      entries: [validPins[0], { path: "lib/b.ts", sha256: "A".repeat(64) }],
+      message: /malformed at entry 1/,
+    },
+    {
+      label: "malformed path",
+      paths: ["lib/a.ts", "lib/b.ts"],
+      entries: [validPins[0], { path: "../b.ts", sha256: validPins[1]!.sha256 }],
+      message: /malformed at entry 1/,
+    },
+    {
+      label: "non-string path",
+      paths: ["lib/a.ts", "lib/b.ts"],
+      entries: [validPins[0], { path: 7, sha256: validPins[1]!.sha256 }],
+      message: /malformed at entry 1/,
+    },
+    {
+      label: "non-string digest",
+      paths: ["lib/a.ts", "lib/b.ts"],
+      entries: [validPins[0], { path: "lib/b.ts", sha256: 7 }],
+      message: /malformed at entry 1/,
+    },
+    {
+      label: "malformed entry",
+      paths: ["lib/a.ts", "lib/b.ts"],
+      entries: [validPins[0], null],
+      message: /malformed at entry 1/,
+    },
   ])("rejects $label before reading files", ({ paths, entries, message }) => {
     const { read } = fixture();
     expect(() => assertPerFileContentPins(paths, entries, read)).toThrow(message);
@@ -479,26 +607,34 @@ describe("Reality V2 per-file source/consumer content pins (DEE-1157)", () => {
   });
 
   it("requires v2 and rejects v1 aggregate-only or missing per-file pins", () => {
-    expect(() => assertPerFilePinInventorySchema({
-      schemaVersion: "reality-v2-source-consumer-inventory/v1",
-      sourceDiscovery: { sortedContentDigestHex: "a".repeat(64) },
-      consumerDiscovery: { sortedContentDigestHex: "b".repeat(64) },
-    })).toThrow(/expected v2 per-file pins/);
-    expect(() => assertPerFilePinInventorySchema({
-      schemaVersion: "reality-v2-source-consumer-inventory/v2",
-      sourceDiscovery: {},
-      consumerDiscovery: { contentPins: [] },
-    })).toThrow(/sourceDiscovery\.contentPins must be an array/);
-    expect(() => assertPerFilePinInventorySchema({
-      schemaVersion: "reality-v2-source-consumer-inventory/v2",
-      sourceDiscovery: { contentPins: [] },
-      consumerDiscovery: {},
-    })).toThrow(/consumerDiscovery\.contentPins must be an array/);
+    expect(() =>
+      assertPerFilePinInventorySchema({
+        schemaVersion: "reality-v2-source-consumer-inventory/v1",
+        sourceDiscovery: { sortedContentDigestHex: "a".repeat(64) },
+        consumerDiscovery: { sortedContentDigestHex: "b".repeat(64) },
+      }),
+    ).toThrow(/expected v2 per-file pins/);
+    expect(() =>
+      assertPerFilePinInventorySchema({
+        schemaVersion: "reality-v2-source-consumer-inventory/v2",
+        sourceDiscovery: {},
+        consumerDiscovery: { contentPins: [] },
+      }),
+    ).toThrow(/sourceDiscovery\.contentPins must be an array/);
+    expect(() =>
+      assertPerFilePinInventorySchema({
+        schemaVersion: "reality-v2-source-consumer-inventory/v2",
+        sourceDiscovery: { contentPins: [] },
+        consumerDiscovery: {},
+      }),
+    ).toThrow(/consumerDiscovery\.contentPins must be an array/);
   });
 
   it("rejects non-array content pin collections without reading files", () => {
     const { read } = fixture();
-    expect(() => assertPerFileContentPins(["lib/a.ts"], { path: "lib/a.ts" }, read)).toThrow(/contentPins must be an array/);
+    expect(() => assertPerFileContentPins(["lib/a.ts"], { path: "lib/a.ts" }, read)).toThrow(
+      /contentPins must be an array/,
+    );
     expect(read).not.toHaveBeenCalled();
   });
 });

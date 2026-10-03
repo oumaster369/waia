@@ -133,10 +133,17 @@ export function createConfiguredHtxObservationRuntime(
   const admissions = new Set<ReturnType<typeof createHtxReadAdmission>>();
   const closingAdmissions = new WeakSet<ReturnType<typeof createHtxReadAdmission>>();
   let derivativeCleanupFailed = false;
-  const releaseDerivatives = (reader: ReturnType<typeof createHtxDerivativesObservationReader> | undefined) => {
+  const releaseDerivatives = (
+    reader: ReturnType<typeof createHtxDerivativesObservationReader> | undefined,
+  ) => {
     if (!reader) return;
     reader.dispose();
-    void reader.settled().then(() => derivativeReaders.delete(reader), () => { derivativeCleanupFailed = true; });
+    void reader.settled().then(
+      () => derivativeReaders.delete(reader),
+      () => {
+        derivativeCleanupFailed = true;
+      },
+    );
   };
   const releaseAdmission = (admission: ReturnType<typeof createHtxReadAdmission> | undefined) => {
     if (!admission || closingAdmissions.has(admission)) return;
@@ -144,14 +151,23 @@ export function createConfiguredHtxObservationRuntime(
     admission.dispose();
     // Abort cannot force an injected fetch to settle. Keep ownership and count
     // against the open limit until all metadata work actually settles.
-    void admission.settled().then(() => admissions.delete(admission), () => { derivativeCleanupFailed = true; });
+    void admission.settled().then(
+      () => admissions.delete(admission),
+      () => {
+        derivativeCleanupFailed = true;
+      },
+    );
   };
   const template = fixed[0];
   const ensureStore = (binding: ObservationBinding) => {
     const id = key(binding);
-    const assignment = fixed.find(item => key(item.binding) === id) ??
-      (template && !template.config.htxDerivativesFamilies?.length &&
-        binding.configurationRevision === template.config.revision ? template : undefined);
+    const assignment =
+      fixed.find((item) => key(item.binding) === id) ??
+      (template &&
+      !template.config.htxDerivativesFamilies?.length &&
+      binding.configurationRevision === template.config.revision
+        ? template
+        : undefined);
     if (!assignment) return null;
     const config = assignment.config;
     const existingStore = stores.get(id);
@@ -188,10 +204,18 @@ export function createConfiguredHtxObservationRuntime(
     for (const pending of opening) pending.abort();
     let failed = false;
     for (const admission of admissions) {
-      try { releaseAdmission(admission); } catch { failed = true; }
+      try {
+        releaseAdmission(admission);
+      } catch {
+        failed = true;
+      }
     }
     for (const reader of derivativeReaders) {
-      try { reader.dispose(); } catch { failed = true; }
+      try {
+        reader.dispose();
+      } catch {
+        failed = true;
+      }
     }
     for (const reader of readers) {
       try {
@@ -219,7 +243,14 @@ export function createConfiguredHtxObservationRuntime(
     iterationTimeoutMs,
     maxAccounts: 20,
     async openReader(requested, signal) {
-      if (closed || !started || signal.aborted || derivativeCleanupFailed || derivativeReaders.size >= 20 || admissions.size >= 20)
+      if (
+        closed ||
+        !started ||
+        signal.aborted ||
+        derivativeCleanupFailed ||
+        derivativeReaders.size >= 20 ||
+        admissions.size >= 20
+      )
         throw new AccountObservationReadFailure("READ_FAILED");
       let binding: ObservationBinding;
       try {
@@ -240,7 +271,11 @@ export function createConfiguredHtxObservationRuntime(
       let derivatives: ReturnType<typeof createHtxDerivativesObservationReader> | undefined;
       const verifyExactKey: AdmissionVerifier = async (scope, digest, admissionSignal) => {
         if (closed || admissionSignal.aborted || !admission) return false;
-        if (verifyReadAdmission && (await verifyReadAdmission(scope, digest, admissionSignal)) !== true) return false;
+        if (
+          verifyReadAdmission &&
+          (await verifyReadAdmission(scope, digest, admissionSignal)) !== true
+        )
+          return false;
         return admission.verifyReadAdmission(scope, digest, admissionSignal);
       };
       try {
@@ -266,8 +301,14 @@ export function createConfiguredHtxObservationRuntime(
                 admissions.add(admission);
                 if (config.htxDerivativesFamilies?.length) {
                   derivatives = createHtxDerivativesObservationReader({
-                    credential: handle, families: config.htxDerivativesFamilies,
-                    clock, fetchImpl, timeoutMs: readerOptions.readTimeoutMs,
+                    credential: handle,
+                    families: config.htxDerivativesFamilies,
+                    ...(config.htxDerivativesFillContracts
+                      ? { fillContracts: config.htxDerivativesFillContracts }
+                      : {}),
+                    clock,
+                    fetchImpl,
+                    timeoutMs: readerOptions.readTimeoutMs,
                     maxResponseBytes: readerOptions.maxResponseBytes,
                     verifyReadOnlyAdmission: verifyExactKey,
                   });
@@ -287,7 +328,11 @@ export function createConfiguredHtxObservationRuntime(
                     try {
                       releaseDerivatives(derivatives);
                     } finally {
-                      try { releaseAdmission(admission); } finally { handle.dispose(); }
+                      try {
+                        releaseAdmission(admission);
+                      } finally {
+                        handle.dispose();
+                      }
                     }
                   },
                 };
@@ -331,7 +376,11 @@ export function createConfiguredHtxObservationRuntime(
         return wrapped;
       } finally {
         if (!owned) {
-          try { releaseDerivatives(derivatives); } finally { releaseAdmission(admission); }
+          try {
+            releaseDerivatives(derivatives);
+          } finally {
+            releaseAdmission(admission);
+          }
         }
         signal.removeEventListener("abort", cancel);
         opening.delete(abort);
