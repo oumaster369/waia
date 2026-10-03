@@ -20,10 +20,86 @@ BEGIN
       AND (rolsuper OR rolbypassrls OR rolcanlogin OR rolinherit OR rolcreatedb OR rolcreaterole OR rolreplication)
   ) OR EXISTS (
     SELECT 1 FROM pg_auth_members membership
-    JOIN pg_roles owned ON owned.oid = membership.member
-    WHERE owned.rolname = 'waia_account_observation_inventory_owner'
+    JOIN pg_roles member_role ON member_role.oid = membership.member
+    WHERE member_role.rolname IN (
+      'waia_account_observation_inventory_owner', 'waia_account_observation_inventory')
   ) THEN
     RAISE EXCEPTION 'UNSAFE_OBSERVATION_INVENTORY_ROLE';
+  END IF;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  -- Memberships are cluster-wide. A limited CREATEROLE migrator may create
+  -- this role and receive an implicit ADMIN-only edge, but that edge does not
+  -- grant SET ROLE. Never infer grant authority from MEMBER alone.
+  IF EXISTS (
+    SELECT 1
+    FROM pg_auth_members membership
+    JOIN pg_roles member_role ON member_role.oid = membership.member
+    JOIN pg_roles owner_role ON owner_role.oid = membership.roleid
+    WHERE owner_role.rolname = 'waia_account_observation_inventory_owner'
+      AND member_role.rolname <> current_user
+  ) THEN
+    RAISE EXCEPTION 'ACCOUNT_OBSERVATION_INVENTORY_OWNER_MEMBER_UNSAFE';
+  END IF;
+  IF NOT pg_has_role(current_user, 'waia_account_observation_inventory_owner', 'SET')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_auth_members membership
+      JOIN pg_roles member_role ON member_role.oid = membership.member
+      JOIN pg_roles owner_role ON owner_role.oid = membership.roleid
+      WHERE member_role.rolname = current_user
+        AND owner_role.rolname = 'waia_account_observation_inventory_owner'
+        AND membership.admin_option
+    ) THEN
+    RAISE EXCEPTION 'ACCOUNT_OBSERVATION_INVENTORY_OWNER_ADMIN_REQUIRED';
+  END IF;
+  IF NOT pg_has_role(current_user, 'waia_account_observation_inventory_owner', 'SET')
+    AND EXISTS (
+      SELECT 1
+      FROM pg_auth_members membership
+      JOIN pg_roles member_role ON member_role.oid = membership.member
+      JOIN pg_roles owner_role ON owner_role.oid = membership.roleid
+      JOIN pg_roles grantor_role ON grantor_role.oid = membership.grantor
+      WHERE member_role.rolname = current_user
+        AND owner_role.rolname = 'waia_account_observation_inventory_owner'
+        AND grantor_role.rolname = current_user
+        AND membership.admin_option
+    ) THEN
+    -- PostgreSQL does not let a grantor grant ADMIN back to its own membership
+    -- edge. Refuse before schema changes rather than downgrade it temporarily.
+    RAISE EXCEPTION 'ACCOUNT_OBSERVATION_INVENTORY_OWNER_SELF_ADMIN_EDGE_UNSAFE';
+  END IF;
+  IF to_regrole('waia_account_observer_login') IS NOT NULL
+    AND EXISTS (
+      SELECT 1
+      FROM pg_auth_members membership
+      JOIN pg_roles login_role ON login_role.oid = membership.member
+      JOIN pg_roles caller_role ON caller_role.oid = membership.roleid
+      WHERE login_role.rolname = 'waia_account_observer_login'
+        AND caller_role.rolname = 'waia_account_observation_inventory'
+        AND (membership.admin_option OR membership.inherit_option OR NOT membership.set_option)
+    ) THEN
+    RAISE EXCEPTION 'ACCOUNT_OBSERVATION_INVENTORY_LOGIN_MEMBERSHIP_UNSAFE';
+  END IF;
+  IF to_regrole('waia_account_observer_login') IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_auth_members membership
+      JOIN pg_roles member_role ON member_role.oid = membership.member
+      JOIN pg_roles caller_role ON caller_role.oid = membership.roleid
+      WHERE member_role.rolname = current_user
+        AND caller_role.rolname = 'waia_account_observation_inventory'
+        AND membership.admin_option
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_roles migration_actor
+      WHERE migration_actor.rolname = current_user
+        AND migration_actor.rolsuper
+    ) THEN
+    RAISE EXCEPTION 'ACCOUNT_OBSERVATION_INVENTORY_CALLER_ADMIN_REQUIRED';
   END IF;
 END $$;
 --> statement-breakpoint
@@ -50,9 +126,9 @@ CREATE POLICY trader_observation_inventory_owner_state
     EXISTS (
       SELECT 1
       FROM public.exchange_credentials credential
-      WHERE credential.id = credential_id
-        AND credential.organization_id = organization_id
-        AND credential.exchange_account_id = exchange_account_id
+      WHERE trader_account_collection_state.organization_id = credential.organization_id
+        AND trader_account_collection_state.credential_id = credential.id
+        AND trader_account_collection_state.exchange_account_id = credential.exchange_account_id
         AND credential.venue = 'htx'
         AND credential.status = 'active'
     )
@@ -63,12 +139,36 @@ GRANT USAGE ON SCHEMA public TO waia_account_observation_inventory;
 DO $do$
 DECLARE
   migration_role text := current_user;
-  had_membership boolean := pg_has_role(current_user, 'waia_account_observation_inventory_owner', 'MEMBER');
+  added_temporary_membership boolean := false;
+  had_same_grantor_membership boolean := false;
+  previous_admin_option boolean := false;
+  previous_inherit_option boolean := false;
+  previous_set_option boolean := false;
 BEGIN
   IF NOT pg_has_role(current_user, 'waia_account_observation_inventory_owner', 'SET') THEN
+    SELECT membership.admin_option, membership.inherit_option, membership.set_option
+      INTO previous_admin_option, previous_inherit_option, previous_set_option
+    FROM pg_auth_members membership
+    JOIN pg_roles member_role ON member_role.oid = membership.member
+    JOIN pg_roles owner_role ON owner_role.oid = membership.roleid
+    JOIN pg_roles grantor_role ON grantor_role.oid = membership.grantor
+    WHERE member_role.rolname = migration_role
+      AND owner_role.rolname = 'waia_account_observation_inventory_owner'
+      AND grantor_role.rolname = migration_role;
+    had_same_grantor_membership := FOUND;
+    IF NOT FOUND THEN
+      had_same_grantor_membership := false;
+      previous_admin_option := false;
+      previous_inherit_option := false;
+      previous_set_option := false;
+    END IF;
+
     EXECUTE format(
-      'GRANT %I TO %I WITH ADMIN FALSE, INHERIT FALSE, SET TRUE',
-      'waia_account_observation_inventory_owner', migration_role);
+      'GRANT %I TO %I WITH ADMIN FALSE, INHERIT %s, SET TRUE GRANTED BY %I',
+      'waia_account_observation_inventory_owner', migration_role,
+      CASE WHEN previous_inherit_option THEN 'TRUE' ELSE 'FALSE' END,
+      migration_role);
+    added_temporary_membership := true;
   END IF;
   EXECUTE 'SET LOCAL ROLE waia_account_observation_inventory_owner';
   EXECUTE $fn$
@@ -145,8 +245,19 @@ BEGIN
   EXECUTE 'REVOKE ALL ON FUNCTION public.trader_account_observation_spot_inventory(text, jsonb) FROM PUBLIC';
   EXECUTE 'GRANT EXECUTE ON FUNCTION public.trader_account_observation_spot_inventory(text, jsonb) TO waia_account_observation_inventory';
   EXECUTE format('SET LOCAL ROLE %I', migration_role);
-  IF NOT had_membership THEN
-    EXECUTE format('REVOKE %I FROM %I', 'waia_account_observation_inventory_owner', migration_role);
+  IF added_temporary_membership THEN
+    IF had_same_grantor_membership THEN
+      EXECUTE format(
+        'GRANT %I TO %I WITH ADMIN %s, INHERIT %s, SET %s GRANTED BY %I',
+        'waia_account_observation_inventory_owner', migration_role,
+        CASE WHEN previous_admin_option THEN 'TRUE' ELSE 'FALSE' END,
+        CASE WHEN previous_inherit_option THEN 'TRUE' ELSE 'FALSE' END,
+        CASE WHEN previous_set_option THEN 'TRUE' ELSE 'FALSE' END,
+        migration_role);
+    ELSE
+      EXECUTE format('REVOKE %I FROM %I GRANTED BY %I',
+        'waia_account_observation_inventory_owner', migration_role, migration_role);
+    END IF;
   END IF;
   EXECUTE 'REVOKE CREATE ON SCHEMA public FROM waia_account_observation_inventory_owner';
 END

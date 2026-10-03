@@ -125,7 +125,7 @@ const LOGIN_POSTURE = (alias) => `
       AND (membership.admin_option OR membership.inherit_option OR NOT membership.set_option)
   ) AS unsafe_membership_options,
   COALESCE((
-    SELECT array_agg(parent.rolname::text ORDER BY parent.rolname)
+    SELECT array_agg(DISTINCT parent.rolname::text ORDER BY parent.rolname::text)
     FROM pg_auth_members membership
     JOIN pg_roles parent ON parent.oid = membership.roleid
     WHERE membership.member = ${alias}.oid

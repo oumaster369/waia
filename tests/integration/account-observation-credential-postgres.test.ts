@@ -55,6 +55,7 @@ describe.skipIf(!enabled)(
     let admin: Sql;
     let database: string;
     let adminSessionUrl: string;
+    let inventoryGrantor: string;
     // Each runtime LOGIN is provisioned with CONNECTION LIMIT 2, so one shared bounded client per
     // identity both respects that bound and keeps it under test.
     const clients = new Map<keyof typeof PASSWORDS, Sql>();
@@ -114,12 +115,73 @@ describe.skipIf(!enabled)(
           }
         }
       });
-      for (const statement of readFileSync(
-        "db/migrations_postgres/0230_trader_account_observation_spot_inventory_v1.sql",
-        "utf8",
-      ).split("--> statement-breakpoint")) {
-        if (statement.trim()) await admin.unsafe(statement);
+      // Cluster role membership survives across synthetic databases. Apply the new
+      // owner migration as the same restricted actor that owns its one safe owner edge.
+      await admin.unsafe(`DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='dee960_local_owner') THEN
+          CREATE ROLE dee960_local_owner NOLOGIN NOSUPERUSER NOBYPASSRLS CREATEROLE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='waia_account_observation_inventory_owner') THEN
+          CREATE ROLE waia_account_observation_inventory_owner
+            NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='waia_account_observation_inventory') THEN
+          CREATE ROLE waia_account_observation_inventory
+            NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+        END IF;
+      END $$;
+      GRANT waia_account_observation_inventory_owner TO dee960_local_owner
+        WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+      GRANT waia_account_observation_inventory TO dee960_local_owner
+        WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+      GRANT CREATE ON DATABASE "${database}" TO dee960_local_owner;
+      GRANT USAGE, CREATE ON SCHEMA public TO dee960_local_owner WITH GRANT OPTION;
+      ALTER TABLE public.exchange_credentials OWNER TO dee960_local_owner;
+      ALTER TABLE public.trader_account_collection_state OWNER TO dee960_local_owner;
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM pg_authid WHERE rolname='dee960_local_owner'
+          AND (rolcanlogin OR rolpassword IS NOT NULL)) THEN
+          RAISE EXCEPTION 'SYNTHETIC_MIGRATION_ACTOR_MUST_START_NOLOGIN';
+        END IF;
+      END $$;
+      ALTER ROLE dee960_local_owner LOGIN PASSWORD 'local_validation_only';`);
+      const actorUrl = new URL(adminSessionUrl);
+      actorUrl.username = "dee960_local_owner";
+      actorUrl.password = "local_validation_only";
+      const actor = postgres(actorUrl.toString(), { max: 1, connect_timeout: 3, prepare: false });
+      try {
+        expect((await actor`SELECT session_user::text AS login, current_user::text AS role`)[0])
+          .toEqual({ login: "dee960_local_owner", role: "dee960_local_owner" });
+        await actor.begin(async tx => {
+          for (const statement of readFileSync(
+            "db/migrations_postgres/0230_trader_account_observation_spot_inventory_v1.sql",
+            "utf8",
+          ).split("--> statement-breakpoint")) {
+            if (statement.trim()) await tx.unsafe(statement);
+          }
+        });
+      } finally {
+        await actor.end({ timeout: 2 });
+        await admin.unsafe("ALTER ROLE dee960_local_owner NOLOGIN PASSWORD NULL");
       }
+
+      // Reproduce safe duplicate membership provenance from two migration/administrator
+      // grantors before runtime-login provisioning, as in an upgraded cluster.
+      inventoryGrantor = `dee1015_inventory_grantor_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+      await admin.unsafe(`CREATE ROLE "${inventoryGrantor}" NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS`);
+      await admin.unsafe(`GRANT waia_account_observation_inventory TO "${inventoryGrantor}"
+        WITH ADMIN TRUE, INHERIT FALSE, SET FALSE`);
+      await admin.unsafe(`DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'waia_account_observer_login') THEN
+          CREATE ROLE waia_account_observer_login LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
+            NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 2;
+        END IF;
+      END $$`);
+      await admin.begin(async tx => {
+        await tx.unsafe(`SET LOCAL ROLE "${inventoryGrantor}"`);
+        await tx.unsafe(`GRANT waia_account_observation_inventory TO waia_account_observer_login
+          WITH ADMIN FALSE, INHERIT FALSE, SET TRUE`);
+      });
 
       // The reviewed Human operator provisions the actual three runtime LOGIN identities.
       const receipt = await provisionAccountObservationLoginsV1({
@@ -246,7 +308,7 @@ describe.skipIf(!enabled)(
         SELECT login.rolname::text AS login, login.rolcanlogin, login.rolinherit, login.rolsuper,
                login.rolcreatedb, login.rolcreaterole, login.rolreplication, login.rolbypassrls,
                login.rolconnlimit,
-               (SELECT array_agg(parent.rolname::text ORDER BY parent.rolname)
+               (SELECT array_agg(DISTINCT parent.rolname::text ORDER BY parent.rolname::text)
                 FROM pg_auth_members m JOIN pg_roles parent ON parent.oid = m.roleid
                 WHERE m.member = login.oid) AS memberships,
                EXISTS (SELECT 1 FROM pg_auth_members m WHERE m.member = login.oid
@@ -304,6 +366,21 @@ describe.skipIf(!enabled)(
     });
 
     it("is idempotent on exact retry and tolerates only database CONNECT", async () => {
+      const duplicateInventoryEdges = await admin`
+        SELECT grantor.rolname::text AS grantor, membership.admin_option,
+          membership.inherit_option, membership.set_option
+        FROM pg_auth_members membership
+        JOIN pg_roles login ON login.oid = membership.member
+        JOIN pg_roles parent ON parent.oid = membership.roleid
+        JOIN pg_roles grantor ON grantor.oid = membership.grantor
+        WHERE login.rolname = 'waia_account_observer_login'
+          AND parent.rolname = 'waia_account_observation_inventory'
+        ORDER BY grantor.rolname`;
+      expect(duplicateInventoryEdges.length).toBeGreaterThanOrEqual(2);
+      expect(new Set(duplicateInventoryEdges.map(edge => edge.grantor))).toContain(inventoryGrantor);
+      for (const edge of duplicateInventoryEdges) expect(edge).toMatchObject({
+        admin_option: false, inherit_option: false, set_option: true,
+      });
       const again = await provisionAccountObservationLoginsV1({
         WAIA_POSTGRES_ADMIN_SESSION_URL: adminSessionUrl,
         WAIA_OBSERVATION_COLLECTOR_DB_PASSWORD: PASSWORDS.collector,
@@ -1412,6 +1489,24 @@ describe.skipIf(!enabled)(
         await expect(provisionSandbox({ loginRole: unsafeOptions, parentRole })).rejects.toThrow(
           "ACCOUNT_OBSERVATION_LOGIN_REFUSED:MEMBERSHIP_OPTIONS",
         );
+
+        const duplicateUnsafeParent = `dee1015_dup_parent_${suffix()}`;
+        const duplicateUnsafeGrantor = `dee1015_dup_grantor_${suffix()}`;
+        const duplicateUnsafeLogin = `dee1015_dup_login_${suffix()}`;
+        await admin.unsafe(`CREATE ROLE "${duplicateUnsafeParent}" NOLOGIN NOSUPERUSER NOBYPASSRLS`);
+        await admin.unsafe(`CREATE ROLE "${duplicateUnsafeGrantor}" NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS`);
+        await admin.unsafe(`CREATE ROLE "${duplicateUnsafeLogin}" LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS`);
+        await admin.unsafe(`GRANT "${duplicateUnsafeParent}" TO "${duplicateUnsafeGrantor}"
+          WITH ADMIN TRUE, INHERIT FALSE, SET FALSE`);
+        await admin.unsafe(`GRANT "${duplicateUnsafeParent}" TO "${duplicateUnsafeLogin}"
+          WITH ADMIN FALSE, INHERIT FALSE, SET TRUE`);
+        await admin.begin(async tx => {
+          await tx.unsafe(`SET LOCAL ROLE "${duplicateUnsafeGrantor}"`);
+          await tx.unsafe(`GRANT "${duplicateUnsafeParent}" TO "${duplicateUnsafeLogin}"
+            WITH ADMIN TRUE, INHERIT FALSE, SET TRUE`);
+        });
+        await expect(provisionSandbox({ loginRole: duplicateUnsafeLogin, parentRole: duplicateUnsafeParent }))
+          .rejects.toThrow("ACCOUNT_OBSERVATION_LOGIN_REFUSED:MEMBERSHIP_OPTIONS");
 
         const granted = `dee1015_granted_${suffix()}`;
         await admin.unsafe(`CREATE ROLE "${granted}" LOGIN NOINHERIT NOSUPERUSER`);

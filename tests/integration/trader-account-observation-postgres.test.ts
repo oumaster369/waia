@@ -50,9 +50,21 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='dee960_local_owner') THEN
         CREATE ROLE dee960_local_owner NOLOGIN NOSUPERUSER NOBYPASSRLS CREATEROLE;
       END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='waia_account_observation_inventory_owner') THEN
+        CREATE ROLE waia_account_observation_inventory_owner
+          NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='waia_account_observation_inventory') THEN
+        CREATE ROLE waia_account_observation_inventory
+          NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+      END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF;
     END $$;
+    GRANT waia_account_observation_inventory_owner TO dee960_local_owner
+      WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+    GRANT waia_account_observation_inventory TO dee960_local_owner
+      WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
     GRANT USAGE, CREATE ON SCHEMA public TO dee960_local_owner WITH GRANT OPTION;`);
     // Schema DDL runs under a limited administrator, not postgres superuser.
     await admin.begin(async (tx) => {
@@ -989,12 +1001,55 @@ describe.skipIf(!enabled)("DEE-1015 actual PostgreSQL 17 collection-state provis
       );
       await tx.unsafe(readFileSync("db/local-validation/dee960-account-observation.sql", "utf8"));
     });
-    await admin.unsafe(
-      readFileSync(
+    // Role memberships are cluster-wide. Reuse the exact synthetic migration actor
+    // whose ADMIN-only owner edge is already established by the canonical fixture.
+    await admin.unsafe(`DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='dee960_local_owner') THEN
+        CREATE ROLE dee960_local_owner NOLOGIN NOSUPERUSER NOBYPASSRLS CREATEROLE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='waia_account_observation_inventory_owner') THEN
+        CREATE ROLE waia_account_observation_inventory_owner
+          NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='waia_account_observation_inventory') THEN
+        CREATE ROLE waia_account_observation_inventory
+          NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+      END IF;
+    END $$;
+    GRANT waia_account_observation_inventory_owner TO dee960_local_owner
+      WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+    GRANT waia_account_observation_inventory TO dee960_local_owner
+      WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+    GRANT CREATE ON DATABASE "${name}" TO dee960_local_owner;
+    GRANT USAGE, CREATE ON SCHEMA public TO dee960_local_owner WITH GRANT OPTION;
+    ALTER TABLE public.exchange_credentials OWNER TO dee960_local_owner;
+    ALTER TABLE public.trader_account_collection_state OWNER TO dee960_local_owner;
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_authid WHERE rolname='dee960_local_owner'
+        AND (rolcanlogin OR rolpassword IS NOT NULL)) THEN
+        RAISE EXCEPTION 'SYNTHETIC_MIGRATION_ACTOR_MUST_START_NOLOGIN';
+      END IF;
+    END $$;
+    ALTER ROLE dee960_local_owner LOGIN PASSWORD 'local_validation_only';`);
+    const migrationUrl = new URL(databaseUrl);
+    migrationUrl.username = "dee960_local_owner";
+    migrationUrl.password = "local_validation_only";
+    const migrationActor = postgres(migrationUrl.toString(), { max: 1, connect_timeout: 3, prepare: false });
+    try {
+      expect((await migrationActor`SELECT session_user::text AS login, current_user::text AS role`)[0])
+        .toEqual({ login: "dee960_local_owner", role: "dee960_local_owner" });
+      await migrationActor.begin(async tx => {
+        for (const statement of readFileSync(
         "db/migrations_postgres/0230_trader_account_observation_spot_inventory_v1.sql",
         "utf8",
-      ).replaceAll("--> statement-breakpoint", ""),
-    );
+        ).split("--> statement-breakpoint")) {
+          if (statement.trim()) await tx.unsafe(statement);
+        }
+      });
+    } finally {
+      await migrationActor.end({ timeout: 2 });
+      await admin.unsafe("ALTER ROLE dee960_local_owner NOLOGIN PASSWORD NULL");
+    }
     // A separately provisioned recurring collector LOGIN, exactly as production would grant it.
     await admin.unsafe(`DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='dee1015_local_collector') THEN

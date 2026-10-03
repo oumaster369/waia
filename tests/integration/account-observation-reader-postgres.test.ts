@@ -34,9 +34,21 @@ describe.skipIf(!enabled)("DEE-960 dedicated read-only LOGIN on actual PostgreSQ
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='dee960_local_owner') THEN
         CREATE ROLE dee960_local_owner NOLOGIN NOSUPERUSER NOBYPASSRLS CREATEROLE;
       END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='waia_account_observation_inventory_owner') THEN
+        CREATE ROLE waia_account_observation_inventory_owner
+          NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='waia_account_observation_inventory') THEN
+        CREATE ROLE waia_account_observation_inventory
+          NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+      END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF;
     END $$;
+    GRANT waia_account_observation_inventory_owner TO dee960_local_owner
+      WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+    GRANT waia_account_observation_inventory TO dee960_local_owner
+      WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
     GRANT USAGE, CREATE ON SCHEMA public TO dee960_local_owner WITH GRANT OPTION;`);
     await admin.begin(async tx => {
       await tx.unsafe("SET LOCAL ROLE dee960_local_owner");
@@ -353,6 +365,21 @@ describe.skipIf(!enabled)("DEE-979 actual PostgreSQL 17 host session attestation
     expect(await probeObservationPool(reader.sql, "reader")).toBe(reader.name);
   });
   it("refuses role-local forbidden writes and disabled forced RLS", async () => {
+    const collector = await login("collector");
+    const unsafeAttributes = ["LOGIN", "INHERIT", "SUPERUSER", "BYPASSRLS", "CREATEDB", "CREATEROLE", "REPLICATION"] as const;
+    for (const attribute of unsafeAttributes) {
+      await admin.unsafe(`ALTER ROLE waia_account_observation_inventory ${attribute}`);
+      try { await expect(probeObservationPool(collector.sql, "collector")).rejects.toThrow("OBSERVATION_HOST_ROLE_REFUSED"); }
+      finally { await admin.unsafe(`ALTER ROLE waia_account_observation_inventory NO${attribute}`); }
+    }
+    const extraParent = `${db}_inventory_parent`;
+    await admin.unsafe(`CREATE ROLE "${extraParent}" NOLOGIN NOSUPERUSER NOBYPASSRLS`);
+    await admin.unsafe(`GRANT "${extraParent}" TO waia_account_observation_inventory
+      WITH ADMIN FALSE, INHERIT FALSE, SET TRUE`);
+    try { await expect(probeObservationPool(collector.sql, "collector")).rejects.toThrow("OBSERVATION_HOST_ROLE_REFUSED"); }
+    finally { await admin.unsafe(`REVOKE "${extraParent}" FROM waia_account_observation_inventory`); }
+    expect(await probeObservationPool(collector.sql, "collector")).toBe(collector.name);
+
     const reader = await login("reader");
     await admin`GRANT DELETE ON public.trader_account_observations TO waia_account_observation_reader`;
     try { await expect(probeObservationPool(reader.sql, "reader")).rejects.toThrow(); }

@@ -44,10 +44,15 @@ export async function probeObservationPool(sql: Sql, purpose: ObservationPoolPur
               WHERE extra.rolname NOT IN (session_user, ${role})
                 AND pg_has_role(session_user, extra.oid, 'SET'))
           END AS exclusive_role,
-          CASE WHEN ${purpose} <> 'collector' THEN true ELSE NOT EXISTS (
+          CASE WHEN ${purpose} <> 'collector' THEN true ELSE EXISTS (
             SELECT 1 FROM pg_roles inventory_role
             WHERE inventory_role.rolname = ${inventory}
-              AND (
+              AND NOT (inventory_role.rolcanlogin OR inventory_role.rolinherit OR inventory_role.rolsuper
+                OR inventory_role.rolbypassrls OR inventory_role.rolcreatedb OR inventory_role.rolcreaterole
+                OR inventory_role.rolreplication)
+              AND NOT EXISTS (SELECT 1 FROM pg_auth_members membership
+                WHERE membership.member = inventory_role.oid)
+              AND NOT (
                 has_table_privilege(inventory_role.oid, 'public.exchange_credentials'::regclass,
                   'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
                 OR has_any_column_privilege(inventory_role.oid, 'public.exchange_credentials'::regclass,

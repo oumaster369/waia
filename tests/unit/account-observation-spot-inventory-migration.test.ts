@@ -41,4 +41,34 @@ describe("DEE-1032 deferred spot inventory migration", () => {
     expect(sql).not.toMatch(/GRANT\s+SELECT\s*\([^)]*encrypted_payload/i);
     expect(sql).toContain("venue = 'htx' AND status = 'active'");
   });
+
+  it("requires explicit migration authority and restores only the temporary grantor edge", () => {
+    const preflight = sql.indexOf("ACCOUNT_OBSERVATION_INVENTORY_OWNER_ADMIN_REQUIRED");
+    const firstSchemaGrant = sql.indexOf("GRANT USAGE, CREATE ON SCHEMA public");
+    expect(preflight).toBeGreaterThan(-1);
+    expect(firstSchemaGrant).toBeGreaterThan(preflight);
+    expect(sql).toContain("pg_has_role(current_user, 'waia_account_observation_inventory_owner', 'SET')");
+    expect(sql).toContain("membership.admin_option");
+    expect(sql).toContain("migration_actor.rolsuper");
+    expect(sql).toContain("ACCOUNT_OBSERVATION_INVENTORY_LOGIN_MEMBERSHIP_UNSAFE");
+    expect(sql).not.toContain("'MEMBER'");
+    expect(sql).toContain("grantor_role.rolname = migration_role");
+    expect(sql).toContain("had_same_grantor_membership");
+    expect(sql).toContain("previous_admin_option");
+    expect(sql).toContain("previous_inherit_option");
+    expect(sql).toContain("previous_set_option");
+    expect(sql).toContain("IF added_temporary_membership THEN");
+    expect(sql).toContain("REVOKE %I FROM %I");
+    expect(sql).toContain("SET TRUE GRANTED BY %I");
+    expect(sql).toContain("FROM %I GRANTED BY %I");
+    expect(sql).toContain("ACCOUNT_OBSERVATION_INVENTORY_OWNER_SELF_ADMIN_EDGE_UNSAFE");
+  });
+
+  it("correlates every state identifier to the state row in the owner policy", () => {
+    const policy = sql.slice(sql.indexOf("CREATE POLICY trader_observation_inventory_owner_state"),
+      sql.indexOf("GRANT USAGE ON SCHEMA public TO waia_account_observation_inventory"));
+    expect(policy).toContain("trader_account_collection_state.organization_id = credential.organization_id");
+    expect(policy).toContain("trader_account_collection_state.credential_id = credential.id");
+    expect(policy).toContain("trader_account_collection_state.exchange_account_id = credential.exchange_account_id");
+  });
 });
