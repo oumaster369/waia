@@ -27,7 +27,7 @@ import { resolveCurrentResearchExecutableIdentityV1 } from "./research-executabl
 import { resolveResearchTrainingPolicyV1 } from "./research-training-policy-v1";
 import { validateResearchTrainingCyclesV1 } from "./research-training-payload-postgres-v1";
 import { evaluateResearchFeatureInvocationV1 } from "./research-feature-invocation-v1";
-import { runOwnedResearchModeledStageV1 } from "./research-modeled-stage-kernel-v1";
+import { runOwnedResearchModeledStageV1, sealOwnedResearchModeledStageDescriptorV1 } from "./research-modeled-stage-kernel-v1";
 import type { ResearchModeledStageSourceV1 } from "./research-modeled-stage-source-v1";
 import { bindInputUseReceipt, buildResearchTrainingTraceV1, readCurrentTrace,
   readResearchStageLedgerProofV1, verifyCommittedTrace, isResearchAccountingFrontierConflictV1,
@@ -195,7 +195,13 @@ async function executeOrVerify(tx: postgres.Sql, executor: ReturnType<typeof hel
   }
   if (verificationOnly) refuse("COMMIT_NOT_CONFIRMED");
   if (ledger.order_count !== "0" || ledger.fill_count !== "0" || ledger.frontier_count !== "0") refuse("UNCOMMITTED_LEDGER");
-  const stage = await runOwnedResearchModeledStageV1({ tx: executor, source, request, policy, model });
+  const stage = await runOwnedResearchModeledStageV1({
+    executor,
+    descriptor: sealOwnedResearchModeledStageDescriptorV1({
+      attemptId: request.attemptId, trialIndex: request.trialIndex, policy, model,
+    }),
+    payload: source,
+  });
   const trace = buildResearchTrainingTraceV1({ source, request, policy, observedExecutableIdentity: runtime,
     stage, ledgerDigestHex: await readLedgerDigest() });
   const canonical = canonicalJsonString(trace);

@@ -12,7 +12,7 @@ state:
   status: in-progress
   completedWorkPackages: []
   remainingWorkPackages: [WP-1, WP-2, WP-3, WP-4]
-  nextAction: "Complete stage-scoped replay isolation and trusted registration binding, then use the same executable at every scoring stage."
+  nextAction: "The sealed modeled-stage kernel call is the current engineering slice. Validation, walk-forward, authorized blind, and scientific qualification remain open."
 provenance:
   createdFrom: "2026-10-01 user handback and source audit of main9d233300"
   supersedes: null
@@ -140,3 +140,7 @@ The actual registered DEVELOPMENT diagnostic resolves and freezes the runtime id
 This continuation deliberately does not reinterpret `pointInTimeEvidenceSha256` as the hash of a rule name. A completed-bar prefix rule is evidence of causal kernel access, not proof of historical instrument eligibility or the declared `sidecar-v3-timeline` artifact. Source/PIT qualification remains `NOT_ESTABLISHED`, full Guardians remain `UNQUALIFIED`, and scientific/capital flags remain false. The attempt already commits its source-run selector before a score and its spec fixes exact bar content; no new signing infrastructure or arbitrary source-run UUID authority is introduced.
 
 Focused acceptance: a correctly preregistered observed descriptor passes; absent/conflicting/malformed release values, changed preregistered source hash, or a release changed before retry refuse before payload/scoring. Actual SQL query observation must establish that ordering on isolated PostgreSQL. A successful exact retry returns the same trace and no additional ledger writes. Retain actual source pins, independent review, and all applicable CI. No production draft-DDL application, real C3/validation/blind read, financial-policy change or live execution.
+
+## Sealed modeled-stage call — current slice
+
+The DEVELOPMENT signal, sizing, D20 admission, D5 mock order/fill, and scoped accounting loop already lives in `research-modeled-stage-kernel-v1.ts`. This slice does not add a second runner and does not widen the public DEVELOPMENT reader. The kernel now accepts only an owned executor, a sealed internal descriptor, and the owner-verified payload. Caller bars, scorers, callbacks, stage labels, receipts, and order repositories are refused at that boundary. Absolute `sourceBarIndex` and the local stage index stay separate. `scientificQualified` remains false. The slice plan is `dee-1159-modeled-stage-kernel-contract.md`. Validation, walk-forward, authorized blind, and scientific qualification stay open on DEE-1159 and parent DEE-1152.
