@@ -63,6 +63,7 @@ describe("trader credential HTTP wrappers", () => {
 
     const result = await revokeExchangeCredentialClient("credential-one");
     expect(result).toMatchObject({ kind: "err", status: 0 });
+    if (result.kind !== "err") throw new Error("Expected a bounded transport error");
     expect(result.displayMessage).not.toContain("private URL");
   });
 
