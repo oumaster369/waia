@@ -18,7 +18,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Human reviews this packet, verifies a restore into a separate project, then applies 0229 through the Supabase connector. This document does not apply it."
+  nextAction: "0229 is applied and verified. The temporary clone was deleted after explicit Human confirmation; 0230 and deployment remain separately deferred."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -29,7 +29,7 @@ provenance:
 
 Owner decision recorded for this packet: production migration **0229** may be applied to Supabase project `wdsnuvldxyrkqcjxvuxp` only after a backup is taken and a restore is verified on a **different** project. **0230 stays deferred.** The coordinator applies the SQL. This repository change does not connect to production, does not run the migrator against production, and does not deploy.
 
-Canonical tree this packet was written against: `main` `520672258014ca4600b2343eef530a65dc38d769`. Re-read `origin/main` before the window. If `db/migrations_postgres/meta/_journal.json` no longer ends at 0229, stop.
+Canonical tree this packet was written against: `main` `0f6be381a68589d4abd4c8920b5a1fd3f5a02110`. Re-read `origin/main` immediately before the apply. If `db/migrations_postgres/meta/_journal.json` no longer ends at 0229, stop.
 
 ## Canonical sequence
 
@@ -44,7 +44,7 @@ Git blob of the 0229 file at that commit: `981b2076f309706e91b88d9ae7db4728f7e63
 
 There is no `0230_*.sql` on `origin/main`. Journal and SQL files match 1:1 (230 and 230). `db/AGENTS.md` says production apply is **targeted SQL** on `waia-prod`. Do not run `pnpm db:migrate:postgres` against production.
 
-The last read-only production comparison in the DEE-1153 packet (2026-10-01) found the live journal equal to the repository prefix through 0228: 229 rows, next repository entry 0229 with the hash above. A later catalog read (2026-10-02 14:47:52 UTC) found `public.trader_scheduled_noncapital_cycle_receipts_v1` absent. Those are historical facts. Repeat the preflight in the window. This packet did not query production.
+The final read-only production admission at `2026-10-03T10:26:36Z` matched the exact repository prefix through 0228 (229 rows; ordered-prefix digest `a60e7e17aa3002e86d016cec6e2be7f41bc8b230daa167214b6572cfe917e398`), with 0229 and 0230 objects absent, zero other `exchange_credentials` locks, and zero non-idle transactions older than one minute. The reviewed wrapper was then applied and verified at `2026-10-03T10:27:33Z`–`10:27:34Z`; production now has the exact 230-row prefix through 0229 (digest `3855287a6dca60522b16a503f894eacbf1a871f3715b13a6294d682cd21affc0`). See `audit-ai-trader-2026-10-03/0229-production-final-admission.json` and `0229-production-result.json`.
 
 ## What 0229 contains
 
@@ -69,7 +69,7 @@ It applies **0230 in the same transaction** if the checkout's journal contains `
 Supported way to stop at 0229, without editing the journal:
 
 1. Preferred for this window, and the path `db/AGENTS.md` allows on `waia-prod`: execute the single transaction in [Apply](#apply). It contains the 0229 file and one journal insert. It does not contain 0230.
-2. The ordinary migrator stops at 0229 only when **both** are true: the process cwd is a clean checkout of a commit whose journal tail is exactly 0229 (current `main` `520672258014ca4600b2343eef530a65dc38d769` qualifies; any child that adds 0230 does not), and the preflight shows the live high-water `created_at` is exactly `1780000000228`. Do not point that command at production for this window. The coordinator apply path is the SQL transaction.
+2. The ordinary migrator stops at 0229 only when **both** are true: the process cwd is a clean checkout of a commit whose journal tail is exactly 0229 (current `main` `0f6be381a68589d4abd4c8920b5a1fd3f5a02110` qualifies; any child that adds 0230 does not), and the preflight shows the live high-water `created_at` is exactly `1780000000228`. Do not point that command at production for this window. The coordinator apply path is the SQL transaction.
 
 There is no supported flag that means "apply 0229 and skip a later journal entry". Hiding 0230 by deleting a journal row, renaming the file, or changing `when` is forbidden.
 
@@ -81,14 +81,15 @@ The missing artifact is a new hand-authored Postgres migration plus a matching `
 
 ## Preflight
 
-Run this on `wdsnuvldxyrkqcjxvuxp` immediately before the backup clone and again immediately before apply. Read-only. One transaction, then rollback. Do not select credential rows, `permission_metadata`, `encrypted_payload`, query text, or role passwords.
+Run this on `wdsnuvldxyrkqcjxvuxp` immediately before apply. It is read-only. The ordered-prefix digest compares every stored `(created_at, hash)` pair to the exact repository prefix through 0228, rather than relying on count and tail alone. Do not select credential rows, `permission_metadata`, `encrypted_payload`, query text, or role passwords.
 
-Stop if any expected value differs, including a journal count other than 229. Do not "repair" the journal.
+Stop if any expected value differs. Do not repair the journal or role topology. The wrapper independently takes bounded table locks and repeats the exact journal guard inside its transaction; preflight cannot close the interval between this read-only snapshot and apply.
 
 ```sql
 BEGIN READ ONLY;
 SET LOCAL statement_timeout = '5s';
 SET LOCAL lock_timeout = '1s';
+SET LOCAL search_path = pg_catalog, public;
 
 SELECT current_database() AS database_name,
        current_setting('server_version_num') AS server_version_num;
@@ -96,7 +97,10 @@ SELECT current_database() AS database_name,
 SELECT count(*)::bigint AS journal_rows,
        count(DISTINCT created_at)::bigint AS distinct_created_at,
        min(created_at)::text AS min_created_at,
-       max(created_at)::text AS max_created_at
+       max(created_at)::text AS max_created_at,
+       encode(pg_catalog.sha256(pg_catalog.convert_to(
+         pg_catalog.string_agg(created_at::text || ':' || hash, E'\n' ORDER BY created_at, hash),
+         'UTF8')),'hex') AS ordered_prefix_sha256
 FROM drizzle.__drizzle_migrations;
 
 SELECT created_at::text, hash
@@ -107,6 +111,7 @@ ORDER BY created_at;
 SELECT to_regclass('public.exchange_credentials') AS exchange_credentials,
        to_regprocedure('public.exchange_credential_observation_read_only(text,text,text)') AS gate_function,
        to_regclass('public.trader_scheduled_noncapital_cycle_receipts_v1') AS scheduled_receipt_table,
+       to_regclass('public.trader_research_development_stage_receipts_v1') AS development_receipts_table,
        to_regprocedure('public.trader_observation_inventory_v1()') AS inventory_function_0230;
 
 SELECT c.relrowsecurity AS rls_enabled,
@@ -135,49 +140,41 @@ SELECT r.rolname, r.rolcanlogin, r.rolsuper, r.rolinherit, r.rolbypassrls,
        r.rolcreatedb, r.rolcreaterole, r.rolreplication, r.rolconnlimit
 FROM pg_roles r
 WHERE r.rolname IN (
-  'waia_account_observer',
-  'waia_account_observer_login',
-  'waia_account_observation_reader',
-  'waia_account_observation_reader_login',
-  'waia_account_observation_credential',
-  'waia_account_observation_credential_login',
-  'waia_account_inventory',
-  'waia_account_inventory_owner'
+  'waia_account_observer', 'waia_account_observer_login',
+  'waia_account_observation_reader', 'waia_account_observation_reader_login',
+  'waia_account_observation_credential', 'waia_account_observation_credential_login',
+  'waia_account_inventory', 'waia_account_inventory_owner'
 )
 ORDER BY r.rolname;
 
 SELECT member.rolname AS member_role,
        parent.rolname AS parent_role,
-       m.admin_option,
-       m.inherit_option,
-       m.set_option
+       m.admin_option, m.inherit_option, m.set_option
 FROM pg_auth_members m
 JOIN pg_roles member ON member.oid = m.member
 JOIN pg_roles parent ON parent.oid = m.roleid
 WHERE member.rolname IN (
-    'waia_account_observer_login',
-    'waia_account_observation_reader_login',
-    'waia_account_observation_credential_login'
+    'waia_account_observer', 'waia_account_observer_login',
+    'waia_account_observation_reader', 'waia_account_observation_reader_login',
+    'waia_account_observation_credential', 'waia_account_observation_credential_login',
+    'waia_account_inventory', 'waia_account_inventory_owner'
   )
   OR parent.rolname IN (
-    'waia_account_observer',
-    'waia_account_observation_reader',
-    'waia_account_observation_credential',
-    'waia_account_inventory',
-    'waia_account_inventory_owner'
+    'waia_account_observer', 'waia_account_observer_login',
+    'waia_account_observation_reader', 'waia_account_observation_reader_login',
+    'waia_account_observation_credential', 'waia_account_observation_credential_login',
+    'waia_account_inventory', 'waia_account_inventory_owner'
   )
 ORDER BY member.rolname, parent.rolname;
 
 SELECT has_column_privilege(
          'waia_account_observation_credential',
          'public.exchange_credentials',
-         'permission_metadata',
-         'SELECT') AS credential_role_can_select_metadata,
+         'permission_metadata', 'SELECT') AS credential_role_can_select_metadata,
        has_column_privilege(
          'waia_account_observation_credential',
          'public.exchange_credentials',
-         'encrypted_payload',
-         'SELECT') AS credential_role_can_select_payload;
+         'encrypted_payload', 'SELECT') AS credential_role_can_select_payload;
 
 SELECT count(*)::bigint AS credential_relation_locks
 FROM pg_locks
@@ -194,50 +191,78 @@ ROLLBACK;
 
 Expected before apply:
 
-- `journal_rows = 229`, `distinct_created_at = 229`, `min_created_at = 1777989873065`, `max_created_at = 1780000000228`.
-- Exactly one tail row: `1780000000228` / `b020a1523ec988be54051c0e98ed3f7a5033c4e1dac79ae7e0073fe055a174c9`. No row for `1780000000229`.
-- `exchange_credentials` is non-null. `gate_function`, `scheduled_receipt_table`, and `inventory_function_0230` are null.
-- `rls_enabled` true, `rls_forced` false. `observation_read_only` returns no attribute row.
-- No `trader_inventory_*` policies. No `waia_account_inventory` or `waia_account_inventory_owner` role.
-- Six observation roles present. The three `*_login` roles: `rolcanlogin` true, not superuser, not inherit, not bypassrls, not createdb, not createrole, not replication, `rolconnlimit = 2`. The three parents: `rolcanlogin` false, same privileged flags false. Each login is a member of only its own parent, with `admin_option` false, `inherit_option` false, `set_option` true. Parents have no outbound membership in this result. This matches the 2026-10-01 catalog; if PostgreSQL 17 column names `inherit_option` / `set_option` are absent, stop rather than rewriting the check.
-- `credential_role_can_select_metadata` is false. `credential_role_can_select_payload` may be true; 0210 grants that column on purpose. Do not widen it.
-- `credential_relation_locks = 0` and `nonidle_transactions_older_than_1_minute = 0`. A non-zero lock count means wait or stop. Do not raise `lock_timeout` above 5s and do not retry a timed-out apply while the first attempt might still be running.
+- Journal has `229` rows and distinct timestamps; min `1777989873065`, max `1780000000228`, ordered-prefix digest `a60e7e17aa3002e86d016cec6e2be7f41bc8b230daa167214b6572cfe917e398`. There is exactly one tail row `1780000000228` / `b020a1523ec988be54051c0e98ed3f7a5033c4e1dac79ae7e0073fe055a174c9` and no 0229 row.
+- `exchange_credentials` is non-null; the 0229 function and generated column are absent. The scheduled receipts, development-stage receipts and 0230 inventory function are absent. RLS is enabled and not forced. No inventory policies or inventory roles exist.
+- The six observation roles are present. All three `*_login` roles have `rolcanlogin=true`, `rolinherit=false`, no superuser/bypass/create-db/create-role/replication privileges, and connection limit `2`. The `waia_account_observer` parent is `NOLOGIN` with `rolinherit=true` (migration 0205 relies on PostgreSQL's default); the reader and credential parents are `NOLOGIN` with `rolinherit=false` (0205/0210 explicitly set `NOINHERIT`). All parents have the other privileged flags false.
+- Membership edges are exactly: each login role → its own parent with `admin_option=false`, `inherit_option=false`, `set_option=true`; and `postgres` → each of the three parent roles with `admin_option=true`, `inherit_option=false`, `set_option=false`. No other edge may involve the six observation roles or the inventory roles. These postgres edges are present in the verified production and restore-clone catalogs.
+- `credential_role_can_select_metadata=false`; payload access may be true under the existing 0210 grant.
+- `credential_relation_locks=0` and `nonidle_transactions_older_than_1_minute=0`. A nonzero other credential-table lock means stop, inspect owner/mode/age, and recheck; the wrapper's 5-second `ACCESS EXCLUSIVE` timeout remains the final bounded lock guard.
 
-`has_column_privilege` for `observation_read_only` is omitted here because the column does not exist yet. PostgreSQL returns null for a missing column. Check it after apply.
+Do not call `has_column_privilege` for the absent `observation_read_only` column during preflight: PostgreSQL raises an error for an unknown column name; it does not return `NULL`. Verify that grant after apply.
 
 ## Backup and restore verification
 
-Do this before the production transaction. Do not restore **onto** `wdsnuvldxyrkqcjxvuxp` as the proof.
+The required separate-project restore has been completed. It was restored from backup `2026-10-03T03:35:49Z` of source project `wdsnuvldxyrkqcjxvuxp` into distinct project `zijfrbnzelqyfukmvfql`. The restore started at `2026-10-03T10:09:12Z`; when the verification evidence was captured, the dashboard showed `COMPLETED` and the restore project API reported `ACTIVE_HEALTHY`. The restore operation did not replace or modify the source database; the separately authorized migration followed after verification.
+
+The read-only clone proof at `2026-10-03T10:14:04Z` confirmed PostgreSQL 17 on both sides (source `170006`, clone `170011`), zero outward-calling/scheduling extensions and zero foreign servers on the clone. The canonical comparisons for journal, objects, observation column, roles, memberships, credential privileges, public relations/columns, invalid public indexes, inventory policies, extensions, and foreign servers all matched. The clone journal remained at 229 rows, max `1780000000228`, with exact ordered-prefix digest `a60e7e17aa3002e86d016cec6e2be7f41bc8b230daa167214b6572cfe917e398`.
+
+Aggregate counts were production 3 trader organization profiles, 3 collection states, and 19,631 observations, versus clone 3, 3, and 19,184. They were observed at different times and are a restore sanity check, not an exact business-data checksum. No credential values were read. No worker was connected to the clone. Evidence is recorded in `audit-ai-trader-2026-10-03/0229-restore-verification.json`.
+
+The clone rehearsal passed before production apply: it reached the expected exact 0228 prefix, applied the reviewed wrapper, and verified the exact 0229 prefix, generated column, immutable function, SELECT grant, unchanged roles, and all 16 pure-function cases. Production then passed the fresh lock-free admission and the same apply verification. Evidence is in `audit-ai-trader-2026-10-03/0229-clone-rehearsal-result.json`, `0229-production-final-admission.json`, and `0229-production-result.json`.
 
 Supabase documents two different restore actions ([Database Backups](https://supabase.com/docs/guides/platform/backups), [Restore to a new project](https://supabase.com/docs/guides/platform/clone-project)):
 
-- **In-place restore** and **in-place PITR** replace the production database and take `wdsnuvldxyrkqcjxvuxp` offline. Those are disaster tools. They are not the verification drill.
-- **Restore to a new project** (Dashboard → project `wdsnuvldxyrkqcjxvuxp` → Database → Backups → **Restore to a New Project**) creates a separate project from a physical backup, or from a PITR timestamp when PITR is enabled. The source project stays up. Paid plan and physical backups are required. The clone copies schema, data, roles, and auth users. It does not copy Storage objects. Daily backups do not store custom-role passwords, so LOGIN passwords on the clone will not match production. Catalog checks do not need those passwords.
+- **In-place restore** and **in-place PITR** replace the production database and take the source offline. They are disaster tools, not the verification drill.
+- **Restore to a New Project** creates a separate project from a physical backup, or from a PITR timestamp when enabled. The source stays up. Do not restore onto `wdsnuvldxyrkqcjxvuxp` as proof.
 
-Verification steps:
-
-1. Confirm a backup exists and record its timestamp or PITR target, the new project ref, and the source ref `wdsnuvldxyrkqcjxvuxp`. Record no connection strings, keys, or passwords.
-2. Start **Restore to a New Project**. Wait until that new project is healthy. If the control is missing, or the only offered action is an in-place restore, stop. Do not invent a `pg_dump` against production from this packet, and do not use an empty preview branch as a substitute. A Supabase Branching preview is acceptable only when the coordinator can show it was created from this same physical backup and its project ref is not `wdsnuvldxyrkqcjxvuxp`.
-3. On the **clone only**, disable extensions that can call outward or schedule work (`pg_cron`, `pg_net`, `wrappers`, and any wrapper foreign servers) before running further SQL. The clone is a full data copy.
-4. Run the [Preflight](#preflight) script on the clone. The same expected values must hold, especially journal high-water `1780000000228` and the absent gate column.
-5. Optional rehearsal: run the [Apply](#apply) transaction on the **clone only**, then the [Post-apply verification](#post-apply-verification). Do not point Cloudflare, workers, or observation hosts at the clone.
-6. Leave production untouched until step 4 succeeds. After the production apply, the clone may be paused or deleted. Deleting the clone does not delete production. Never delete `wdsnuvldxyrkqcjxvuxp`.
-
-Whether this project currently has physical backups or PITR was not re-checked. A 2026-10-01 attempt to open the backup dashboard was refused by the browser policy. Absence of that check is not evidence that backups are missing.
+The temporary restore project was deleted after explicit Human confirmation on 2026-10-03. A prior pause attempt had been refused for this paid project. The Dashboard returned to the project list with the clone absent and waia-prod present; the source API remained ACTIVE_HEALTHY. Evidence: restore-clone-deleted.jpg. Never delete source project `wdsnuvldxyrkqcjxvuxp`.
 
 ## Apply
 
-One transaction. Statements below the `FILE` markers are the exact bytes of `db/migrations_postgres/0229_trader_observation_read_only_credential_v1.sql`. The journal hash is SHA-256 of those file bytes, not of this wrapper.
+**Completed 2026-10-03:** the reviewed wrapper was applied to production after the successful clone rehearsal and fresh lock-free admission. The production result reports success at `2026-10-03T10:27:33.484504Z`; post-apply verification passed at `10:27:34.589414Z`. The journal contains 230 rows through 0229 with exact digest `3855287a6dca60522b16a503f894eacbf1a871f3715b13a6294d682cd21affc0`, the stored generated column and immutable non-security-definer function are present, the new gate is selectable by the credential role (existing ciphertext permissions are unchanged; metadata remains denied), roles/memberships are unchanged, and all 16 pure-function cases passed. The scheduled/development receipt tables and 0230 inventory function remain absent.
 
-Use the Supabase SQL surface that can commit this whole script as **one** transaction (dashboard SQL with an explicit `BEGIN` / `COMMIT`). Do not paste it into a mode that auto-commits each statement. Do not use the transaction pooler (port 6543 or 6432) for this DDL. Do not set either timeout to `0`. If `lock_timeout` or `statement_timeout` fires, the transaction aborts; inspect and do not start a second attempt until the first session is gone.
+The canonical migration source retains its historical header comment saying it is unmerged/unapplied. Those source bytes are unchanged to preserve the journal hash; the comment no longer describes current production state.
+
+The SQL below is the exact executed packet retained for audit; **do not rerun it**. It is one transaction and embeds the exact 0229 migration bytes (canonical SHA-256 `67086bdf2f8cdd101c49b33ef142daf5f791be6865e3b07b1e8de8897dc2bd70`). Wrapper SHA-256: `200affcc0422ae5c32c74bb21dda6697c37c44fb3d1c37fa4f2257f91b81453b`. It acquires the credential table's `ACCESS EXCLUSIVE` lock first with a 5-second timeout, then serializes journal writers with `SHARE ROW EXCLUSIVE`; this matches the normal DDL-then-journal insertion order and avoids lock-order deadlock. Under both locks it verifies the full 229-entry ordered journal-prefix digest before any migration DDL. It then applies only canonical 0229, inserts its journal row, and checks the 230-entry prefix plus generated column, function and privileges before commit. A mismatch raises an exception and rolls the whole transaction back.
+
+Use the Supabase SQL surface that commits this whole script as **one** transaction. Do not paste it into a mode that auto-commits each statement. Do not use the transaction pooler (port 6543 or 6432) for this DDL. Do not set either timeout to `0`. If a lock or statement timeout fires, inspect and do not start a second attempt until the first session is gone.
 
 ```sql
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '120s';
+SET LOCAL search_path = pg_catalog, public;
+-- Match the normal DDL-before-journal lock order to avoid a lock-order inversion.
+LOCK TABLE public.exchange_credentials IN ACCESS EXCLUSIVE MODE;
+-- Serialize journal writers; no other migration may pass between check and commit.
+LOCK TABLE drizzle.__drizzle_migrations IN SHARE ROW EXCLUSIVE MODE;
+DO $guard$
+DECLARE n bigint; tail bigint; digest text;
+BEGIN
+  SELECT count(*),max(created_at),encode(sha256(convert_to(
+    string_agg(created_at::text||':'||hash,E'\n' ORDER BY created_at,hash),'UTF8')),'hex')
+    INTO n,tail,digest FROM drizzle.__drizzle_migrations;
+  IF n <> 229 OR tail IS DISTINCT FROM 1780000000228
+    OR digest IS DISTINCT FROM 'a60e7e17aa3002e86d016cec6e2be7f41bc8b230daa167214b6572cfe917e398' THEN
+    RAISE EXCEPTION '0229_EXACT_JOURNAL_PREFIX_MISMATCH';
+  END IF;
+  IF to_regprocedure('public.exchange_credential_observation_read_only(text,text,text)') IS NOT NULL
+    OR EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid='public.exchange_credentials'::regclass
+      AND attname='observation_read_only' AND NOT attisdropped) THEN
+    RAISE EXCEPTION '0229_ALREADY_OR_PARTIALLY_PRESENT';
+  END IF;
+  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid='public.exchange_credentials'::regclass)
+    OR has_column_privilege('waia_account_observation_credential','public.exchange_credentials','permission_metadata','SELECT') THEN
+    RAISE EXCEPTION '0229_CREDENTIAL_BOUNDARY_MISMATCH';
+  END IF;
+  IF to_regclass('public.trader_scheduled_noncapital_cycle_receipts_v1') IS NOT NULL
+    OR to_regclass('public.trader_research_development_stage_receipts_v1') IS NOT NULL
+    OR to_regprocedure('public.trader_observation_inventory_v1()') IS NOT NULL THEN
+    RAISE EXCEPTION '0229_UNEXPECTED_SCHEMA_ADVANCEMENT';
+  END IF;
+END $guard$;
 
--- FILE BEGIN db/migrations_postgres/0229_trader_observation_read_only_credential_v1.sql
--- sha256 67086bdf2f8cdd101c49b33ef142daf5f791be6865e3b07b1e8de8897dc2bd70
+-- CANONICAL FILE BEGIN
 -- DEE-1151: decrypt only exact-account canonical HTX spot read-only policy.
 -- Mirrors the stored read-purpose contract in htx-credential-types.ts, then
 -- additionally excludes trade scopes. Metadata remains withheld from the role.
@@ -302,140 +327,142 @@ ALTER TABLE public.exchange_credentials
 --> statement-breakpoint
 GRANT SELECT (observation_read_only)
   ON public.exchange_credentials TO waia_account_observation_credential;
--- FILE END
+-- CANONICAL FILE END
 
-INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
-VALUES (
-  '67086bdf2f8cdd101c49b33ef142daf5f791be6865e3b07b1e8de8897dc2bd70',
-  1780000000229
-);
-
-DO $$
-DECLARE
-  journal_count bigint;
-  generated_mark "char";
+INSERT INTO drizzle.__drizzle_migrations (hash,created_at)
+VALUES ('67086bdf2f8cdd101c49b33ef142daf5f791be6865e3b07b1e8de8897dc2bd70',1780000000229);
+DO $guard$
+DECLARE n bigint; tail bigint; digest text;
 BEGIN
-  SELECT count(*) INTO journal_count
-  FROM drizzle.__drizzle_migrations
-  WHERE created_at = 1780000000229
-    AND hash = '67086bdf2f8cdd101c49b33ef142daf5f791be6865e3b07b1e8de8897dc2bd70';
-  IF journal_count <> 1 THEN
-    RAISE EXCEPTION '0229_JOURNAL_CARDINALITY_%', journal_count;
+  SELECT count(*),max(created_at),encode(sha256(convert_to(
+    string_agg(created_at::text||':'||hash,E'\n' ORDER BY created_at,hash),'UTF8')),'hex')
+    INTO n,tail,digest FROM drizzle.__drizzle_migrations;
+  IF n <> 230 OR tail IS DISTINCT FROM 1780000000229
+    OR digest IS DISTINCT FROM '3855287a6dca60522b16a503f894eacbf1a871f3715b13a6294d682cd21affc0' THEN
+    RAISE EXCEPTION '0229_EXACT_JOURNAL_PREFIX_MISMATCH';
   END IF;
-
-  SELECT a.attgenerated INTO generated_mark
-  FROM pg_attribute a
-  WHERE a.attrelid = 'public.exchange_credentials'::regclass
-    AND a.attname = 'observation_read_only'
-    AND NOT a.attisdropped;
-  IF generated_mark IS DISTINCT FROM 's' THEN
-    RAISE EXCEPTION '0229_COLUMN_NOT_STORED';
+  IF NOT EXISTS (SELECT 1 FROM pg_attribute
+    WHERE attrelid='public.exchange_credentials'::regclass AND attname='observation_read_only'
+      AND NOT attisdropped AND attgenerated='s' AND attnotnull) THEN
+    RAISE EXCEPTION '0229_GENERATED_COLUMN_MISMATCH';
   END IF;
-END $$;
-
+  IF NOT EXISTS (SELECT 1 FROM pg_proc
+    WHERE oid='public.exchange_credential_observation_read_only(text,text,text)'::regprocedure
+      AND provolatile='i' AND NOT prosecdef) THEN
+    RAISE EXCEPTION '0229_FUNCTION_MISMATCH';
+  END IF;
+  IF NOT has_column_privilege('waia_account_observation_credential','public.exchange_credentials','observation_read_only','SELECT')
+    OR has_column_privilege('waia_account_observation_credential','public.exchange_credentials','permission_metadata','SELECT') THEN
+    RAISE EXCEPTION '0229_COLUMN_PRIVILEGE_MISMATCH';
+  END IF;
+END $guard$;
 COMMIT;
 ```
 
+
 ## Post-apply verification
 
-New read-only transaction on production. Do not read credential values.
+Run in a new read-only transaction. Do not read credential values. Expected ordered-prefix digest is `3855287a6dca60522b16a503f894eacbf1a871f3715b13a6294d682cd21affc0`.
 
 ```sql
 BEGIN READ ONLY;
 SET LOCAL statement_timeout = '5s';
 SET LOCAL lock_timeout = '1s';
+SET LOCAL search_path = pg_catalog, public;
 
 SELECT count(*)::bigint AS journal_rows,
-       max(created_at)::text AS max_created_at
+       max(created_at)::text AS max_created_at,
+       encode(pg_catalog.sha256(pg_catalog.convert_to(
+         pg_catalog.string_agg(created_at::text || ':' || hash, E'\n' ORDER BY created_at, hash),
+         'UTF8')),'hex') AS ordered_prefix_sha256
 FROM drizzle.__drizzle_migrations;
 
 SELECT created_at::text, hash
 FROM drizzle.__drizzle_migrations
 WHERE created_at = 1780000000229;
 
-SELECT a.attgenerated, a.attnotnull, pg_get_expr(d.adbin, d.adrelid) AS generation_expression
-FROM pg_attribute a
-LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+SELECT a.attgenerated, a.attnotnull, pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS generation_expression
+FROM pg_catalog.pg_attribute a
+LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
 WHERE a.attrelid = 'public.exchange_credentials'::regclass
   AND a.attname = 'observation_read_only'
   AND NOT a.attisdropped;
 
-SELECT p.proname, p.provolatile, p.prosecdef, pg_get_function_identity_arguments(p.oid) AS args
-FROM pg_proc p
-JOIN pg_namespace n ON n.oid = p.pronamespace
+SELECT p.proname, p.provolatile, p.prosecdef,
+       pg_catalog.pg_get_function_identity_arguments(p.oid) AS args
+FROM pg_catalog.pg_proc p
+JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public'
   AND p.proname = 'exchange_credential_observation_read_only';
 
-SELECT has_column_privilege(
-         'waia_account_observation_credential',
-         'public.exchange_credentials',
-         'observation_read_only',
-         'SELECT') AS credential_role_can_select_gate,
-       has_column_privilege(
-         'waia_account_observation_credential',
-         'public.exchange_credentials',
-         'permission_metadata',
-         'SELECT') AS credential_role_can_select_metadata;
+SELECT has_column_privilege('waia_account_observation_credential',
+         'public.exchange_credentials', 'observation_read_only', 'SELECT') AS credential_role_can_select_gate,
+       has_column_privilege('waia_account_observation_credential',
+         'public.exchange_credentials', 'permission_metadata', 'SELECT') AS credential_role_can_select_metadata;
 
 SELECT to_regclass('public.trader_scheduled_noncapital_cycle_receipts_v1') AS scheduled_receipt_table,
+       to_regclass('public.trader_research_development_stage_receipts_v1') AS development_receipts_table,
        to_regprocedure('public.trader_observation_inventory_v1()') AS inventory_function_0230;
 
 SELECT r.rolname
-FROM pg_roles r
+FROM pg_catalog.pg_roles r
 WHERE r.rolname IN ('waia_account_inventory', 'waia_account_inventory_owner');
 
 ROLLBACK;
 ```
 
-Expected:
-
-- `journal_rows = 230`, `max_created_at = 1780000000229`.
-- One journal row, hash `67086bdf2f8cdd101c49b33ef142daf5f791be6865e3b07b1e8de8897dc2bd70`.
-- `attgenerated = s`, `attnotnull` true, generation expression `exchange_credential_observation_read_only(permission_metadata, venue, exchange_account_id)`.
-- One function, `provolatile = i` (immutable), `prosecdef` false, arguments `text, text, text`.
-- Gate `SELECT` true for `waia_account_observation_credential`. Metadata `SELECT` still false.
-- Receipts table still null. `trader_observation_inventory_v1` still null. Inventory roles still absent.
+Expected: 230 journal rows, max `1780000000229`, exact ordered-prefix digest above; one 0229 row with the canonical file hash; stored generated non-null column; one immutable non-security-definer function; gate SELECT true while metadata SELECT remains false. Receipt tables, 0230 inventory function and inventory roles remain absent.
 
 ## Rollback
 
-If `COMMIT` never succeeded, PostgreSQL already rolled the transaction back. Run the preflight again and expect the 0228 high-water mark. Do not retry until that is true.
+Rollback is an operator-only contingency, not a routine follow-up. Do not run it if any deployed process may use the column. Stop/rollback consumers first and confirm no later schema migration has been applied. The wrapper locks `exchange_credentials` then the journal using the same bounded order as apply. It requires the exact 230-row 0229 prefix before any drop, and verifies the exact 229-row 0228 prefix after deletion. All actions are one transaction; any guard failure leaves the applied schema and journal intact.
 
-If `COMMIT` succeeded and the post-apply checks fail, or the coordinator aborts before any process uses the new column: stop writers of `exchange_credentials`, then run this **one** transaction. Do not drop the column while a deployed observation host or account-acquisition session is using it. Those callers fail closed when the column is absent and can decrypt when the stored value is true. Roll the app or host back first if a release that requires the column has already gone out. This ceremony's intended order is schema first, and no release is authorized below, so the column should still be unused.
-
-Do not use an in-place backup restore as the first rollback. 0229 is additive. In-place restore takes production offline and reverts every later write, not just this column.
+Rollback wrapper SHA-256: `dfe7aebff1e5f1348dba5320b53f90dc070e932fca12330340142e31e895ee09`.
 
 ```sql
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '120s';
-
-ALTER TABLE public.exchange_credentials
-  DROP COLUMN observation_read_only;
-
-DROP FUNCTION public.exchange_credential_observation_read_only(text, text, text);
-
-DELETE FROM drizzle.__drizzle_migrations
-WHERE created_at = 1780000000229
-  AND hash = '67086bdf2f8cdd101c49b33ef142daf5f791be6865e3b07b1e8de8897dc2bd70';
-
-DO $$
-DECLARE journal_count bigint;
+SET LOCAL search_path = pg_catalog, public;
+-- Match the normal DDL-before-journal lock order to avoid a lock-order inversion.
+LOCK TABLE public.exchange_credentials IN ACCESS EXCLUSIVE MODE;
+-- Serialize journal writers; no other migration may pass between check and commit.
+LOCK TABLE drizzle.__drizzle_migrations IN SHARE ROW EXCLUSIVE MODE;
+-- Operator-only rollback: first prove no current consumer uses the new column.
+-- Never use this after subsequent migrations or without a fresh schema/usage check.
+DO $guard$
+DECLARE n bigint; tail bigint; digest text;
 BEGIN
-  SELECT count(*) INTO journal_count
-  FROM drizzle.__drizzle_migrations
-  WHERE created_at = 1780000000229;
-  IF journal_count <> 0 THEN
-    RAISE EXCEPTION '0229_JOURNAL_STILL_PRESENT_%', journal_count;
+  SELECT count(*),max(created_at),encode(sha256(convert_to(
+    string_agg(created_at::text||':'||hash,E'\n' ORDER BY created_at,hash),'UTF8')),'hex')
+    INTO n,tail,digest FROM drizzle.__drizzle_migrations;
+  IF n <> 230 OR tail IS DISTINCT FROM 1780000000229
+    OR digest IS DISTINCT FROM '3855287a6dca60522b16a503f894eacbf1a871f3715b13a6294d682cd21affc0' THEN
+    RAISE EXCEPTION '0229_EXACT_JOURNAL_PREFIX_MISMATCH';
+  END IF;
+END $guard$;
+ALTER TABLE public.exchange_credentials DROP COLUMN observation_read_only;
+DROP FUNCTION public.exchange_credential_observation_read_only(text,text,text);
+DELETE FROM drizzle.__drizzle_migrations
+WHERE created_at=1780000000229 AND hash='67086bdf2f8cdd101c49b33ef142daf5f791be6865e3b07b1e8de8897dc2bd70';
+DO $guard$
+DECLARE n bigint; tail bigint; digest text;
+BEGIN
+  SELECT count(*),max(created_at),encode(sha256(convert_to(
+    string_agg(created_at::text||':'||hash,E'\n' ORDER BY created_at,hash),'UTF8')),'hex')
+    INTO n,tail,digest FROM drizzle.__drizzle_migrations;
+  IF n <> 229 OR tail IS DISTINCT FROM 1780000000228
+    OR digest IS DISTINCT FROM 'a60e7e17aa3002e86d016cec6e2be7f41bc8b230daa167214b6572cfe917e398' THEN
+    RAISE EXCEPTION '0229_EXACT_JOURNAL_PREFIX_MISMATCH';
   END IF;
   IF to_regprocedure('public.exchange_credential_observation_read_only(text,text,text)') IS NOT NULL THEN
-    RAISE EXCEPTION '0229_FUNCTION_STILL_PRESENT';
+    RAISE EXCEPTION '0229_ROLLBACK_FUNCTION_PRESENT';
   END IF;
-END $$;
-
+END $guard$;
 COMMIT;
 ```
 
-After rollback, the preflight expectations hold again: 229 journal rows, high-water `1780000000228`, gate column absent.
+After a successful rollback, the preflight expectations hold again: exact 229-row ordered prefix digest `a60e7e17aa3002e86d016cec6e2be7f41bc8b230daa167214b6572cfe917e398`, high-water `1780000000228`, and gate column/function absent.
 
 ## Release and flags after the schema
 
@@ -443,9 +470,9 @@ Applying 0229 does **not** authorize a Cloudflare deploy.
 
 Last observed production web release in the handoff, not re-read here: SHA `31c78cba11d5ddf6cc6637b473a875574ebce00d`, version `2f679217-20de-4e3b-9905-bef8507c4948`, deployment `2b0ba0d5-cef2-4d8b-80a1-e915ecb9d990`. That SHA is an ancestor of current `main` and already contains the PR 714 credential reader. Confirm the live deployment SHA in Cloudflare before relying on it.
 
-Do **not** deploy current `main` `520672258014ca4600b2343eef530a65dc38d769` as the follow-on of this migration. That commit's Worker cron calls `runScheduledNoncapitalPaperLoopFromEnv`. Checked-in `wrangler.jsonc` sets `PAPER_LOOP_ENABLED` to `1`, with `PAPER_LOOP_ORGANIZATION_ID` and `PAPER_LOOP_ACCOUNT_KEY` non-empty. `loadPaperLoopConfig` treats `1`, `true`, and `yes` as enabled. The scheduled owner then polls public HTX market data and writes `trader_scheduled_noncapital_cycle_receipts_v1`, which this migration does not create. An unchanged-config deploy fails that insert on every cron tick after a public GET, or commits noncapital cycles if the receipts table is added later without a separate decision.
+Do **not** deploy current `main` `0f6be381a68589d4abd4c8920b5a1fd3f5a02110` as the follow-on of this migration. That commit's Worker cron calls `runScheduledNoncapitalPaperLoopFromEnv`. Checked-in `wrangler.jsonc` sets `PAPER_LOOP_ENABLED` to `1`, with `PAPER_LOOP_ORGANIZATION_ID` and `PAPER_LOOP_ACCOUNT_KEY` non-empty. `loadPaperLoopConfig` treats `1`, `true`, and `yes` as enabled. The scheduled owner then polls public HTX market data and writes `trader_scheduled_noncapital_cycle_receipts_v1`, which this migration does not create. An unchanged-config deploy fails that insert on every cron tick after a public GET, or commits noncapital cycles if the receipts table is added later without a separate decision.
 
-Safe flag posture for any later, separately authorized deploy of `520672258014ca4600b2343eef530a65dc38d769`:
+Safe flag posture for any later, separately authorized deploy of `0f6be381a68589d4abd4c8920b5a1fd3f5a02110`:
 
 - Effective `PAPER_LOOP_ENABLED` is `0` or unset. Not `1`, `true`, or `yes`.
 - `WAIA_TRADER_LIVE_ENABLED` and `WAIA_LIVE_TRADING_ENABLED` stay unset. Do not run `pnpm trader:live:enable` or `trader:live:confirm`.
@@ -454,7 +481,7 @@ Safe flag posture for any later, separately authorized deploy of `520672258014ca
 - Do not start `ai-trader-account-observation-host` in `account-observation-recurring`. Idle mode is a separate host decision and is not part of this SQL.
 - Do not print Worker secrets while confirming flag names.
 
-`52067225` is the source SHA of this packet. It is not the SHA to deploy until the receipts migration exists and a human release says the effective paper-loop flag is off or explicitly accepts the scheduled owner.
+`0f6be381` is the canonical source SHA for this packet. It is not a deployment authorization. The receipts migration is absent; a separate human release decision is required before deploying this or any later code.
 
 ## Scheduled owner after the schema appears
 
@@ -464,14 +491,13 @@ If the receipts table is created later while effective `PAPER_LOOP_ENABLED` is o
 
 ## Blockers and unknowns
 
-- Production was not queried for this packet. The 0228 high-water mark and the absent receipts table are prior observations and must be re-proven by the preflight.
-- Backup and PITR availability on `wdsnuvldxyrkqcjxvuxp` is unverified. No restore proof exists until the clone preflight passes.
+- Migration 0229 is applied and verified in production. The restore verification and clone rehearsal also passed. The temporary restore project `zijfrbnzelqyfukmvfql` was deleted with explicit Human confirmation after evidence was saved.
 - Effective Cloudflare `PAPER_LOOP_ENABLED` and the live-flag names were not re-read. Checked-in source and an older deployment snapshot both show paper loop enabled. That is unsafe for a deploy of current `main`, not a reason to skip 0229's own preflight.
 - The scheduled receipts table has no canonical migration. 0230 remains deferred and must not ride along.
-- DEE-1201 (paper executor lease) is a separate branch. This packet does not touch it.
+- DEE-1201 (paper executor lease) was merged in PR752 and is outside this schema-only packet.
 
 ## Acceptance
 
-- The coordinator can apply exactly the 0229 file and one drizzle journal row in one transaction, and can prove the clone restore before doing so.
+- The production journal now contains exactly the canonical 0229 file hash at `1780000000229`; apply and post-apply guards passed, and the separate clone rehearsal passed.
 - 0230 objects stay absent.
 - No production write, deploy, live flag, or order is performed by the change that adds this document.
