@@ -23,6 +23,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
   grantTraderEntitlementByUserEmail(email);
   grantPlatformAdminByUserEmail(email);
   let version = 1;
+  let v5Enabled = false;
   let denied = false;
   let streamFailed = false;
   const started = Date.now();
@@ -137,8 +138,97 @@ test("mounted Admin and tenant update the same observation automatically and cle
         [fill("BTC", "BTC201225", "fill-delivery-1", "BTC")],
       ],
     ] as const;
+    const htxV5 = {
+      schemaVersion: "htx-v5-observation/v1",
+      htxUid: "9988776655",
+      assetMode: {
+        status: "COMPLETE",
+        value: "1",
+        readStartedAtMs: at,
+        readCompletedAtMs: at,
+        responseGeneratedAtMs: at,
+        error: null,
+      },
+      balance: {
+        status: "COMPLETE",
+        readStartedAtMs: at,
+        readCompletedAtMs: at,
+        responseGeneratedAtMs: at,
+        error: null,
+        value: {
+          state: "normal",
+          account: {
+            equityUsd: "1000.25",
+            initialMarginUsd: "2",
+            maintenanceMarginUsd: "1",
+            maintenanceMarginRate: "0.001",
+            profitUnrealUsd: "-0.25",
+            availableMarginUsd: "997.25",
+            voucherValue: "0",
+            createdTimeMs: at,
+            updatedTimeMs: at,
+          },
+          details: [],
+        },
+      },
+      positions: {
+        status: "COMPLETE",
+        values: [],
+        readStartedAtMs: at,
+        readCompletedAtMs: at,
+        responseGeneratedAtMs: at,
+        error: null,
+        pageScope: null,
+      },
+      openOrders: {
+        status: "PARTIAL",
+        values: [],
+        readStartedAtMs: at,
+        readCompletedAtMs: at,
+        responseGeneratedAtMs: at,
+        error: null,
+        pageScope: {
+          pageSize: 20,
+          maxPages: 2,
+          pagesRead: 2,
+          nextFrom: null,
+          completeness: "UNKNOWN",
+        },
+      },
+      algoOrders: {
+        status: "PARTIAL",
+        values: [],
+        readStartedAtMs: at,
+        readCompletedAtMs: at,
+        responseGeneratedAtMs: at,
+        error: null,
+        pageScope: {
+          pageSize: 20,
+          maxPagesPerType: 2,
+          queries: ["tp", "sl", "tpsl", "trigger", "trailing_stop"].map((type) => ({
+            type,
+            pagesRead: 1,
+            nextFrom: null,
+          })),
+          completeness: "UNKNOWN",
+        },
+      },
+      fills: {
+        status: "NOT_CONFIGURED",
+        coverage: "NOT_CONFIGURED",
+        contracts: [],
+        windowStartMs: null,
+        windowEndMs: null,
+        readStartedAtMs: null,
+        readCompletedAtMs: null,
+        responseGeneratedAtMs: null,
+        error: null,
+        pageScope: null,
+        values: null,
+      },
+    };
     return {
-      schemaVersion: "account-observation/v2",
+      schemaVersion: v5Enabled ? "account-observation/v3" : "account-observation/v2",
       binding,
       observationId:
         version === 1
@@ -146,7 +236,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
           : "44444444-4444-4444-8444-444444444444",
       collectionStartedAtMs: at,
       collectionCompletedAtMs: at,
-      status: "COMPLETE",
+      status: v5Enabled ? "PARTIAL" : "COMPLETE",
       balances: empty,
       openOrders: empty,
       holdings: [],
@@ -185,6 +275,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
           },
         })),
       },
+      ...(v5Enabled ? { htxV5 } : {}),
     };
   };
   const wire = async (target: Page, admin: boolean) => {
@@ -333,8 +424,21 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(adminPanel.getByText("Reconnecting automatically.")).toBeVisible();
 
   version = 2;
+  v5Enabled = true;
   await expect(tenantPanel.getByText(observation().observationId)).toBeVisible({ timeout: 12_000 });
   await expect(adminPanel.getByText(observation().observationId)).toBeVisible({ timeout: 12_000 });
+  for (const panel of [tenantPanel, adminPanel]) {
+    const v5 = panel.getByRole("region", { name: "HTX futures snapshot" });
+    await expect(v5.getByText("HTX futures snapshot")).toBeVisible();
+    await expect(v5.getByText("Total equity (USD)")).toBeVisible();
+    await expect(v5.getByText("Some results may be missing from this read.").first()).toBeVisible();
+    await expect(
+      v5.getByText("Fill history is unavailable; no fill count is implied."),
+    ).toBeVisible();
+    await expect(panel.getByText("BTC · BTC-USDT", { exact: true })).toBeVisible();
+    await expect(v5.getByRole("alert")).toHaveCount(0);
+    await expect(v5.getByRole("button")).toHaveCount(0);
+  }
   streamFailed = true;
   await expect(
     tenantPanel.getByText("Automatic polling fallback; stream retry scheduled."),
@@ -356,6 +460,8 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(adminPanel.getByText("200.50", { exact: true })).toHaveCount(0);
   await expect(tenantPanel.getByText("BTC · BTC-USDT", { exact: true })).toHaveCount(0);
   await expect(adminPanel.getByText("BTC · BTC-USDT", { exact: true })).toHaveCount(0);
+  await expect(tenantPanel.getByRole("region", { name: "HTX futures snapshot" })).toHaveCount(0);
+  await expect(adminPanel.getByRole("region", { name: "HTX futures snapshot" })).toHaveCount(0);
   await admin.close();
 });
 

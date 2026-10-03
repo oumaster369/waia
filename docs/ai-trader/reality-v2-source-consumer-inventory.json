@@ -305,16 +305,17 @@
       "getTradeHistory",
       "placeOrder"
     ],
-    "expectedFileCount": 154,
-    "sortedPathDigestHex": "f04cfbd3338d766013e392d186fe99c12e2b29f0265569590457456bb2c9e715",
+    "expectedFileCount": 155,
+    "sortedPathDigestHex": "eac684d9a68357360ea098e772a51ac25dc85caf2f5e8461680abac37b83f670",
     "contentPins": [
       {"path": "lib/trader/account-observation/credential-read-boundary.ts","sha256": "1c302306d59844713198f16cf6b0056eebd03652fd5c24b44deb12a120c541ad"},
-      {"path": "lib/trader/account-observation/credential-store.ts","sha256": "77fcab86d72f5636c48f2a4d957f819bd525531013dc39700c8678d3c655ae70"},
+      {"path": "lib/trader/account-observation/credential-store.ts","sha256": "c6daebfc774f03544772b5e3bbe4d08fb2252213a7cfc439899dc485a7029eb9"},
       {"path": "lib/trader/account-observation/derivatives/htx-account-transport.ts","sha256": "03a1e22dc92eed1353e3113fbe811ce9ff0df69a23546c56d895e05cc5b1c802"},
-      {"path": "lib/trader/account-observation/htx-get-transport.ts","sha256": "3b0ea19c5aff17186e10fe13f2ebbec2e39fa46cf8a0ebfaa36f2e781040c561"},
+      {"path": "lib/trader/account-observation/derivatives/htx-v5-read-transport.ts","sha256": "5ad65d14cd88b1a097dcea8f4cac983839bb630ac7c1af37510d1e9bd6338ccb"},
+      {"path": "lib/trader/account-observation/htx-get-transport.ts","sha256": "997568ee070b8abfa11c220d06b3bc21b51b92c9a1ac0c9d8a23ebe6442d0a58"},
       {"path": "lib/trader/account-observation/htx-reader.ts","sha256": "cc600c6b4d4329bcd046b04f86a57c976fa89f791a6bcfc0ca62b74328b13c55"},
-      {"path": "lib/trader/account-observation/service.ts","sha256": "481c1d4f6bc74e9cf3b42e23d496e1d9f42883b378e6b4040814d19af7db683f"},
-      {"path": "lib/trader/account-observation/types.ts","sha256": "52cf50c130cffae1f005c7885ecb2f59da64fb796af36d9a1cf92f24d07d6d28"},
+      {"path": "lib/trader/account-observation/service.ts","sha256": "fad2d5275e5e25376b4a627fdddef9fdf704251e083f3c9eced1fa67b52f76cb"},
+      {"path": "lib/trader/account-observation/types.ts","sha256": "27fd5772fcf19dc5f4d0f80707d790b8ec3017c8d0de96148ee5f1475c0b0bc0"},
       {"path": "lib/trader/admin-console/collectors/fetch-news.ts","sha256": "5207fb0c80a46b83b3a82fdeed0e4bb13f409fcdc847c3d93a3b151d0d931633"},
       {"path": "lib/trader/admin-console/collectors/run-due.ts","sha256": "a06cd64107d225f86f6d23063a5b9af3d7bfae015afebc68514ba6107f93f9b6"},
       {"path": "lib/trader/admin-console/money/htx-public-tickers.ts","sha256": "72f9e0cb9403a8ecb0c1ede772079048ee082802c08e3541240f5e9c32ff906c"},
@@ -494,6 +495,12 @@
       "pathPattern": "^lib/trader/account-observation/derivatives/htx-account-transport\\.ts$",
       "disposition": "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
       "reason": "DEE-1153 and DEE-1226 fixed HTX derivatives account-info, position-info, and match-results POST reads on api.hbdm.com only; uses signing primitive without a trading connector, with same-key/family pre/post admission and bounded cancellation. The twelve routes are read-only. No arbitrary route/body, order, cancel, transfer, canonical Reality, Risk or capital authority."
+    },
+    {
+      "id": "ACCOUNT_OBSERVATION_HTX_V5_READ_TRANSPORT",
+      "pathPattern": "^lib/trader/account-observation/derivatives/htx-v5-read-transport\\.ts$",
+      "disposition": "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
+      "reason": "DEE-1231 fixed six-route HTX V5 signed-GET transport with internally owned strict read-only admission and identity rechecks. It performs observation reads only; no arbitrary path/body, order, canonical Reality, Risk or capital authority."
     },
     {
       "id": "ACCOUNT_OBSERVATION_NORMALIZED_DTOS",

@@ -336,7 +336,7 @@ describe("DEE-1015 observation authority graph", () => {
     );
 
     expect(closure.has("lib/trader/account-observation/htx-read-admission.ts")).toBe(true);
-    expect(admission).toContain('if (!permissions.includes("readonly")');
+    expect(admission).toMatch(/if\s*\(\s*!permissions\.includes\(\s*["']readonly["']\s*\)/);
     expect(admission).toContain('permission !== "readonly" && permission !== "trade"');
   });
 

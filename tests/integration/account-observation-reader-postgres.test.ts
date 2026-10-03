@@ -5,7 +5,7 @@ import postgres, { type Sql } from "postgres";
 import { createPostgresObservationReader } from "@/lib/trader/account-observation/postgres-reader";
 import { createPostgresObservationAssignmentSource } from "@/lib/trader/account-observation/postgres-assignments";
 import { createObservationConfiguration } from "@/lib/trader/account-observation/runtime";
-import type { AccountObservation, ObservationBinding } from "@/lib/trader/account-observation/types";
+import type { AccountObservation, HtxV5AccountObservation, ObservationBinding } from "@/lib/trader/account-observation/types";
 import { observationPoolLimits, probeObservationPool } from "@/lib/trader/account-observation/host-role-probe";
 import { createAccountObservationHost } from "@/lib/trader/account-observation/host";
 import { accountObservationClock } from "@/lib/trader/account-observation/clock";
@@ -60,6 +60,27 @@ describe.skipIf(!enabled)("DEE-960 dedicated read-only LOGIN on actual PostgreSQ
   function scope(b: ObservationBinding) {
     return { organizationId: b.organizationId, credentialId: b.credentialId, exchangeAccountId: b.exchangeAccountId };
   }
+  function htxV5Projection(t: number): HtxV5AccountObservation {
+    const completeValue = <T>(value: T) => ({ status: "COMPLETE" as const, value,
+      readStartedAtMs: t, readCompletedAtMs: t, responseGeneratedAtMs: null, error: null });
+    const completeRows = <T>(values: readonly T[]) => ({ status: "COMPLETE" as const, values,
+      readStartedAtMs: t, readCompletedAtMs: t, responseGeneratedAtMs: null, error: null, pageScope: null });
+    return { schemaVersion: "htx-v5-observation/v1", htxUid: "456", assetMode: completeValue("1"),
+      balance: completeValue({ state: "normal", account: { equityUsd: "0", initialMarginUsd: "0",
+        maintenanceMarginUsd: "0", maintenanceMarginRate: "0", profitUnrealUsd: "0", availableMarginUsd: "0",
+        voucherValue: "0", createdTimeMs: null, updatedTimeMs: null }, details: [] }),
+      positions: completeRows([]),
+      openOrders: { status: "PARTIAL", values: [], readStartedAtMs: t, readCompletedAtMs: t,
+        responseGeneratedAtMs: null, error: null,
+        pageScope: { pageSize: 100, maxPages: 2, pagesRead: 1, nextFrom: null, completeness: "UNKNOWN" } },
+      algoOrders: { status: "PARTIAL", values: [], readStartedAtMs: t, readCompletedAtMs: t,
+        responseGeneratedAtMs: null, error: null, pageScope: { pageSize: 20, maxPagesPerType: 2,
+          queries: (["tp", "sl", "tpsl", "trigger", "trailing_stop"] as const)
+            .map(type => ({ type, pagesRead: 1, nextFrom: null })), completeness: "UNKNOWN" } },
+      fills: { status: "NOT_CONFIGURED", values: null, readStartedAtMs: null, readCompletedAtMs: null,
+        responseGeneratedAtMs: null, error: null, coverage: "NOT_CONFIGURED", contracts: [],
+        windowStartMs: null, windowEndMs: null, pageScope: null } };
+  }
   async function seed(mutate?: (o: AccountObservation) => unknown) {
     const b: ObservationBinding = { organizationId: randomUUID(), credentialId: randomUUID(),
       exchangeAccountId: randomUUID(), credentialRevision: "1", configurationRevision: "config-1" };
@@ -82,7 +103,7 @@ describe.skipIf(!enabled)("DEE-960 dedicated read-only LOGIN on actual PostgreSQ
         1, 'config-1', ${randomUUID()}, ${admin.json(JSON.parse(JSON.stringify(payload)))})`;
     await admin`UPDATE public.trader_account_collection_state SET last_observation_id=${observation.observationId}
       WHERE credential_id=${b.credentialId}`;
-    return { b, observation };
+    return { b, observation: payload as AccountObservation };
   }
   async function restricted(b: ObservationBinding, statement: string) {
     return client.begin(async tx => {
@@ -142,6 +163,22 @@ describe.skipIf(!enabled)("DEE-960 dedicated read-only LOGIN on actual PostgreSQ
     });
     expect(family?.positions?.values?.[0]?.volume).toBe("0.000000000000000013");
     expect(family?.positions?.values?.[0]?.unrealizedPnl).toBe("-0.000000000000000007");
+  });
+  it("reads a stored v3 projection through the restricted tenant reader while v1/v2 remain compatible", async () => {
+    const { b, observation } = await seed(o => ({ ...o, schemaVersion: "account-observation/v3",
+      status: "PARTIAL", htxV5: htxV5Projection(o.collectionCompletedAtMs) }));
+    const actualRole = await client`SELECT session_user, current_user`;
+    expect(actualRole[0].session_user).toBe(login);
+    expect(actualRole[0].current_user).toBe(login);
+    const stored = await reader.readLatest(b);
+    expect(stored).toEqual(observation);
+    expect(stored?.schemaVersion).toBe("account-observation/v3");
+    expect(await reader.resolveActiveBinding({ ...scope(b), organizationId: randomUUID() })).toBeNull();
+    expect(await reader.readLatest({ ...b, organizationId: randomUUID() })).toBeNull();
+    expect(await reader.readLatest({ ...b, credentialId: randomUUID() })).toBeNull();
+    expect(await reader.readLatest({ ...b, exchangeAccountId: "wrong-account" })).toBeNull();
+    expect(await restricted({ ...b, organizationId: randomUUID() },
+      "SELECT observation_id FROM public.trader_account_observations")).toHaveLength(0);
   });
   it("checks exact current assignment and configured symbols through the restricted reader", async () => {
     const { b } = await seed();

@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { htxObservationReaderLimitsSchema } from "./coverage";
+import { htxObservationReaderLimitsSchema, htxV5ObservationConfigurationSchema } from "./coverage";
 import { createObservationConfiguration } from "./runtime";
 import type { ConfiguredHtxObservationAssignment } from "./configured-runtime";
 import {
@@ -68,6 +68,7 @@ const assignmentSchema = z
       .min(1)
       .max(HTX_DERIVATIVES_FILL_CONTRACT_LIMIT)
       .optional(),
+    htxV5: htxV5ObservationConfigurationSchema.optional(),
   })
   .strict();
 
@@ -176,6 +177,7 @@ export function parseAccountObservationAssignmentManifest(
         ...(item.htxDerivativesFillContracts
           ? { htxDerivativesFillContracts: item.htxDerivativesFillContracts }
           : {}),
+        ...(item.htxV5 ? { htxV5: item.htxV5 } : {}),
       });
     } catch {
       refuse("COVERAGE");
