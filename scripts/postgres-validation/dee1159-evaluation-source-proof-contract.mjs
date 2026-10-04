@@ -2,6 +2,7 @@ import { draftSql as trainingDrafts, sourcePaths as trainingSources } from "./de
 export const databaseName = "waia_hsv2_it_dee1159_eval_source_v1";
 export const requiredSuites = ["tests/integration/postgres-research-evaluation-source-v1.test.ts"];
 export const requiredAssertionTitles = [
+  "reloads committed consumption without a score and preserves rolled-back availability",
   "commits exact indexed rows and metadata, then returns the immutable retry without payload",
   "prepares and replays through the real operator CLI without payload or scoring effects",
   "refuses missing and forged training issuance bindings without partial writes",
@@ -23,6 +24,9 @@ export const requiredAssertionTitles = [
 export const draftSql = [...trainingDrafts, "docs/plans/dee-1159-evaluation-source-owner.sql"];
 export const sourcePaths = [...new Set([
   ...trainingSources,
+  "lib/trader/research/strategy-admission-v1.ts",
+  "lib/trader/research/strategy-admission-journal-postgres.ts",
+  "tests/unit/trader-admission-consumption-snapshot.test.ts",
   "scripts/trader/discovery-evaluation-source.ts",
   "lib/trader/operator/operator-authority.ts",
   "tests/unit/trader-discovery-evaluation-source-cli.test.ts",

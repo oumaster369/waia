@@ -67,9 +67,17 @@ export async function loadStrategyAdmissionJournal(ex: Pick<WaiaPostgresDb, "sel
       .select({ payload: pgSchema.traderStrategyAdmissionJournal.payloadJson })
       .from(pgSchema.traderStrategyAdmissionJournal)
       .orderBy(asc(pgSchema.traderStrategyAdmissionJournal.createdAt));
+    // Root-committed disclosure may precede the terminal metric result. Never
+    // infer split availability from scored journal rows alone.
+    const splitUses = await ex.select({
+      specSha256: pgSchema.traderStrategyAdmissionSplitConsume.specSha256,
+      hypothesisId: pgSchema.traderStrategyAdmissionSplitConsume.hypothesisId,
+      split: pgSchema.traderStrategyAdmissionSplitConsume.split,
+    }).from(pgSchema.traderStrategyAdmissionSplitConsume);
     const journal = AppendOnlyStrategyAdmissionJournal.fromSnapshot({
       families,
       rows: stored.map((row) => rowFromPayload(row.payload)),
+      splitUses,
     });
     return { journal, baseline: admissionJournalBaseline(journal) };
   } catch (error) {

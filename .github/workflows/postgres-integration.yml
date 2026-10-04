@@ -317,6 +317,9 @@ on:
       - "tests/unit/postgres-dee1159-evaluation-source-proof-guard.test.ts"
       - "tests/unit/research-development-evaluation-source-v1.test.ts"
       - "scripts/trader/discovery-evaluation-source.ts"
+      - "lib/trader/research/strategy-admission-v1.ts"
+      - "lib/trader/research/strategy-admission-journal-postgres.ts"
+      - "tests/unit/trader-admission-consumption-snapshot.test.ts"
       - "lib/trader/operator/operator-authority.ts"
       - "tests/unit/trader-discovery-evaluation-source-cli.test.ts"
 

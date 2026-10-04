@@ -5,6 +5,9 @@ import { promisify } from "node:util";
 import { join } from "node:path";
 import { writeFileSync } from "node:fs";
 import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
+import * as schema from "@/db/schema.postgres";
+import { loadStrategyAdmissionJournal } from "@/lib/trader/research/strategy-admission-journal-postgres";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prepareResearchDevelopmentSourcePostgresV1 } from "@/lib/trader/research/research-development-source-owner-postgres-v1";
 import { prepareResearchDevelopmentEvaluationSourcePostgresV1 } from "@/lib/trader/research/research-development-evaluation-source-owner-postgres-v1";
@@ -101,6 +104,36 @@ describe.skipIf(!enabled)("DEE-1159 DEVELOPMENT evaluation-source PostgreSQL", (
     }
     return result.issuance;
   }
+
+  it("reloads committed consumption without a score and preserves rolled-back availability", async () => {
+    const specSha256 = computeStableJsonDigest({ test: "consume-before-result", nonce: randomUUID() });
+    const use = { specSha256, hypothesisId: "frozen-candidate", split: "validation" as const };
+    await admin.begin(async tx => {
+      await tx`INSERT INTO public.trader_strategy_admission_family(spec_sha256,family_size) VALUES (${specSha256},1)`;
+      await tx`INSERT INTO public.trader_strategy_admission_split_consume(spec_sha256,hypothesis_id,split)
+        VALUES (${specSha256},${use.hypothesisId},'validation')`;
+    });
+    await expect(admin.begin(async tx => {
+      await tx`INSERT INTO public.trader_strategy_admission_split_consume(spec_sha256,hypothesis_id,split)
+        VALUES (${specSha256},'rolled-back-candidate','validation')`;
+      throw new Error("synthetic rollback before disclosure");
+    })).rejects.toThrow("synthetic rollback before disclosure");
+    const fresh = postgres(url!, { max: 1, prepare: false });
+    try {
+      const { journal, baseline } = await loadStrategyAdmissionJournal(drizzle(fresh, { schema }));
+      expect(journal.registeredFamilySize(specSha256)).toBe(1);
+      expect(journal.splitUseCount(use)).toBe(1);
+      expect(() => journal.assertSplitAvailable(use)).toThrow(/split_already_used/);
+      expect(() => journal.assertSplitAvailable({ ...use, hypothesisId: "rolled-back-candidate" })).not.toThrow();
+      expect(() => journal.assertSplitAvailable({ ...use, split: "holdout" })).not.toThrow();
+      expect(journal.list()).toEqual([]);
+      expect(baseline.rowCount).toBe(0);
+      const [counts] = await fresh`SELECT
+        (SELECT count(*)::int FROM public.trader_strategy_admission_split_consume WHERE spec_sha256=${specSha256}) AS consumes,
+        (SELECT count(*)::int FROM public.trader_strategy_admission_journal WHERE spec_sha256=${specSha256}) AS metrics`;
+      expect(counts).toEqual({ consumes: 1, metrics: 0 });
+    } finally { await fresh.end({ timeout: 2 }); }
+  });
 
   it("commits exact indexed rows and metadata, then returns the immutable retry without payload", async () => {
     const training = await issueTrainingSource();
