@@ -28,7 +28,7 @@ describe("DEE-1212 executed PostgreSQL proof guard", () => {
   it("binds the exact isolated database, single suite, and complete assertion roster", () => {
     expect(databaseName).toBe("waia_hsv2_it_dee1212_issued_training_v2");
     expect(requiredSuites).toEqual(["tests/integration/postgres-research-issued-training-v2.test.ts"]);
-    expect(requiredAssertionTitles).toHaveLength(16);
+    expect(requiredAssertionTitles).toHaveLength(17);
     expect(draftSql).toEqual([
       "docs/plans/dee-1159-research-experiment-registration.sql",
       "docs/plans/dee-1159-research-attempt-registration.sql",

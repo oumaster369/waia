@@ -1,5 +1,8 @@
 /** Synthetic-only end-to-end proof for the actual issued-source DEE-1212 diagnostic. */
 import { createHash, randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -18,6 +21,11 @@ import { canonicalJsonString, computeStableJsonDigest } from "@/lib/trader/resea
 import { deterministicUuidV8 } from "@/lib/trader/execution/deterministic-execution-id";
 import { RESEARCH_DEVELOPMENT_SOURCE_ORG_V1 as ORG } from "@/lib/trader/research/research-development-source-contract-v1";
 import { runResearchIssuedTrainingDiagnosticPostgresV2 } from "@/lib/trader/research/research-issued-training-diagnostic-postgres-v2";
+import {
+  readResearchExperimentProposalFile,
+  runDiscoveryExperimentRegistrationBranch,
+  runDiscoveryIssuedAttemptRegistrationBranch,
+} from "@/scripts/trader/discovery-registration";
 
 const url = process.env.WAIA_DEE1212_POSTGRES_TEST_DATABASE_URL?.trim();
 const enabled = process.env.WAIA_PG_INTEGRATION === "1" && !!url;
@@ -46,7 +54,7 @@ describe.skipIf(!enabled)("DEE-1212 issued DEVELOPMENT diagnostic PostgreSQL", (
     vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "");
   }
 
-  async function fixture(label: string, options: Readonly<{ unsupportedGuardian?: boolean }> = {}) {
+  async function unregisteredFixture(label: string, options: Readonly<{ unsupportedGuardian?: boolean }> = {}) {
     const source = createResearchDevelopmentSourceFixtureV1({ closes: POSITIVE_CLOSES });
     sourceFixtureEnv(source);
     const commandId = `dee1212-${randomUUID()}`;
@@ -89,6 +97,11 @@ describe.skipIf(!enabled)("DEE-1212 issued DEVELOPMENT diagnostic PostgreSQL", (
       lastCloseMs: trainEnd + 20 * 60_000, barCount: 10 };
     proposal.partitions.walkForward = [{ contentSha256: "4".repeat(64), firstOpenMs: trainEnd,
       lastCloseMs: trainEnd + 10 * 60_000, barCount: 10 }];
+    return { source, issuance, proposal };
+  }
+
+  async function fixture(label: string, options: Readonly<{ unsupportedGuardian?: boolean }> = {}) {
+    const { source, issuance, proposal } = await unregisteredFixture(label, options);
     const experiment = await registerResearchExperimentPostgresV1(
       drizzle(admin, { schema: pgSchema }) as never, { organizationId: ORG }, proposal);
     const attempt = await registerResearchIssuedAttemptPostgresV2({ organizationId: ORG,
@@ -177,6 +190,70 @@ describe.skipIf(!enabled)("DEE-1212 issued DEVELOPMENT diagnostic PostgreSQL", (
         .toBe("d1b9c6cfb549d860b5b9ea5f4230ff90fbe0b3c701b377ab49af5842e8fdc760");
     } finally { defaultFixture.cleanup(); }
   });
+
+  it("registers experiment and issued attempt through explicit CLI branches with durable retry and no scoring", async () => {
+    const f = await unregisteredFixture(`registration-cli-${randomUUID()}`);
+    const directory = mkdtempSync(join(tmpdir(), "waia-dee1212-registration-"));
+    try {
+      const proposalFile = join(directory, "proposal.json");
+      writeFileSync(proposalFile, JSON.stringify(f.proposal), { mode: 0o600 });
+      const beforeStages = await orgStageCounts();
+      const db = drizzle(admin, { schema: pgSchema });
+      const authorize = vi.fn(); // Operator policy is tested separately; these callbacks use real DB owners.
+      const experimentPrint = vi.fn();
+      const experimentArgs = ["--register-experiment=1", `--org-id=${ORG}`, `--proposal-file=${proposalFile}`];
+      const experimentInput = {
+        cliEnabled: true, authorize, readProposal: readResearchExperimentProposalFile,
+        register: (organizationId: string, proposal: unknown) =>
+          registerResearchExperimentPostgresV1(db as never, { organizationId }, proposal),
+        print: experimentPrint,
+      };
+      expect(await runDiscoveryExperimentRegistrationBranch(experimentArgs, experimentInput))
+        .toEqual({ handled: true, exitCode: 0 });
+      expect(await runDiscoveryExperimentRegistrationBranch(experimentArgs, experimentInput))
+        .toEqual({ handled: true, exitCode: 0 });
+      const experimentSummary = experimentPrint.mock.calls[0]![0];
+      expect(experimentPrint.mock.calls[1]![0]).toEqual(experimentSummary);
+      expect(experimentSummary).toMatchObject({ authority: "REGISTRATION_ONLY",
+        registrationOnly: true, scientificQualified: false, capitalEligible: false });
+      const experiments = await admin`select spec_sha256 from public.trader_research_experiments_v1
+        where organization_id=${ORG}::uuid and spec_sha256=${experimentSummary.specSha256}`;
+      expect(experiments).toHaveLength(1);
+
+      const attemptPrint = vi.fn();
+      const commandId = `registration-cli-${randomUUID()}`;
+      const attemptArgs = ["--register-issued-attempt=1", `--org-id=${ORG}`,
+        `--spec-sha256=${experimentSummary.specSha256}`, `--source-run-id=${f.issuance.sourceRunId}`,
+        `--command-id=${commandId}`];
+      const attemptInput = { cliEnabled: true, authorize,
+        register: registerResearchIssuedAttemptPostgresV2, print: attemptPrint };
+      expect(await runDiscoveryIssuedAttemptRegistrationBranch(attemptArgs, attemptInput))
+        .toEqual({ handled: true, exitCode: 0 });
+      expect(await runDiscoveryIssuedAttemptRegistrationBranch(attemptArgs, attemptInput))
+        .toEqual({ handled: true, exitCode: 0 });
+      const attemptSummary = attemptPrint.mock.calls[0]![0];
+      expect(attemptPrint.mock.calls[1]![0]).toEqual(attemptSummary);
+      expect(attemptSummary).toMatchObject({ authority: "REGISTRATION_ONLY",
+        specSha256: experimentSummary.specSha256, sourceRunId: f.issuance.sourceRunId,
+        sourceIssuanceDigest: f.issuance.contentDigest, scientificQualified: false, capitalEligible: false });
+      const attempts = await admin`select id from public.trader_research_issued_attempts_v2
+        where organization_id=${ORG}::uuid and command_id=${commandId}`;
+      expect(attempts.map(row => row.id)).toEqual([attemptSummary.attemptId]);
+      expect(await stageCounts(attemptSummary.attemptId)).toEqual([0, 0, 0, 0, 0, 0]);
+      expect(await orgStageCounts()).toEqual(beforeStages);
+      // A syntactically valid but absent immutable source cannot become an issued attempt.
+      const wrongSource = attemptArgs.map(arg => arg.startsWith("--source-run-id=")
+        ? `--source-run-id=research-source-v1:${"a".repeat(64)}` : arg);
+      expect(await runDiscoveryIssuedAttemptRegistrationBranch(wrongSource, attemptInput))
+        .toEqual({ handled: true, exitCode: 1, error: "ISSUED_ATTEMPT_REGISTRATION_FAILED" });
+      expect(attemptPrint).toHaveBeenCalledTimes(2);
+      expect(authorize).toHaveBeenCalledTimes(5);
+      expect(await orgStageCounts()).toEqual(beforeStages);
+    } finally {
+      f.source.cleanup();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 180_000);
 
   it("runs an actual issued DEVELOPMENT attempt and exact retry commits one nonqualifying ledger", async () => {
     const f = await fixture("issued-positive");

@@ -53,6 +53,8 @@ on:
       - "docs/plans/dee-1211-research-source-owner.md"
       - "docs/plans/dee-1203-research-executable-runtime-binding.md"
       - "scripts/trader/discovery-run.ts"
+      - "scripts/trader/discovery-registration.ts"
+      - "tests/unit/trader-discovery-registration-cli.test.ts"
       - "pnpm-lock.yaml"
       - "lib/trader/balances/**"
       - "lib/trader/positions/**"

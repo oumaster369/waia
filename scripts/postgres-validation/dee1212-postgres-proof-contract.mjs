@@ -14,6 +14,7 @@ export const requiredSuites = [
 
 export const requiredAssertionTitles = [
   "preserves the pre-existing default fixture bytes when no close override is supplied",
+  "registers experiment and issued attempt through explicit CLI branches with durable retry and no scoring",
   "runs an actual issued DEVELOPMENT attempt and exact retry commits one nonqualifying ledger",
   "refuses unknown and V1-shadow attempts without stage effects",
   "refuses runtime, trial, and policy before revoked market payload access",
@@ -48,6 +49,8 @@ const dee1212Paths = [
   "lib/trader/research/research-modeled-stage-source-v1.ts",
   "lib/trader/research/research-training-trace-internal-v1.ts",
   "scripts/trader/discovery-run.ts",
+  "scripts/trader/discovery-registration.ts",
+  "tests/unit/trader-discovery-registration-cli.test.ts",
   "scripts/postgres-validation/dee1212-postgres-proof-contract.mjs",
   "scripts/postgres-validation/prepare-dee1212-issued-training-proof.mjs",
   "scripts/postgres-validation/assert-dee1212-postgres-results.mjs",

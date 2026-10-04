@@ -28,7 +28,14 @@ import { captureResearchDevelopmentSourceRequestV1 } from "@/lib/trader/research
 import { captureResearchIssuedTrainingRequestV2 } from "@/lib/trader/research/research-issued-training-contract-v2";
 import { runResearchIssuedTrainingDiagnosticPostgresV2, selectResearchIssuedTrainingFamilyPostgresV1 } from "@/lib/trader/research/research-issued-training-diagnostic-postgres-v2";
 import { captureResearchTrainingFamilyRequestV1 } from "@/lib/trader/research/research-training-family-contract-v1";
+import { registerResearchExperimentPostgresV1 } from "@/lib/trader/research/research-experiment-registry-postgres-v1";
+import { registerResearchIssuedAttemptPostgresV2 } from "@/lib/trader/research/research-issued-attempt-postgres-v2";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
+import {
+  readResearchExperimentProposalFile,
+  runDiscoveryExperimentRegistrationBranch,
+  runDiscoveryIssuedAttemptRegistrationBranch,
+} from "@/scripts/trader/discovery-registration";
 
 const LOG_PREFIX = "[trader:discovery:run]";
 
@@ -112,6 +119,17 @@ Separate complete-family DEVELOPMENT selection (does not qualify a strategy):
   Requires every declared trial to have a committed, verified, terminal-flat result.
   Missing or unfinished trials refuse the entire selection; this mode runs no trials.
   Requires WAIA_TRADER_CLI=1 and operator authorization; uncertain commit exits nonzero.
+
+Separate immutable experiment registration (registration only; no execution or qualification):
+  pnpm trader:discovery:run -- --register-experiment=1 --org-id=<Org0 uuid>
+    --proposal-file=<absolute JSON file, max 256 KiB>
+  Requires WAIA_TRADER_CLI=1 and operator authorization.
+
+Separate issued-attempt registration (registration only; experiment and source must already exist):
+  pnpm trader:discovery:run -- --register-issued-attempt=1 --org-id=<Org0 uuid>
+    --spec-sha256=<64 lowercase hex> --source-run-id=<research-source-v1:64 lowercase hex>
+    --command-id=<stable command>
+  Requires WAIA_TRADER_CLI=1 and operator authorization. The two registration modes cannot be combined.
 `);
 }
 
@@ -398,6 +416,30 @@ async function main(): Promise<void> {
   }
 
   const argv = process.argv.slice(2);
+  if (argv.some(arg => arg === "--register-experiment" || arg.startsWith("--register-experiment="))) {
+    const outcome = await runDiscoveryExperimentRegistrationBranch(argv, {
+      cliEnabled: process.env.WAIA_TRADER_CLI === "1",
+      authorize: () => assertOperatorActionAllowed("authorize_discovery_run"),
+      readProposal: readResearchExperimentProposalFile,
+      register: async (organizationId, proposal) =>
+        registerResearchExperimentPostgresV1(getPostgresDrizzle(), requireOrgContext(organizationId), proposal),
+      print: summary => console.log(`${LOG_PREFIX} experiment-registration ${JSON.stringify(summary)}`),
+    });
+    if (outcome.error) console.error(`${LOG_PREFIX} ${outcome.error}`);
+    if (outcome.exitCode !== 0) process.exitCode = outcome.exitCode;
+    return;
+  }
+  if (argv.some(arg => arg === "--register-issued-attempt" || arg.startsWith("--register-issued-attempt="))) {
+    const outcome = await runDiscoveryIssuedAttemptRegistrationBranch(argv, {
+      cliEnabled: process.env.WAIA_TRADER_CLI === "1",
+      authorize: () => assertOperatorActionAllowed("authorize_discovery_run"),
+      register: registerResearchIssuedAttemptPostgresV2,
+      print: summary => console.log(`${LOG_PREFIX} issued-attempt-registration ${JSON.stringify(summary)}`),
+    });
+    if (outcome.error) console.error(`${LOG_PREFIX} ${outcome.error}`);
+    if (outcome.exitCode !== 0) process.exitCode = outcome.exitCode;
+    return;
+  }
   if (hasTrainingFamilySelectionFlag(argv)) {
     const outcome = await runDiscoveryTrainingFamilySelectionBranch(argv, {
       cliEnabled: process.env.WAIA_TRADER_CLI === "1",
@@ -508,7 +550,9 @@ async function main(): Promise<void> {
 if (
   process.env.WAIA_TRADER_CLI === "1" ||
   hasSourcePreparationFlag(process.argv.slice(2)) ||
-  hasIssuedTrainingFlag(process.argv.slice(2))
+  hasIssuedTrainingFlag(process.argv.slice(2)) ||
+  process.argv.slice(2).some(arg => arg === "--register-experiment" || arg.startsWith("--register-experiment=")) ||
+  process.argv.slice(2).some(arg => arg === "--register-issued-attempt" || arg.startsWith("--register-issued-attempt="))
 ) {
   main().catch((error: unknown) => {
     console.error(`${LOG_PREFIX} failed`, error);
