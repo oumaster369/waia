@@ -130,10 +130,13 @@ export async function probeObservationCredentialPool(sql: Sql): Promise<string> 
         ), protected AS (
           SELECT 'public.exchange_credentials'::regclass AS oid,
             ARRAY['id','organization_id','exchange_account_id','status','observation_read_only',
-              'encrypted_payload','payload_key_version','wrapped_dek_key_version','wrapped_dek_key']::text[] AS allowed
+              'observation_revision','encrypted_payload','payload_key_version','wrapped_dek_key_version','wrapped_dek_key']::text[] AS allowed,
+            ARRAY['id','organization_id','exchange_account_id','status','observation_read_only',
+              'encrypted_payload','payload_key_version','wrapped_dek_key_version','wrapped_dek_key']::text[] AS required
           UNION ALL SELECT 'public.trader_account_collection_state'::regclass,
+            ARRAY['organization_id','credential_id','exchange_account_id','configuration_revision']::text[],
             ARRAY['organization_id','credential_id','exchange_account_id']::text[]
-          UNION ALL SELECT 'public.trader_account_observations'::regclass, ARRAY[]::text[]
+          UNION ALL SELECT 'public.trader_account_observations'::regclass, ARRAY[]::text[], ARRAY[]::text[]
         )
         SELECT session_user::text AS login, current_user = session_user AS original_session,
           current_setting('server_version_num')::int >= 170000 AS supported,
@@ -160,7 +163,7 @@ export async function probeObservationCredentialPool(sql: Sql): Promise<string> 
           AND NOT EXISTS (SELECT 1 FROM scopes s CROSS JOIN protected p
             JOIN pg_attribute a ON a.attrelid = p.oid AND a.attnum > 0 AND NOT a.attisdropped
             WHERE NOT (a.attname = ANY(p.allowed)) AND has_column_privilege(s.oid, p.oid, a.attnum, 'SELECT'))
-          AND NOT EXISTS (SELECT 1 FROM protected p CROSS JOIN LATERAL unnest(p.allowed) AS c(name)
+          AND NOT EXISTS (SELECT 1 FROM protected p CROSS JOIN LATERAL unnest(p.required) AS c(name)
             WHERE NOT has_column_privilege(i.parent_oid, p.oid, c.name, 'SELECT')) AS exact_projection,
           (SELECT count(*) = 2 AND bool_and(c.relrowsecurity AND
             (c.oid <> 'public.trader_account_collection_state'::regclass OR c.relforcerowsecurity))

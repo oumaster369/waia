@@ -154,7 +154,7 @@ describe.skipIf(!enabled)(
           .toEqual({ login: "dee960_local_owner", role: "dee960_local_owner" });
         await actor.begin(async tx => {
           for (const statement of readFileSync(
-            "db/migrations_postgres/0230_trader_account_observation_spot_inventory_v1.sql",
+            "db/migrations_postgres/0231_trader_account_observation_spot_inventory_v1.sql",
             "utf8",
           ).split("--> statement-breakpoint")) {
             if (statement.trim()) await tx.unsafe(statement);
@@ -1559,5 +1559,49 @@ describe.skipIf(!enabled)(
         ).rejects.toThrow("ACCOUNT_OBSERVATION_LOGIN_REFUSED:ADMIN_ROLE");
       });
     });
+
+    it("admits only the two optional revision grants after canonical 0230", async () => {
+      await admin.begin(async tx => {
+        await tx.unsafe("SET LOCAL ROLE dee960_local_owner");
+        const [identity] = await tx`
+          SELECT current_user::text AS actor, rolsuper, rolbypassrls
+          FROM pg_roles WHERE rolname = current_user
+        `;
+        expect(identity).toEqual({ actor: "dee960_local_owner", rolsuper: false, rolbypassrls: false });
+        for (const statement of readFileSync(
+          "db/migrations_postgres/0230_trader_observation_consent_revision_grants_v1.sql",
+          "utf8",
+        ).split("--> statement-breakpoint")) {
+          if (statement.trim()) await tx.unsafe(statement);
+        }
+      });
+
+      const credentialIdentity = ACCOUNT_OBSERVATION_LOGIN_PLAN.find(
+        entry => entry.purpose === "credential",
+      )!;
+      const credentialRole = credentialIdentity.parentRole;
+      await expect(probeObservationCredentialPool(open("credential"))).resolves.toBe(credentialIdentity.loginRole);
+      const scope = await seed();
+      expect(await attempt("credential", "SELECT observation_revision FROM public.exchange_credentials", scope)).toBe("ALLOWED");
+      expect(await attempt("credential", "SELECT configuration_revision FROM public.trader_account_collection_state", scope)).toBe("ALLOWED");
+      expect(await attempt("credential", "SELECT permission_metadata FROM public.exchange_credentials", scope)).toBe("42501");
+      expect(await attempt("credential", "UPDATE public.exchange_credentials SET status='revoked'", scope)).toBe("42501");
+      const [privileges] = await admin`
+        SELECT has_column_privilege(${credentialRole}, 'public.exchange_credentials', 'observation_revision', 'SELECT') AS observation_revision,
+          has_column_privilege(${credentialRole}, 'public.trader_account_collection_state', 'configuration_revision', 'SELECT') AS configuration_revision,
+          has_column_privilege(${credentialRole}, 'public.exchange_credentials', 'permission_metadata', 'SELECT') AS permission_metadata,
+          has_table_privilege(${credentialRole}, 'public.exchange_credentials', 'SELECT') AS credentials_table_select,
+          has_any_column_privilege(${credentialRole}, 'public.exchange_credentials', 'INSERT,UPDATE,REFERENCES') AS credential_writes,
+          has_any_column_privilege(${credentialRole}, 'public.trader_account_collection_state', 'INSERT,UPDATE,REFERENCES') AS state_writes
+      `;
+      expect(privileges).toEqual({
+        observation_revision: true,
+        configuration_revision: true,
+        permission_metadata: false,
+        credentials_table_select: false,
+        credential_writes: false,
+        state_writes: false,
+      });
+    }, 30000);
   },
 );

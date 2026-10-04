@@ -111,10 +111,15 @@ describe.skipIf(!enabled)("Postgres fixed noncapital domains actual owners", () 
     const journal = JSON.parse(await readFile(path.join(migrationDirectory, "meta/_journal.json"), "utf8")) as {
       entries: Array<{ idx: number; tag: string; when: number }>;
     };
-    expect(journal.entries.at(-1)).toMatchObject({
+    expect(journal.entries.at(-2)).toMatchObject({
       idx: 230,
-      tag: "0230_trader_account_observation_spot_inventory_v1",
+      tag: "0230_trader_observation_consent_revision_grants_v1",
       when: 1780000000230,
+    });
+    expect(journal.entries.at(-1)).toMatchObject({
+      idx: 231,
+      tag: "0231_trader_account_observation_spot_inventory_v1",
+      when: 1780000000231,
     });
     const expectedMigrationIdentity = await Promise.all(journal.entries.map(async (entry) => ({
       hash: createHash("sha256").update(await readFile(path.join(migrationDirectory, `${entry.tag}.sql`))).digest("hex"),

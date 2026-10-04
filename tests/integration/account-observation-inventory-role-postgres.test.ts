@@ -11,7 +11,7 @@ if (enabled && requestedPort !== "55463") {
 const localPort = "55463";
 const rootUrl = `postgres://waia_local_admin:local_validation_only@127.0.0.1:${localPort}/postgres`;
 const migration = readFileSync(
-  "db/migrations_postgres/0230_trader_account_observation_spot_inventory_v1.sql",
+  "db/migrations_postgres/0231_trader_account_observation_spot_inventory_v1.sql",
   "utf8",
 );
 const statements = migration.split("--> statement-breakpoint").filter((part) => part.trim()).slice(1);
@@ -22,7 +22,7 @@ type Membership = {
   set_option: boolean;
 };
 
-describe.skipIf(!enabled)("0230 native PostgreSQL role membership preservation", () => {
+describe.skipIf(!enabled)("0231 native PostgreSQL role membership preservation", () => {
   const rootConnections: Sql[] = [];
   const targetConnections: Sql[] = [];
   const databases: string[] = [];

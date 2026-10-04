@@ -32,9 +32,9 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
     await expect(prepareHistoricalReconciliationFixture(env)).rejects.toThrow("DEE1130_BOOTSTRAP_REFUSED");
     expect(postgres).not.toHaveBeenCalled();
   });
-  it("captures all231 actual source SQL files and exact seed bytes without any connection", () => {
+  it("captures all232 actual source SQL files and exact seed bytes without any connection", () => {
     const source = readBootstrapSources();
-    expect(source.migrations).toHaveLength(231);
+    expect(source.migrations).toHaveLength(232);
     expect(source.migrations.slice(0, 222).at(-1)!.entry.tag).toBe("0221_trader_research_understanding_v1");
     expect(source.migrations[222]!.entry.tag).toBe("0222_trader_historical_reconciliation_v1");
     expect(source.migrations[223]!.entry).toEqual({ idx: 223, version: "7", when: 1780000000223,
@@ -52,7 +52,9 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
     expect(source.migrations[229]!.entry).toEqual({ idx: 229, version: "7", when: 1780000000229,
       tag: "0229_trader_observation_read_only_credential_v1", breakpoints: true });
     expect(source.migrations[230]!.entry).toEqual({ idx: 230, version: "7", when: 1780000000230,
-      tag: "0230_trader_account_observation_spot_inventory_v1", breakpoints: true });
+      tag: "0230_trader_observation_consent_revision_grants_v1", breakpoints: true });
+    expect(source.migrations[231]!.entry).toEqual({ idx: 231, version: "7", when: 1780000000231,
+      tag: "0231_trader_account_observation_spot_inventory_v1", breakpoints: true });
     for (const item of source.migrations) {
       expect(item.bytes).toEqual(readFileSync(`db/migrations_postgres/${item.entry.tag}.sql`));
       expect(item.identity.hash).toBe(createHash("sha256").update(item.bytes).digest("hex"));

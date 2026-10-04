@@ -289,7 +289,7 @@ describe.skipIf(!enabled)("DEE-979 actual PostgreSQL 17 host session attestation
       for (const path of ["db/migrations_postgres/0006_exchange_credentials.sql",
         "db/migrations_postgres/0007_exchange_credentials_rls.sql",
         "db/migrations_postgres/0205_trader_account_observation_v1.sql",
-        "db/migrations_postgres/0230_trader_account_observation_spot_inventory_v1.sql"])
+        "db/migrations_postgres/0231_trader_account_observation_spot_inventory_v1.sql"])
         await tx.unsafe(readFileSync(path, "utf8").replaceAll("--> statement-breakpoint", ""));
     });
   }, 30000);

@@ -82,7 +82,7 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
       await tx.unsafe(readFileSync("db/local-validation/dee960-account-observation.sql", "utf8"));
       await tx.unsafe(
         readFileSync(
-          "db/migrations_postgres/0230_trader_account_observation_spot_inventory_v1.sql",
+          "db/migrations_postgres/0231_trader_account_observation_spot_inventory_v1.sql",
           "utf8",
         ).replaceAll("--> statement-breakpoint", ""),
       );
@@ -1040,7 +1040,7 @@ describe.skipIf(!enabled)("DEE-1015 actual PostgreSQL 17 collection-state provis
         .toEqual({ login: "dee960_local_owner", role: "dee960_local_owner" });
       await migrationActor.begin(async tx => {
         for (const statement of readFileSync(
-        "db/migrations_postgres/0230_trader_account_observation_spot_inventory_v1.sql",
+        "db/migrations_postgres/0231_trader_account_observation_spot_inventory_v1.sql",
         "utf8",
         ).split("--> statement-breakpoint")) {
           if (statement.trim()) await tx.unsafe(statement);

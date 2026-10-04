@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 describe("DEE-1032 deferred spot inventory migration", () => {
   const sql = readFileSync(
-    "db/migrations_postgres/0230_trader_account_observation_spot_inventory_v1.sql",
+    "db/migrations_postgres/0231_trader_account_observation_spot_inventory_v1.sql",
     "utf8",
   );
   const previous = readFileSync(
@@ -16,13 +16,18 @@ describe("DEE-1032 deferred spot inventory migration", () => {
   ) as { entries: { idx: number; tag: string; when: number }[] };
 
   it("stays a repo-only journal tail and does not rewrite 0229", () => {
-    expect(journal.entries).toHaveLength(231);
-    expect(journal.entries.at(-1)).toMatchObject({
+    expect(journal.entries).toHaveLength(232);
+    expect(journal.entries[230]).toMatchObject({
       idx: 230,
-      tag: "0230_trader_account_observation_spot_inventory_v1",
+      tag: "0230_trader_observation_consent_revision_grants_v1",
       when: 1780000000230,
     });
-    expect(journal.entries.at(-2)?.tag).toBe("0229_trader_observation_read_only_credential_v1");
+    expect(journal.entries.at(-1)).toMatchObject({
+      idx: 231,
+      tag: "0231_trader_account_observation_spot_inventory_v1",
+      when: 1780000000231,
+    });
+    expect(journal.entries[229]?.tag).toBe("0229_trader_observation_read_only_credential_v1");
     expect(previous).toContain("This new migration is unmerged/unapplied to production");
     expect(sql).toContain("Do not apply this migration to production");
     expect(sql).not.toContain("0229_trader_observation_read_only_credential_v1");

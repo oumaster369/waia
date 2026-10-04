@@ -335,10 +335,11 @@ describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational
       const folder = "db/migrations_postgres";
       const journal = JSON.parse(readFileSync(`${folder}/meta/_journal.json`, "utf8")) as {
         entries: { idx: number; tag: string; when: number }[] };
-      expect(journal.entries).toHaveLength(231);
-      expect(journal.entries.at(-1)).toMatchObject({ idx: 230, tag: "0230_trader_account_observation_spot_inventory_v1", when: 1780000000230 });
-      // Apply the unchanged canonical prefix through 0229 with the normal Drizzle migrator.
-      // 0230 is then authenticated as its established synthetic migration actor because the
+      expect(journal.entries).toHaveLength(232);
+      expect(journal.entries.at(-2)).toMatchObject({ idx: 230, tag: "0230_trader_observation_consent_revision_grants_v1", when: 1780000000230 });
+      expect(journal.entries.at(-1)).toMatchObject({ idx: 231, tag: "0231_trader_account_observation_spot_inventory_v1", when: 1780000000231 });
+      // Apply the canonical prefix through metadata-grants 0230 with the normal Drizzle migrator.
+      // 0231 is then authenticated as its established synthetic migration actor because the
       // owner role's membership is cluster-global and may already exist from another test DB.
       const prefixFolder = await mkdtemp(join(homedir(), ".dee1135-migrations-prefix-"));
       let actor: Sql | undefined;
@@ -388,7 +389,7 @@ describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational
         actor = postgres(actorUrl.toString(), { max: 1, connect_timeout: 3, prepare: false, onnotice: () => {} });
         expect((await actor`SELECT session_user::text AS login, current_user::text AS role`)[0])
           .toEqual({ login: "dee960_local_owner", role: "dee960_local_owner" });
-        const migration = readFileSync(`${folder}/0230_trader_account_observation_spot_inventory_v1.sql`, "utf8");
+        const migration = readFileSync(`${folder}/0231_trader_account_observation_spot_inventory_v1.sql`, "utf8");
         await actor.begin(async tx => {
           for (const statement of migration.split("--> statement-breakpoint")) {
             if (statement.trim()) await tx.unsafe(statement);
