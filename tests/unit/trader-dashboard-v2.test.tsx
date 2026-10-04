@@ -74,13 +74,15 @@ describe("Trader Dashboard V2", () => {
     await waitFor(() =>
       expect(screen.getByText(ACCOUNT_OBSERVATION_FIRST_TICK_COPY)).toBeInTheDocument(),
     );
-    expect(screen.getByTestId("trader-account-status")).toHaveTextContent("HTX connected");
+    expect(screen.getByTestId("trader-account-status")).toHaveTextContent("HTX подключен в WAIA");
+    expect(screen.getByTestId("trader-credential-account-id")).toHaveTextContent("account-1");
+    expect(screen.getByTestId("trader-credential-masked-key")).toHaveTextContent("abc…xyz");
     expect(screen.getByText("User account")).toBeInTheDocument();
     expect(screen.getByText(/cannot enable live trading/)).toBeInTheDocument();
     expect(screen.getByText(ACCOUNT_OBSERVATION_FIRST_TICK_COPY)).toBeInTheDocument();
     expect(screen.queryByTestId("trader-sync-balances")).not.toBeInTheDocument();
     expect(screen.queryByTestId("trader-unavailable-read-model")).not.toBeInTheDocument();
-    expect(screen.getByTestId("trader-authority-boundary")).toHaveTextContent("Observation only");
+    expect(screen.getByTestId("trader-authority-boundary")).toHaveTextContent("Только наблюдение");
     expect(screen.queryByRole("button", { name: /enable live/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /kill switch/i })).not.toBeInTheDocument();
   });

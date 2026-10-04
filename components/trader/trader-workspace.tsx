@@ -13,6 +13,7 @@ import {
   assertNoSecretsInPayload,
   connectHtxClient,
   listExchangeCredentialsClient,
+  revokeExchangeCredentialClient,
 } from "@/lib/trader/trader-workspace-client";
 import { parseHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
 import type { CredentialMetadataDto } from "@/lib/trader/credentials/connect-api.types";
@@ -32,25 +33,25 @@ function PermissionExplainer() {
       data-testid="trader-permission-explainer"
       className="border-border bg-muted/20 text-muted-foreground rounded-lg border p-4 text-sm"
     >
-      <p className="text-foreground font-medium">How to create the HTX key</p>
-      <ol className="mt-2 list-decimal space-y-1 pl-5">
-        <li>On HTX open API Management and create an HMAC API key.</li>
+        <p className="text-foreground font-medium">Как создать ключ HTX</p>
+        <ol className="mt-2 list-decimal space-y-1 pl-5">
+        <li>Откройте в HTX управление API и создайте ключ HMAC.</li>
         <li>
-          Enable <span className="text-foreground">Read</span> only. Do not enable Withdraw. Trade
-          is not required for this cabinet.
+          Включите только разрешение <span className="text-foreground">Read</span>. Не включайте Withdraw.
+          Разрешение Trade для этого кабинета не требуется.
         </li>
         <li>
-          Leave the IP whitelist empty, then paste Access Key and Secret below. The secret is shown
-          only once.
+          Оставьте список IP пустым, затем вставьте ниже Access Key и Secret Key. Секретный ключ
+          отображается только один раз.
         </li>
         <li>
-          After Connect succeeds, edit the same HTX key and IP-whitelist only{" "}
+          После успешного подключения измените тот же ключ HTX и добавьте в список IP только{" "}
           <span className="text-foreground font-mono">84.32.9.146</span>.
         </li>
       </ol>
       <p className="mt-2 text-xs">
-        HTX spot uses API key + secret only (no passphrase). This is your personal AI-TRADER
-        account. Nobody else is joined to it.
+        Для HTX Spot используются только API key и secret, без passphrase. Это ваш личный аккаунт
+        AI-TRADER; другие пользователи к нему не подключаются.
       </p>
     </div>
   );
@@ -63,26 +64,28 @@ function CredentialStatus({ credential }: { credential: CredentialMetadataDto })
   return (
     <div data-testid="trader-account-status" className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium">HTX connected</span>
+        <span className="text-sm font-medium">
+          {credential.status === "active" ? "HTX подключен в WAIA" : "Подключение HTX отозвано в WAIA"}
+        </span>
         <span
           data-testid="trader-credential-status"
           className="bg-muted rounded-full px-2 py-0.5 text-xs capitalize"
         >
-          {credential.status}
+          {credential.status === "active" ? "Активен в WAIA" : "Отозван в WAIA"}
         </span>
       </div>
       <dl className="grid gap-2 text-sm">
         <div className="flex justify-between gap-4">
-          <dt className="text-muted-foreground">Account</dt>
+          <dt className="text-muted-foreground">Аккаунт</dt>
           <dd data-testid="trader-credential-account-id">{credential.exchangeAccountId}</dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="text-muted-foreground">API key</dt>
+          <dt className="text-muted-foreground">Ключ API</dt>
           <dd data-testid="trader-credential-masked-key">{credential.apiKeyMasked ?? "—"}</dd>
         </div>
         {metadata ? (
           <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">Scopes</dt>
+            <dt className="text-muted-foreground">Разрешения</dt>
             <dd data-testid="trader-credential-scopes">{metadata.scopes.join(", ") || "—"}</dd>
           </div>
         ) : null}
@@ -101,39 +104,105 @@ function CredentialStatus({ credential }: { credential: CredentialMetadataDto })
   );
 }
 
+type CredentialAccountOption = Readonly<{ accountId: string; credential: CredentialMetadataDto }>;
+
+function credentialAccountOptions(credentials: readonly CredentialMetadataDto[]): CredentialAccountOption[] {
+  const byAccount = new Map<string, CredentialMetadataDto>();
+  for (const credential of credentials) {
+    const existing = byAccount.get(credential.exchangeAccountId);
+    if (
+      !existing ||
+      (credential.status === "active" && existing.status !== "active") ||
+      (credential.status === existing.status && credential.updatedAt > existing.updatedAt)
+    ) {
+      byAccount.set(credential.exchangeAccountId, credential);
+    }
+  }
+  return [...byAccount.entries()]
+    .map(([accountId, credential]) => ({ accountId, credential }))
+    .sort((left, right) => left.accountId.localeCompare(right.accountId));
+}
+
+function credentialRequestError(code: string | undefined, status: number): string {
+  if (status === 0) return "Не удалось подтвердить результат запроса. Проверьте состояние подключения перед повторной отправкой ключа.";
+  switch (code) {
+    case "CREDENTIAL_CONFLICT": return "Состояние аккаунта изменилось. Обновите список и повторите действие.";
+    case "CREDENTIAL_NOT_FOUND": return "Подключение не найдено. Обновите список аккаунтов.";
+    case "CREDENTIAL_VALIDATION_FAILED": return "HTX не подтвердил эти ключи. Проверьте их разрешения и попробуйте снова.";
+    case "UNAUTHORIZED": return "Войдите в аккаунт, чтобы управлять подключением HTX.";
+    case "FORBIDDEN": return "У этого аккаунта нет доступа к AI-TRADER.";
+    case "CSRF_INVALID": return "Запрос отклонён. Обновите страницу и повторите действие.";
+    case "MASTER_KEY_NOT_READY": return "Сохранение подключений временно недоступно. Попробуйте позже.";
+    default: return "Не удалось завершить запрос. Проверьте состояние подключения перед повторной отправкой ключа.";
+  }
+}
+
 function ExchangeTraderWorkspace() {
   const [credentials, setCredentials] = React.useState<CredentialMetadataDto[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = React.useState("");
+  const [addingNewAccount, setAddingNewAccount] = React.useState(false);
+  const [editingReplacement, setEditingReplacement] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [connecting, setConnecting] = React.useState(false);
+  const [disconnecting, setDisconnecting] = React.useState(false);
+  const [confirmDisconnectCredentialId, setConfirmDisconnectCredentialId] = React.useState<string | null>(null);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [apiKey, setApiKey] = React.useState("");
   const [apiSecret, setApiSecret] = React.useState("");
   const [accountLabel, setAccountLabel] = React.useState("");
+  const mutationBusy = connecting || disconnecting;
   const scope = React.useRef(0);
+  const selectedAccountIdRef = React.useRef("");
   const pending = React.useRef(new Map<string, object>());
   const asyncError =
-    "Connect did not complete. Keep HTX IP restrictions empty (do not whitelist 84.32.9.146 yet) and retry once.";
+    "Запрос не завершился. Проверьте состояние подключения перед повторной отправкой ключа.";
 
-  const activeCredential = credentials.find((c) => c.status === "active") ?? credentials[0];
+  const accountOptions = credentialAccountOptions(credentials);
+  const selectedAccount = accountOptions.find((account) => account.accountId === selectedAccountId);
+  const selectedCredential = selectedAccount?.credential;
+  const confirmDisconnect = !!selectedCredential && confirmDisconnectCredentialId === selectedCredential.id;
 
-  const loadWorkspace = React.useCallback(async () => {
+  const loadWorkspace = React.useCallback(async (
+    clearError = true,
+    ambiguousConnectRecovery?: { requestedAccountId: string | null },
+  ): Promise<CredentialMetadataDto[] | null> => {
     const generation = ++scope.current;
     pending.current.clear();
     setConnecting(false);
+    setDisconnecting(false);
     setLoading(true);
-    setErrorMessage(null);
+    if (clearError) setErrorMessage(null);
     try {
       const result = await listExchangeCredentialsClient();
-      if (scope.current !== generation) return;
+      if (scope.current !== generation) return null;
       if (result.kind === "err") {
-        setErrorMessage(result.displayMessage);
+        setErrorMessage(credentialRequestError(result.code, result.status));
         setCredentials([]);
-        return;
+        return null;
       }
       assertNoSecretsInPayload(JSON.stringify(result.data));
       setCredentials(result.data);
+      const options = credentialAccountOptions(result.data);
+      const previousSelection = selectedAccountIdRef.current;
+      const retained = options.some((account) => account.accountId === previousSelection)
+        ? previousSelection
+        : !previousSelection && options.length === 1 ? options[0]!.accountId : "";
+      const nextSelection = ambiguousConnectRecovery
+        ? ambiguousConnectRecovery.requestedAccountId && options.some((account) => account.accountId === ambiguousConnectRecovery.requestedAccountId)
+          ? ambiguousConnectRecovery.requestedAccountId
+          : ""
+        : retained;
+      if (ambiguousConnectRecovery) {
+        setAddingNewAccount(false);
+        setEditingReplacement(false);
+        setConfirmDisconnectCredentialId(null);
+      }
+      selectedAccountIdRef.current = nextSelection;
+      setSelectedAccountId(nextSelection);
+      return result.data;
     } catch {
       if (scope.current === generation) setErrorMessage(asyncError);
+      return null;
     } finally {
       if (scope.current === generation) setLoading(false);
     }
@@ -142,6 +211,21 @@ function ExchangeTraderWorkspace() {
   const retireScope = React.useCallback(() => {
     ++scope.current;
   }, []);
+
+  const selectAccount = (accountId: string) => {
+    ++scope.current;
+    selectedAccountIdRef.current = accountId;
+    setSelectedAccountId(accountId);
+    setAddingNewAccount(false);
+    setEditingReplacement(false);
+    setConnecting(false);
+    setDisconnecting(false);
+    setConfirmDisconnectCredentialId(null);
+    setApiKey("");
+    setApiSecret("");
+    setAccountLabel("");
+    setErrorMessage(null);
+  };
   React.useEffect(() => {
     void (async () => {
       await loadWorkspace();
@@ -154,7 +238,7 @@ function ExchangeTraderWorkspace() {
     setPending: (value: boolean) => void,
     work: (isCurrent: () => boolean) => Promise<void>,
   ) => {
-    if (pending.current.has(name)) return;
+    if (pending.current.size > 0 || pending.current.has(name)) return;
     const owner = {};
     pending.current.set(name, owner);
     const generation = scope.current;
@@ -180,24 +264,78 @@ function ExchangeTraderWorkspace() {
     const trimmedKey = apiKey.trim();
     const trimmedSecret = apiSecret.trim();
     if (!trimmedKey || !trimmedSecret) {
-      setErrorMessage("API key and secret are required.");
+      setErrorMessage("Введите Access Key и Secret Key.");
       return;
     }
-    runRequest("connect", setConnecting, async (isCurrent) => {
+    const targetAccountId = selectedCredential?.exchangeAccountId ?? null;
+    const replacementCredentialId = selectedCredential?.status === "active" ? selectedCredential.id : undefined;
+    runRequest(`connect:${targetAccountId ?? "new"}`, setConnecting, async (isCurrent) => {
       const result = await connectHtxClient({
         apiKey: trimmedKey,
         apiSecret: trimmedSecret,
         accountLabel: accountLabel.trim() || undefined,
+        replacementCredentialId,
       });
       if (!isCurrent()) return;
       if (result.kind === "err") {
-        setErrorMessage(result.displayMessage);
+        const displayMessage = credentialRequestError(result.code, result.status);
+        setApiKey("");
+        setApiSecret("");
+        setAccountLabel("");
+        const refresh = loadWorkspace(false, { requestedAccountId: replacementCredentialId ? targetAccountId : null });
+        const refreshGeneration = scope.current;
+        await refresh;
+        if (scope.current === refreshGeneration) setErrorMessage(displayMessage);
         return;
       }
       assertNoSecretsInPayload(JSON.stringify(result.data));
       setApiKey("");
       setApiSecret("");
+      setAccountLabel("");
+      selectedAccountIdRef.current = result.data.exchangeAccountId;
+      setSelectedAccountId(result.data.exchangeAccountId);
+      setAddingNewAccount(false);
+      setEditingReplacement(false);
+      setConfirmDisconnectCredentialId(null);
       setConnecting(false);
+      await loadWorkspace();
+    });
+  };
+
+  const cancelConnect = () => {
+    setApiKey("");
+    setApiSecret("");
+    setAccountLabel("");
+    setEditingReplacement(false);
+    setConfirmDisconnectCredentialId(null);
+    if (addingNewAccount) {
+      setAddingNewAccount(false);
+      selectAccount("");
+    }
+  };
+
+  const handleDisconnect = () => {
+    if (!selectedCredential || selectedCredential.status !== "active" || selectedCredential.id !== confirmDisconnectCredentialId) return;
+    const credentialId = selectedCredential.id;
+    runRequest(`revoke:${credentialId}`, setDisconnecting, async (isCurrent) => {
+      const result = await revokeExchangeCredentialClient(credentialId);
+      if (!isCurrent()) return;
+      if (result.kind === "err") {
+        const displayMessage = credentialRequestError(result.code, result.status);
+        const refresh = loadWorkspace(false);
+        const refreshGeneration = scope.current;
+        const refreshedCredentials = await refresh;
+        if (scope.current !== refreshGeneration) return;
+        const stillActive = refreshedCredentials?.some((credential) =>
+          credential.id === credentialId && credential.status === "active",
+        );
+        if (refreshedCredentials && !stillActive) setConfirmDisconnectCredentialId(null);
+        setErrorMessage(displayMessage);
+        return;
+      }
+      assertNoSecretsInPayload(JSON.stringify(result.data));
+      setConfirmDisconnectCredentialId(null);
+      setEditingReplacement(false);
       await loadWorkspace();
     });
   };
@@ -237,111 +375,168 @@ function ExchangeTraderWorkspace() {
       ) : null}
 
       {loading ? (
-        <p className="text-muted-foreground text-sm">Loading account…</p>
-      ) : activeCredential ? (
-        <div className="space-y-6">
-          <section aria-labelledby="trader-account-heading" className="space-y-4">
-            <div>
-              <p className="text-muted-foreground text-xs tracking-wide uppercase">Account</p>
-              <h2 id="trader-account-heading" className="mt-1 text-xl font-semibold">
-                HTX connection
-              </h2>
-            </div>
-            <WaiaSurface variant="elevated" className="p-6">
-              <CredentialStatus credential={activeCredential} />
-            </WaiaSurface>
-          </section>
-          <ConnectedAccountObservationPanel
-            key={`${activeCredential.id}:${activeCredential.status}:${activeCredential.updatedAt}`}
-            target={
-              activeCredential.status === "active"
-                ? {
-                    credentialId: activeCredential.id,
-                    exchangeAccountId: activeCredential.exchangeAccountId,
-                  }
-                : null
-            }
-          />
-          <p className="text-muted-foreground text-sm" data-testid="trader-unpublished-note">
-            Strategy, forecast, news and monthly statement are not published in this cabinet yet.
-            Nothing is inferred.
-          </p>
-          <aside
-            className="border-border bg-muted/10 rounded-lg border p-4 text-sm"
-            data-testid="trader-authority-boundary"
-          >
-            <p className="font-medium">Observation only</p>
-            <p className="text-muted-foreground mt-1">
-              This dashboard is observational. Live enablement, kill switches, strategy promotion,
-              administrative controls and capital changes are intentionally absent.
-            </p>
-          </aside>
-        </div>
+        <p className="text-muted-foreground text-sm">Загрузка аккаунтов…</p>
       ) : (
-        <div className="mx-auto w-full max-w-lg space-y-6">
-          <WaiaSurface variant="elevated" className="p-6" data-testid="trader-connect-section">
-            <h2 className="text-lg font-medium">Connect HTX</h2>
-            <p className="text-muted-foreground mt-1 text-sm">
-              Create a Read-only HTX HMAC key. Do not enable Withdraw. Paste the Access Key and
-              Secret Key below.
-            </p>
-            <form
-              className="mt-6 space-y-4"
-              onSubmit={handleConnect}
-              data-testid="trader-connect-form"
-            >
+        <div className="space-y-6">
+          {accountOptions.length > 0 ? (
+            <section aria-labelledby="trader-account-heading" className="space-y-4">
               <div>
-                <label className="text-sm font-medium" htmlFor="trader-api-key">
-                  HTX Access Key
-                </label>
-                <Input
-                  id="trader-api-key"
-                  data-testid="trader-api-key"
-                  className="mt-1"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  autoComplete="off"
-                  required
-                />
+                <p className="text-muted-foreground text-xs tracking-wide uppercase">Аккаунты</p>
+                <h2 id="trader-account-heading" className="mt-1 text-xl font-semibold">
+                  Подключения HTX
+                </h2>
               </div>
-              <div>
-                <label className="text-sm font-medium" htmlFor="trader-api-secret">
-                  HTX Secret Key
-                </label>
-                <Input
-                  id="trader-api-secret"
-                  data-testid="trader-api-secret"
-                  type="password"
-                  className="mt-1"
-                  value={apiSecret}
-                  onChange={(e) => setApiSecret(e.target.value)}
-                  autoComplete="off"
-                  required
-                />
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="min-w-64 flex-1">
+                  <label htmlFor="trader-account-select" className="text-sm font-medium">
+                    Выберите аккаунт
+                  </label>
+                  <select
+                    id="trader-account-select"
+                    data-testid="trader-account-select"
+                    value={selectedAccountId}
+                    disabled={mutationBusy}
+                    onChange={(event) => selectAccount(event.target.value)}
+                    className="border-input bg-background mt-1 h-9 w-full rounded-md border px-3 text-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                  >
+                    <option value="">Выберите аккаунт</option>
+                    {accountOptions.map(({ accountId, credential }) => (
+                      <option key={accountId} value={accountId}>
+                        HTX {accountId} · {credential.status === "active" ? "Активен в WAIA" : "Отозван в WAIA"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {!addingNewAccount ? (
+                  <Button type="button" variant="outline" disabled={mutationBusy} onClick={() => {
+                    selectAccount("");
+                    setAddingNewAccount(true);
+                  }}>
+                    Подключить другой аккаунт
+                  </Button>
+                ) : null}
               </div>
-              <div>
-                <label className="text-sm font-medium" htmlFor="trader-account-label">
-                  Account label (optional)
-                </label>
-                <Input
-                  id="trader-account-label"
-                  data-testid="trader-account-label"
-                  className="mt-1"
-                  value={accountLabel}
-                  onChange={(e) => setAccountLabel(e.target.value)}
+            </section>
+          ) : null}
+
+          {accountOptions.length > 0 && !selectedCredential && !addingNewAccount ? (
+            <div className="border-border bg-muted/10 rounded-lg border p-4 text-sm" data-testid="trader-account-selection-prompt">
+              Выберите аккаунт, чтобы просмотреть его статус и историю, или подключите другой.
+            </div>
+          ) : null}
+
+          {selectedCredential ? (
+            <section aria-label="Выбранный аккаунт HTX" className="space-y-4">
+              <WaiaSurface variant="elevated" className="p-6">
+                <CredentialStatus credential={selectedCredential} />
+                {selectedCredential.status === "active" ? (
+                  <div className="mt-4">
+                    {!editingReplacement && !confirmDisconnect ? (
+                      <Button type="button" variant="outline" disabled={mutationBusy} onClick={() => {
+                        setConfirmDisconnectCredentialId(null);
+                        setApiKey("");
+                        setApiSecret("");
+                        setAccountLabel("");
+                        setEditingReplacement(true);
+                      }} data-testid="trader-replace-button">
+                        Заменить подключение
+                      </Button>
+                    ) : null}
+                    {!confirmDisconnect ? (
+                      <Button type="button" variant="outline" disabled={mutationBusy}
+                        onClick={() => {
+                          setEditingReplacement(false);
+                          setApiKey("");
+                          setApiSecret("");
+                          setAccountLabel("");
+                          setConfirmDisconnectCredentialId(selectedCredential.id);
+                        }} data-testid="trader-disconnect-button">
+                        Отключить подключение
+                      </Button>
+                    ) : (
+                      <div className="border-border bg-muted/10 rounded-lg border p-4" role="group" aria-label="Подтвердить отключение">
+                        <p className="text-sm">Будет отозвана только запись подключения в WAIA. Сам ключ HTX и внешний исполнитель не изменятся; история сохранится.</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button type="button" variant="destructive" disabled={disconnecting}
+                            onClick={handleDisconnect} data-testid="trader-disconnect-confirm">
+                            {disconnecting ? "Отключение…" : "Подтвердить отключение"}
+                          </Button>
+                          <Button type="button" variant="outline" disabled={mutationBusy}
+                            onClick={() => setConfirmDisconnectCredentialId(null)}>Отмена</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </WaiaSurface>
+              {selectedCredential.status === "active" ? (
+                <ConnectedAccountObservationPanel
+                  key={`${selectedCredential.id}:${selectedCredential.status}:${selectedCredential.updatedAt}`}
+                  target={{ credentialId: selectedCredential.id, exchangeAccountId: selectedCredential.exchangeAccountId }}
                 />
-              </div>
-              <PermissionExplainer />
-              <Button
-                type="submit"
-                disabled={connecting}
-                data-testid="trader-connect-submit"
-                className="w-full"
-              >
-                {connecting ? "Connecting…" : "Connect HTX"}
-              </Button>
-            </form>
-          </WaiaSurface>
+              ) : null}
+              <p className="text-muted-foreground text-sm" data-testid="trader-unpublished-note">
+                Стратегия, прогноз, новости и месячный отчёт пока не опубликованы в этом кабинете.
+                Выводы не строятся.
+              </p>
+              <aside className="border-border bg-muted/10 rounded-lg border p-4 text-sm" data-testid="trader-authority-boundary">
+                <p className="font-medium">Только наблюдение</p>
+                <p className="text-muted-foreground mt-1">
+                  Кабинет предназначен только для наблюдения. Включение live-режима, аварийные
+                  переключатели, публикация стратегий, административные функции и управление
+                  капиталом здесь недоступны.
+                </p>
+              </aside>
+            </section>
+          ) : null}
+
+          {(accountOptions.length === 0 || addingNewAccount || selectedCredential?.status === "revoked" || editingReplacement) ? (
+            <div className="mx-auto w-full max-w-lg space-y-6">
+              <WaiaSurface variant="elevated" className="p-6" data-testid="trader-connect-section">
+                <h2 className="text-lg font-medium">
+                  Подключить HTX
+                </h2>
+                {selectedCredential?.status === "active" ? (
+                  <p className="mt-2 text-sm font-medium">Это заменит подключение в WAIA для выбранного аккаунта, а не добавит отдельный ключ наблюдения. Сам ключ HTX и внешний исполнитель не изменятся; история сохранится.</p>
+                ) : selectedCredential ? (
+                  <p className="text-muted-foreground mt-1 text-sm">Предыдущая запись подключения отозвана в WAIA. Введённый ключ может относиться к другому аккаунту HTX; после ответа будет выбран аккаунт из результата. История сохранится.</p>
+                ) : (
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    Создайте ключ HTX HMAC только с разрешением чтения. Не включайте Withdraw.
+                    Вставьте ниже Access Key и Secret Key.
+                  </p>
+                )}
+                <form className="mt-6 space-y-4" onSubmit={handleConnect} data-testid="trader-connect-form">
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="trader-api-key">HTX Access Key</label>
+                    <Input id="trader-api-key" data-testid="trader-api-key" className="mt-1"
+                      value={apiKey} onChange={(e) => setApiKey(e.target.value)} autoComplete="off" required />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="trader-api-secret">HTX Secret Key</label>
+                    <Input id="trader-api-secret" data-testid="trader-api-secret" type="password" className="mt-1"
+                      value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} autoComplete="off" required />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="trader-account-label">Название аккаунта (необязательно)</label>
+                    <Input id="trader-account-label" data-testid="trader-account-label" className="mt-1"
+                      value={accountLabel} onChange={(e) => setAccountLabel(e.target.value)} />
+                  </div>
+                  <PermissionExplainer />
+                  <Button type="submit" disabled={mutationBusy} data-testid="trader-connect-submit" className="w-full">
+                    {connecting ? "Подключение…" : selectedCredential?.status === "active"
+                      ? "Заменить подключение"
+                      : "Подключить HTX"}
+                  </Button>
+                  {selectedCredential?.status === "active" || addingNewAccount ? (
+                    <Button type="button" variant="outline" disabled={mutationBusy} onClick={cancelConnect}>
+                      Отмена
+                    </Button>
+                  ) : null}
+                </form>
+              </WaiaSurface>
+            </div>
+          ) : null}
         </div>
       )}
     </div>
