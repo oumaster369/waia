@@ -27,7 +27,8 @@ import { prepareResearchDevelopmentSourcePostgresV1 } from "@/lib/trader/researc
 import { prepareResearchDevelopmentEvaluationSourcePostgresV1 } from "@/lib/trader/research/research-development-evaluation-source-owner-postgres-v1";
 import { captureResearchDevelopmentSourceRequestV1 } from "@/lib/trader/research/research-development-source-contract-v1";
 import { captureResearchIssuedTrainingRequestV2 } from "@/lib/trader/research/research-issued-training-contract-v2";
-import { runResearchIssuedTrainingDiagnosticPostgresV2, selectResearchIssuedTrainingFamilyPostgresV1 } from "@/lib/trader/research/research-issued-training-diagnostic-postgres-v2";
+import { runResearchIssuedTrainingDiagnosticPostgresV2, selectResearchIssuedTrainingFamilyPostgresV1,
+  reserveResearchDevelopmentEvaluationPostgresV1, runResearchDevelopmentEvaluationPostgresV1 } from "@/lib/trader/research/research-issued-training-diagnostic-postgres-v2";
 import { captureResearchTrainingFamilyRequestV1 } from "@/lib/trader/research/research-training-family-contract-v1";
 import { registerResearchExperimentPostgresV1 } from "@/lib/trader/research/research-experiment-registry-postgres-v1";
 import { registerResearchIssuedAttemptPostgresV2 } from "@/lib/trader/research/research-issued-attempt-postgres-v2";
@@ -38,6 +39,8 @@ import {
   runDiscoveryIssuedAttemptRegistrationBranch,
 } from "@/scripts/trader/discovery-registration";
 import { readResearchEvaluationSourceRequestFile, runDiscoveryEvaluationSourceBranch } from "@/scripts/trader/discovery-evaluation-source";
+import { hasDiscoveryDevelopmentEvaluationFlag, readResearchDevelopmentEvaluationRequestFile,
+  runDiscoveryDevelopmentEvaluationBranch } from "@/scripts/trader/discovery-development-evaluation";
 
 const LOG_PREFIX = "[trader:discovery:run]";
 
@@ -138,6 +141,15 @@ Separate DEVELOPMENT evaluation-source preparation (metadata-only; does not eval
     --request-file=<absolute JSON file, max 256 KiB>
   The request names an already-issued training source and exact absolute validation/WF ranges.
   Requires WAIA_TRADER_CLI=1 and operator authorization. The request file contains selection metadata only.
+
+Separate DEVELOPMENT candidate reservation / evaluation (never chained):
+  pnpm trader:discovery:run -- --reserve-development-evaluation=1 --org-id=<internal uuid>
+    --request-file=<absolute JSON file, max 256 KiB>
+  pnpm trader:discovery:run -- --run-development-evaluation=1 --org-id=<internal uuid>
+    --request-file=<the same committed claim request>
+  Request: organizationId, attemptId, evaluationSourceId, stable commandId and operational limits.
+  Evaluation requires an earlier committed reservation. Output contains receipt identifiers only.
+  The CLI/action-class guard is not human authentication or scientific permission; use only authorized data.
 `);
 }
 
@@ -428,6 +440,19 @@ async function main(): Promise<void> {
   }
 
   const argv = process.argv.slice(2);
+  if (hasDiscoveryDevelopmentEvaluationFlag(argv)) {
+    const outcome = await runDiscoveryDevelopmentEvaluationBranch(argv, {
+      cliEnabled: process.env.WAIA_TRADER_CLI === "1",
+      authorize: () => assertOperatorActionAllowed("authorize_discovery_run"),
+      readRequest: readResearchDevelopmentEvaluationRequestFile,
+      reserve: reserveResearchDevelopmentEvaluationPostgresV1,
+      evaluate: runResearchDevelopmentEvaluationPostgresV1,
+      print: summary => console.log(`${LOG_PREFIX} development-evaluation ${JSON.stringify(summary)}`),
+    });
+    if (outcome.error) console.error(`${LOG_PREFIX} ${outcome.error}`);
+    if (outcome.exitCode !== 0) process.exitCode = outcome.exitCode;
+    return;
+  }
   if (hasEvaluationSourceFlag(argv)) {
     const outcome = await runDiscoveryEvaluationSourceBranch(argv, {
       cliEnabled: process.env.WAIA_TRADER_CLI === "1",
@@ -573,6 +598,7 @@ async function main(): Promise<void> {
 
 if (
   process.env.WAIA_TRADER_CLI === "1" ||
+  hasDiscoveryDevelopmentEvaluationFlag(process.argv.slice(2)) ||
   hasSourcePreparationFlag(process.argv.slice(2)) ||
   hasEvaluationSourceFlag(process.argv.slice(2)) ||
   hasIssuedTrainingFlag(process.argv.slice(2)) ||

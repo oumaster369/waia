@@ -1,5 +1,8 @@
 /** Synthetic-only proof that validation reservation consumes the frozen candidate before disclosure. */
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { promisify } from "node:util";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -535,6 +538,89 @@ describe.skipIf(!enabled)("DEE-1159 DEVELOPMENT evaluation claim PostgreSQL", ()
       expect(scopeAccounts!.n).toBe(3);
     } finally { f.source.cleanup(); }
   }, 360_000);
+
+  it("uses separate operator child processes for reservation and evaluation without duplicate effects", async () => {
+    const f = await readyFixture("evaluation-cli-child-sequence", { evaluationDip: true });
+    const requestFile = `${f.source.rootDir}/evaluation-claim-request.json`;
+    writeFileSync(requestFile, JSON.stringify(f.request), { mode: 0o600 });
+    const stageCounts = async () => ({ rows: await rowCounts(), effects: await modelEffects(), stages: await evaluationCounts() });
+    const before = await stageCounts();
+    const invoke = async (action: "RESERVE" | "EVALUATE", cliEnabled = true) => {
+      const mode = action === "RESERVE" ? "--reserve-development-evaluation=1" : "--run-development-evaluation=1";
+      try {
+        const result = await promisify(execFile)(process.execPath,
+          ["--import", "tsx", "--conditions=react-server", "scripts/trader/discovery-run.ts", mode,
+            `--org-id=${ORG}`, `--request-file=${requestFile}`],
+          { cwd: process.cwd(), env: { ...process.env, ...(cliEnabled ? { WAIA_TRADER_CLI: "1" } : { WAIA_TRADER_CLI: "" }) },
+            timeout: 120_000, maxBuffer: 256 * 1024 });
+        const line = result.stdout.trim().split("\n").find(value => value.startsWith(
+          "[trader:discovery:run] development-evaluation "));
+        if (!line) throw new Error("DEE1159_EVALUATION_CLI_SUMMARY_REQUIRED");
+        return { exitCode: 0, stdout: result.stdout, stderr: result.stderr,
+          summary: JSON.parse(line.slice("[trader:discovery:run] development-evaluation ".length)) };
+      } catch (error) {
+        const child = error as { code?: number | string; stdout?: string; stderr?: string };
+        return { exitCode: Number(child.code ?? 1), stdout: String(child.stdout ?? ""), stderr: String(child.stderr ?? ""), summary: null };
+      }
+    };
+    try {
+      const missingCli = await invoke("EVALUATE", false);
+      expect(missingCli.exitCode).toBe(1);
+      expect(missingCli.stderr).toContain("WAIA_TRADER_CLI=1 is required");
+      expect(await stageCounts()).toEqual(before);
+
+      const premature = await invoke("EVALUATE");
+      expect(premature.exitCode).toBe(1);
+      expect(premature.summary).toBeNull();
+      expect(await stageCounts()).toEqual(before);
+
+      const reserve = await invoke("RESERVE");
+      expect(reserve.exitCode).toBe(0);
+      expect(reserve.summary).toMatchObject({ action: "RESERVE", status: "COMMITTED", stageCount: 0,
+        scientificQualified: false, capitalEligible: false });
+      expect(reserve.summary.claimId).toMatch(/^[a-f0-9-]{36}$/);
+      expect(reserve.summary.claimDigest).toMatch(/^[a-f0-9]{64}$/);
+      expect(reserve.summary.receiptDigest).toBe(reserve.summary.claimDigest);
+      const reservedCounts = await stageCounts();
+      expect(reservedCounts.stages).toEqual(before.stages);
+      expect(reservedCounts.effects).toEqual(before.effects);
+
+      const reserveReplay = await invoke("RESERVE");
+      expect(reserveReplay.exitCode).toBe(0);
+      expect(reserveReplay.summary).toEqual({ ...reserve.summary, status: "REPLAYED" });
+      expect(await stageCounts()).toEqual(reservedCounts);
+
+      const evaluated = await invoke("EVALUATE");
+      expect(evaluated.exitCode).toBe(0);
+      expect(evaluated.summary).toMatchObject({ action: "EVALUATE", status: "COMMITTED",
+        claimId: reserve.summary.claimId, claimDigest: reserve.summary.claimDigest, stageCount: 3,
+        scientificQualified: false, capitalEligible: false });
+      expect(evaluated.summary.receiptDigest).toMatch(/^[a-f0-9]{64}$/);
+      const evaluationCommittedCounts = await stageCounts();
+      const evaluationReplay = await invoke("EVALUATE");
+      expect(evaluationReplay.exitCode).toBe(0);
+      expect(evaluationReplay.summary).toEqual({ ...evaluated.summary, status: "REPLAYED" });
+      expect(await stageCounts()).toEqual(evaluationCommittedCounts);
+
+      const [claimRow] = await admin`SELECT receipt_canonical_json FROM public.trader_research_development_evaluation_claims_v1
+        WHERE organization_id=${ORG}::uuid AND claim_id=${reserve.summary.claimId}::uuid`;
+      expect(claimRow).toBeTruthy();
+      const claimReceipt = JSON.parse(claimRow!.receipt_canonical_json);
+      const traces = await admin`SELECT trace_canonical_json FROM public.trader_research_development_evaluation_results_v1
+        WHERE organization_id=${ORG}::uuid AND claim_id=${reserve.summary.claimId}::uuid ORDER BY stage_ordinal`;
+      const parsedTraces = traces.map(row => JSON.parse(row.trace_canonical_json));
+      expect(parsedTraces).toHaveLength(3);
+      expect(parsedTraces.every(trace => trace.trialIndex === claimReceipt.selectedIndex &&
+        JSON.stringify(trace.selectedParameters) === JSON.stringify(claimReceipt.selectedParameters))).toBe(true);
+      expect(parsedTraces.some(trace => trace.orders.length > 0)).toBe(true);
+      expect(parsedTraces.some(trace => trace.fillDetails.length > 0)).toBe(true);
+      const finalCounts = await stageCounts();
+      expect(finalCounts.stages).toMatchObject({ scopes: before.stages.scopes + 3, results: before.stages.results + 3 });
+      expect(finalCounts.effects.orders).toBeGreaterThan(before.effects.orders);
+      expect(finalCounts.effects.fills).toBeGreaterThan(before.effects.fills);
+      expect(finalCounts.effects.diagnostics).toBe(before.effects.diagnostics);
+    } finally { f.source.cleanup(); }
+  }, 600_000);
 
   it("refuses a tampered committed stage trace on replay", async () => {
     const f = await readyFixture("evaluation-batch-tampered-result");

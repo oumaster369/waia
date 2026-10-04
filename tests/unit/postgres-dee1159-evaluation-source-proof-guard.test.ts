@@ -32,6 +32,8 @@ describe("DEE-1159 evaluation source executed PostgreSQL proof guard", () => {
     expect(new Set(sourcePaths).size).toBeGreaterThan(0);
     expect(sourcePaths).toContain("lib/trader/research/research-owned-postgres-pool-v1.ts");
     expect(sourcePaths).toContain("lib/trader/research/research-issued-training-diagnostic-postgres-v2.ts");
+    expect(sourcePaths).toContain("scripts/trader/discovery-development-evaluation.ts");
+    expect(sourcePaths).toContain("tests/unit/trader-discovery-development-evaluation-cli.test.ts");
     expect(draftSql).toContain("docs/plans/dee-1159-evaluation-stage-owner.sql");
     expect(sourcePaths).toContain("docs/plans/dee-1159-evaluation-stage-owner.sql");
     expect(sourcePaths).toContain("package.json");

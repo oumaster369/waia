@@ -36,6 +36,7 @@ export const requiredAssertionTitlesBySuite = {
   "rolls back every stage when a later result insert fails while retaining the prior claim",
   "confirms the whole evaluation batch after a lost COMMIT acknowledgement",
   "serializes concurrent evaluation calls for one committed claim into one batch and one replay",
+  "uses separate operator child processes for reservation and evaluation without duplicate effects",
   "refuses a tampered committed stage trace on replay",
   "enforces evaluation stage immutability and denies browser roles"
 ]
@@ -51,6 +52,9 @@ export const sourcePaths = [...new Set([
   "lib/trader/research/strategy-admission-journal-postgres.ts",
   "tests/unit/trader-admission-consumption-snapshot.test.ts",
   "scripts/trader/discovery-evaluation-source.ts",
+  "scripts/trader/discovery-development-evaluation.ts",
+  "tests/unit/trader-discovery-development-evaluation-cli.test.ts",
+  "docs/plans/dee-1159-modeled-stage-kernel-contract-addendum-v1.md",
   "lib/trader/operator/operator-authority.ts",
   "tests/unit/trader-discovery-evaluation-source-cli.test.ts",
   "lib/trader/research/research-development-evaluation-source-contract-v1.ts",
