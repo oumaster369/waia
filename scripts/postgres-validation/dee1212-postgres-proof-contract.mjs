@@ -15,6 +15,7 @@ export const requiredSuites = [
 export const requiredAssertionTitles = [
   "preserves the pre-existing default fixture bytes when no close override is supplied",
   "registers experiment and issued attempt through explicit CLI branches with durable retry and no scoring",
+  "refuses invalid declared DEVELOPMENT evaluation ranges before issued registration or modeled effects",
   "runs an actual issued DEVELOPMENT attempt and exact retry commits one nonqualifying ledger",
   "refuses unknown and V1-shadow attempts without stage effects",
   "refuses runtime, trial, and policy before revoked market payload access",

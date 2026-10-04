@@ -21,6 +21,8 @@ import { canonicalJsonString, computeStableJsonDigest } from "@/lib/trader/resea
 import { deterministicUuidV8 } from "@/lib/trader/execution/deterministic-execution-id";
 import { RESEARCH_DEVELOPMENT_SOURCE_ORG_V1 as ORG } from "@/lib/trader/research/research-development-source-contract-v1";
 import { runResearchIssuedTrainingDiagnosticPostgresV2 } from "@/lib/trader/research/research-issued-training-diagnostic-postgres-v2";
+import { resolveFhvCanonicalPartitionInterval } from "@/lib/trader/market-data/fhv-partition-boundaries";
+import { readResearchDevelopmentSourceRowsV1 } from "@/lib/trader/research/research-development-source-read-v1";
 import {
   readResearchExperimentProposalFile,
   runDiscoveryExperimentRegistrationBranch,
@@ -252,6 +254,59 @@ describe.skipIf(!enabled)("DEE-1212 issued DEVELOPMENT diagnostic PostgreSQL", (
     } finally {
       f.source.cleanup();
       rmSync(directory, { recursive: true, force: true });
+    }
+  }, 180_000);
+
+  it("refuses invalid declared DEVELOPMENT evaluation ranges before issued registration or modeled effects", async () => {
+    const changes = [
+      (proposal: ReturnType<typeof buildResearchExperimentProposalV1>) => { proposal.partitions.validation.barCount += 1; },
+      (proposal: ReturnType<typeof buildResearchExperimentProposalV1>) => { proposal.partitions.walkForward[0]!.barCount += 1; },
+      (proposal: ReturnType<typeof buildResearchExperimentProposalV1>) => {
+        proposal.partitions.validation.firstOpenMs += 1;
+        proposal.partitions.walkForward[0]!.firstOpenMs += 1;
+      },
+      (proposal: ReturnType<typeof buildResearchExperimentProposalV1>) => {
+        const end = Date.parse(resolveFhvCanonicalPartitionInterval("development").endUtc);
+        proposal.partitions.validation.firstOpenMs = end;
+        proposal.partitions.validation.lastCloseMs = end + 10 * 60_000;
+        proposal.partitions.walkForward[0]!.firstOpenMs = end;
+        proposal.partitions.walkForward[0]!.lastCloseMs = end + 10 * 60_000;
+        proposal.partitions.blind.firstOpenMs = end + 10 * 60_000;
+        proposal.partitions.blind.lastCloseMs = end + 20 * 60_000;
+      },
+    ];
+    for (const [index, change] of changes.entries()) {
+      const f = await unregisteredFixture(`evaluation-range-${index}-${randomUUID()}`);
+      try {
+        change(f.proposal);
+        // Generic experiment storage remains separate from this closed DEVELOPMENT lane.
+        const experiment = await registerResearchExperimentPostgresV1(
+          drizzle(admin, { schema: pgSchema }) as never, { organizationId: ORG }, f.proposal);
+        if (index === 1) {
+          // Deliberately corrupt this isolated fixture to prove metadata refusal
+          // precedes the source-row check (which now fails for a different reason).
+          await admin`alter table public.trader_historical_dataset_authority_v2
+            disable trigger historical_dataset_authority_v2_append_only`;
+          try {
+            await admin`update public.trader_historical_dataset_authority_v2
+              set authority_content_digest_hex=${"f".repeat(64)}
+              where organization_id=${ORG}::uuid and run_id=${f.issuance.sourceRunId}`;
+          } finally {
+            await admin`alter table public.trader_historical_dataset_authority_v2
+              enable trigger historical_dataset_authority_v2_append_only`;
+          }
+          await expect(readResearchDevelopmentSourceRowsV1(admin, f.issuance)).rejects.toThrow();
+        }
+        const commandId = `invalid-evaluation-${randomUUID()}`;
+        const before = await orgStageCounts();
+        await expect(registerResearchIssuedAttemptPostgresV2({ organizationId: ORG,
+          specSha256: experiment.specSha256, sourceRunId: f.issuance.sourceRunId, commandId }))
+          .rejects.toThrow("RESEARCH_DEVELOPMENT_EVALUATION_RANGE_INVALID");
+        const attempts = await admin`select id from public.trader_research_issued_attempts_v2
+          where organization_id=${ORG}::uuid and command_id=${commandId}`;
+        expect(attempts).toHaveLength(0);
+        expect(await orgStageCounts()).toEqual(before);
+      } finally { f.source.cleanup(); }
     }
   }, 180_000);
 

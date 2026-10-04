@@ -44,6 +44,7 @@ on:
       - "lib/trader/intelligence/information-inquiry/contracts-v1.ts"
       - "tests/helpers/research-experiment-fixture.ts"
       - "tests/unit/research-development-source-contract-v1.test.ts"
+      - "tests/unit/research-development-evaluation-ranges-v1.test.ts"
       - "tests/unit/trader-research-owned-postgres-pool-v1.test.ts"
       - "tests/unit/fhv-bounded-json-file.test.ts"
       - "tests/unit/historical-simulation-bootstrap-source-loader-v2.test.ts"
