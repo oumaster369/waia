@@ -92,8 +92,8 @@ function payload(
       contentDigest: "2".repeat(64),
       ledgerScope: {
         organizationId: ORG_ID,
-        historicalRunId: "run-1",
-        historicalAccountKey: "acct",
+        historicalRunId: `run-${contentSha256}`,
+        historicalAccountKey: `acct-${contentSha256}`,
       },
     },
     experiment: { spec: experimentSpec, specSha256: computeStableJsonDigest(experimentSpec) },
@@ -274,6 +274,95 @@ function runnerResult(scientificQualified = false) {
 }
 
 describe("development modeled stage binding", () => {
+  it.each(["historicalRunId", "historicalAccountKey"] as const)(
+    "refuses a shared %s before reserving validation or invoking a stage",
+    async (field) => {
+      const { db, calls } = executor();
+      const batch = stages();
+      const validation = batch[1]!.payload;
+      batch[1]!.payload = {
+        ...validation,
+        scope: {
+          ...validation.scope,
+          ledgerScope: {
+            ...validation.scope.ledgerScope,
+            [field]: batch[0]!.payload.scope.ledgerScope[field],
+          },
+        },
+      };
+      const kernel = vi.spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1")
+        .mockResolvedValue(runnerResult() as never);
+      try {
+        await expect(runBoundDevelopmentModeledStagesV1({
+          executor: owned(db), descriptor: descriptor(),
+          registration: registrationFor(), stages: batch,
+        })).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_LEDGER_REUSED");
+        expect(db.transaction).not.toHaveBeenCalled();
+        expect(calls).toEqual([]);
+        expect(kernel).not.toHaveBeenCalled();
+      } finally { kernel.mockRestore(); }
+    },
+  );
+
+  it.each(["historicalRunId", "historicalAccountKey"] as const)(
+    "refuses a shared %s between walk-forward windows",
+    async (field) => {
+      const { db, calls } = executor();
+      const secondPartition = "3".repeat(64);
+      const declaredSpec = spec({ partitions: {
+        ...spec().partitions,
+        walkForward: [{ contentSha256: WALK_PARTITION }, { contentSha256: secondPartition }],
+      } });
+      const window = (contentSha256: string) => ({
+        ...payload(contentSha256),
+        experiment: { spec: declaredSpec, specSha256: computeStableJsonDigest(declaredSpec) },
+      }) as unknown as ResearchModeledStageSourceV1;
+      const first = window(WALK_PARTITION);
+      const second = window(secondPartition);
+      const reused = { ...second, scope: { ...second.scope, ledgerScope: {
+        ...second.scope.ledgerScope, [field]: first.scope.ledgerScope[field],
+      } } };
+      const kernel = vi.spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1")
+        .mockResolvedValue(runnerResult() as never);
+      try {
+        await expect(runBoundDevelopmentModeledStagesV1({
+          executor: owned(db), descriptor: descriptor(),
+          registration: registrationFor(declaredSpec), stages: [
+            { kind: "walk-forward", windowIndex: 0, payload: first },
+            { kind: "walk-forward", windowIndex: 1, payload: reused },
+          ],
+        })).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_LEDGER_REUSED");
+        expect(db.transaction).not.toHaveBeenCalled();
+        expect(calls).toEqual([]);
+        expect(kernel).not.toHaveBeenCalled();
+      } finally { kernel.mockRestore(); }
+    },
+  );
+
+  it.each([
+    { historicalRunId: "" },
+    { historicalAccountKey: " acct " },
+    { historicalRunId: "x".repeat(257) },
+    { unexpected: "field" },
+  ])("refuses malformed ledger scope %j before any side effects", async (invalid) => {
+    const { db, calls } = executor();
+    const supplied = payload(TRAIN_PARTITION);
+    const kernel = vi.spyOn(modeledStageKernel, "runOwnedResearchModeledStageV1")
+      .mockResolvedValue(runnerResult() as never);
+    try {
+      await expect(runBoundDevelopmentModeledStagesV1({
+        executor: owned(db), descriptor: descriptor(), registration: registrationFor(),
+        stages: [{ kind: "train", windowIndex: 0, payload: {
+          ...supplied, scope: { ...supplied.scope,
+            ledgerScope: { ...supplied.scope.ledgerScope, ...invalid } },
+        } }],
+      })).rejects.toThrow("RESEARCH_DEVELOPMENT_STAGE_REFUSED:STAGE_LEDGER_SCOPE");
+      expect(db.transaction).not.toHaveBeenCalled();
+      expect(calls).toEqual([]);
+      expect(kernel).not.toHaveBeenCalled();
+    } finally { kernel.mockRestore(); }
+  });
+
   it("runs train, validation, and walk-forward only through the sealed kernel and records runner receipts", async () => {
     const { db, calls } = executor();
     const kernel = vi
@@ -294,6 +383,10 @@ describe("development modeled stage binding", () => {
         expect(Object.keys(call[0])).toEqual(["executor", "descriptor", "payload"]);
         expect(Object.isFrozen(call[0].payload)).toBe(true);
       }
+      expect(kernel.mock.calls.map(([call]) => call.payload.scope.ledgerScope))
+        .toEqual(stages().map((stage) => stage.payload.scope.ledgerScope));
+      expect(new Set(kernel.mock.calls.map(([call]) => call.payload.scope.ledgerScope.historicalRunId)).size).toBe(3);
+      expect(new Set(kernel.mock.calls.map(([call]) => call.payload.scope.ledgerScope.historicalAccountKey)).size).toBe(3);
       expect(kernel.mock.calls.map((call) => call[0].payload.partition.contentSha256)).toEqual([
         TRAIN_PARTITION,
         VALIDATION_PARTITION,

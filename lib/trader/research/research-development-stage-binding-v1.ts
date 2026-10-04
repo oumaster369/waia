@@ -6,6 +6,7 @@ import { types as nodeUtilTypes } from "node:util";
 import { sql } from "drizzle-orm";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { assertModelMatchesD5 } from "@/lib/trader/execution/historical-execution-model";
+import { captureHistoricalMockLedgerScope, type HistoricalMockLedgerScope } from "@/lib/trader/execution/historical-mock-ledger-scope";
 import { canonicalJsonString, computeStableJsonDigest } from "@/lib/trader/research/digest";
 import { RESEARCH_EXECUTABLE_ID_V1 } from "@/lib/trader/research/research-experiment-contract-v1";
 import { resolveCurrentResearchExecutableIdentityV1 } from "@/lib/trader/research/research-executable-runtime-identity-v1";
@@ -112,6 +113,7 @@ type ObservedStage = Readonly<{
   scopeContentDigest: string;
   executableSourceSha256: string;
   historicalExecutionModelSha256: string;
+  ledgerScope: HistoricalMockLedgerScope;
 }>;
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -364,6 +366,12 @@ function observeStage(
   ) {
     refuse("STAGE_PAYLOAD_IDENTITY");
   }
+  let checkedLedgerScope: HistoricalMockLedgerScope;
+  try {
+    checkedLedgerScope = captureHistoricalMockLedgerScope(ledgerScope as HistoricalMockLedgerScope);
+  } catch {
+    refuse("STAGE_LEDGER_SCOPE");
+  }
   const specSha256 = computeStableJsonDigest(spec);
   const replay = readRecord(spec, "replay", "REPLAY_MODEL_MISMATCH");
   const declaredModelSha256 = requireSha256(
@@ -464,6 +472,7 @@ function observeStage(
     scopeContentDigest,
     executableSourceSha256,
     historicalExecutionModelSha256: actualModelSha256,
+    ledgerScope: checkedLedgerScope,
   });
 }
 
@@ -471,6 +480,8 @@ function assertSameIdentities(stages: readonly ObservedStage[]): void {
   const first = stages[0];
   if (!first) refuse("STAGE_INPUT");
   const seen = new Set<string>();
+  const ledgerRuns = new Set<string>();
+  const ledgerAccounts = new Set<string>();
   let previous: DevelopmentStageKindV1 | null = null;
   let previousWindow = -1;
   for (const stage of stages) {
@@ -503,6 +514,14 @@ function assertSameIdentities(stages: readonly ObservedStage[]): void {
         refuse("EVALUATOR_MISMATCH");
       refuse("SPEC_MISMATCH");
     }
+    // Some mock projections are account-key scoped. A distinct run alone does
+    // not isolate stages; both namespaces must differ before any reservation.
+    if (ledgerRuns.has(stage.ledgerScope.historicalRunId) ||
+        ledgerAccounts.has(stage.ledgerScope.historicalAccountKey)) {
+      refuse("STAGE_LEDGER_REUSED");
+    }
+    ledgerRuns.add(stage.ledgerScope.historicalRunId);
+    ledgerAccounts.add(stage.ledgerScope.historicalAccountKey);
     previous = stage.kind;
     if (stage.kind === "walk-forward") previousWindow = stage.windowIndex;
   }
