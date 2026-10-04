@@ -51,6 +51,17 @@ function hasSafeReaderPortGuard(source: string): boolean {
     source.includes('`postgres://waia_local_admin:local_validation_only@127.0.0.1:${localPort}/waia_dee960_local`') &&
     !/process\.env\.(?:DATABASE_URL|POSTGRES_URL)/.test(source);
 }
+function hasSafeCredentialPortGuard(source: string): boolean {
+  const compact = source.replace(/\s+/g, " ");
+  return source.includes('const localPort = process.env.DEE960_LOCAL_PG_PORT ?? "55460";') &&
+    compact.includes('if (!/^\\d{4,5}$/.test(localPort) || Number(localPort) < 1024 || Number(localPort) > 65535) throw new Error("invalid synthetic PostgreSQL loopback port");') &&
+    source.includes('const HOST = `127.0.0.1:${localPort}`;') &&
+    source.includes('const url = `postgres://waia_local_admin:local_validation_only@${HOST}/waia_dee960_local`;') &&
+    source.includes('collector: "dee1015_synthetic_collector_password_0001"') &&
+    source.includes('reader: "dee1015_synthetic_reader_password_00000002"') &&
+    source.includes('credential: "dee1015_synthetic_credential_password_0003"') &&
+    !/process\.env\.(?:DATABASE_URL|POSTGRES_URL|PGURL)/.test(source);
+}
 
 describe("account observation PostgreSQL CI contract", () => {
   it("retains both pre-existing historical jobs byte-for-byte", () => {
@@ -76,9 +87,13 @@ describe("account observation PostgreSQL CI contract", () => {
       expect(source).toContain('process.env.DEE960_LOCAL_PG17 === "1"');
       if (suite === "tests/integration/account-observation-reader-postgres.test.ts") {
         // The reader suite may target the separately provisioned, loopback-only
-        // PG17 validation cluster. The other four suites remain pinned to CI's
-        // 55460 service and never inherit this opt-in port.
+        // PG17 validation cluster. Other suites do not inherit the reader-specific
+        // opt-in port variable.
         expect(hasSafeReaderPortGuard(source)).toBe(true);
+      } else if (suite === "tests/integration/account-observation-credential-postgres.test.ts") {
+        // The credential suite may target a validated alternate loopback port;
+        // target identity and synthetic logins remain fixed and never come from DATABASE_URL.
+        expect(hasSafeCredentialPortGuard(source)).toBe(true);
       } else {
         expect(source).toContain(`const url = "${syntheticUrl}"`);
       }
@@ -99,6 +114,26 @@ describe("account observation PostgreSQL CI contract", () => {
     ]) {
       expect(hasSafeReaderPortGuard(mutation)).toBe(false);
     }
+  });
+
+  it("keeps the credential suite's alternate PG17 port numeric, loopback-only, and synthetic", () => {
+    const credentialPath = "tests/integration/account-observation-credential-postgres.test.ts";
+    const credential = readFileSync(credentialPath, "utf8");
+    expect(hasSafeCredentialPortGuard(credential)).toBe(true);
+    for (const mutation of [
+      credential.replace('process.env.DEE960_LOCAL_PG_PORT ?? "55460"', 'process.env.DEE960_LOCAL_PG_PORT'),
+      credential.replace('!/^\\d{4,5}$/.test(localPort)', 'false'),
+      credential.replace('Number(localPort) < 1024', 'false'),
+      credential.replace('Number(localPort) > 65535', 'false'),
+      credential.replace('Number(localPort) < 1024 || Number(localPort) > 65535', 'Number(localPort) < 1024 && Number(localPort) > 65535'),
+      credential.replace('throw new Error("invalid synthetic PostgreSQL loopback port")', 'console.warn("ignored port validation")'),
+      credential.replace('127.0.0.1:${localPort}', 'example.com:${localPort}'),
+      credential.replace('waia_local_admin:local_validation_only', 'production:secret'),
+      credential.replace('/waia_dee960_local`', '/production`'),
+      credential.replace('process.env.DEE960_LOCAL_PG_PORT ?? "55460"', 'process.env.DATABASE_URL'),
+      credential.replace('process.env.DEE960_LOCAL_PG_PORT ?? "55460"', 'process.env.DATABASE_URL_POSTGRES'),
+      credential.replace('dee1015_synthetic_credential_password_0003', 'production-secret'),
+    ]) expect(hasSafeCredentialPortGuard(mutation)).toBe(false);
   });
 
   it("rejects disabled, soft-failing or selectively filtered account gates", () => {
