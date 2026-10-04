@@ -1,6 +1,5 @@
 import "server-only";
 import { and, eq } from "drizzle-orm";
-import postgres, { type Sql } from "postgres";
 import { getFreshOptionalAdminSessionUserId } from "@/lib/auth/session-user";
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb, type WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import * as pgSchema from "@/db/schema.postgres";
@@ -13,19 +12,21 @@ import {
   ADMIN_LISTED_VENUE,
   isAdminConnectedAccountScope,
 } from "@/lib/trader/credentials/admin-connected-account-scope";
-import { createPostgresObservationReader } from "./postgres-reader";
+import { createProjectionClient, type ProjectionClient } from "./projection-client";
 import { handleAccountObservationGet, type ObservationReadDependencies } from "./read-handler";
 
-/** Dormant unless an explicit dedicated SELECT-only connection is configured.
+/** Dormant unless the fixed snapshot-only HTTPS transport is explicitly configured.
  * No exchange calls, provisioning, collection startup, secret decryption or DB fallback.
  * Existing WAIA access storage is used only for membership/entitlement/permission reads.
  */
 export function createAccountObservationRouteDependencies() {
+  // Capture before the first session/authorization await, never once per operation.
+  const deadlineMs = Date.now() + 5000;
   let access: Promise<WaiaRuntimeDb> | undefined;
-  let sql: Sql | undefined;
+  let projection: ProjectionClient | undefined;
   let disposed = false;
   const assertOpen = (signal: AbortSignal) => {
-    if (disposed || signal.aborted) throw new Error("ACCOUNT_OBSERVATION_UNAVAILABLE");
+    if (disposed || signal.aborted || Date.now() >= deadlineMs) throw new Error("ACCOUNT_OBSERVATION_UNAVAILABLE");
   };
   const runtime = async (signal: AbortSignal) => {
     assertOpen(signal);
@@ -37,13 +38,25 @@ export function createAccountObservationRouteDependencies() {
   };
   const reader = (signal: AbortSignal) => {
     assertOpen(signal);
-    if (!sql) {
-      const url = process.env.WAIA_ACCOUNT_OBSERVATION_DATABASE_URL?.trim();
-      if (!url) throw new Error("ACCOUNT_OBSERVATION_NOT_CONFIGURED");
-      sql = postgres(url, { max: 1, prepare: false, connect_timeout: 3, idle_timeout: 5,
-        max_lifetime: 60, connection: { statement_timeout: 3000 } });
+    if (!projection) {
+      const keyHex = process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_HMAC_KEY_HEX;
+      if (process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_ENABLED !== "1" ||
+          !keyHex || !/^[0-9a-f]{64}$/.test(keyHex)) throw new Error("ACCOUNT_OBSERVATION_NOT_CONFIGURED");
+      const keyBytes = Uint8Array.from(keyHex.match(/../g)!, x => Number.parseInt(x, 16));
+      try {
+        projection = createProjectionClient({
+          fetch: globalThis.fetch.bind(globalThis), clock: Date.now, deadlineMs,
+          tuple: { audience: "https://observation-reader.waia.life",
+            releaseSha: process.env.WAIA_RELEASE_SHA ?? "",
+            epochId: process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_EPOCH ?? "",
+            keyId: process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_KEY_ID ?? "" },
+          keyBytes,
+          accessClientId: process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_ACCESS_CLIENT_ID ?? "",
+          accessClientSecret: process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_ACCESS_CLIENT_SECRET ?? "",
+        });
+      } finally { keyBytes.fill(0); }
     }
-    return createPostgresObservationReader(sql);
+    return projection;
   };
   const deps: ObservationReadDependencies = {
     async getUserId(signal) { assertOpen(signal); return getFreshOptionalAdminSessionUserId(); },
@@ -83,13 +96,16 @@ export function createAccountObservationRouteDependencies() {
       const row = rows[0];
       return row !== undefined && isAdminConnectedAccountScope(row);
     },
-    async resolveActiveBinding(scope, _userId, signal) { return reader(signal).resolveActiveBinding(scope); },
-    async readLatest(binding, signal) { return reader(signal).readLatest(binding); },
+    async resolveActiveBinding(scope, _userId, signal) {
+      return reader(signal).resolveActiveBinding({ organizationId: scope.organizationId,
+        credentialId: scope.credentialId, exchangeAccountId: scope.exchangeAccountId }, signal);
+    },
+    async readLatest(binding, signal) { return reader(signal).readLatest(binding, signal); },
   };
   return { deps, async dispose() {
     disposed = true;
+    projection?.dispose();
     await Promise.allSettled([
-      sql?.end({ timeout: 1 }),
       access?.then(db => disposeWaiaRuntimeDb(db)),
     ]);
   } };
