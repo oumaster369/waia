@@ -39,6 +39,7 @@ const goodRow = (login: string) => ({
   no_destructive: true,
   reader_no_writes: true,
   forced_rls: true,
+  inventory_execute_only: true,
 });
 
 function pool(login: string, overrides: Record<string, unknown> = {}) {

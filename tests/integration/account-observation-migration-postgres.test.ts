@@ -47,9 +47,36 @@ describe.skipIf(!enabled)("DEE-960 full migration chain and additive upgrade on 
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='dee960_local_owner') THEN
         CREATE ROLE dee960_local_owner NOLOGIN NOSUPERUSER NOBYPASSRLS CREATEROLE;
       END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='waia_account_observation_inventory_owner') THEN
+        CREATE ROLE waia_account_observation_inventory_owner
+          NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='waia_account_observation_inventory') THEN
+        CREATE ROLE waia_account_observation_inventory
+          NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+      END IF;
     END $$;
+    GRANT waia_account_observation_inventory_owner TO dee960_local_owner
+      WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+    GRANT waia_account_observation_inventory TO dee960_local_owner
+      WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
     GRANT CREATE ON DATABASE "${name}" TO dee960_local_owner;
     GRANT USAGE, CREATE ON SCHEMA public TO dee960_local_owner WITH GRANT OPTION;`);
+    expect(await sql`
+      SELECT target.rolname, grantor.rolname AS grantor,
+        membership.admin_option, membership.inherit_option, membership.set_option
+      FROM pg_auth_members membership
+      JOIN pg_roles member ON member.oid = membership.member
+      JOIN pg_roles target ON target.oid = membership.roleid
+      JOIN pg_roles grantor ON grantor.oid = membership.grantor
+      WHERE member.rolname = 'dee960_local_owner'
+        AND target.rolname IN ('waia_account_observation_inventory_owner','waia_account_observation_inventory')
+      ORDER BY target.rolname`).toEqual([
+      { rolname: "waia_account_observation_inventory", grantor: "waia_local_admin",
+        admin_option: true, inherit_option: false, set_option: false },
+      { rolname: "waia_account_observation_inventory_owner", grantor: "waia_local_admin",
+        admin_option: true, inherit_option: false, set_option: false },
+    ]);
     // Bare Postgres auth stubs only. Never used on Supabase or any external database.
     await sql.begin(async tx => {
       await tx.unsafe("SET LOCAL ROLE dee960_local_owner");

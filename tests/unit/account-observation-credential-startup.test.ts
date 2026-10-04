@@ -22,6 +22,7 @@ const required = ["original_session", "supported", "safe_login", "safe_role", "m
 function pool(overrides: Record<string, unknown> = {}) {
   const row: Record<string, unknown> = { login: LOGIN, ...Object.fromEntries(required.map(key => [key, true])),
     can_set: true, no_ciphertext: true, no_destructive: true, reader_no_writes: true, forced_rls: true,
+    inventory_execute_only: true,
     ...overrides };
   const statements: string[] = [];
   const tx = vi.fn(async (chunks: TemplateStringsArray) => {
@@ -74,6 +75,20 @@ describe("credential pool catalog admission (synthetic executor; native SQL prov
     expect(f.statements.slice(0, 4)).toEqual(["SET TRANSACTION READ ONLY", "SET LOCAL statement_timeout = '3000ms'",
       "SET LOCAL lock_timeout = '1000ms'", "SET LOCAL transaction_timeout = '5000ms'"]);
     expect(f.statements).toHaveLength(5);
+  });
+  it("admits only the 0230 revision metadata in the strict credential projection", async () => {
+    const f = pool();
+    await expect(probeObservationCredentialPool(f.sql)).resolves.toBe(LOGIN);
+    const query = f.statements.at(-1)!;
+    expect(query).toContain("'observation_revision'");
+    expect(query).toContain("'configuration_revision'");
+    expect(query).toContain("unnest(p.required)");
+    expect(query).toContain("a.attname = ANY(p.allowed)");
+    expect(query).toContain("'encrypted_payload','payload_key_version','wrapped_dek_key_version','wrapped_dek_key']::text[] AS required");
+    expect(query).toContain("ARRAY['organization_id','credential_id','exchange_account_id']::text[]");
+    expect(query).not.toContain("permission_metadata");
+    expect(query).toContain("'INSERT,UPDATE,REFERENCES'");
+    expect(query).toContain("'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'");
   });
   it.each(required)("refuses false or absent %s evidence", async key => {
     for (const value of [false, undefined, "true"]) {

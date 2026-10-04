@@ -14,7 +14,7 @@ vi.mock("@/lib/trader/account-observation/configured-runtime", () => ({
 }));
 const goodRow = (login: string) => ({ login, original_session: true, supported: true, safe_login: true,
   safe_role: true, can_set: true, exclusive_role: true, no_ciphertext: true, no_destructive: true,
-  reader_no_writes: true, forced_rls: true });
+  reader_no_writes: true, forced_rls: true, inventory_execute_only: true });
 function pool(login: string) {
   const row = goodRow(login); const statements: string[] = [];
   const tx = vi.fn(async (chunks: TemplateStringsArray) => {

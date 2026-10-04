@@ -19,6 +19,7 @@ export async function probeObservationPool(sql: Sql, purpose: ObservationPoolPur
       typeof options.connect_timeout !== "number" || options.connect_timeout < 1 || options.connect_timeout > 3 ||
       typeof options.max_lifetime !== "number" || options.max_lifetime < 1 || options.max_lifetime > 300) fail();
     const role = purpose === "collector" ? "waia_account_observer" : "waia_account_observation_reader";
+    const inventory = "waia_account_observation_inventory";
     const result = await sql.begin(async tx => {
       await tx`SET TRANSACTION READ ONLY`;
       await tx`SET LOCAL statement_timeout = '3000ms'`;
@@ -32,9 +33,40 @@ export async function probeObservationPool(sql: Sql, purpose: ObservationPoolPur
             AND NOT (rolinherit OR rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole OR rolreplication)) AS safe_login,
           EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ${role} AND NOT
             (rolcanlogin OR rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole OR rolreplication)) AS safe_role,
-          pg_has_role(session_user, ${role}, 'SET') AS can_set,
-          NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname NOT IN (session_user, ${role})
-            AND pg_has_role(session_user, oid, 'SET')) AS exclusive_role,
+          pg_has_role(session_user, ${role}, 'SET')
+            AND CASE WHEN ${purpose} = 'collector'
+              THEN pg_has_role(session_user, ${inventory}, 'SET') ELSE true END AS can_set,
+          CASE WHEN ${purpose} = 'collector' THEN
+            NOT EXISTS (SELECT 1 FROM pg_roles extra
+              WHERE extra.rolname NOT IN (session_user, ${role}, ${inventory})
+                AND pg_has_role(session_user, extra.oid, 'SET'))
+            ELSE NOT EXISTS (SELECT 1 FROM pg_roles extra
+              WHERE extra.rolname NOT IN (session_user, ${role})
+                AND pg_has_role(session_user, extra.oid, 'SET'))
+          END AS exclusive_role,
+          CASE WHEN ${purpose} <> 'collector' THEN true ELSE EXISTS (
+            SELECT 1 FROM pg_roles inventory_role
+            WHERE inventory_role.rolname = ${inventory}
+              AND NOT (inventory_role.rolcanlogin OR inventory_role.rolinherit OR inventory_role.rolsuper
+                OR inventory_role.rolbypassrls OR inventory_role.rolcreatedb OR inventory_role.rolcreaterole
+                OR inventory_role.rolreplication)
+              AND NOT EXISTS (SELECT 1 FROM pg_auth_members membership
+                WHERE membership.member = inventory_role.oid)
+              AND NOT (
+                has_table_privilege(inventory_role.oid, 'public.exchange_credentials'::regclass,
+                  'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                OR has_any_column_privilege(inventory_role.oid, 'public.exchange_credentials'::regclass,
+                  'SELECT,INSERT,UPDATE')
+                OR has_table_privilege(inventory_role.oid, 'public.trader_account_collection_state'::regclass,
+                  'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                OR has_any_column_privilege(inventory_role.oid, 'public.trader_account_collection_state'::regclass,
+                  'SELECT,INSERT,UPDATE')
+                OR has_table_privilege(inventory_role.oid, 'public.trader_account_observations'::regclass,
+                  'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                OR has_any_column_privilege(inventory_role.oid, 'public.trader_account_observations'::regclass,
+                  'SELECT,INSERT,UPDATE')
+              )
+          ) END AS inventory_execute_only,
           NOT EXISTS (SELECT 1 FROM unnest(ARRAY[session_user::text, ${role}]) AS r(name)
             CROSS JOIN unnest(ARRAY['encrypted_payload', 'wrapped_dek_key']) AS c(name)
             WHERE has_column_privilege(r.name, 'public.exchange_credentials', c.name, 'SELECT')) AS no_ciphertext,
@@ -55,7 +87,7 @@ export async function probeObservationPool(sql: Sql, purpose: ObservationPoolPur
     const row = result[0];
     if (result.length !== 1 || !row || typeof row.login !== "string" || !row.login ||
       ["original_session", "supported", "safe_login", "safe_role", "can_set", "exclusive_role",
-        "no_ciphertext", "no_destructive", "reader_no_writes", "forced_rls"].some(name => row[name] !== true)) fail();
+        "inventory_execute_only", "no_ciphertext", "no_destructive", "reader_no_writes", "forced_rls"].some(name => row[name] !== true)) fail();
     return row.login;
   } catch { return fail(); }
 }
@@ -98,10 +130,13 @@ export async function probeObservationCredentialPool(sql: Sql): Promise<string> 
         ), protected AS (
           SELECT 'public.exchange_credentials'::regclass AS oid,
             ARRAY['id','organization_id','exchange_account_id','status','observation_read_only',
-              'encrypted_payload','payload_key_version','wrapped_dek_key_version','wrapped_dek_key']::text[] AS allowed
+              'observation_revision','encrypted_payload','payload_key_version','wrapped_dek_key_version','wrapped_dek_key']::text[] AS allowed,
+            ARRAY['id','organization_id','exchange_account_id','status','observation_read_only',
+              'encrypted_payload','payload_key_version','wrapped_dek_key_version','wrapped_dek_key']::text[] AS required
           UNION ALL SELECT 'public.trader_account_collection_state'::regclass,
+            ARRAY['organization_id','credential_id','exchange_account_id','configuration_revision']::text[],
             ARRAY['organization_id','credential_id','exchange_account_id']::text[]
-          UNION ALL SELECT 'public.trader_account_observations'::regclass, ARRAY[]::text[]
+          UNION ALL SELECT 'public.trader_account_observations'::regclass, ARRAY[]::text[], ARRAY[]::text[]
         )
         SELECT session_user::text AS login, current_user = session_user AS original_session,
           current_setting('server_version_num')::int >= 170000 AS supported,
@@ -128,7 +163,7 @@ export async function probeObservationCredentialPool(sql: Sql): Promise<string> 
           AND NOT EXISTS (SELECT 1 FROM scopes s CROSS JOIN protected p
             JOIN pg_attribute a ON a.attrelid = p.oid AND a.attnum > 0 AND NOT a.attisdropped
             WHERE NOT (a.attname = ANY(p.allowed)) AND has_column_privilege(s.oid, p.oid, a.attnum, 'SELECT'))
-          AND NOT EXISTS (SELECT 1 FROM protected p CROSS JOIN LATERAL unnest(p.allowed) AS c(name)
+          AND NOT EXISTS (SELECT 1 FROM protected p CROSS JOIN LATERAL unnest(p.required) AS c(name)
             WHERE NOT has_column_privilege(i.parent_oid, p.oid, c.name, 'SELECT')) AS exact_projection,
           (SELECT count(*) = 2 AND bool_and(c.relrowsecurity AND
             (c.oid <> 'public.trader_account_collection_state'::regclass OR c.relforcerowsecurity))

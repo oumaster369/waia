@@ -1,8 +1,8 @@
 import { buildHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
 // DEE-1135 observation-only PG17 composition. No active profile, basis, allowance or order.
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { mkdtemp, readdir, readFile } from "node:fs/promises";
+import { cpSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -266,9 +266,10 @@ async function heldRuntime(stage: string, settled: () => boolean) {
 async function loginPosture(sql: Sql) {
   return sql`SELECT login.rolname, login.rolcanlogin, login.rolinherit, login.rolsuper, login.rolcreatedb,
     login.rolcreaterole, login.rolreplication, login.rolbypassrls, login.rolconnlimit,
-    (SELECT jsonb_agg(jsonb_build_object('parent',parent.rolname,'admin',m.admin_option,
-      'inherit',m.inherit_option,'set',m.set_option) ORDER BY parent.rolname)
-      FROM pg_auth_members m JOIN pg_roles parent ON parent.oid=m.roleid WHERE m.member=login.oid) AS membership
+    (SELECT jsonb_agg(jsonb_build_object('grantor',grantor.rolname,'parent',parent.rolname,'admin',m.admin_option,
+      'inherit',m.inherit_option,'set',m.set_option) ORDER BY parent.rolname,grantor.rolname)
+      FROM pg_auth_members m JOIN pg_roles parent ON parent.oid=m.roleid
+      JOIN pg_roles grantor ON grantor.oid=m.grantor WHERE m.member=login.oid) AS membership
     FROM pg_roles login WHERE login.rolname IN
     ('waia_account_observer_login','waia_account_observation_reader_login','waia_account_observation_credential_login') ORDER BY login.rolname`;
 }
@@ -334,9 +335,75 @@ describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational
       const folder = "db/migrations_postgres";
       const journal = JSON.parse(readFileSync(`${folder}/meta/_journal.json`, "utf8")) as {
         entries: { idx: number; tag: string; when: number }[] };
-      expect(journal.entries).toHaveLength(230);
-      expect(journal.entries.at(-1)).toMatchObject({ idx: 229, tag: "0229_trader_observation_read_only_credential_v1", when: 1780000000229 });
-      await migrate(db(), { migrationsFolder: folder });
+      expect(journal.entries).toHaveLength(232);
+      expect(journal.entries.at(-2)).toMatchObject({ idx: 230, tag: "0230_trader_observation_consent_revision_grants_v1", when: 1780000000230 });
+      expect(journal.entries.at(-1)).toMatchObject({ idx: 231, tag: "0231_trader_account_observation_spot_inventory_v1", when: 1780000000231 });
+      // Apply the canonical prefix through metadata-grants 0230 with the normal Drizzle migrator.
+      // 0231 is then authenticated as its established synthetic migration actor because the
+      // owner role's membership is cluster-global and may already exist from another test DB.
+      const prefixFolder = await mkdtemp(join(homedir(), ".dee1135-migrations-prefix-"));
+      let actor: Sql | undefined;
+      try {
+        cpSync(folder, prefixFolder, { recursive: true });
+        writeFileSync(join(prefixFolder, "meta/_journal.json"), JSON.stringify({
+          ...(JSON.parse(readFileSync(`${folder}/meta/_journal.json`, "utf8")) as Record<string, unknown>),
+          entries: journal.entries.slice(0, -1),
+        }, null, 2));
+        await migrate(db(), { migrationsFolder: prefixFolder });
+        await owner.sql.unsafe(`DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='dee960_local_owner') THEN
+          CREATE ROLE dee960_local_owner NOLOGIN NOSUPERUSER NOBYPASSRLS CREATEROLE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='waia_account_observation_inventory_owner') THEN
+          CREATE ROLE waia_account_observation_inventory_owner
+            NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='waia_account_observation_inventory') THEN
+          CREATE ROLE waia_account_observation_inventory
+            NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+        END IF;
+      END $$;
+      GRANT waia_account_observation_inventory_owner TO dee960_local_owner
+        WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+      GRANT waia_account_observation_inventory TO dee960_local_owner
+        WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+      GRANT CREATE ON DATABASE "${database}" TO dee960_local_owner;
+      GRANT USAGE, CREATE ON SCHEMA public TO dee960_local_owner WITH GRANT OPTION;
+      ALTER TABLE public.exchange_credentials OWNER TO dee960_local_owner;
+      ALTER TABLE public.trader_account_collection_state OWNER TO dee960_local_owner;
+      GRANT USAGE ON SCHEMA drizzle TO dee960_local_owner;
+      GRANT INSERT ON TABLE drizzle.__drizzle_migrations TO dee960_local_owner;
+      DO $$ DECLARE migration_seq text := pg_get_serial_sequence('drizzle.__drizzle_migrations','id');
+      BEGIN EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE %s TO dee960_local_owner', migration_seq); END $$;
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM pg_authid WHERE rolname='dee960_local_owner'
+          AND (rolcanlogin OR rolpassword IS NOT NULL)) THEN
+          RAISE EXCEPTION 'SYNTHETIC_MIGRATION_ACTOR_MUST_START_NOLOGIN';
+        END IF;
+      END $$;
+      ALTER ROLE dee960_local_owner LOGIN PASSWORD 'local_validation_only';`);
+        try {
+        const actorUrl = new URL(adminUrl);
+        actorUrl.username = "dee960_local_owner";
+        actorUrl.password = "local_validation_only";
+        actor = postgres(actorUrl.toString(), { max: 1, connect_timeout: 3, prepare: false, onnotice: () => {} });
+        expect((await actor`SELECT session_user::text AS login, current_user::text AS role`)[0])
+          .toEqual({ login: "dee960_local_owner", role: "dee960_local_owner" });
+        const migration = readFileSync(`${folder}/0231_trader_account_observation_spot_inventory_v1.sql`, "utf8");
+        await actor.begin(async tx => {
+          for (const statement of migration.split("--> statement-breakpoint")) {
+            if (statement.trim()) await tx.unsafe(statement);
+          }
+          await tx`INSERT INTO drizzle.__drizzle_migrations(hash, created_at)
+            VALUES (${hash(migration)}, ${journal.entries.at(-1)!.when})`;
+        });
+      } finally {
+        await actor?.end({ timeout: 2 });
+        await owner.sql.unsafe("ALTER ROLE dee960_local_owner NOLOGIN PASSWORD NULL");
+      }
+      } finally {
+        await rm(prefixFolder, { recursive: true, force: true });
+      }
       const actual = await owner.sql`SELECT hash,created_at::text AS when FROM drizzle.__drizzle_migrations ORDER BY created_at`;
       expect(actual).toEqual(journal.entries.map(entry => ({ hash: hash(readFileSync(`${folder}/${entry.tag}.sql`)), when: String(entry.when) })));
       receipt("genuine-migration-chain", { database, count: actual.length, entries: actual });
@@ -353,9 +420,16 @@ describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational
       initialPosture = await loginPosture(owner.sql); expect(initialPosture).toHaveLength(3);
       for (const row of initialPosture) {
         const plan = ACCOUNT_OBSERVATION_LOGIN_PLAN.find(entry => entry.loginRole === row.rolname)!;
+        const expectedParents = row.rolname === "waia_account_observer_login"
+          ? ["waia_account_observation_inventory", "waia_account_observer"]
+          : [plan.parentRole];
+        const membership = row.membership as { grantor: string; parent: string; admin: boolean; inherit: boolean; set: boolean }[];
+        expect([...new Set(membership.map(edge => edge.parent))].sort()).toEqual([...expectedParents].sort());
+        expect(membership.length).toBeGreaterThanOrEqual(expectedParents.length);
+        for (const edge of membership) expect(edge).toMatchObject({ admin: false, inherit: false, set: true });
         expect(row).toMatchObject({ rolcanlogin: true, rolinherit: false, rolsuper: false, rolcreatedb: false,
           rolcreaterole: false, rolreplication: false, rolbypassrls: false, rolconnlimit: 2,
-          membership: [{ parent: plan.parentRole, admin: false, inherit: false, set: true }] });
+          membership: row.membership });
       }
       receipt("runtime-login-posture", { mode: freshCi ? "FRESH_CI" : "PRESERVED_LOCAL", rows: initialPosture });
       for (const purpose of ["collector", "reader", "credential"] as const) {
