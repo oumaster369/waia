@@ -589,6 +589,8 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(
     adminIndex.getByRole("columnheader", { name: "Спот USDT · доступно" }),
   ).toBeVisible();
+  await expect(adminIndex.getByRole("columnheader", { name: "UID HTX" })).toBeVisible();
+  await expect(adminIndex.getByText("9988776655", { exact: true })).toBeVisible();
   await expect(adminIndex.getByRole("columnheader", { name: "Фьючерсы · USD" })).toBeVisible();
   await expect(adminIndex.getByText("Капитал HTX: 1000.25 USD")).toBeVisible();
   await expect(adminIndex.getByText("Доступная маржа: 997.25 USD")).toBeVisible();
@@ -630,17 +632,19 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(admin.getByTestId("admin-connected-accounts")).toHaveCount(0);
   await expect(admin.getByText("Local demo cabinet", { exact: true })).toHaveCount(0);
   await expect(admin.getByText("Капитал HTX: 1000.25 USD")).toHaveCount(0);
+  await expect(admin.getByText("9988776655", { exact: true })).toHaveCount(0);
   directoryDenied = false;
   await admin.clock.fastForward(60_000);
   await expect(admin.getByTestId("admin-connected-accounts")).toBeVisible();
   await expect(admin.getByText("Капитал HTX: 1000.25 USD")).toBeVisible();
+  await expect(admin.getByText("9988776655", { exact: true })).toBeVisible();
   await expect(admin.getByText("Доступ отозван. Данные счетов очищены.")).toHaveCount(0);
   await admin.close();
 });
 
 test("account observation admin page does not expose the form anonymously", async ({ page }) => {
   await page.goto("/admin/account-observation");
-  await expect(page.getByRole("heading", { name: "Live HTX account" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Счёт HTX" })).toHaveCount(0);
   await expect(page.getByLabel("Credential record ID (not an API key)")).toHaveCount(0);
 });
 

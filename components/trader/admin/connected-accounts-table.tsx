@@ -10,7 +10,6 @@ import {
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import {
   ACCOUNT_OBSERVATION_STALE_AFTER_MS,
-  ageLabel,
   summarizeFuturesBalance,
   summarizeCabinetObservation,
   type FuturesBalanceSummary,
@@ -24,6 +23,7 @@ import type { ConnectedHtxAccountDto } from "@/lib/trader/credentials/connected-
 
 type RowView = ConnectedHtxAccountDto & {
   observation: "loading" | "waiting" | "ready" | "unavailable";
+  htxUid: string | null;
   usdtFree: string | null;
   usdtLocked: string | null;
   openOrdersCount: number | null;
@@ -35,6 +35,7 @@ type RowView = ConnectedHtxAccountDto & {
 export const ADMIN_CONNECTED_ACCOUNTS_POLL_MS = 60_000;
 
 const EMPTY_OBSERVATION = {
+  htxUid: null,
   usdtFree: null,
   usdtLocked: null,
   openOrdersCount: null,
@@ -43,10 +44,24 @@ const EMPTY_OBSERVATION = {
 } as const;
 
 function freshnessLabel(row: RowView, nowMs: number): string {
-  if (row.observation === "loading") return "Loading…";
-  if (row.observation === "unavailable") return "Unavailable";
-  if (row.observation === "waiting" || row.lastTickMs === null) return "Connecting";
-  return nowMs - row.lastTickMs >= ACCOUNT_OBSERVATION_STALE_AFTER_MS ? "Last tick" : "Live";
+  if (row.observation === "loading") return "Загрузка…";
+  if (row.observation === "unavailable") return "Недоступно";
+  if (row.observation === "waiting" || row.lastTickMs === null) return "Подключение";
+  return nowMs - row.lastTickMs >= ACCOUNT_OBSERVATION_STALE_AFTER_MS
+    ? "Последнее чтение"
+    : "Актуально";
+}
+
+function ageLabelRu(completedAtMs: number, nowMs: number): string {
+  if (!Number.isFinite(completedAtMs) || completedAtMs > nowMs) return "время неизвестно";
+  const seconds = Math.floor((nowMs - completedAtMs) / 1000);
+  if (seconds < 5) return "только что";
+  if (seconds < 60) return `${seconds} с назад`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes === 1) return "1 минуту назад";
+  if (minutes < 60) return `${minutes} мин. назад`;
+  const hours = Math.floor(minutes / 60);
+  return hours === 1 ? "1 час назад" : `${hours} ч назад`;
 }
 
 function drillHref(account: ConnectedHtxAccountDto): string {
@@ -64,7 +79,13 @@ async function readObservationRow(
 ): Promise<
   Pick<
     RowView,
-    "observation" | "usdtFree" | "usdtLocked" | "openOrdersCount" | "lastTickMs" | "futures"
+    | "observation"
+    | "htxUid"
+    | "usdtFree"
+    | "usdtLocked"
+    | "openOrdersCount"
+    | "lastTickMs"
+    | "futures"
   >
 > {
   const empty = EMPTY_OBSERVATION;
@@ -107,6 +128,7 @@ async function readObservationRow(
   const summary = summarizeCabinetObservation(snapshot);
   return {
     observation: "ready",
+    htxUid: snapshot.htxV5?.htxUid ?? null,
     usdtFree: summary.usdtFree,
     usdtLocked: summary.usdtLocked,
     openOrdersCount: summary.openOrdersCount,
@@ -238,12 +260,16 @@ export function ConnectedAccountsTable() {
       if (controller.signal.aborted || ticket !== generation) return;
       if (!result.ok) {
         if (first || result.revoked) {
-          setError(result.revoked ? "Доступ отозван. Данные счетов очищены." : "Не удалось загрузить счета HTX.");
+          setError(
+            result.revoked
+              ? "Доступ отозван. Данные счетов очищены."
+              : "Не удалось загрузить список счетов HTX.",
+          );
           setRefreshNotice(null);
           setRows([]);
           setLoading(false);
         } else {
-          setRefreshNotice("The latest refresh failed. The table still shows the previous read.");
+          setRefreshNotice("Не удалось обновить список. Показаны ранее полученные данные.");
         }
         return;
       }
@@ -301,15 +327,15 @@ export function ConnectedAccountsTable() {
     };
   }, []);
 
-  if (loading) return <AdminLoadingState label="Loading HTX accounts…" />;
+  if (loading) return <AdminLoadingState label="Загрузка счетов HTX…" />;
   if (error) return <AdminErrorState message={error} />;
 
   return (
     <WaiaSurface variant="raised" className="space-y-4 p-5">
       <div>
-        <h1 className="text-xl font-semibold">HTX accounts</h1>
+        <h1 className="text-xl font-semibold">Счета HTX</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Personal AI-TRADER cabinets with an active HTX connection. No PnL is calculated here.
+          Личные счета AI-TRADER с активным подключением HTX. Финансовый результат здесь не рассчитывается.
         </p>
         {refreshNotice ? (
           <p className="text-destructive mt-2 text-sm" role="status">
@@ -318,16 +344,17 @@ export function ConnectedAccountsTable() {
         ) : null}
       </div>
       {rows.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No HTX-connected accounts yet.</p>
+        <p className="text-muted-foreground text-sm">Пока нет счетов с подключённым HTX.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm" data-testid="admin-connected-accounts">
             <thead>
               <tr className="text-muted-foreground border-b">
-                <th className="py-2 pr-3 font-medium">Account</th>
-                <th className="py-2 pr-3 font-medium">HTX</th>
-                <th className="py-2 pr-3 font-medium">Status</th>
-                <th className="py-2 pr-3 font-medium">Age</th>
+                <th className="py-2 pr-3 font-medium">Счёт</th>
+                <th className="py-2 pr-3 font-medium">ID счёта HTX</th>
+                <th className="py-2 pr-3 font-medium">UID HTX</th>
+                <th className="py-2 pr-3 font-medium">Состояние</th>
+                <th className="py-2 pr-3 font-medium">Давность данных</th>
                 <th className="py-2 pr-3 font-medium">Спот USDT · доступно</th>
                 <th className="py-2 pr-3 font-medium">Спот USDT · в ордерах</th>
                 <th className="py-2 pr-3 font-medium">Спот · открытые ордера</th>
@@ -343,9 +370,10 @@ export function ConnectedAccountsTable() {
                     </Link>
                   </td>
                   <td className="py-2 pr-3 font-mono">{row.exchangeAccountId}</td>
+                  <td className="py-2 pr-3 font-mono">{row.htxUid ?? "Не получен"}</td>
                   <td className="py-2 pr-3">{freshnessLabel(row, nowMs)}</td>
                   <td className="py-2 pr-3">
-                    {row.lastTickMs ? ageLabel(row.lastTickMs, nowMs) : "—"}
+                    {row.lastTickMs ? ageLabelRu(row.lastTickMs, nowMs) : "—"}
                   </td>
                   <td className="py-2 pr-3 font-mono">{row.usdtFree ?? "—"}</td>
                   <td className="py-2 pr-3 font-mono">{row.usdtLocked ?? "—"}</td>

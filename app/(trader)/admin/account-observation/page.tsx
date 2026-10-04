@@ -36,15 +36,15 @@ export default function AdminAccountObservationPage() {
       <WaiaSurface variant="raised" className="space-y-3 p-5">
         <p className="text-muted-foreground text-sm">
           <Link className="underline-offset-2 hover:underline" href="/admin/account-observation">
-            All HTX accounts
+            Все счета HTX
           </Link>
         </p>
-        <h1 className="text-xl font-semibold">Live HTX account</h1>
+        <h1 className="text-xl font-semibold">Счёт HTX</h1>
         <p className="text-waia-fg-muted text-sm">
-          The same live observation as the user cabinet. This page does not connect HTX or enable
-          trading.
+          Здесь показан тот же снимок, что и в личном кабинете. Страница не подключается к HTX и не
+          отправляет заявки.
         </p>
-        <p className="font-mono text-sm">HTX {target.exchangeAccountId}</p>
+        <p className="font-mono text-sm">ID счёта HTX: {target.exchangeAccountId}</p>
       </WaiaSurface>
       <ConnectedAccountObservationPanel target={target} mode="admin" />
     </main>

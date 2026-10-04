@@ -196,9 +196,11 @@ describe("admin connected accounts table", () => {
       `/admin/account-observation?organization_id=${account.organizationId}&credential_id=${account.credentialId}&exchange_account_id=${account.exchangeAccountId}`,
     );
     await waitFor(() => expect(screen.getByText("12.5")).toBeInTheDocument());
-    expect(screen.getByText("Live")).toBeInTheDocument();
+    expect(screen.getByText("Актуально")).toBeInTheDocument();
     expect(screen.getByText("1.0")).toBeInTheDocument();
     expect(screen.getByText("73750148")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "UID HTX" })).toBeInTheDocument();
+    expect(screen.getByText("Не получен")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Спот USDT · доступно" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Фьючерсы · USD" })).toBeInTheDocument();
     expect(screen.getByText("Данные фьючерсов не получены")).toBeInTheDocument();
@@ -242,7 +244,8 @@ describe("admin connected accounts table", () => {
     expect(futuresCell).toHaveTextContent("Нереализованный результат HTX: -0.000 USD");
     expect(futuresCell).toHaveTextContent("Устаревший срез");
     expect(futuresCell).not.toHaveTextContent("12.5");
-    expect(screen.getByText("Live")).toBeInTheDocument();
+    expect(screen.getByText("123456")).toBeInTheDocument();
+    expect(screen.getByText("Актуально")).toBeInTheDocument();
   });
 
   it("shows an unavailable futures balance as unavailable and links to details", async () => {
@@ -293,9 +296,9 @@ describe("admin connected accounts table", () => {
       }),
     );
     render(<ConnectedAccountsTable />);
-    await waitFor(() => expect(screen.getByText("Connecting")).toBeInTheDocument());
-    expect(screen.queryByText("Waiting for observation")).not.toBeInTheDocument();
-    expect(screen.queryByText("Organization")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Подключение")).toBeInTheDocument());
+    expect(screen.getByText("Ожидается первый снимок")).toBeInTheDocument();
+    expect(screen.queryByText("Организация")).not.toBeInTheDocument();
   });
 
   it("shows a cabinet that appears on the next poll", async () => {
@@ -315,13 +318,13 @@ describe("admin connected accounts table", () => {
     );
     render(<ConnectedAccountsTable />);
     await waitFor(() =>
-      expect(screen.getByText("No HTX-connected accounts yet.")).toBeInTheDocument(),
+      expect(screen.getByText("Пока нет счетов с подключённым HTX.")).toBeInTheDocument(),
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(ADMIN_CONNECTED_ACCOUNTS_POLL_MS);
     });
     await waitFor(() => expect(screen.getByText("Partner cabinet")).toBeInTheDocument());
-    expect(screen.getByText("Connecting")).toBeInTheDocument();
+    expect(screen.getByText("Подключение")).toBeInTheDocument();
   });
 
   it("clears prior account balances when the row binding changes", async () => {
@@ -394,7 +397,7 @@ describe("admin connected accounts table", () => {
       }),
     );
     render(<ConnectedAccountsTable />);
-    await waitFor(() => expect(screen.getByText("Last tick")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Последнее чтение")).toBeInTheDocument());
   });
 
   it("ages the futures balance after a refresh failure while the saved snapshot remains visible", async () => {
@@ -440,7 +443,7 @@ describe("admin connected accounts table", () => {
     });
     await waitFor(() =>
       expect(
-        screen.getByText("The latest refresh failed. The table still shows the previous read."),
+        screen.getByText("Не удалось обновить список. Показаны ранее полученные данные."),
       ).toBeInTheDocument(),
     );
     expect(screen.getByText(/Срез ·/)).toBeInTheDocument();
@@ -479,11 +482,11 @@ describe("admin connected accounts table", () => {
     });
     await waitFor(() =>
       expect(
-        screen.getByText("The latest refresh failed. The table still shows the previous read."),
+        screen.getByText("Не удалось обновить список. Показаны ранее полученные данные."),
       ).toBeInTheDocument(),
     );
     expect(screen.getByText("Partner cabinet")).toBeInTheDocument();
-    expect(screen.getByText("Connecting")).toBeInTheDocument();
+    expect(screen.getByText("Подключение")).toBeInTheDocument();
   });
 
   it("clears the refresh notice after the next successful read", async () => {
@@ -511,7 +514,7 @@ describe("admin connected accounts table", () => {
     });
     await waitFor(() =>
       expect(
-        screen.getByText("The latest refresh failed. The table still shows the previous read."),
+        screen.getByText("Не удалось обновить список. Показаны ранее полученные данные."),
       ).toBeInTheDocument(),
     );
     await act(async () => {
@@ -519,7 +522,7 @@ describe("admin connected accounts table", () => {
     });
     await waitFor(() =>
       expect(
-        screen.queryByText("The latest refresh failed. The table still shows the previous read."),
+        screen.queryByText("Не удалось обновить список. Показаны ранее полученные данные."),
       ).not.toBeInTheDocument(),
     );
     expect(screen.getByText("Partner cabinet")).toBeInTheDocument();
@@ -562,6 +565,7 @@ describe("admin connected accounts table", () => {
       expect(screen.getByText("Partner cabinet")).toBeInTheDocument();
       expect(screen.getByText("12.5")).toBeInTheDocument();
       expect(screen.getByText(account.exchangeAccountId)).toBeInTheDocument();
+      expect(screen.getByText("123456")).toBeInTheDocument();
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(ADMIN_CONNECTED_ACCOUNTS_POLL_MS);
@@ -573,6 +577,7 @@ describe("admin connected accounts table", () => {
       expect(screen.queryByText("100.25 USD")).not.toBeInTheDocument();
       expect(screen.queryByText("12.5")).not.toBeInTheDocument();
       expect(screen.queryByText(account.exchangeAccountId)).not.toBeInTheDocument();
+      expect(screen.queryByText("123456")).not.toBeInTheDocument();
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(ADMIN_CONNECTED_ACCOUNTS_POLL_MS);
@@ -580,6 +585,7 @@ describe("admin connected accounts table", () => {
       await waitFor(() => expect(screen.getByText("Partner cabinet")).toBeInTheDocument());
       expect(screen.getByText("100.25 USD")).toBeInTheDocument();
       expect(screen.getByText("12.5")).toBeInTheDocument();
+      expect(screen.getByText("123456")).toBeInTheDocument();
     },
   );
 
@@ -620,13 +626,14 @@ describe("admin connected accounts table", () => {
       });
       await waitFor(() =>
         expect(
-          screen.getByText("The latest refresh failed. The table still shows the previous read."),
+          screen.getByText("Не удалось обновить список. Показаны ранее полученные данные."),
         ).toBeInTheDocument(),
       );
       expect(screen.getByText("Partner cabinet")).toBeInTheDocument();
       expect(screen.getByText("100.25 USD")).toBeInTheDocument();
       expect(screen.getByText("12.5")).toBeInTheDocument();
       expect(screen.getByText(account.exchangeAccountId)).toBeInTheDocument();
+      expect(screen.getByText("123456")).toBeInTheDocument();
     },
   );
 
@@ -660,6 +667,7 @@ describe("admin connected accounts table", () => {
       expect(snapshotFetch).not.toHaveBeenCalled();
       expect(screen.queryByText("12.5")).not.toBeInTheDocument();
       expect(screen.queryByText("13.5")).not.toBeInTheDocument();
+      expect(screen.getByText("Не получен")).toBeInTheDocument();
     },
   );
 
@@ -698,6 +706,7 @@ describe("admin connected accounts table", () => {
       );
       expect(screen.queryByText("12.5")).not.toBeInTheDocument();
       expect(screen.queryByText("13.5")).not.toBeInTheDocument();
+      expect(screen.getByText("Не получен")).toBeInTheDocument();
     },
   );
 
@@ -751,6 +760,7 @@ describe("admin connected accounts table", () => {
     expect(screen.queryByText("Partner cabinet")).not.toBeInTheDocument();
     expect(screen.queryByText("12.5")).not.toBeInTheDocument();
     expect(screen.queryByText(account.exchangeAccountId)).not.toBeInTheDocument();
+    expect(screen.queryByText("123456")).not.toBeInTheDocument();
     expect(screen.getByText("Доступ отозван. Данные счетов очищены.")).toBeInTheDocument();
 
     await act(async () => {
@@ -759,6 +769,7 @@ describe("admin connected accounts table", () => {
     await waitFor(() => expect(screen.getByText("Partner cabinet")).toBeInTheDocument());
     expect(screen.queryByText("12.5")).not.toBeInTheDocument();
     expect(screen.queryByText("13.5")).not.toBeInTheDocument();
+    expect(screen.getByText("Не получен")).toBeInTheDocument();
     expect(screen.getByText("Ожидается первый снимок")).toBeInTheDocument();
   });
 });
