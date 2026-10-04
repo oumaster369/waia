@@ -7,6 +7,7 @@ import type { ObservationBinding, ObservationClock, ObservationReadError, HtxV5A
   HtxV5RowsObservation, HtxV5ValueObservation } from "../types";
 import { HTX_V5_READ_BUDGET_MS } from "../types";
 import { observationBindingSchema, sameObservationBinding } from "../validation";
+import type { HtxExpectedPermission } from "../htx-read-admission";
 import { createHtxV5ReadTransport, type HtxV5ReadResponse, type HtxV5ReadTransport } from "./htx-v5-read-transport";
 import {
   parseHtxV5AlgoOrders, parseHtxV5AssetMode, parseHtxV5Balance, parseHtxV5Fills,
@@ -36,6 +37,7 @@ type ReaderInput = Readonly<{
   timeoutMs: number;
   maxResponseBytes: number;
   expectedHtxUid?: string;
+  expectedPermission?: HtxExpectedPermission;
   contracts?: readonly string[];
   authorizeCurrent(binding: ObservationBinding, signal: AbortSignal): Promise<boolean>;
 }>;
@@ -62,7 +64,7 @@ function ownConfig(value: unknown): Record<string, unknown> {
     if (typeof rawKey !== "string") fail("INVALID_RESPONSE");
     const key = rawKey as string;
     if (!["credential", "clock", "fetchImpl", "timeoutMs", "maxResponseBytes",
-      "expectedHtxUid", "contracts", "authorizeCurrent"].includes(key)) fail("INVALID_RESPONSE");
+      "expectedHtxUid", "expectedPermission", "contracts", "authorizeCurrent"].includes(key)) fail("INVALID_RESPONSE");
     const descriptor = (descriptors as Record<string, PropertyDescriptor>)[key];
     if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) fail("INVALID_RESPONSE");
     result[key] = descriptor.value;
@@ -118,6 +120,11 @@ export function createHtxV5ObservationReader(input: ReaderInput): HtxV5Observati
   const timeoutMs = config.timeoutMs as number;
   const maxResponseBytes = config.maxResponseBytes as number;
   const authorizeCurrent = config.authorizeCurrent as ReaderInput["authorizeCurrent"];
+  const rawExpectedPermission = config.expectedPermission;
+  if (rawExpectedPermission !== undefined && rawExpectedPermission !== "readOnly" &&
+      rawExpectedPermission !== "readOnly,trade") return fail("INVALID_RESPONSE");
+  const expectedPermission: HtxExpectedPermission = rawExpectedPermission === undefined
+    ? "readOnly" : rawExpectedPermission;
   let expectedHtxUid: string | undefined;
   if (config.expectedHtxUid !== undefined) {
     if (typeof config.expectedHtxUid !== "string" || !UID.test(config.expectedHtxUid)) return fail("INVALID_RESPONSE");
@@ -195,7 +202,7 @@ export function createHtxV5ObservationReader(input: ReaderInput): HtxV5Observati
       if (remainingMs < 100) fail("TIMEOUT");
       const requestExpectedUid = expectedHtxUid ?? firstIdentity?.htxUid;
       const transport = createHtxV5ReadTransport({ credential, clock, fetchImpl, timeoutMs: Math.min(timeoutMs, remainingMs),
-        maxResponseBytes, ...(requestExpectedUid ? { expectedHtxUid: requestExpectedUid } : {}), authorizeCurrent });
+        maxResponseBytes, ...(requestExpectedUid ? { expectedHtxUid: requestExpectedUid } : {}), expectedPermission, authorizeCurrent });
       transports.add(transport);
       let completed = started;
       let returnPromptly = false;
@@ -206,7 +213,7 @@ export function createHtxV5ObservationReader(input: ReaderInput): HtxV5Observati
         completed = now();
         responseTime(response, started, completed, lastIdentityCheck);
         const identity = response.identity;
-        if (!sameObservationBinding(identity.binding, binding) || identity.permission !== "readOnly" ||
+        if (!sameObservationBinding(identity.binding, binding) || identity.permission !== expectedPermission ||
           !/^[0-9a-f]{64}$/.test(identity.accessKeySha256) || identity.accessKeySha256 !== expectedKeyDigest ||
           !UID.test(identity.htxUid) ||
           (expectedHtxUid !== undefined && identity.htxUid !== expectedHtxUid) ||

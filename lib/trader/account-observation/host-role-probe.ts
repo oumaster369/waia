@@ -70,8 +70,9 @@ const refuseCredential = (): never => { throw new Error("OBSERVATION_CREDENTIAL_
  * are excluded as in the provisioner: CONNECT and TEMP are not data authority here;
  * effective permanent CREATE is checked separately. Parent projection grants are expected.
  */
-export async function probeObservationCredentialPool(sql: Sql): Promise<string> {
+export async function probeObservationCredentialPool(sql: Sql, existingKeyReadConsent = false): Promise<string> {
   try {
+    if (typeof existingKeyReadConsent !== "boolean") refuseCredential();
     const options = sql?.options;
     if (typeof sql !== "function" || typeof sql.begin !== "function" || !options ||
       options.prepare !== false || !Number.isSafeInteger(options.max) || options.max < 1 || options.max > 2 ||
@@ -98,9 +99,11 @@ export async function probeObservationCredentialPool(sql: Sql): Promise<string> 
         ), protected AS (
           SELECT 'public.exchange_credentials'::regclass AS oid,
             ARRAY['id','organization_id','exchange_account_id','status','observation_read_only',
-              'encrypted_payload','payload_key_version','wrapped_dek_key_version','wrapped_dek_key']::text[] AS allowed
+              'encrypted_payload','payload_key_version','wrapped_dek_key_version','wrapped_dek_key']::text[]
+              || ARRAY['observation_revision']::text[] AS allowed
           UNION ALL SELECT 'public.trader_account_collection_state'::regclass,
             ARRAY['organization_id','credential_id','exchange_account_id']::text[]
+              || ARRAY['configuration_revision']::text[]
           UNION ALL SELECT 'public.trader_account_observations'::regclass, ARRAY[]::text[]
         )
         SELECT session_user::text AS login, current_user = session_user AS original_session,
@@ -129,7 +132,8 @@ export async function probeObservationCredentialPool(sql: Sql): Promise<string> 
             JOIN pg_attribute a ON a.attrelid = p.oid AND a.attnum > 0 AND NOT a.attisdropped
             WHERE NOT (a.attname = ANY(p.allowed)) AND has_column_privilege(s.oid, p.oid, a.attnum, 'SELECT'))
           AND NOT EXISTS (SELECT 1 FROM protected p CROSS JOIN LATERAL unnest(p.allowed) AS c(name)
-            WHERE NOT has_column_privilege(i.parent_oid, p.oid, c.name, 'SELECT')) AS exact_projection,
+            WHERE (${existingKeyReadConsent} OR c.name NOT IN ('observation_revision', 'configuration_revision'))
+              AND NOT has_column_privilege(i.parent_oid, p.oid, c.name, 'SELECT')) AS exact_projection,
           (SELECT count(*) = 2 AND bool_and(c.relrowsecurity AND
             (c.oid <> 'public.trader_account_collection_state'::regclass OR c.relforcerowsecurity))
             FROM pg_class c WHERE c.oid IN ('public.exchange_credentials'::regclass,

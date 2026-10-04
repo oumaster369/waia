@@ -102,6 +102,26 @@ describe("explicit recurring PostgreSQL observation composition", () => {
       }),
     ).toThrow();
   });
+  it("keeps legacy revisions unchanged without an existing-key consent and binds a valid consent ID", () => {
+    const legacy = createObservationConfiguration(parameters);
+    const consentId = "55555555-5555-4555-8555-555555555555";
+    const consent = createObservationConfiguration({ ...parameters, existingKeyReadConsentId: consentId });
+
+    expect(legacy.revision).toBe(
+      "sha256:" + createHash("sha256").update(JSON.stringify(parameters)).digest("hex"),
+    );
+    expect(legacy).not.toHaveProperty("existingKeyReadConsentId");
+    expect(consent.existingKeyReadConsentId).toBe(consentId);
+    expect(consent.revision).not.toBe(legacy.revision);
+    expect(() => createObservationConfiguration({
+      ...parameters,
+      existingKeyReadConsentId: "not-a-uuid",
+    })).toThrow();
+    expect(() => createObservationConfiguration({
+      ...parameters, leaseTtlMs: 3600000, existingKeyReadConsentId: consentId,
+      htxDerivativesFamilies: ["usdt_cross_shared"],
+    })).toThrow("existing-key consent does not authorize legacy derivatives readers");
+  });
   it("binds an immutable explicit derivatives family allowlist while preserving the legacy spot digest", () => {
     const inputFamilies: HtxDerivativesAccountFamily[] = ["usdt_cross_shared", "coin_perpetual"];
     const configured = createObservationConfiguration({

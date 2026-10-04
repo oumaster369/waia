@@ -173,7 +173,9 @@ export function createConfiguredHtxObservationRuntime(
       },
     );
   };
-  const template = fixed[0];
+  // Consent is per exact operator assignment and must never flow through the
+  // self-service template path, even when that assignment is first in the list.
+  const template = fixed.find((item) => !item.config.existingKeyReadConsentId);
   const ensureStore = (binding: ObservationBinding) => {
     const id = key(binding);
     const assignment =
@@ -348,7 +350,8 @@ export function createConfiguredHtxObservationRuntime(
                   fetchImpl,
                   timeoutMs: readerOptions.readTimeoutMs,
                   maxResponseBytes: readerOptions.maxResponseBytes,
-                  requireReadOnlyPermission: Boolean(config.htxDerivativesFamilies?.length),
+                  requireReadOnlyPermission: !config.existingKeyReadConsentId,
+                  expectedPermission: config.existingKeyReadConsentId ? "readOnly,trade" : "readOnly",
                   authorizeCurrent: source.authorizeOpen,
                 });
                 admissions.add(admission);
@@ -375,6 +378,7 @@ export function createConfiguredHtxObservationRuntime(
                     timeoutMs: HTX_V5_READ_BUDGET_MS,
                     maxResponseBytes: readerOptions.maxResponseBytes,
                     ...(config.htxV5.expectedHtxUid ? { expectedHtxUid: config.htxV5.expectedHtxUid } : {}),
+                    expectedPermission: config.existingKeyReadConsentId ? "readOnly,trade" : "readOnly",
                     ...(config.htxV5.fillContracts ? { contracts: config.htxV5.fillContracts } : {}),
                     authorizeCurrent: source.authorizeOpen,
                   });

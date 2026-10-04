@@ -2,7 +2,7 @@
 integrationIssue: DEE-1231
 integrationTitle: "HTX V5 read-only account-observation contract"
 branch: dee-1231-htx-v5-readonly
-riskTier: T2
+riskTier: T3
 prPolicy: one-integration-pr
 executionSurfaces: [local]
 requiredValidation: [targeted-unit, native-postgres, mounted-e2e, lint, typecheck, build]
@@ -31,6 +31,41 @@ provenance:
 ---
 
 # DEE-1231: HTX V5 read-only contract slice
+
+## Human option 2: existing keys, observation only (October 4)
+
+The Human selected use of the already connected credentials for fixed read operations,
+then explicitly prohibited all trading and any interference with Grok's active executor.
+An operator-approved exact manifest/release digest may bind `existingKeyReadConsentId`
+to one full assignment (organization, credential ID, account, credential revision and
+configuration revision). The ID by itself is not authorization. It is never inherited
+by self-service inventory. Replacement or stored permission changes advance the
+database credential revision; config changes fence existing leases and projections.
+Removing a deployed consent requires configuration/state coordination and process drain,
+not merely editing a file while an old process continues running.
+
+The stored `observation_read_only` bit remains mandatory before decryption. It describes
+the canonical stored read-purpose policy, not proof of the actual exchange key's scopes.
+The consented path additionally matches both revisions in that same database query.
+Fresh venue metadata must then match the pinned `readOnly,trade` permission before and
+after private V5 GETs; no-consent V5 and composed spot defaults require `readOnly`.
+Unknown scopes and changes away from the expected permission fail closed. This is not
+a historical guarantee about unobserved permission changes between polls. The credential
+itself still has trading authority; the observation code exposes only fixed read routes.
+Legacy derivatives readers are excluded from existing-key consent. No orders, cancels,
+stop edits, transfers, account-mode changes, execution flags or second executor are added.
+
+Two additional metadata-column grants allow the exact pre-decryption query. Their SQL
+is currently a LOCAL validation draft at
+`scripts/postgres-validation/fixtures/observation-existing-key-consent-draft.sql`.
+It is not journaled and must not be applied to production. Canonical numbering and
+rollout must be coordinated with the deferred PR759/0230; applied migration0229 is unchanged.
+Strict read-only mode remains compatible before/after these additive grants. Consent mode
+refuses startup if either required metadata-column grant is missing.
+
+Local PostgreSQL and synthetic-HTTP proof do not establish real-key/native account
+coverage, cadence or deployment acceptance. This package remains draft and unactivated,
+pending canonical privilege rollout, whole-PR/exact-head checks and Human T3 admission.
 
 ## Goal
 

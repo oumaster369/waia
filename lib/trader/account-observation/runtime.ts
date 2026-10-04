@@ -33,6 +33,7 @@ const configurationSchema = z
     readTimeoutMs: z.number().int().min(100).max(60000),
     leaseTtlMs: z.number().int().min(1000).max(3600000),
     htxCoverage: htxObservationCoverageSchema.optional(),
+    existingKeyReadConsentId: z.string().uuid().optional(),
     htxDerivativesFamilies: z
       .array(z.enum(HTX_DERIVATIVES_ACCOUNT_FAMILIES))
       .min(1)
@@ -80,6 +81,11 @@ export function createObservationConfiguration(
   input: Omit<ObservationConfig, "revision">,
 ): ObservationConfig {
   const config = configurationSchema.parse(input);
+  // The explicit existing-key authorization covers the fixed spot/V5 GET owners.
+  // Legacy derivatives readers retain their original exact read-only admission.
+  if (config.existingKeyReadConsentId && config.htxDerivativesFamilies?.length) {
+    throw new Error("existing-key consent does not authorize legacy derivatives readers");
+  }
   if (config.htxV5 && (!config.htxV5.enabled &&
       (config.htxV5.fillContracts !== undefined || config.htxV5.expectedHtxUid !== undefined) ||
     new Set(config.htxV5.fillContracts ?? []).size !== (config.htxV5.fillContracts?.length ?? 0))) {

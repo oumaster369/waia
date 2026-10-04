@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { types } from "node:util";
 import { buildSignedQueryString, formatHtxTimestamp } from "@/lib/trader/connectors/htx/signing";
 import { AccountObservationReadFailure } from "../service";
-import { createHtxReadAdmission, type HtxReadIdentityEvidence } from "../htx-read-admission";
+import { createHtxReadAdmission, type HtxExpectedPermission, type HtxReadIdentityEvidence } from "../htx-read-admission";
 import type { HtxObservationCredentialHandle } from "../htx-reader-opener";
 import type { ObservationBinding, ObservationClock } from "../types";
 import { observationBindingSchema, sameObservationBinding } from "../validation";
@@ -69,6 +69,7 @@ type TransportInput = Readonly<{
   timeoutMs: number;
   maxResponseBytes: number;
   expectedHtxUid?: string;
+  expectedPermission?: HtxExpectedPermission;
   /** Database/revision currentness only. Venue identity comes from the private admission owner. */
   authorizeCurrent(binding: ObservationBinding, signal: AbortSignal): Promise<boolean>;
 }>;
@@ -81,6 +82,7 @@ function snapshotConfig(value: unknown): Record<string, unknown> {
     "timeoutMs",
     "maxResponseBytes",
     "expectedHtxUid",
+    "expectedPermission",
     "authorizeCurrent",
   ];
   if (value === null || typeof value !== "object" || types.isProxy(value) || Array.isArray(value))
@@ -159,6 +161,9 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
       return fail("INVALID_RESPONSE");
     expectedHtxUid = config.expectedHtxUid;
   }
+  const expectedPermission = config.expectedPermission ?? "readOnly";
+  if (expectedPermission !== "readOnly" && expectedPermission !== "readOnly,trade")
+    return fail("INVALID_RESPONSE");
   if (
     !credential ||
     typeof credential !== "object" ||
@@ -210,7 +215,7 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
     fetchImpl,
     timeoutMs,
     maxResponseBytes,
-    requireReadOnlyPermission: true,
+    expectedPermission,
     authorizeCurrent,
   });
 
@@ -269,8 +274,8 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
       after.accessKeySha256 !== accessKeySha256 ||
       before.htxUid !== after.htxUid ||
       (expectedHtxUid !== undefined && before.htxUid !== expectedHtxUid) ||
-      before.permission !== "readOnly" ||
-      after.permission !== "readOnly" ||
+      before.permission !== expectedPermission ||
+      after.permission !== expectedPermission ||
       !Number.isSafeInteger(before.checkedAt) ||
       !Number.isSafeInteger(after.checkedAt) ||
       before.checkedAt < 0 ||
@@ -297,7 +302,7 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
     if (
       !sameObservationBinding(evidence.binding, binding) ||
       evidence.accessKeySha256 !== accessKeySha256 ||
-      evidence.permission !== "readOnly" ||
+      evidence.permission !== expectedPermission ||
       (expectedHtxUid !== undefined && evidence.htxUid !== expectedHtxUid) ||
       !Number.isSafeInteger(evidence.checkedAt) ||
       evidence.checkedAt < 0 ||

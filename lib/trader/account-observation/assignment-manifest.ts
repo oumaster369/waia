@@ -41,6 +41,7 @@ const assignmentSchema = z
       .max(256)
       .regex(/^[1-9]\d*$/),
     configurationRevision: z.string().min(1).max(256),
+    existingKeyReadConsentId: z.string().uuid().optional(),
     symbols: z
       .array(z.string().regex(/^[A-Z0-9]{2,32}$/))
       .min(1)
@@ -171,6 +172,9 @@ export function parseAccountObservationAssignmentManifest(
         readTimeoutMs: item.readTimeoutMs,
         leaseTtlMs: item.leaseTtlMs,
         htxCoverage: { ...readerLimits, host: body.host },
+        ...(item.existingKeyReadConsentId
+          ? { existingKeyReadConsentId: item.existingKeyReadConsentId }
+          : {}),
         ...(item.htxDerivativesFamilies
           ? { htxDerivativesFamilies: item.htxDerivativesFamilies }
           : {}),

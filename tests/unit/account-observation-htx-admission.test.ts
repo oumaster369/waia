@@ -26,7 +26,7 @@ function payload(path: string): unknown {
 }
 function setup(
   change?: (path: string, value: unknown) => unknown,
-  options?: { requireReadOnlyPermission?: boolean },
+  options?: { requireReadOnlyPermission?: boolean; expectedPermission?: "readOnly" | "readOnly,trade" },
 ) {
   const fetchImpl = vi.fn<typeof fetch>(async (url) => {
     const path = new URL(String(url)).pathname;
@@ -42,6 +42,7 @@ function setup(
     timeoutMs: number;
     maxResponseBytes: number;
     requireReadOnlyPermission?: boolean;
+    expectedPermission?: "readOnly" | "readOnly,trade";
     authorizeCurrent: typeof authorizeCurrent;
   } = {
     credential,
@@ -54,6 +55,9 @@ function setup(
   };
   if (options && Object.hasOwn(options, "requireReadOnlyPermission")) {
     input.requireReadOnlyPermission = options.requireReadOnlyPermission;
+  }
+  if (options && Object.hasOwn(options, "expectedPermission")) {
+    input.expectedPermission = options.expectedPermission;
   }
   const admission = createHtxReadAdmission(input);
   return {
@@ -284,6 +288,31 @@ describe("fresh exact-key read-only HTX admission, synthetic keys and mock fetch
     expect(() =>
       setup(undefined, { requireReadOnlyPermission: "true" as unknown as boolean }),
     ).toThrow("PERMISSION_DENIED");
+  });
+  it("requires an exact canonical permission when requested and refuses contradictory policy before I/O", async () => {
+    const trade = (path: string, value: unknown) => path === "/v2/user/api-key"
+      ? { code: 200, data: [{ accessKey: apiKey, status: "normal", permission: "readOnly,trade" }] }
+      : value;
+    const f = setup(trade, { expectedPermission: "readOnly,trade" });
+    expect((await f.admission.verifyReadIdentity(binding, digest, signal())).permission).toBe("readOnly,trade");
+    expect(f.fetchImpl.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+    f.admission.dispose();
+
+    const mismatch = setup(undefined, { expectedPermission: "readOnly,trade" });
+    await expect(mismatch.check()).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+    mismatch.admission.dispose();
+    expect(() => setup(undefined, { expectedPermission: "readOnly,trade", requireReadOnlyPermission: true }))
+      .toThrow("PERMISSION_DENIED");
+  });
+  it("normalizes permission token order and case before exact comparison", async () => {
+    const f = setup((path, value) => path === "/v2/user/api-key"
+      ? { code: 200, data: [{ accessKey: apiKey, status: "normal", permission: "trade, READONLY" }] }
+      : value, { expectedPermission: "readOnly,trade" });
+    expect((await f.admission.verifyReadIdentity(binding, digest, signal())).permission).toBe("readOnly,trade");
+    f.admission.dispose();
+  });
+  it("rejects a malformed exact-permission option before metadata I/O", () => {
+    expect(() => setup(undefined, { expectedPermission: "trade" as never })).toThrow("PERMISSION_DENIED");
   });
   it("accepts the documented API-key envelope and metadata fields for the exact synthetic key", async () => {
     // https://huobiapi.github.io/docs/spot/v1/en/#api-key-query; synthetic identities only.

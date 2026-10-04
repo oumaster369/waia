@@ -339,6 +339,76 @@ describe("configured observation runtime, real local composition with mock persi
       "/linear-swap-api/v1/swap_cross_account_info", "/linear-swap-api/v1/swap_cross_position_info",
     ]);
   });
+  it("retains exact consented config while inventory uses only a no-consent template", async () => {
+    const f = setup();
+    const { revision: _revision, ...parameters } = f.item.config;
+    const consentId = "55555555-5555-4555-8555-555555555555";
+    const consentConfig = createObservationConfiguration({ ...parameters, existingKeyReadConsentId: consentId });
+    const consented = { ...f.item, config: consentConfig,
+      binding: { ...f.item.binding, configurationRevision: consentConfig.revision } };
+    const template = assignment("124", "3");
+    const inventoryBinding: ObservationBinding = {
+      ...template.binding,
+      credentialId: "00000000-0000-4000-8000-000000000004",
+      exchangeAccountId: "789",
+    };
+    f.input.configured = [consented, template];
+    const inventoryRows = [
+      { organization_id: f.item.binding.organizationId, credential_id: "00000000-0000-4000-8000-000000000006",
+        exchange_account_id: "456", credential_revision: "1",
+        configuration_revision: consentConfig.revision, symbols: ["BTCUSDT"] },
+      { organization_id: f.item.binding.organizationId, credential_id: inventoryBinding.credentialId,
+        exchange_account_id: inventoryBinding.exchangeAccountId, credential_revision: "1",
+        configuration_revision: template.config.revision, symbols: ["BTCUSDT"] },
+    ];
+    f.input.collectorSql = { begin: async (run: (tx: unknown) => Promise<unknown>) => run(
+      Object.assign(async () => inventoryRows, { unsafe: async () => undefined })) } as never;
+    const keys = new Map([
+      [consented.binding.credentialId, "synthetic-key-consented"],
+      [template.binding.credentialId, "synthetic-key-template"],
+      [inventoryBinding.credentialId, "synthetic-key-inventory"],
+    ]);
+    const getCredentials = vi.fn(async (_scope: unknown, credentialId: string) => ({
+      apiKey: keys.get(credentialId)!, apiSecret: "synthetic-secret",
+    }));
+    f.input.protectedCredentialService = { getDecryptedCredentials: getCredentials };
+    const resolved = [consented.binding, template.binding, inventoryBinding];
+    ports.resolveActiveBinding.mockImplementation(async (scope: Partial<ObservationBinding>) =>
+      resolved.find(binding => binding.organizationId === scope.organizationId &&
+        binding.credentialId === scope.credentialId && binding.exchangeAccountId === scope.exchangeAccountId) ?? null);
+    const accountByKey = new Map([
+      ["synthetic-key-consented", 123],
+      ["synthetic-key-template", 124],
+      ["synthetic-key-inventory", 789],
+    ]);
+    f.fetchImpl.mockImplementation(async (url) => {
+      const target = new URL(String(url));
+      const accessKey = target.searchParams.get("AccessKeyId") ?? "";
+      const account = accountByKey.get(accessKey) ?? 123;
+      if (target.pathname === "/v1/account/accounts") return Response.json({ status: "ok",
+        data: [{ id: account, type: "spot", state: "working" }] });
+      if (target.pathname === "/v2/user/uid") return Response.json({ code: 200, data: account + 1000 });
+      if (target.pathname === "/v2/user/api-key") return Response.json({ code: 200,
+        data: [{ accessKey, status: "normal", permission: accessKey === "synthetic-key-consented"
+          ? "readOnly,trade" : "readOnly" }] });
+      return Response.json({ status: "ok", data: target.pathname.endsWith("/balance")
+        ? { id: account, type: "spot", state: "working", list: [] } : [] });
+    });
+
+    const stop = new AbortController();
+    const work = createConfiguredHtxObservationRuntime(f.input).run(stop.signal);
+    await vi.advanceTimersByTimeAsync(0);
+    stop.abort();
+    await work;
+
+    const committedBindings = ports.commitIfCurrent.mock.calls.map(([value]) => value.observation.binding);
+    expect(committedBindings.map(binding => binding.exchangeAccountId).sort()).toEqual(["123", "124", "789"]);
+    expect(committedBindings.find(binding => binding.exchangeAccountId === "123")).toEqual(consented.binding);
+    expect(committedBindings.some(binding => binding.exchangeAccountId === "456")).toBe(false);
+    expect(getCredentials.mock.calls.map(([, credentialId]) => credentialId).sort()).toEqual(
+      [...keys.keys()].sort(),
+    );
+  });
   it("does not let an extra verifier grant a derivatives read for a trading key", async () => {
     const f = setup();
     f.input.configured = [withDerivatives(f.item)];

@@ -9,10 +9,11 @@ import type { MasterKeyProvider } from "@/lib/trader/security/master-key-provide
 export const ACCOUNT_OBSERVATION_CREDENTIAL_ROLE = "waia_account_observation_credential";
 
 /**
- * The exact column list migration 0210 grants. Never `SELECT *`: the generic credential
+ * The legacy read-only projection from 0210/0229. Never `SELECT *`: the generic credential
  * repository's unprojected read is an implementation shape, not an authority requirement, and
  * this role has no privilege on `venue`, `api_key_masked`, `permission_metadata`,
- * `observation_revision`, `created_at`, `updated_at` or `revoked_at`.
+ * `created_at`, `updated_at` or `revoked_at`. Explicit existing-key consent uses a separate
+ * query with narrowly granted credential and configuration revisions.
  */
 export const ACCOUNT_OBSERVATION_CREDENTIAL_COLUMNS = Object.freeze([
   "id",
@@ -54,6 +55,12 @@ export type ObservationCredentialAssignment = Readonly<{
   organizationId: string;
   credentialId: string;
   exchangeAccountId: string;
+  /** Operator-approved manifest only; an identifier is not itself Human authorization. */
+  existingKeyReadConsent?: Readonly<{
+    consentId: string;
+    credentialRevision: string;
+    configurationRevision: string;
+  }>;
 }>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -65,6 +72,8 @@ type CredentialProjection = {
   exchange_account_id: string;
   status: string;
   observation_read_only: boolean;
+  observation_revision?: string;
+  configuration_revision?: string;
   encrypted_payload: string | null;
   payload_key_version: string | null;
   wrapped_dek_key_version: string | null;
@@ -128,7 +137,13 @@ export function createObservationCredentialReader(
       !assignment ||
       !UUID.test(assignment.organizationId ?? "") ||
       !UUID.test(assignment.credentialId ?? "") ||
-      !ACCOUNT.test(assignment.exchangeAccountId ?? "")
+      !ACCOUNT.test(assignment.exchangeAccountId ?? "") ||
+      (assignment.existingKeyReadConsent !== undefined && (
+        !assignment.existingKeyReadConsent ||
+        !UUID.test(assignment.existingKeyReadConsent.consentId ?? "") ||
+        !/^[1-9]\d{0,18}$/.test(assignment.existingKeyReadConsent.credentialRevision ?? "") ||
+        !/^sha256:[a-f0-9]{64}$/.test(assignment.existingKeyReadConsent.configurationRevision ?? "")
+      ))
     ) {
       refuse("ASSIGNMENTS_INVALID");
     }
@@ -142,6 +157,9 @@ export function createObservationCredentialReader(
         organizationId: assignment.organizationId,
         credentialId: assignment.credentialId,
         exchangeAccountId: assignment.exchangeAccountId,
+        ...(assignment.existingKeyReadConsent ? {
+          existingKeyReadConsent: Object.freeze({ ...assignment.existingKeyReadConsent }),
+        } : {}),
       }),
     );
   }
@@ -174,7 +192,7 @@ export function createObservationCredentialReader(
       ) {
         refuse("NOT_ASSIGNED");
       }
-      const assignment =
+      const assignment: ObservationCredentialAssignment | undefined =
         mapped ??
         (requestedAccount
           ? Object.freeze({
@@ -203,6 +221,25 @@ export function createObservationCredentialReader(
           await tx`SELECT set_config('waia.observation_org', ${assignment.organizationId}, true),
             set_config('waia.observation_credential', ${assignment.credentialId}, true),
             set_config('waia.observation_account', ${assignment.exchangeAccountId}, true)`;
+          const consent = assignment.existingKeyReadConsent;
+          if (consent) {
+            // The active row, ciphertext, existing read-purpose flag and both revisions come
+            // from ONE database snapshot. Never fetch/parse raw permission metadata here.
+            return tx.unsafe<CredentialProjection[]>(
+              `SELECT ${ACCOUNT_OBSERVATION_CREDENTIAL_COLUMNS.map(column => `c.${column}`).join(", ")},
+                 c.observation_revision::text AS observation_revision,
+                 s.configuration_revision
+               FROM public.exchange_credentials c
+               JOIN public.trader_account_collection_state s
+                 ON s.organization_id=c.organization_id AND s.credential_id=c.id
+                 AND s.exchange_account_id=c.exchange_account_id
+               WHERE c.id=$1 AND c.organization_id=$2 AND c.exchange_account_id=$3
+                 AND c.status='active' AND c.observation_revision::text=$4
+                 AND s.configuration_revision=$5`,
+              [assignment.credentialId, assignment.organizationId, assignment.exchangeAccountId,
+                consent.credentialRevision, consent.configurationRevision],
+            );
+          }
           return tx.unsafe<CredentialProjection[]>(
             `SELECT ${projection} FROM public.exchange_credentials
              WHERE id = $1 AND organization_id = $2 AND exchange_account_id = $3`,
@@ -224,7 +261,15 @@ export function createObservationCredentialReader(
         refuse("IDENTITY_MISMATCH");
       }
       if (row.status !== "active") refuse("NOT_FOUND");
-      // Trade, unknown, and unparsable scopes are false. Decrypt only a read-only row.
+      const consent = assignment.existingKeyReadConsent;
+      if (consent) {
+        // A changed/replaced credential requires a newly approved manifest. The
+        // stored read-purpose bit does not attest actual venue scopes; the fixed
+        // GET owner separately pins and verifies the live read+trade permission.
+        if (row.observation_revision !== consent.credentialRevision ||
+            row.configuration_revision !== consent.configurationRevision) refuse("IDENTITY_MISMATCH");
+      }
+      // Keep 0229's pre-decryption guard for EVERY path, including explicit consent.
       if (row.observation_read_only !== true) refuse("NOT_READ_ONLY");
 
       try {

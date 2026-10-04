@@ -16,6 +16,7 @@ export type HtxReadIdentityEvidence = Readonly<{
   permission: "readOnly" | "readOnly,trade";
   checkedAt: number;
 }>;
+export type HtxExpectedPermission = "readOnly" | "readOnly,trade";
 export type HtxReadAdmission = Readonly<{
   dispose(): void;
   verifyReadAdmission(
@@ -86,6 +87,8 @@ export function createHtxReadAdmission(
     maxResponseBytes: number;
     /** Derivatives observation requires a freshly observed exact read-only scope. */
     requireReadOnlyPermission?: boolean;
+    /** Optional exact canonical venue permission required by this caller. */
+    expectedPermission?: HtxExpectedPermission;
     authorizeCurrent(binding: ObservationBinding, signal: AbortSignal): Promise<boolean>;
   }>,
 ): HtxReadAdmission {
@@ -99,6 +102,10 @@ export function createHtxReadAdmission(
       )
         denied();
       const requireReadOnlyPermission = input.requireReadOnlyPermission === true;
+      const expectedPermission = input.expectedPermission;
+      if (expectedPermission !== undefined &&
+          expectedPermission !== "readOnly" && expectedPermission !== "readOnly,trade") denied();
+      if (requireReadOnlyPermission && expectedPermission === "readOnly,trade") denied();
       const binding = Object.freeze(observationBindingSchema.parse(credential.binding));
       const apiKey = z
         .string()
@@ -134,6 +141,7 @@ export function createHtxReadAdmission(
         timeoutMs,
         maxResponseBytes,
         requireReadOnlyPermission,
+        expectedPermission,
       };
     } catch {
       return denied();
@@ -147,6 +155,7 @@ export function createHtxReadAdmission(
     timeoutMs,
     maxResponseBytes,
     requireReadOnlyPermission,
+    expectedPermission,
   } = fixed;
   let apiKey = fixed.apiKey;
   fixed.apiKey = "";
@@ -245,11 +254,13 @@ export function createHtxReadAdmission(
       if (matching.length !== 1) denied();
       const key = keySchema.parse(matching[0]);
       const permissions = key.permission.split(",").map((token) => token.trim().toLowerCase());
+      const canonicalPermission = permissions.includes("trade") ? "readOnly,trade" : "readOnly";
       if (
         !permissions.includes("readonly") ||
         new Set(permissions).size !== permissions.length ||
         permissions.some((permission) => permission !== "readonly" && permission !== "trade") ||
-        (requireReadOnlyPermission && (permissions.length !== 1 || permissions[0] !== "readonly"))
+        (requireReadOnlyPermission && (permissions.length !== 1 || permissions[0] !== "readonly")) ||
+        (expectedPermission !== undefined && canonicalPermission !== expectedPermission)
       )
         denied();
       current();

@@ -224,7 +224,8 @@ function openObservationCredentialService(
       onnotice: () => {},
     });
     try {
-      await probeObservationCredentialPool(sql);
+      await probeObservationCredentialPool(sql,
+        trusted.configured.some(assignment => assignment.config.existingKeyReadConsentId !== undefined));
       requireActive();
       const provider = await SecretsStoreMasterKeyProvider.create({
         secretGetter: () => runtime.masterKeySecretGetter(),
@@ -239,6 +240,13 @@ function openObservationCredentialService(
             organizationId: assignment.binding.organizationId,
             credentialId: assignment.binding.credentialId,
             exchangeAccountId: assignment.binding.exchangeAccountId,
+            ...(assignment.config.existingKeyReadConsentId ? {
+              existingKeyReadConsent: Object.freeze({
+                consentId: assignment.config.existingKeyReadConsentId,
+                credentialRevision: assignment.binding.credentialRevision,
+                configurationRevision: assignment.binding.configurationRevision,
+              }),
+            } : {}),
           }),
         ),
       });

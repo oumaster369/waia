@@ -24,12 +24,12 @@ const modeBody = '{"code":200,"data":{"asset_mode":1},"ts":1780261200000}';
 const signal = () => new AbortController().signal;
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
 
-function payload(path: string, uid = 456): unknown {
+function payload(path: string, uid = 456, permission = "readOnly"): unknown {
   if (path === "/v1/account/accounts")
     return { status: "ok", data: [{ id: 123, type: "spot", state: "working" }] };
   if (path === "/v2/user/uid") return { code: 200, data: uid };
   if (path === "/v2/user/api-key")
-    return { code: 200, data: [{ accessKey: apiKey, status: "normal", permission: "readOnly" }] };
+    return { code: 200, data: [{ accessKey: apiKey, status: "normal", permission }] };
   return null;
 }
 
@@ -84,19 +84,19 @@ function setup(
     timeoutMs: number;
     maxResponseBytes: number;
     expectedHtxUid: string;
+    expectedPermission: "readOnly" | "readOnly,trade";
     clock: typeof accountObservationClock;
   }> = {},
 ) {
   const credential = overrides.credential ?? credentialHandle();
   const calls: Array<{ url: URL; init: RequestInit | undefined }> = [];
-  const fetchImpl =
-    overrides.fetchImpl ??
-    vi.fn<typeof fetch>(async (input, init) => {
-      const url = new URL(String(input));
-      calls.push({ url, init });
-      if (url.hostname === "api.huobi.pro") return json(payload(url.pathname));
-      return new Response(modeBody, { headers: { "content-type": "application/json" } });
-    });
+  const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+    const url = new URL(String(input));
+    calls.push({ url, init });
+    if (overrides.fetchImpl) return overrides.fetchImpl(input, init);
+    if (url.hostname === "api.huobi.pro") return json(payload(url.pathname, 456, overrides.expectedPermission ?? "readOnly"));
+    return new Response(modeBody, { headers: { "content-type": "application/json" } });
+  });
   const authorizeCurrent = overrides.authorizeCurrent ?? vi.fn(async () => true);
   const config = {
     credential,
@@ -106,6 +106,7 @@ function setup(
     maxResponseBytes: overrides.maxResponseBytes ?? 4096,
     authorizeCurrent,
     ...(overrides.expectedHtxUid !== undefined ? { expectedHtxUid: overrides.expectedHtxUid } : {}),
+    ...(overrides.expectedPermission !== undefined ? { expectedPermission: overrides.expectedPermission } : {}),
   };
   const transport = createHtxV5ReadTransport(config);
   return { credential, calls, fetchImpl, authorizeCurrent, transport };
@@ -226,6 +227,55 @@ describe("HTX V5 owned read-only transport", () => {
     f.transport.dispose();
     await f.transport.settled();
     expect(f.credential.dispose).not.toHaveBeenCalled();
+  });
+  it("keeps default admission read-only and permits an explicit trade-permission observation only on fixed GETs", async () => {
+    const denied = setup({ fetchImpl: vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      return url.hostname === "api.huobi.pro"
+        ? json(payload(url.pathname, 456, "readOnly,trade"))
+        : new Response(modeBody);
+    }) });
+    await expect(denied.transport.readBalance(signal())).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+    expect(denied.calls.filter(call => call.url.hostname === "api.hbdm.com")).toHaveLength(0);
+    denied.transport.dispose();
+
+    const permitted = setup({ expectedPermission: "readOnly,trade", fetchImpl: vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      return url.hostname === "api.huobi.pro"
+        ? json(payload(url.pathname, 456, "readOnly,trade"))
+        : new Response(modeBody);
+    }) });
+    const result = await permitted.transport.readBalance(signal());
+    expect(result.identity.permission).toBe("readOnly,trade");
+    expect(permitted.calls.filter(call => call.url.hostname === "api.hbdm.com")).toHaveLength(1);
+    expect(permitted.calls.every(call => call.init?.method === "GET")).toBe(true);
+    expect(permitted.calls.filter(call => call.url.hostname === "api.hbdm.com").map(call => call.url.pathname))
+      .toEqual([HTX_V5_READ_ONLY_ROUTES.balance]);
+    permitted.transport.dispose();
+  });
+  it("denies a permission change between the pre-read and post-read identity checks", async () => {
+    for (const [expected, first, later] of [
+      ["readOnly,trade", "readOnly,trade", "readOnly"],
+      ["readOnly", "readOnly", "readOnly,trade"],
+    ] as const) {
+      let keyChecks = 0;
+      const f = setup({ expectedPermission: expected, fetchImpl: vi.fn<typeof fetch>(async input => {
+        const url = new URL(String(input));
+        if (url.hostname !== "api.huobi.pro") return new Response(modeBody);
+        if (url.pathname === "/v2/user/api-key") {
+          keyChecks++;
+          return json(payload(url.pathname, 456, keyChecks <= 1 ? first : later));
+        }
+        return json(payload(url.pathname));
+      }) });
+      await expect(f.transport.readBalance(signal())).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+      expect(keyChecks).toBeGreaterThanOrEqual(2);
+      expect(f.calls.filter(call => call.url.hostname === "api.hbdm.com")).toHaveLength(1);
+      f.transport.dispose();
+    }
+  });
+  it("refuses malformed expected-permission options before any request", () => {
+    expect(() => setup({ expectedPermission: "trade" as never })).toThrow("INVALID_RESPONSE");
   });
 
   it("rejects malformed route options before any signed network request", () => {

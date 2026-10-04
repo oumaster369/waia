@@ -21,12 +21,12 @@ const uid = "456";
 const ts = 1_791_028_800_000;
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
 
-function body(path: string): unknown {
+function body(path: string, permission = "readOnly"): unknown {
   if (path === "/v1/account/accounts")
     return { status: "ok", data: [{ id: 123, type: "spot", state: "working" }] };
   if (path === "/v2/user/uid") return { code: 200, data: Number(uid) };
   if (path === "/v2/user/api-key")
-    return { code: 200, data: [{ accessKey: apiKey, status: "normal", permission: "readOnly" }] };
+    return { code: 200, data: [{ accessKey: apiKey, status: "normal", permission }] };
   if (path === "/v5/account/asset_mode") return { code: 200, data: { asset_mode: "1" }, ts };
   if (path === "/v5/account/balance") return { code: 200, data: {
     state: "normal", equity: "0", initial_margin: "0", maintenance_margin: "0",
@@ -44,13 +44,16 @@ function credential(): HtxObservationCredentialHandle {
 
 function setup(overrides: Readonly<{ uid?: string; contracts?: readonly string[]; fetchImpl?: typeof fetch;
   credential?: HtxObservationCredentialHandle; timeoutMs?: number; maxResponseBytes?: number;
-  clock?: ObservationClock }> = {}) {
+  expectedPermission?: "readOnly" | "readOnly,trade"; permission?: string; clock?: ObservationClock }> = {}) {
   const calls: URL[] = [];
+  const requestCalls: Array<{ url: URL; init: RequestInit | undefined }> = [];
   const credentialHandle = overrides.credential ?? credential();
-  const fetchImpl = overrides.fetchImpl ?? vi.fn<typeof fetch>(async (input) => {
+  const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
     const url = new URL(String(input));
     calls.push(url);
-    if (url.hostname === "api.huobi.pro") return json(body(url.pathname));
+    requestCalls.push({ url, init });
+    if (overrides.fetchImpl) return overrides.fetchImpl(input, init);
+    if (url.hostname === "api.huobi.pro") return json(body(url.pathname, overrides.permission ?? "readOnly"));
     return json(body(url.pathname));
   });
   const reader = createHtxV5ObservationReader({ credential: credentialHandle, clock: overrides.clock ?? accountObservationClock,
@@ -58,8 +61,9 @@ function setup(overrides: Readonly<{ uid?: string; contracts?: readonly string[]
     authorizeCurrent: async () => true,
     ...(overrides.uid ? { expectedHtxUid: overrides.uid } : {}),
     ...(overrides.contracts ? { contracts: overrides.contracts } : {}),
+    ...(overrides.expectedPermission !== undefined ? { expectedPermission: overrides.expectedPermission } : {}),
   });
-  return { reader, calls, credentialHandle, fetchImpl };
+  return { reader, calls, requestCalls, credentialHandle, fetchImpl };
 }
 
 function accountEnvelope(htxV5: unknown, status = "PARTIAL", collectionStartedAtMs = ts, collectionCompletedAtMs = ts) {
@@ -110,6 +114,38 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("HTX V5 observation reader", () => {
+  it("defaults to read-only, and allows explicit trade permission only for fixed GET observations", async () => {
+    const denied = setup({ permission: "readOnly,trade" });
+    await expect(denied.reader.read(new AbortController().signal)).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+    expect(denied.fetchImpl).toHaveBeenCalledTimes(3);
+    expect(denied.requestCalls.every(call => call.init?.method === "GET")).toBe(true);
+    denied.reader.dispose();
+
+    const permitted = setup({ expectedPermission: "readOnly,trade", permission: "readOnly,trade" });
+    const result = await permitted.reader.read(new AbortController().signal);
+    expect(result.schemaVersion).toBe("htx-v5-observation/v1");
+    expect(permitted.requestCalls.some(({ url }) => url.hostname === "api.hbdm.com")).toBe(true);
+    expect(permitted.requestCalls.every(call => call.init?.method === "GET")).toBe(true);
+    await permitted.reader.settled();
+  });
+  it("rejects permission change and malformed expected-permission options", async () => {
+    let checks = 0;
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.hostname === "api.huobi.pro" && url.pathname === "/v2/user/api-key") {
+        checks++;
+        return json(body(url.pathname, checks === 1 ? "readOnly,trade" : "readOnly"));
+      }
+      return json(body(url.pathname));
+    });
+    const changing = setup({ expectedPermission: "readOnly,trade", fetchImpl });
+    await expect(changing.reader.read(new AbortController().signal)).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+    expect(checks).toBeGreaterThanOrEqual(2);
+    changing.reader.dispose();
+    expect(() => createHtxV5ObservationReader({ credential: credential(), clock: accountObservationClock,
+      fetchImpl: vi.fn<typeof fetch>(), timeoutMs: 1000, maxResponseBytes: 4096,
+      authorizeCurrent: async () => true, expectedPermission: "trade" as never })).toThrow("INVALID_RESPONSE");
+  });
   it("reads the bounded empty projection and preserves descriptive UID and unknown list coverage", async () => {
     const f = setup({ uid });
     const result = await f.reader.read(new AbortController().signal);

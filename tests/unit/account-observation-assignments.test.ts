@@ -144,6 +144,33 @@ describe("explicit assignments filtered by current read-only DB state", () => {
     expect(list[1]?.binding.organizationId).toBe(extraOrg);
     expect(list[1]?.config.revision).toBe(a.config.revision);
   });
+  it("retains an exact consented assignment but excludes its revision from inventory", async () => {
+    const base = assignment();
+    const { revision: _revision, ...parameters } = base.config;
+    const consentId = "55555555-5555-4555-8555-555555555555";
+    const consentConfig = createObservationConfiguration({ ...parameters, existingKeyReadConsentId: consentId });
+    const consented = { ...base, config: consentConfig,
+      binding: { ...base.binding, configurationRevision: consentConfig.revision } };
+    const template = { ...base, binding: { ...base.binding,
+      credentialId: "00000000-0000-4000-8000-000000000005", exchangeAccountId: "124" } };
+    const rows = [
+      { organization_id: base.binding.organizationId, credential_id: "00000000-0000-4000-8000-000000000006",
+        exchange_account_id: "456", credential_revision: "1",
+        configuration_revision: consentConfig.revision, symbols: ["BTCUSDT"] },
+      { organization_id: base.binding.organizationId, credential_id: "00000000-0000-4000-8000-000000000007",
+        exchange_account_id: "789", credential_revision: "1",
+        configuration_revision: template.config.revision, symbols: ["BTCUSDT"] },
+    ];
+    const collectorSql = { begin: async (run: (tx: unknown) => Promise<unknown>) => run(
+      Object.assign(async () => rows, { unsafe: async () => undefined })) } as never;
+    const source = createPostgresObservationAssignmentSource(sql, [consented, template], collectorSql);
+
+    const list = await source.loadAssignments(signal());
+    expect(list.map(item => item.binding.exchangeAccountId)).toEqual(["123", "124", "789"]);
+    expect(list[0]).toEqual(consented);
+    expect(list[2]?.config).not.toHaveProperty("existingKeyReadConsentId");
+    expect(list.some(item => item.binding.exchangeAccountId === "456")).toBe(false);
+  });
   it("does not auto-apply a fixed external HTX UID to inventory accounts", async () => {
     const a = assignment();
     const { revision: _revision, ...parameters } = a.config;

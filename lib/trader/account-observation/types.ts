@@ -262,6 +262,8 @@ export type ObservationConfig = Readonly<{
   }>[];
   /** Required by the configured HTX composition; generic injected readers may omit it. */
   htxCoverage?: HtxObservationCoverage;
+  /** Identifier for an independently persisted existing-key consent, if explicitly bound. */
+  existingKeyReadConsentId?: string;
   /** Optional protected V5 observation scope; omitted preserves legacy behavior. */
   htxV5?: HtxV5ObservationConfiguration;
 }>;
