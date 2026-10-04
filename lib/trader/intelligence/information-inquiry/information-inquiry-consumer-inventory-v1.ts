@@ -149,6 +149,27 @@ export const INFORMATION_INQUIRY_DIRECT_CONSUMERS_V1 = [
     createsCapitalAuthority: false,
   },
   {
+    path: "lib/trader/research/research-development-evaluation-claim-contract-v1.ts",
+    symbols: ["captureResearchDevelopmentEvaluationClaimRequestV1", "deepFreezeInquiry"],
+    imports: ["CONTRACTS"],
+    disposition: "PURE_INTERNAL_COMPOSITION",
+    createsCapitalAuthority: false,
+  },
+  {
+    path: "lib/trader/research/research-development-evaluation-source-contract-v1.ts",
+    symbols: ["captureResearchDevelopmentEvaluationSourceRequestV1", "deepFreezeInquiry"],
+    imports: ["CONTRACTS"],
+    disposition: "PURE_INTERNAL_COMPOSITION",
+    createsCapitalAuthority: false,
+  },
+  {
+    path: "lib/trader/research/research-development-evaluation-source-issuance-v1.ts",
+    symbols: ["parseResearchEvaluationSourceIssuanceV1", "deepFreezeInquiry"],
+    imports: ["CONTRACTS"],
+    disposition: "PURE_INTERNAL_COMPOSITION",
+    createsCapitalAuthority: false,
+  },
+  {
     path: "lib/trader/intelligence/information-inquiry/index.ts",
     symbols: ["contracts-v1", "information-inquiry-loop-v1"],
     imports: [
