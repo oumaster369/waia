@@ -13,6 +13,7 @@ import { SecretsStoreMasterKeyProvider } from "@/lib/trader/security/secrets-sto
 import { buildHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
 import { requireHtxStoredPermissionMetadata } from "@/lib/trader/security/htx-secure-credential-resolver";
 import { runAccountObservationCollector } from "@/scripts/trader/account-observation-collector-host";
+import { createAccountObservationDatabaseTlsOptions } from "@/lib/trader/account-observation/database-node-tls";
 import {
   ACCOUNT_OBSERVATION_LOGIN_PLAN,
   provisionAccountObservationLoginsV1,
@@ -31,6 +32,9 @@ if (!/^\d{4,5}$/.test(localPort) || Number(localPort) < 1024 || Number(localPort
 const HOST = `127.0.0.1:${localPort}`;
 const url = `postgres://waia_local_admin:local_validation_only@${HOST}/waia_dee960_local`;
 const MASTER_KEY = Buffer.alloc(32, 7).toString("base64");
+// Created by the explicit disposable-service fixture. Never inherit an external CA or URL.
+const databaseCertificateAuthority = enabled
+  ? readFileSync(".tmp/account-observation-tls/ca.crt", "utf8") : undefined;
 
 /** Distinct, synthetic, >=32 characters; never a production secret. */
 const PASSWORDS = Object.freeze({
@@ -706,6 +710,35 @@ describe.skipIf(!enabled)(
       expect(historical[0].no_historical_membership).toBe(true);
     });
 
+    it("verifies the actual PostgreSQL certificate and hostname, refusing the wrong trust root or name", async () => {
+      for (const client of clients.values()) await client.end({ timeout: 2 });
+      clients.clear();
+      const strict = createAccountObservationDatabaseTlsOptions(databaseCertificateAuthority);
+      const valid = postgres(runtimeUrl("reader"), { max: 1, connect_timeout: 3, prepare: false, ssl: strict });
+      try {
+        const [session] = await valid`SELECT ssl, version FROM pg_stat_ssl WHERE pid = pg_backend_pid()`;
+        expect(session.ssl).toBe(true);
+        expect(session.version).toMatch(/^TLSv1\.[23]$/);
+      } finally { await valid.end({ timeout: 2 }); }
+
+      const wrongRoot = postgres(runtimeUrl("reader"), { max: 1, connect_timeout: 3, prepare: false,
+        ssl: createAccountObservationDatabaseTlsOptions() });
+      try {
+        await expect(wrongRoot`SELECT 1`).rejects.toMatchObject({ code: expect.stringMatching(
+          /^(UNABLE_TO_VERIFY_LEAF_SIGNATURE|SELF_SIGNED_CERT_IN_CHAIN|UNABLE_TO_GET_ISSUER_CERT_LOCALLY)$/,
+        ) });
+      } finally { await wrongRoot.end({ timeout: 2 }); }
+
+      // Same owned PostgreSQL listener and CA, but a name absent from the server certificate.
+      // The explicit name is test input only; the production helper never overrides identity checks.
+      const wrongName = postgres(runtimeUrl("reader"), {
+        max: 1, connect_timeout: 3, prepare: false,
+        ssl: { ...strict, servername: "wrong.fixture.invalid" },
+      });
+      try { await expect(wrongName`SELECT 1`).rejects.toMatchObject({ code: "ERR_TLS_CERT_ALTNAME_INVALID" }); }
+      finally { await wrongName.end({ timeout: 2 }); }
+    }, 30000);
+
     it("starts the actual collector through all three provisioned runtime identities", async () => {
       // The three logins carry CONNECTION LIMIT 2, so release the shared qualification clients
       // and let the real host own its own bounded pools.
@@ -761,6 +794,7 @@ describe.skipIf(!enabled)(
       let run: Promise<void> | undefined;
       try {
         run = runAccountObservationCollector({
+          databaseCertificateAuthority,
           env: {
             WAIA_TRADER_CLI: "1",
             WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
@@ -790,6 +824,17 @@ describe.skipIf(!enabled)(
         expect(url).toContain("AccessKeyId=synthetic-observation-key");
         expect(url.startsWith("https://api.huobi.pro/")).toBe(true);
         expect(events).toContain("HOST_STARTED");
+        const encrypted = await admin`
+          SELECT a.usename, count(*)::integer AS sessions, bool_and(s.ssl) AS verified_transport
+          FROM pg_stat_activity a JOIN pg_stat_ssl s ON s.pid = a.pid
+          WHERE a.datname = ${database} AND a.usename = ANY (${ACCOUNT_OBSERVATION_LOGIN_PLAN.map(entry => entry.loginRole)})
+          GROUP BY a.usename ORDER BY a.usename`;
+        expect(encrypted).toHaveLength(3);
+        for (const session of encrypted) {
+          expect(session.sessions).toBeGreaterThan(0);
+          expect(session.sessions).toBeLessThanOrEqual(2);
+          expect(session.verified_transport).toBe(true);
+        }
       } finally {
         controller.abort();
         await run?.catch(() => {});
@@ -1073,6 +1118,7 @@ describe.skipIf(!enabled)(
           let deadline: ReturnType<typeof setTimeout> | undefined;
           try {
             run = runAccountObservationCollector({
+              databaseCertificateAuthority,
               env: {
                 WAIA_TRADER_CLI: "1",
                 WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
@@ -1144,6 +1190,7 @@ describe.skipIf(!enabled)(
           await admin.unsafe(`ALTER ROLE ${login} INHERIT`);
           await expect(
             runAccountObservationCollector({
+              databaseCertificateAuthority,
               env: {
                 WAIA_TRADER_CLI: "1",
                 WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
@@ -1179,6 +1226,7 @@ describe.skipIf(!enabled)(
         clients.clear();
         const restart = new AbortController();
         await runAccountObservationCollector({
+          databaseCertificateAuthority,
           env: {
             WAIA_TRADER_CLI: "1",
             WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
@@ -1457,6 +1505,7 @@ describe.skipIf(!enabled)(
         let deadline: ReturnType<typeof setTimeout> | undefined;
         try {
           run = runAccountObservationCollector({
+          databaseCertificateAuthority,
             env: { WAIA_TRADER_CLI: "1", WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
               WAIA_OBSERVATION_OWNER_ID: "synthetic-consent-host",
               WAIA_OBSERVATION_ASSIGNMENT_MANIFEST: manifestPath,
