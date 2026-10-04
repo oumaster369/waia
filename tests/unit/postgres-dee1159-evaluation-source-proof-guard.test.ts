@@ -2,26 +2,28 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { assertSourceHashes, assertVitestProofReport, githubPathPatternMatches, requiredAssertionTitles, requiredSuites, sourcePaths, uncoveredSourcePathsForPullRequestWorkflow } from "@/scripts/postgres-validation/dee1159-evaluation-source-proof-contract.mjs";
+import { assertSourceHashes, assertVitestProofReport, githubPathPatternMatches, requiredAssertionTitles, requiredAssertionTitlesBySuite, requiredSuites, sourcePaths, uncoveredSourcePathsForPullRequestWorkflow } from "@/scripts/postgres-validation/dee1159-evaluation-source-proof-contract.mjs";
 
 function report() {
-  const assertions = requiredAssertionTitles.map(title => ({ title, status: "passed" }));
+  const testResults = requiredSuites.map(path => ({ name: `/workspace/${path}`, status: "passed",
+    assertionResults: requiredAssertionTitlesBySuite[path].map((title: string) => ({ title, status: "passed" })) }));
   return {
-    numTotalTestSuites: 1, numPassedTestSuites: 1, numFailedTestSuites: 0, numPendingTestSuites: 0,
-    numTotalTests: assertions.length, numPassedTests: assertions.length, numFailedTests: 0,
-    numPendingTests: 0, numTodoTests: 0,
-    testResults: [{ name: `/workspace/${requiredSuites[0]}`, status: "passed", assertionResults: assertions }],
+    numTotalTestSuites: requiredSuites.length, numPassedTestSuites: requiredSuites.length,
+    numFailedTestSuites: 0, numPendingTestSuites: 0,
+    numTotalTests: requiredAssertionTitles.length, numPassedTests: requiredAssertionTitles.length, numFailedTests: 0,
+    numPendingTests: 0, numTodoTests: 0, testResults,
   };
 }
 
 describe("DEE-1159 evaluation source executed PostgreSQL proof guard", () => {
   it("accepts only a nonempty exact native suite with all assertions passed", () => {
-    expect(requiredSuites).toEqual(["tests/integration/postgres-research-evaluation-source-v1.test.ts"]);
+    expect(requiredSuites).toEqual(["tests/integration/postgres-research-evaluation-source-v1.test.ts",
+      "tests/integration/postgres-research-evaluation-claim-v1.test.ts"]);
     expect(() => assertVitestProofReport(report())).not.toThrow();
   });
 
-  it("accepts nested Vitest describe suites for the one exact native file", () => {
-    const value = report(); value.numTotalTestSuites = 2; value.numPassedTestSuites = 2;
+  it("accepts nested Vitest describe suites for the exact native files", () => {
+    const value = report(); value.numTotalTestSuites = 4; value.numPassedTestSuites = 4;
     expect(() => assertVitestProofReport(value)).not.toThrow();
   });
 
@@ -58,6 +60,9 @@ describe("DEE-1159 evaluation source executed PostgreSQL proof guard", () => {
   });
 
   it.each([
+    ["claim assertion in wrong file", (value: ReturnType<typeof report>) => {
+      const moved = value.testResults[1]!.assertionResults.pop()!; value.testResults[0]!.assertionResults.push(moved);
+    }],
     ["missing suite", (value: ReturnType<typeof report>) => { value.testResults = []; }],
     ["duplicate suite", (value: ReturnType<typeof report>) => { value.testResults.push(structuredClone(value.testResults[0]!)); value.numTotalTestSuites++; value.numPassedTestSuites++; }],
     ["unequal nested suite counters", (value: ReturnType<typeof report>) => { value.numTotalTestSuites = 2; value.numPassedTestSuites = 1; }],
@@ -86,7 +91,7 @@ describe("DEE-1159 evaluation source executed PostgreSQL proof guard", () => {
   });
 
   it("rejects assertion totals that do not match the suite detail", () => {
-    const value = report(); value.testResults[0]!.assertionResults.pop();
+    const value = report(); value.numTotalTests++; value.numPassedTests++;
     expect(() => assertVitestProofReport(value)).toThrow(/ASSERTION_TOTAL_MISMATCH/);
   });
 });

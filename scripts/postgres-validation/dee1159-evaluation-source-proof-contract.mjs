@@ -1,7 +1,8 @@
-import { draftSql as trainingDrafts, sourcePaths as trainingSources } from "./dee1211-postgres-proof-contract.mjs";
+import { draftSql as trainingDrafts, sourcePaths as trainingSources } from "./dee1222-postgres-proof-contract.mjs";
 export const databaseName = "waia_hsv2_it_dee1159_eval_source_v1";
-export const requiredSuites = ["tests/integration/postgres-research-evaluation-source-v1.test.ts"];
-export const requiredAssertionTitles = [
+export const requiredSuites = ["tests/integration/postgres-research-evaluation-source-v1.test.ts",
+  "tests/integration/postgres-research-evaluation-claim-v1.test.ts"];
+const sourceAssertionTitles = [
   "reloads committed consumption without a score and preserves rolled-back availability",
   "commits exact indexed rows and metadata, then returns the immutable retry without payload",
   "prepares and replays through the real operator CLI without payload or scoring effects",
@@ -21,9 +22,24 @@ export const requiredAssertionTitles = [
   "rejects a poisoned evaluation writer capability: disabled RLS",
   "rejects a poisoned evaluation writer capability: public definer"
 ];
-export const draftSql = [...trainingDrafts, "docs/plans/dee-1159-evaluation-source-owner.sql"];
+export const requiredAssertionTitlesBySuite = {
+  [requiredSuites[0]]: sourceAssertionTitles,
+  [requiredSuites[1]]: [
+  "commits and replays the immutable reservation without evaluation metrics or model effects",
+  "refuses absent family selection, changed release, foreign organization, and unregistered evaluation source",
+  "lets only one concurrent command consume a frozen validation key, including across attempts",
+  "rolls back the global consume when immutable claim insertion fails",
+  "confirms lost COMMIT acknowledgement and leaves unavailable recovery for an explicit retry",
+  "enforces claim immutability and denies browser roles"
+]
+};
+export const requiredAssertionTitles = Object.values(requiredAssertionTitlesBySuite).flat();
+export const draftSql = [...trainingDrafts, "docs/plans/dee-1159-evaluation-source-owner.sql",
+  "docs/plans/dee-1159-evaluation-claim-owner.sql"];
 export const sourcePaths = [...new Set([
   ...trainingSources,
+  "lib/trader/research/research-development-evaluation-claim-contract-v1.ts",
+  "tests/unit/trader-research-evaluation-claim-contract-v1.test.ts",
   "lib/trader/research/strategy-admission-v1.ts",
   "lib/trader/research/strategy-admission-journal-postgres.ts",
   "tests/unit/trader-admission-consumption-snapshot.test.ts",
@@ -112,11 +128,12 @@ export function assertVitestProofReport(report) {
       refuse(`SUITE_MISSING_FAILED_SKIPPED_OR_EMPTY:${path}`);
     }
     assertions += matches[0].assertionResults.length;
+    const titles = matches[0].assertionResults.map(item => typeof item.title === "string" ? item.title : "");
+    for (const title of requiredAssertionTitlesBySuite[path]) {
+      if (titles.filter(candidate => candidate === title).length !== 1) {
+        refuse(`REQUIRED_ASSERTION_MISSING_OR_DUPLICATE:${path}:${title}`);
+      }
+    }
   }
   if (assertions !== report.numTotalTests) refuse("ASSERTION_TOTAL_MISMATCH");
-  const titles = report.testResults.flatMap(result => result.assertionResults
-    .map(item => typeof item.title === "string" ? item.title : ""));
-  for (const title of requiredAssertionTitles) {
-    if (titles.filter(candidate => candidate === title).length !== 1) refuse(`REQUIRED_ASSERTION_MISSING_OR_DUPLICATE:${title}`);
-  }
 }

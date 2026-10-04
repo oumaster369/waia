@@ -60,6 +60,9 @@ async function main() {
       refuse("FRESH_POSTGRES16_MIGRATED_DATABASE_REQUIRED");
     }
     const targets = await sql`SELECT
+      to_regclass('public.trader_research_development_evaluation_claims_v1')::text AS evaluation_claims,
+      to_regclass('public.trader_research_training_family_selections_v1')::text AS selections,
+      to_regclass('public.trader_research_issued_training_diagnostics_v2')::text AS issued_diagnostics,
       to_regclass('public.trader_research_evaluation_source_runs_v1')::text AS evaluation_sources,
       to_regclass('public.trader_research_experiments_v1')::text AS experiments,
       to_regclass('public.trader_research_attempts_v1')::text AS attempts,
@@ -79,6 +82,10 @@ async function main() {
     });
 
     const [post] = await sql`SELECT
+      to_regclass('public.trader_research_development_evaluation_claims_v1')::text AS evaluation_claims,
+      to_regclass('public.trader_research_training_family_selections_v1')::text AS selections,
+      to_regclass('public.trader_research_issued_training_diagnostics_v2')::text AS issued_diagnostics,
+      (SELECT relrowsecurity FROM pg_class WHERE oid='public.trader_research_development_evaluation_claims_v1'::regclass) AS claim_rls,
       to_regclass('public.trader_research_evaluation_source_runs_v1')::text AS evaluation_sources,
       to_regclass('public.trader_research_experiments_v1')::text AS experiments,
       to_regclass('public.trader_research_attempts_v1')::text AS attempts,
@@ -93,9 +100,10 @@ async function main() {
       (SELECT count(*)::int FROM pg_policies WHERE schemaname='public' AND tablename='trader_research_issued_attempts_v2') AS attempts_policies,
       EXISTS(SELECT 1 FROM pg_roles WHERE rolname='waia_research_eval_source_writer' AND NOT rolcanlogin) AS writer_role,
       EXISTS(SELECT 1 FROM pg_roles WHERE rolname='waia_research_eval_source_writer_login' AND rolcanlogin) AS writer_login`;
-    if (!post || [post.evaluation_sources, post.experiments, post.attempts, post.diagnostics, post.source_runs,
+    if (!post || [post.evaluation_claims, post.selections, post.issued_diagnostics,
+        post.evaluation_sources, post.experiments, post.attempts, post.diagnostics, post.source_runs,
         post.issued_attempts, post.append_function].some(value => !value) ||
-        post.evaluation_rls !== true || post.source_rls !== true || post.attempts_rls !== true || post.source_policies !== 3 ||
+        post.claim_rls !== true || post.evaluation_rls !== true || post.source_rls !== true || post.attempts_rls !== true || post.source_policies !== 3 ||
         post.attempts_policies !== 0 || post.writer_role !== true || post.writer_login !== true) {
       refuse("DRAFT_SCHEMA_POSTCONDITION_FAILED");
     }

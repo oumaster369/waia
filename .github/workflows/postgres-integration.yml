@@ -313,6 +313,9 @@ on:
       - "drizzle.postgres.config.ts"
       - ".github/workflows/postgres-integration.yml"
       - "docs/plans/dee-1159-evaluation-source-owner.sql"
+      - "docs/plans/dee-1159-evaluation-claim-owner.sql"
+      - "tests/integration/postgres-research-evaluation-claim-v1.test.ts"
+      - "tests/unit/trader-research-evaluation-claim-contract-v1.test.ts"
       - "tests/integration/postgres-research-evaluation-source-v1.test.ts"
       - "tests/unit/postgres-dee1159-evaluation-source-proof-guard.test.ts"
       - "tests/unit/research-development-evaluation-source-v1.test.ts"
@@ -722,7 +725,8 @@ jobs:
           rm -f .tmp/dee1159-evaluation-source-results.json
           set +e
           pnpm test --run --no-file-parallelism --reporter=default --reporter=json --outputFile=.tmp/dee1159-evaluation-source-results.json \
-            tests/integration/postgres-research-evaluation-source-v1.test.ts
+            tests/integration/postgres-research-evaluation-source-v1.test.ts \
+            tests/integration/postgres-research-evaluation-claim-v1.test.ts
           test_status=$?
           node scripts/postgres-validation/assert-dee1159-evaluation-source-results.mjs .tmp/dee1159-evaluation-source-results.json
           guard_status=$?

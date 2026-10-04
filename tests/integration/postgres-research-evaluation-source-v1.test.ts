@@ -428,7 +428,7 @@ describe.skipIf(!enabled)("DEE-1159 DEVELOPMENT evaluation-source PostgreSQL", (
     await expect(admin`DELETE FROM public.trader_research_evaluation_source_runs_v1
       WHERE organization_id=${ORG}::uuid AND command_id=${request.commandId}`)
       .rejects.toThrow("RESEARCH_SOURCE_APPEND_ONLY");
-    await expect(admin`TRUNCATE TABLE public.trader_research_evaluation_source_runs_v1`)
+    await expect(admin`TRUNCATE TABLE public.trader_research_evaluation_source_runs_v1 CASCADE`)
       .rejects.toThrow("RESEARCH_SOURCE_APPEND_ONLY");
     expect(await issuanceCount(request.commandId)).toBe(1);
     expect(await evaluationRows(request.commandId)).toHaveLength(6);

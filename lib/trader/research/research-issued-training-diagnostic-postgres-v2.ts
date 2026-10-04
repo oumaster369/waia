@@ -23,6 +23,10 @@ import { canonicalJsonString, computeStableJsonDigest } from "./digest";
 import { captureResearchIssuedTrainingRequestV2, RESEARCH_ISSUED_TRAINING_DIAGNOSTIC_V2, type ResearchIssuedTrainingRequestV2 } from "./research-issued-training-contract-v2";
 import { readResearchIssuedSourceAndExperimentV2 } from "./research-issued-attempt-postgres-v2";
 import { readResearchDevelopmentSourceRowsV1 } from "./research-development-source-read-v1";
+import { readResearchEvaluationSourceIssuanceV1 } from "./research-development-evaluation-source-read-v1";
+import { captureResearchDevelopmentEvaluationClaimRequestV1, RESEARCH_DEVELOPMENT_EVALUATION_CLAIM_V1,
+  type ResearchDevelopmentEvaluationClaimRequestV1 } from "./research-development-evaluation-claim-contract-v1";
+import { strategyAdmissionHypothesisId } from "./strategy-admission-v1";
 import { resolveCurrentResearchExecutableIdentityV1 } from "./research-executable-runtime-identity-v1";
 import { resolveResearchTrainingPolicyV1 } from "./research-training-policy-v1";
 import { validateResearchTrainingCyclesV1 } from "./research-training-payload-postgres-v1";
@@ -396,6 +400,146 @@ export async function selectResearchIssuedTrainingFamilyPostgresV1(supplied: unk
     try {
       const confirmed = await ownedSession(url, signal, deadline, true, (tx, executor, checkDeadline) =>
         verifyFamilyAndPersist(tx, executor, request, runtime, true, checkDeadline, expectedDigest));
+      return Object.freeze({ status: "CONFIRMED_AFTER_UNCERTAINTY", receipt: confirmed.receipt });
+    } catch { return Object.freeze({ status: "COMMIT_UNCERTAIN", receipt: null }); }
+  }
+}
+
+type EvaluationClaimRow = {
+  claim_id: string; organization_id: string; command_id: string; attempt_id: string;
+  spec_sha256: string; hypothesis_id: string; split: string; selection_sha256: string;
+  evaluation_source_id: string; evaluation_source_digest: string;
+  receipt_canonical_json: string; receipt_sha256: string;
+};
+function claimRefuse(reason: string): never { throw new Error(`RESEARCH_EVALUATION_CLAIM_REFUSED:${reason}`); }
+
+/** This private operation reads evaluation metadata only. Training verification
+ * cannot execute a missing trial; all its payload belongs to already spent train. */
+async function buildVerifiedEvaluationClaim(tx: postgres.Sql, executor: ReturnType<typeof heldExecutor>["executor"],
+  request: ResearchDevelopmentEvaluationClaimRequestV1, runtime: Runtime, checkDeadline: () => void) {
+  const { attempt, bound } = await readIssuedMetadata(tx, request, runtime, true);
+  const evaluation = await readResearchEvaluationSourceIssuanceV1(tx, request.organizationId, request.evaluationSourceId);
+  if (!evaluation) claimRefuse("COMMITTED_EVALUATION_SOURCE_REQUIRED");
+  const m = evaluation.metadata;
+  const train = bound.issuance;
+  const { spec } = bound.experiment;
+  const partition = (value: typeof m.validation) => ({ contentSha256: value.contentSha256,
+    firstOpenMs: value.firstOpenMs, lastCloseMs: value.lastCloseMs, barCount: value.barCount });
+  if (m.request.trainingSourceRunId !== attempt.source_run_id ||
+      m.request.trainingSourceIssuanceDigest !== attempt.source_issuance_digest ||
+      m.releaseSha !== runtime.releaseSha || m.request.symbol !== spec.universe.symbol ||
+      m.sourceReleaseSha !== train.sourceReleaseSha || m.qualificationReceiptDigest !== train.qualificationReceiptDigest ||
+      m.runtimeRequalificationDigest !== train.runtimeRequalificationDigest ||
+      m.partitionRawSha256 !== train.partitionRawSha256 || m.partitionSemanticDigest !== train.partitionSemanticDigest ||
+      m.volumeQualificationDigest !== train.volumeQualificationDigest ||
+      canonicalJsonString(partition(m.validation)) !== canonicalJsonString(spec.partitions.validation) ||
+      canonicalJsonString(m.walkForward.map(partition)) !== canonicalJsonString(spec.partitions.walkForward)) {
+    claimRefuse("REGISTERED_EVALUATION_SOURCE_BINDING_MISMATCH");
+  }
+  const verified = await verifyFamilyAndPersist(tx, executor, request, runtime, true, checkDeadline);
+  const family = verified.receipt;
+  // This is the admission journal's existing string-valued parameter convention,
+  // not a new identity namespace derived from attempt, source or command IDs.
+  const parameters = Object.fromEntries(Object.entries(family.selectedParameters).map(([key, value]) => [key, String(value)]));
+  const hypothesisId = strategyAdmissionHypothesisId(attempt.spec_sha256, parameters);
+  const claimId = deterministicUuidV8(computeStableJsonDigest({ schemaVersion: RESEARCH_DEVELOPMENT_EVALUATION_CLAIM_V1,
+    organizationId: request.organizationId, commandId: request.commandId }));
+  const body = { schemaVersion: RESEARCH_DEVELOPMENT_EVALUATION_CLAIM_V1,
+    authority: "PRE_DISCLOSURE_VALIDATION_RESERVATION_ONLY" as const,
+    scientificQualified: false as const, capitalEligible: false as const,
+    sourceAvailability: "PIT_SOURCE_AVAILABILITY_NOT_ESTABLISHED" as const,
+    claimId, organizationId: request.organizationId, commandId: request.commandId, attemptId: request.attemptId,
+    experimentSpecSha256: attempt.spec_sha256, hypothesisId, split: "validation" as const,
+    trainingSourceRunId: attempt.source_run_id, trainingSourceIssuanceDigest: attempt.source_issuance_digest,
+    trainingFamilyReceiptSha256: family.contentDigest,
+    selectedIndex: family.selectedIndex, selectedParameters: family.selectedParameters,
+    observedExecutableIdentity: runtime, policyDigestHex: family.policyDigestHex,
+    historicalExecutionModelSha256: family.historicalExecutionModelSha256,
+    evaluationSourceId: request.evaluationSourceId, evaluationSourceIssuanceDigest: evaluation.contentDigest,
+    evaluationRowSetSha256: evaluation.rowSetSha256,
+    validation: spec.partitions.validation, walkForward: spec.partitions.walkForward };
+  return deepFreezeInquiry({ ...body, contentDigest: computeStableJsonDigest(body) });
+}
+export type ResearchDevelopmentEvaluationClaimReceiptV1 = Awaited<ReturnType<typeof buildVerifiedEvaluationClaim>>;
+type EvaluationClaimOutcome = Readonly<{ status: "COMMITTED" | "REPLAYED" | "CONFIRMED_AFTER_UNCERTAINTY";
+  receipt: ResearchDevelopmentEvaluationClaimReceiptV1 }> | Readonly<{ status: "COMMIT_UNCERTAIN"; receipt: null }>;
+
+async function reserveOrVerifyEvaluationClaim(tx: postgres.Sql, executor: ReturnType<typeof heldExecutor>["executor"],
+  request: ResearchDevelopmentEvaluationClaimRequestV1, runtime: Runtime, readOnly: boolean,
+  checkDeadline: () => void, expectedDigest?: string) {
+  if (!readOnly) await tx`SELECT pg_advisory_xact_lock(hashtextextended(
+    ${`research-evaluation-claim-v1:${request.organizationId}:${request.commandId}`},0))`;
+  const receipt = await buildVerifiedEvaluationClaim(tx, executor, request, runtime, checkDeadline);
+  const { contentDigest, ...body } = receipt;
+  const canonical = canonicalJsonString(body);
+  if (Buffer.byteLength(canonical, "utf8") > 262144) claimRefuse("RECEIPT_BYTE_LIMIT");
+  if (expectedDigest !== undefined && contentDigest !== expectedDigest) claimRefuse("CONFIRMATION_MISMATCH");
+  const readRows = () => tx<EvaluationClaimRow[]>`
+    SELECT claim_id::text,organization_id::text,command_id,attempt_id::text,spec_sha256,hypothesis_id,split,
+      selection_sha256,evaluation_source_id,evaluation_source_digest,receipt_canonical_json,receipt_sha256
+    FROM public.trader_research_development_evaluation_claims_v1
+    WHERE organization_id=${request.organizationId}::uuid AND command_id=${request.commandId}
+      AND octet_length(receipt_canonical_json)<=262144`;
+  const assertExact = (rows: EvaluationClaimRow[]) => {
+    const row = rows[0];
+    if (rows.length !== 1 || !row || row.claim_id !== receipt.claimId || row.organization_id !== request.organizationId ||
+        row.command_id !== request.commandId || row.attempt_id !== request.attemptId ||
+        row.spec_sha256 !== receipt.experimentSpecSha256 || row.hypothesis_id !== receipt.hypothesisId ||
+        row.split !== "validation" || row.selection_sha256 !== receipt.trainingFamilyReceiptSha256 ||
+        row.evaluation_source_id !== receipt.evaluationSourceId ||
+        row.evaluation_source_digest !== receipt.evaluationSourceIssuanceDigest ||
+        row.receipt_canonical_json !== canonical || row.receipt_sha256 !== contentDigest) claimRefuse("COMMITTED_CLAIM_CHANGED");
+  };
+  const rows = await readRows();
+  if (rows.length) {
+    assertExact(rows);
+    const consumed = await tx`SELECT spec_sha256 FROM public.trader_strategy_admission_split_consume
+      WHERE spec_sha256=${receipt.experimentSpecSha256} AND hypothesis_id=${receipt.hypothesisId} AND split='validation'`;
+    if (consumed.length !== 1) claimRefuse("COMMITTED_CONSUME_REQUIRED");
+    return Object.freeze({ status: "REPLAYED" as const, receipt });
+  }
+  if (readOnly) claimRefuse("COMMITTED_CLAIM_REQUIRED");
+  // The existing global primary key arbitrates both legacy and this new owner.
+  // SERIALIZABLE conflict with an invisible winner retries the whole snapshot.
+  // A visible spent key is never adopted merely by supplying a new command.
+  const inserted = await tx`INSERT INTO public.trader_strategy_admission_split_consume(spec_sha256,hypothesis_id,split)
+    VALUES (${receipt.experimentSpecSha256},${receipt.hypothesisId},'validation')
+    ON CONFLICT (spec_sha256,hypothesis_id,split) DO NOTHING RETURNING spec_sha256`;
+  if (inserted.length !== 1) claimRefuse("VALIDATION_ALREADY_CONSUMED");
+  await tx`INSERT INTO public.trader_research_development_evaluation_claims_v1
+    (organization_id,claim_id,command_id,attempt_id,spec_sha256,hypothesis_id,split,selection_sha256,
+     evaluation_source_id,evaluation_source_digest,receipt_canonical_json,receipt_sha256)
+    VALUES (${request.organizationId}::uuid,${receipt.claimId}::uuid,${request.commandId},${request.attemptId}::uuid,
+      ${receipt.experimentSpecSha256},${receipt.hypothesisId},'validation',${receipt.trainingFamilyReceiptSha256},
+      ${receipt.evaluationSourceId},${receipt.evaluationSourceIssuanceDigest},${canonical},${contentDigest})`;
+  assertExact(await readRows());
+  checkDeadline();
+  return Object.freeze({ status: "COMMITTED" as const, receipt });
+}
+
+/** Closed reservation only. Owns a root commit before returning metadata; never
+ * exposes evaluation payload or invokes a validation/WF kernel. */
+export async function reserveResearchDevelopmentEvaluationPostgresV1(supplied: unknown): Promise<EvaluationClaimOutcome> {
+  const deadline = performance.now() + 180_000;
+  const signal = AbortSignal.timeout(180_000);
+  const request = captureResearchDevelopmentEvaluationClaimRequestV1(supplied);
+  const runtime = resolveCurrentResearchExecutableIdentityV1();
+  const url = process.env.DATABASE_URL_POSTGRES;
+  if (!url) claimRefuse("DATABASE_REQUIRED");
+  let candidate: ResearchDevelopmentEvaluationClaimReceiptV1 | undefined;
+  try {
+    return await ownedSession(url, signal, deadline, false, async (tx, executor, checkDeadline) => {
+      candidate = undefined;
+      const result = await reserveOrVerifyEvaluationClaim(tx, executor, request, runtime, false, checkDeadline);
+      checkDeadline(); candidate = result.receipt; return result;
+    });
+  } catch (error) {
+    const code = (error as { code?: string } | null)?.code ?? "";
+    if (!candidate || (/^[0-9A-Z]{5}$/.test(code) && !/^(08|57)/.test(code))) throw error;
+    const expectedDigest = candidate.contentDigest;
+    try {
+      const confirmed = await ownedSession(url, signal, deadline, true, (tx, executor, checkDeadline) =>
+        reserveOrVerifyEvaluationClaim(tx, executor, request, runtime, true, checkDeadline, expectedDigest));
       return Object.freeze({ status: "CONFIRMED_AFTER_UNCERTAINTY", receipt: confirmed.receipt });
     } catch { return Object.freeze({ status: "COMMIT_UNCERTAIN", receipt: null }); }
   }
