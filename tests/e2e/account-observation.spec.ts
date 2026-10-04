@@ -563,8 +563,9 @@ test("mounted Admin and tenant update the same observation automatically and cle
     path: "test-results/account-observation-cabinet-mobile.png",
   });
 
+  let directoryDenied = false;
   await admin.route("**/api/trader/admin/connected-accounts", (route) =>
-    route.fulfill({
+    directoryDenied ? route.fulfill({ status: 403, contentType: "text/plain", body: "Forbidden" }) : route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
@@ -582,6 +583,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
       }),
     }),
   );
+  await admin.clock.install();
   await admin.goto("/admin/account-observation");
   const adminIndex = admin.getByTestId("admin-connected-accounts");
   await expect(
@@ -621,6 +623,18 @@ test("mounted Admin and tenant update the same observation automatically and cle
     "aria-current",
     "page",
   );
+  await expect(admin.getByText("Капитал HTX: 1000.25 USD")).toBeVisible();
+  directoryDenied = true;
+  await admin.clock.fastForward(60_000);
+  await expect(admin.getByText("Доступ отозван. Данные счетов очищены.")).toBeVisible();
+  await expect(admin.getByTestId("admin-connected-accounts")).toHaveCount(0);
+  await expect(admin.getByText("Local demo cabinet", { exact: true })).toHaveCount(0);
+  await expect(admin.getByText("Капитал HTX: 1000.25 USD")).toHaveCount(0);
+  directoryDenied = false;
+  await admin.clock.fastForward(60_000);
+  await expect(admin.getByTestId("admin-connected-accounts")).toBeVisible();
+  await expect(admin.getByText("Капитал HTX: 1000.25 USD")).toBeVisible();
+  await expect(admin.getByText("Доступ отозван. Данные счетов очищены.")).toHaveCount(0);
   await admin.close();
 });
 

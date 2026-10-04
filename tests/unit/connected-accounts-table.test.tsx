@@ -155,6 +155,14 @@ afterEach(() => {
 });
 
 describe("admin connected accounts table", () => {
+  const exactBinding = {
+    organizationId: account.organizationId,
+    credentialId: account.credentialId,
+    exchangeAccountId: account.exchangeAccountId,
+    credentialRevision: "1",
+    configurationRevision: "1",
+  };
+
   it("lists HTX cabinets without UUID paste and hydrates USDT from observation", async () => {
     const binding = {
       organizationId: account.organizationId,
@@ -515,5 +523,242 @@ describe("admin connected accounts table", () => {
       ).not.toBeInTheDocument(),
     );
     expect(screen.getByText("Partner cabinet")).toBeInTheDocument();
+  });
+
+  it.each([401, 403])(
+    "clears previously displayed identity and balances on directory authorization loss (%s) and recovers after reauthorization",
+    async (status) => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(now);
+      const snapshot = observationWithFuturesBalance("COMPLETE", now, {
+        equityUsd: "100.25",
+        availableMarginUsd: "75.5",
+        profitUnrealUsd: "2.5",
+      });
+      let listCalls = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL | Request) => {
+          const url =
+            typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+          if (url === "/api/trader/admin/connected-accounts") {
+            listCalls += 1;
+            if (listCalls === 2) {
+              return new Response("authorization expired", {
+                status,
+                headers: { "content-type": "text/plain" },
+              });
+            }
+            return Response.json({ accounts: [account] });
+          }
+          if (url.includes("/binding?")) return Response.json(exactBinding);
+          if (url.includes("/api/trader/admin/account-observation?")) return Response.json(snapshot);
+          return new Response(null, { status: 404 });
+        }),
+      );
+
+      render(<ConnectedAccountsTable />);
+      await waitFor(() => expect(screen.getByText("100.25 USD")).toBeInTheDocument());
+      expect(screen.getByText("Partner cabinet")).toBeInTheDocument();
+      expect(screen.getByText("12.5")).toBeInTheDocument();
+      expect(screen.getByText(account.exchangeAccountId)).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ADMIN_CONNECTED_ACCOUNTS_POLL_MS);
+      });
+      await waitFor(() =>
+        expect(screen.getByText("Доступ отозван. Данные счетов очищены.")).toBeInTheDocument(),
+      );
+      await waitFor(() => expect(screen.queryByText("Partner cabinet")).not.toBeInTheDocument());
+      expect(screen.queryByText("100.25 USD")).not.toBeInTheDocument();
+      expect(screen.queryByText("12.5")).not.toBeInTheDocument();
+      expect(screen.queryByText(account.exchangeAccountId)).not.toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ADMIN_CONNECTED_ACCOUNTS_POLL_MS);
+      });
+      await waitFor(() => expect(screen.getByText("Partner cabinet")).toBeInTheDocument());
+      expect(screen.getByText("100.25 USD")).toBeInTheDocument();
+      expect(screen.getByText("12.5")).toBeInTheDocument();
+    },
+  );
+
+  it.each(["network", "server"] as const)(
+    "retains the previous authorized row and shows a refresh notice after a %s failure",
+    async (failure) => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(now);
+      const snapshot = observationWithFuturesBalance("COMPLETE", now, {
+        equityUsd: "100.25",
+        availableMarginUsd: "75.5",
+        profitUnrealUsd: "2.5",
+      });
+      let listCalls = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL | Request) => {
+          const url =
+            typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+          if (url === "/api/trader/admin/connected-accounts") {
+            listCalls += 1;
+            if (listCalls === 2) {
+              if (failure === "network") throw new TypeError("synthetic network failure");
+              return Response.json({ error: { message: "Unavailable." } }, { status: 503 });
+            }
+            return Response.json({ accounts: [account] });
+          }
+          if (url.includes("/binding?")) return Response.json(exactBinding);
+          if (url.includes("/api/trader/admin/account-observation?")) return Response.json(snapshot);
+          return new Response(null, { status: 404 });
+        }),
+      );
+
+      render(<ConnectedAccountsTable />);
+      await waitFor(() => expect(screen.getByText("100.25 USD")).toBeInTheDocument());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ADMIN_CONNECTED_ACCOUNTS_POLL_MS);
+      });
+      await waitFor(() =>
+        expect(
+          screen.getByText("The latest refresh failed. The table still shows the previous read."),
+        ).toBeInTheDocument(),
+      );
+      expect(screen.getByText("Partner cabinet")).toBeInTheDocument();
+      expect(screen.getByText("100.25 USD")).toBeInTheDocument();
+      expect(screen.getByText("12.5")).toBeInTheDocument();
+      expect(screen.getByText(account.exchangeAccountId)).toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ["organization", { organizationId: "99999999-9999-4999-8999-999999999999" }],
+    ["credential", { credentialId: "88888888-8888-4888-8888-888888888888" }],
+    ["exchange account", { exchangeAccountId: "other-account" }],
+  ] as const)(
+    "refuses a binding response for a different requested %s before reading its snapshot",
+    async (_label, mismatch) => {
+      const snapshotFetch = vi.fn();
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL | Request) => {
+          const url =
+            typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+          if (url === "/api/trader/admin/connected-accounts") {
+            return Response.json({ accounts: [account] });
+          }
+          if (url.includes("/binding?")) return Response.json({ ...exactBinding, ...mismatch });
+          if (url.includes("/api/trader/admin/account-observation?")) {
+            snapshotFetch();
+            return Response.json(observation());
+          }
+          return new Response(null, { status: 404 });
+        }),
+      );
+
+      render(<ConnectedAccountsTable />);
+      await waitFor(() => expect(screen.getByText("Данные фьючерсов недоступны")).toBeInTheDocument());
+      expect(snapshotFetch).not.toHaveBeenCalled();
+      expect(screen.queryByText("12.5")).not.toBeInTheDocument();
+      expect(screen.queryByText("13.5")).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ["organization", { organizationId: "99999999-9999-4999-8999-999999999999" }],
+    ["credential", { credentialId: "88888888-8888-4888-8888-888888888888" }],
+    ["exchange account", { exchangeAccountId: "other-account" }],
+    ["credential revision", { credentialRevision: "2" }],
+    ["configuration revision", { configurationRevision: "2" }],
+  ] as const)(
+    "refuses a snapshot with a changed %s after the binding read",
+    async (_label, revisionPatch) => {
+      const mismatchedSnapshot = parseAccountObservation({
+        ...observationWithFuturesBalance("COMPLETE", now),
+        binding: { ...exactBinding, ...revisionPatch },
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL | Request) => {
+          const url =
+            typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+          if (url === "/api/trader/admin/connected-accounts") {
+            return Response.json({ accounts: [account] });
+          }
+          if (url.includes("/binding?")) return Response.json(exactBinding);
+          if (url.includes("/api/trader/admin/account-observation?")) {
+            return Response.json(mismatchedSnapshot);
+          }
+          return new Response(null, { status: 404 });
+        }),
+      );
+
+      render(<ConnectedAccountsTable />);
+      await waitFor(() =>
+        expect(screen.getByText("Данные фьючерсов недоступны")).toBeInTheDocument(),
+      );
+      expect(screen.queryByText("12.5")).not.toBeInTheDocument();
+      expect(screen.queryByText("13.5")).not.toBeInTheDocument();
+    },
+  );
+
+  it("does not restore a late observation response after directory authorization is revoked", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(now);
+    let resolveSnapshot!: (response: Response) => void;
+    const pendingSnapshot = new Promise<Response>((resolve) => {
+      resolveSnapshot = resolve;
+    });
+    let listCalls = 0;
+    let snapshotCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (url === "/api/trader/admin/connected-accounts") {
+          listCalls += 1;
+          if (listCalls === 2) return new Response("expired", { status: 401 });
+          return Response.json({ accounts: [account] });
+        }
+        if (url.includes("/binding?")) {
+          return listCalls >= 3 ? new Response(null, { status: 204 }) : Response.json(exactBinding);
+        }
+        if (url.includes("/api/trader/admin/account-observation?")) {
+          snapshotCalls += 1;
+          return pendingSnapshot;
+        }
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    render(<ConnectedAccountsTable />);
+    await waitFor(() => expect(snapshotCalls).toBe(1));
+    expect(screen.getByText("Partner cabinet")).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ADMIN_CONNECTED_ACCOUNTS_POLL_MS);
+    });
+    await waitFor(() =>
+      expect(screen.getByText("Доступ отозван. Данные счетов очищены.")).toBeInTheDocument(),
+    );
+
+    await act(async () => {
+      resolveSnapshot(Response.json(observationWithFuturesBalance("COMPLETE", now)));
+      await pendingSnapshot;
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.queryByText("Partner cabinet")).not.toBeInTheDocument();
+    expect(screen.queryByText("12.5")).not.toBeInTheDocument();
+    expect(screen.queryByText(account.exchangeAccountId)).not.toBeInTheDocument();
+    expect(screen.getByText("Доступ отозван. Данные счетов очищены.")).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ADMIN_CONNECTED_ACCOUNTS_POLL_MS);
+    });
+    await waitFor(() => expect(screen.getByText("Partner cabinet")).toBeInTheDocument());
+    expect(screen.queryByText("12.5")).not.toBeInTheDocument();
+    expect(screen.queryByText("13.5")).not.toBeInTheDocument();
+    expect(screen.getByText("Ожидается первый снимок")).toBeInTheDocument();
   });
 });

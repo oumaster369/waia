@@ -6,7 +6,6 @@ import * as React from "react";
 import {
   AdminErrorState,
   AdminLoadingState,
-  adminFetch,
 } from "@/components/trader/admin/admin-org-selector";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import {
@@ -19,6 +18,7 @@ import {
 import {
   observationBindingSchema,
   parseAccountObservation,
+  sameObservationBinding,
 } from "@/lib/trader/account-observation/validation";
 import type { ConnectedHtxAccountDto } from "@/lib/trader/credentials/connected-accounts.types";
 
@@ -84,6 +84,11 @@ async function readObservationRow(
     return { observation: "unavailable", ...empty };
   }
   const binding = observationBindingSchema.parse(await bindingResponse.json());
+  if (binding.organizationId !== account.organizationId ||
+      binding.credentialId !== account.credentialId ||
+      binding.exchangeAccountId !== account.exchangeAccountId) {
+    return { observation: "unavailable", ...empty };
+  }
   const observationParams = new URLSearchParams(binding);
   const observationResponse = await fetch(
     `/api/trader/admin/account-observation?${observationParams}`,
@@ -96,6 +101,9 @@ async function readObservationRow(
     return { observation: "unavailable", ...empty };
   }
   const snapshot = parseAccountObservation(await observationResponse.json());
+  if (!sameObservationBinding(snapshot.binding, binding)) {
+    return { observation: "unavailable", ...empty };
+  }
   const summary = summarizeCabinetObservation(snapshot);
   return {
     observation: "ready",
@@ -105,6 +113,33 @@ async function readObservationRow(
     lastTickMs: summary.lastTickMs,
     futures: summarizeFuturesBalance(snapshot, Date.now()),
   };
+}
+
+async function readAccountDirectory(signal: AbortSignal): Promise<
+  { ok: true; accounts: ConnectedHtxAccountDto[] } | { ok: false; revoked: boolean }
+> {
+  try {
+    const response = await fetch("/api/trader/admin/connected-accounts", {
+      cache: "no-store", credentials: "same-origin", signal,
+    });
+    // An access denial must clear retained account data even without a JSON body.
+    if (response.status === 401 || response.status === 403) return { ok: false, revoked: true };
+    if (!response.ok) return { ok: false, revoked: false };
+    const body: unknown = await response.json();
+    if (body === null || typeof body !== "object" || !("accounts" in body) ||
+        !Array.isArray(body.accounts)) return { ok: false, revoked: false };
+    const accounts = body.accounts;
+    if (!accounts.every((row): row is ConnectedHtxAccountDto => row !== null && typeof row === "object" &&
+      typeof row.organizationId === "string" && typeof row.credentialId === "string" &&
+      typeof row.exchangeAccountId === "string" && typeof row.accountName === "string" &&
+      typeof row.updatedAt === "string" && row.venue === "htx" && row.status === "active") ||
+      new Set(accounts.map(row => row.credentialId)).size !== accounts.length) {
+      return { ok: false, revoked: false };
+    }
+    return { ok: true, accounts };
+  } catch {
+    return { ok: false, revoked: false };
+  }
 }
 
 function futuresReadLabel(summary: FuturesBalanceSummary, nowMs: number): string {
@@ -199,13 +234,12 @@ export function ConnectedAccountsTable() {
         setLoading(true);
         setError(null);
       }
-      const result = await adminFetch<{ accounts?: ConnectedHtxAccountDto[] }>(
-        "/api/trader/admin/connected-accounts",
-      );
+      const result = await readAccountDirectory(controller.signal);
       if (controller.signal.aborted || ticket !== generation) return;
       if (!result.ok) {
-        if (first) {
-          setError(result.message);
+        if (first || result.revoked) {
+          setError(result.revoked ? "Доступ отозван. Данные счетов очищены." : "Не удалось загрузить счета HTX.");
+          setRefreshNotice(null);
           setRows([]);
           setLoading(false);
         } else {
@@ -213,8 +247,9 @@ export function ConnectedAccountsTable() {
         }
         return;
       }
+      setError(null);
       setRefreshNotice(null);
-      const accounts = result.data.accounts ?? [];
+      const accounts = result.accounts;
       setRows((current) => {
         const previous = new Map(current.map((row) => [row.credentialId, row]));
         return accounts.map((account) => {
