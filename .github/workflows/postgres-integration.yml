@@ -316,6 +316,9 @@ on:
       - "tests/integration/postgres-research-evaluation-source-v1.test.ts"
       - "tests/unit/postgres-dee1159-evaluation-source-proof-guard.test.ts"
       - "tests/unit/research-development-evaluation-source-v1.test.ts"
+      - "scripts/trader/discovery-evaluation-source.ts"
+      - "lib/trader/operator/operator-authority.ts"
+      - "tests/unit/trader-discovery-evaluation-source-cli.test.ts"
 
 env:
   DATABASE_URL_POSTGRES: postgresql://waia_it:waia_it@127.0.0.1:5432/waia_it

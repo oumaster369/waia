@@ -1,5 +1,8 @@
 /** Synthetic-only proof of the restricted DEVELOPMENT evaluation-source issuer. */
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { join } from "node:path";
 import { writeFileSync } from "node:fs";
 import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -150,6 +153,45 @@ describe.skipIf(!enabled)("DEE-1159 DEVELOPMENT evaluation-source PostgreSQL", (
     expect(await evaluationRows(request.commandId)).toHaveLength(6);
     expect(await issuanceCount(request.commandId)).toBe(1);
   });
+
+  it("prepares and replays through the real operator CLI without payload or scoring effects", async () => {
+    const training = await issueTrainingSource();
+    const request = evaluationRequest(training);
+    const requestFile = join(fixture.rootDir, "evaluation-selection.json");
+    writeFileSync(requestFile, JSON.stringify(request), { mode: 0o600 });
+    const stageCounts = async () => (await admin`SELECT
+      (SELECT count(*)::int FROM public.trader_orders WHERE organization_id=${ORG}::uuid) AS orders,
+      (SELECT count(*)::int FROM public.trader_fills f JOIN public.trader_orders o ON o.id=f.order_id
+        WHERE o.organization_id=${ORG}::uuid) AS fills,
+      (SELECT count(*)::int FROM public.trader_accounting_frontier WHERE organization_id=${ORG}::uuid) AS frontiers,
+      (SELECT count(*)::int FROM public.trader_research_training_diagnostics_v1 WHERE organization_id=${ORG}::uuid) AS diagnostics,
+      (SELECT count(*)::int FROM public.trader_research_issued_attempts_v2 WHERE organization_id=${ORG}::uuid) AS attempts`)[0];
+    const beforeStages = await stageCounts();
+    const invoke = async () => {
+      const { stdout, stderr } = await promisify(execFile)(process.execPath,
+        ["--import", "tsx", "--conditions=react-server", "scripts/trader/discovery-run.ts",
+          "--prepare-evaluation-source=1", `--org-id=${ORG}`, `--request-file=${requestFile}`],
+        { cwd: process.cwd(), env: { ...process.env, WAIA_TRADER_CLI: "1" }, timeout: 30_000, maxBuffer: 256 * 1024 });
+      expect(stderr).toBe("");
+      const lines = stdout.trim().split("\n");
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatch(/^\[trader:discovery:run\] evaluation-source /);
+      return JSON.parse(lines[0]!.replace("[trader:discovery:run] evaluation-source ", ""));
+    };
+    const first = await invoke();
+    expect(first).toMatchObject({ status: "COMMITTED", preparationOnly: true,
+      evaluationSourceId: researchDevelopmentEvaluationSourceIdV1(request),
+      trainingSourceRunId: training.sourceRunId, trainingSourceIssuanceDigest: training.contentDigest,
+      scientificQualified: false, capitalEligible: false });
+    expect(first.contentDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(first.rowSetSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(Object.keys(first).sort()).toEqual(["status", "preparationOnly", "evaluationSourceId", "trainingSourceRunId",
+      "trainingSourceIssuanceDigest", "contentDigest", "rowSetSha256", "scientificQualified", "capitalEligible"].sort());
+    expect(await invoke()).toEqual({ ...first, status: "REPLAYED" });
+    expect(await issuanceCount(request.commandId)).toBe(1);
+    expect(await evaluationRows(request.commandId)).toHaveLength(6);
+    expect(await stageCounts()).toEqual(beforeStages);
+  }, 60_000);
 
   it("refuses missing and forged training issuance bindings without partial writes", async () => {
     const training = await issueTrainingSource();

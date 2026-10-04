@@ -24,6 +24,7 @@ import {
   type CampaignRunFrontmatter,
 } from "@/lib/trader/research/campaign-run-frontmatter";
 import { prepareResearchDevelopmentSourcePostgresV1 } from "@/lib/trader/research/research-development-source-owner-postgres-v1";
+import { prepareResearchDevelopmentEvaluationSourcePostgresV1 } from "@/lib/trader/research/research-development-evaluation-source-owner-postgres-v1";
 import { captureResearchDevelopmentSourceRequestV1 } from "@/lib/trader/research/research-development-source-contract-v1";
 import { captureResearchIssuedTrainingRequestV2 } from "@/lib/trader/research/research-issued-training-contract-v2";
 import { runResearchIssuedTrainingDiagnosticPostgresV2, selectResearchIssuedTrainingFamilyPostgresV1 } from "@/lib/trader/research/research-issued-training-diagnostic-postgres-v2";
@@ -36,6 +37,7 @@ import {
   runDiscoveryExperimentRegistrationBranch,
   runDiscoveryIssuedAttemptRegistrationBranch,
 } from "@/scripts/trader/discovery-registration";
+import { readResearchEvaluationSourceRequestFile, runDiscoveryEvaluationSourceBranch } from "@/scripts/trader/discovery-evaluation-source";
 
 const LOG_PREFIX = "[trader:discovery:run]";
 
@@ -130,6 +132,12 @@ Separate issued-attempt registration (registration only; experiment and source m
     --spec-sha256=<64 lowercase hex> --source-run-id=<research-source-v1:64 lowercase hex>
     --command-id=<stable command>
   Requires WAIA_TRADER_CLI=1 and operator authorization. The two registration modes cannot be combined.
+
+Separate DEVELOPMENT evaluation-source preparation (metadata-only; does not evaluate or disclose bars):
+  pnpm trader:discovery:run -- --prepare-evaluation-source=1 --org-id=<Org0 uuid>
+    --request-file=<absolute JSON file, max 256 KiB>
+  The request names an already-issued training source and exact absolute validation/WF ranges.
+  Requires WAIA_TRADER_CLI=1 and operator authorization. The request file contains selection metadata only.
 `);
 }
 
@@ -163,6 +171,10 @@ const SOURCE_PREPARATION_FLAGS = new Set([
 
 function hasSourcePreparationFlag(argv: readonly string[]): boolean {
   return argv.some((arg) => arg === "--prepare-source" || arg.startsWith("--prepare-source="));
+}
+
+function hasEvaluationSourceFlag(argv: readonly string[]): boolean {
+  return argv.some(arg => arg === "--prepare-evaluation-source" || arg.startsWith("--prepare-evaluation-source="));
 }
 
 function parseStrictInteger(value: string | boolean | undefined, flag: string): number {
@@ -416,6 +428,18 @@ async function main(): Promise<void> {
   }
 
   const argv = process.argv.slice(2);
+  if (hasEvaluationSourceFlag(argv)) {
+    const outcome = await runDiscoveryEvaluationSourceBranch(argv, {
+      cliEnabled: process.env.WAIA_TRADER_CLI === "1",
+      authorize: () => assertOperatorActionAllowed("authorize_discovery_run"),
+      readRequest: readResearchEvaluationSourceRequestFile,
+      prepare: prepareResearchDevelopmentEvaluationSourcePostgresV1,
+      print: summary => console.log(`${LOG_PREFIX} evaluation-source ${JSON.stringify(summary)}`),
+    });
+    if (outcome.error) console.error(`${LOG_PREFIX} ${outcome.error}`);
+    if (outcome.exitCode !== 0) process.exitCode = outcome.exitCode;
+    return;
+  }
   if (argv.some(arg => arg === "--register-experiment" || arg.startsWith("--register-experiment="))) {
     const outcome = await runDiscoveryExperimentRegistrationBranch(argv, {
       cliEnabled: process.env.WAIA_TRADER_CLI === "1",
@@ -550,6 +574,7 @@ async function main(): Promise<void> {
 if (
   process.env.WAIA_TRADER_CLI === "1" ||
   hasSourcePreparationFlag(process.argv.slice(2)) ||
+  hasEvaluationSourceFlag(process.argv.slice(2)) ||
   hasIssuedTrainingFlag(process.argv.slice(2)) ||
   process.argv.slice(2).some(arg => arg === "--register-experiment" || arg.startsWith("--register-experiment=")) ||
   process.argv.slice(2).some(arg => arg === "--register-issued-attempt" || arg.startsWith("--register-issued-attempt="))

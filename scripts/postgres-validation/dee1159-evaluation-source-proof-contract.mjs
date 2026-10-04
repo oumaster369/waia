@@ -3,6 +3,7 @@ export const databaseName = "waia_hsv2_it_dee1159_eval_source_v1";
 export const requiredSuites = ["tests/integration/postgres-research-evaluation-source-v1.test.ts"];
 export const requiredAssertionTitles = [
   "commits exact indexed rows and metadata, then returns the immutable retry without payload",
+  "prepares and replays through the real operator CLI without payload or scoring effects",
   "refuses missing and forged training issuance bindings without partial writes",
   "refuses changed selection under the same command and corrupt source without partial rows",
   "refuses a saved evaluation row moved out of its committed run on retry",
@@ -22,6 +23,9 @@ export const requiredAssertionTitles = [
 export const draftSql = [...trainingDrafts, "docs/plans/dee-1159-evaluation-source-owner.sql"];
 export const sourcePaths = [...new Set([
   ...trainingSources,
+  "scripts/trader/discovery-evaluation-source.ts",
+  "lib/trader/operator/operator-authority.ts",
+  "tests/unit/trader-discovery-evaluation-source-cli.test.ts",
   "lib/trader/research/research-development-evaluation-source-contract-v1.ts",
   "lib/trader/research/research-development-evaluation-source-snapshot-v1.ts",
   "lib/trader/research/research-development-evaluation-source-issuance-v1.ts",
