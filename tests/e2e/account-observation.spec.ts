@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { parseAccountObservation } from "../../lib/trader/account-observation/validation";
 import { signUpAndOpenDashboard } from "./helpers/auth-dashboard";
 import { grantTraderEntitlementByUserEmail } from "./helpers/trader-sqlite";
 import { grantPlatformAdminByUserEmail } from "./helpers/treasury-admin-sqlite";
@@ -16,7 +17,7 @@ const binding = {
 test("mounted Admin and tenant update the same observation automatically and clear revoked access", async ({
   page,
   context,
-}) => {
+}, testInfo) => {
   test.setTimeout(90_000);
   const email = `e2e-account-observation-${Date.now()}@example.com`;
   await signUpAndOpenDashboard(page, email);
@@ -173,7 +174,30 @@ test("mounted Admin and tenant update the same observation automatically and cle
       },
       positions: {
         status: "COMPLETE",
-        values: [],
+        values: [
+          {
+            contractCode: "BTC-USDT",
+            positionSide: "long",
+            direction: "buy",
+            marginMode: "cross",
+            volume: "2",
+            available: "2",
+            openAveragePrice: "60000",
+            liquidationPrice: null,
+            initialMargin: "10",
+            maintenanceMargin: "2",
+            margin: "10",
+            profitUnreal: "1.25",
+            profitRate: "0.01",
+            marginRate: "0.02",
+            marginCurrency: "USDT",
+            lastPrice: "61000",
+            markPrice: "61000",
+            contractType: "swap",
+            createdTimeMs: at - 1000,
+            updatedTimeMs: at,
+          },
+        ],
         readStartedAtMs: at,
         readCompletedAtMs: at,
         responseGeneratedAtMs: at,
@@ -197,7 +221,40 @@ test("mounted Admin and tenant update the same observation automatically and cle
       },
       algoOrders: {
         status: "PARTIAL",
-        values: [],
+        values: [
+          {
+            id: "101",
+            algoId: "algo-stop-fixture",
+            contractCode: "BTC-USDT",
+            volume: "1",
+            type: "sl",
+            state: "active",
+            positionSide: "long",
+            side: "sell",
+            marginMode: "cross",
+            tpTriggerPrice: null,
+            slTriggerPrice: "59000",
+            reduceOnly: true,
+            createdTimeMs: at - 900,
+            updatedTimeMs: at,
+          },
+          {
+            id: "102",
+            algoId: "algo-target-fixture",
+            contractCode: "BTC-USDT",
+            volume: "1",
+            type: "tp",
+            state: "active",
+            positionSide: "long",
+            side: "sell",
+            marginMode: "cross",
+            tpTriggerPrice: "62000",
+            slTriggerPrice: null,
+            reduceOnly: true,
+            createdTimeMs: at - 900,
+            updatedTimeMs: at,
+          },
+        ],
         readStartedAtMs: at,
         readCompletedAtMs: at,
         responseGeneratedAtMs: at,
@@ -227,7 +284,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
         values: null,
       },
     };
-    return {
+    return parseAccountObservation({
       schemaVersion: v5Enabled ? "account-observation/v3" : "account-observation/v2",
       binding,
       observationId:
@@ -276,7 +333,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
         })),
       },
       ...(v5Enabled ? { htxV5 } : {}),
-    };
+    });
   };
   const wire = async (target: Page, admin: boolean) => {
     await target.route(`**/api/trader/${admin ? "admin/" : ""}account-observation**`, (route) => {
@@ -429,14 +486,20 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(adminPanel.getByText(observation().observationId)).toBeVisible({ timeout: 12_000 });
   for (const panel of [tenantPanel, adminPanel]) {
     const v5 = panel.getByRole("region", { name: "HTX futures snapshot" });
-    await expect(v5.getByText("HTX futures snapshot")).toBeVisible();
-    await expect(v5.getByText("Total equity (USD)")).toBeVisible();
-    await expect(v5.getByText("Some results may be missing from this read.").first()).toBeVisible();
+    await expect(v5.getByText("Снимок фьючерсного счёта HTX")).toBeVisible();
+    await expect(v5.getByText("Капитал счёта (USD)")).toBeVisible();
+    await expect(v5.getByText("В этой выборке могут отсутствовать некоторые записи.").first()).toBeVisible();
+    await expect(panel.getByText("HTX · счёт account-a · UID 9988776655")).toBeVisible();
+    await expect(panel.getByText(/Результат за день: недоступен/)).toBeVisible();
+    await expect(v5.getByText("Стоп: цена 59000; объём 1 контр.")).toBeVisible();
+    await expect(v5.getByText("Цель: цена 62000; объём 1 контр.")).toBeVisible();
+    await expect(v5.getByText("Полнота покрытия позиции неизвестна; защита не подтверждена.")).toBeVisible();
     await expect(
-      v5.getByText("Fill history is unavailable; no fill count is implied."),
+      v5.getByText("История исполнений недоступна; число исполнений неизвестно."),
     ).toBeVisible();
     await expect(panel.getByText("BTC · BTC-USDT", { exact: true })).toBeVisible();
-    await expect(v5.getByRole("alert")).toHaveCount(0);
+    await expect(v5.getByRole("alert")).toHaveCount(1);
+    await expect(v5.getByRole("alert")).toHaveText("Наличие защиты открытой позиции не подтверждено этим снимком.");
     await expect(v5.getByRole("button")).toHaveCount(0);
   }
   streamFailed = true;
@@ -463,6 +526,9 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(tenantPanel.getByRole("region", { name: "HTX futures snapshot" })).toHaveCount(0);
   await expect(adminPanel.getByRole("region", { name: "HTX futures snapshot" })).toHaveCount(0);
 
+  await expect(tenantPanel.getByText("HTX · счёт account-a · UID 9988776655")).toHaveCount(0);
+  await expect(adminPanel.getByText("HTX · счёт account-a · UID 9988776655")).toHaveCount(0);
+
   // Restore the local fixture after the revocation case, then capture the mounted
   // Spot/Futures cabinet and Admin index at desktop and mobile widths.
   denied = false;
@@ -475,14 +541,23 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(restoredTenantPanel.getByText(observation().observationId)).toBeVisible();
   await expect(restoredTenantPanel.getByRole("region", { name: "Спот" })).toBeVisible();
   await expect(restoredTenantPanel.getByRole("region", { name: "Фьючерсы" })).toBeVisible();
-  await expect(restoredTenantPanel.getByText("Total equity (USD)")).toBeVisible();
+  await expect(restoredTenantPanel.getByText("Капитал счёта (USD)")).toBeVisible();
+  await expect(restoredTenantPanel.getByText("Стоп: цена 59000; объём 1 контр.")).toBeVisible();
+  await expect(restoredTenantPanel.getByText("Цель: цена 62000; объём 1 контр.")).toBeVisible();
+  await restoredTenantPanel.getByRole("region", { name: "HTX futures snapshot" }).screenshot({
+    path: testInfo.outputPath("htx-v5-desktop.png"),
+  });
+  await page.screenshot({
+    path: testInfo.outputPath("account-observation-shared-view.png"),
+    fullPage: true,
+  });
   await page.screenshot({
     path: "test-results/account-observation-cabinet-desktop.png",
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await restoredTenantPanel
-    .getByRole("heading", { name: "Фьючерсы", exact: true })
+    .getByRole("heading", { name: "Фьючерсы · маржа, позиции и заявки", exact: true })
     .scrollIntoViewIfNeeded();
   await page.screenshot({
     path: "test-results/account-observation-cabinet-mobile.png",

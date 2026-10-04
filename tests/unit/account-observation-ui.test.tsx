@@ -601,6 +601,6 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
     );
     expect(screen.getByRole("status")).toHaveTextContent("Live");
     expect(screen.getByText("Reconnecting automatically.")).toBeVisible();
-    expect(screen.getByText(/awaiting the next collector tick|next update in/)).toBeVisible();
+    expect(screen.getByText(/ожидается следующий сбор|следующее обновление через/)).toBeVisible();
   });
 });
