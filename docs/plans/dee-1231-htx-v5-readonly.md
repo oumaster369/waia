@@ -55,11 +55,15 @@ itself still has trading authority; the observation code exposes only fixed read
 Legacy derivatives readers are excluded from existing-key consent. No orders, cancels,
 stop edits, transfers, account-mode changes, execution flags or second executor are added.
 
-Two additional metadata-column grants allow the exact pre-decryption query. Their SQL
-is currently a LOCAL validation draft at
-`scripts/postgres-validation/fixtures/observation-existing-key-consent-draft.sql`.
-It is not journaled and must not be applied to production. Canonical numbering and
-rollout must be coordinated with the deferred PR759/0230; applied migration0229 is unchanged.
+Two additional metadata-column grants allow the exact pre-decryption query. On October 4
+the Human explicitly approved assigning 0230 to these grants and moving PR759's still
+unapplied inventory payload to 0231 without changing its bytes or releasing its HOLD.
+The canonical source is `db/migrations_postgres/0230_trader_observation_consent_revision_grants_v1.sql`,
+with journal idx230/when1780000000230. It replaces the local proof draft; applied0229 and
+the complete journal prefix through it remain unchanged. There are no schema-model
+changes: this migration grants access to two existing metadata columns only.
+This sequence decision does not authorize a production apply or final T3 merge.
+Inventory0231 must not be included in the eventual targeted 0230 apply packet.
 Strict read-only mode remains compatible before/after these additive grants. Consent mode
 refuses startup if either required metadata-column grant is missing.
 

@@ -1357,15 +1357,15 @@ describe.skipIf(!enabled)(
       });
     });
 
-    describe("existing-key consent draft (isolated database only)", () => {
+    describe("canonical existing-key consent grants (isolated database only)", () => {
       const configurationRevision = `sha256:${"c".repeat(64)}`;
       beforeAll(async () => {
         await expect(probeObservationCredentialPool(open("credential"), true))
           .rejects.toThrow("OBSERVATION_CREDENTIAL_ROLE_REFUSED");
         await admin.begin(async tx => {
           await tx.unsafe("SET LOCAL ROLE dee1015_cred_owner");
-          const draft = readFileSync("scripts/postgres-validation/fixtures/observation-existing-key-consent-draft.sql", "utf8");
-          for (const statement of draft.split("--> statement-breakpoint")) {
+          const migration = readFileSync("db/migrations_postgres/0230_trader_observation_consent_revision_grants_v1.sql", "utf8");
+          for (const statement of migration.split("--> statement-breakpoint")) {
             if (statement.trim()) await tx.unsafe(statement);
           }
         });

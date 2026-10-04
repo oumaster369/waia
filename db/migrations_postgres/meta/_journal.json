@@ -1611,6 +1611,13 @@
       "when": 1780000000229,
       "tag": "0229_trader_observation_read_only_credential_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 230,
+      "version": "7",
+      "when": 1780000000230,
+      "tag": "0230_trader_observation_consent_revision_grants_v1",
+      "breakpoints": true
     }
   ]
 }
