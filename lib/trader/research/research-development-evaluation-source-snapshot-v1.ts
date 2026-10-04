@@ -20,9 +20,9 @@ type SourceHost = Readonly<{
 /** Private preparation building block for the future restricted durable issuer.
  * The caller must own host configuration and read the training issuance from its
  * committed snapshot. Parsing supplied metadata here cannot establish that fact.
- * No evaluator/CLI uses this helper, and no bars/cycles leave its result. It is
+ * Only the restricted issuer uses this internal loader. Its private payload is
  * not a consumed-payload reader and grants no research or execution authority. */
-export async function prepareResearchDevelopmentEvaluationSourceMetadataV1(input: Readonly<{
+export async function loadResearchDevelopmentEvaluationSourceSnapshotV1(input: Readonly<{
   request: unknown; trainingIssuance: unknown; host: SourceHost; signal?: AbortSignal;
 }>) {
   const request = captureResearchDevelopmentEvaluationSourceRequestV1(input.request);
@@ -98,5 +98,12 @@ export async function prepareResearchDevelopmentEvaluationSourceMetadataV1(input
   });
   if (Buffer.byteLength(JSON.stringify(metadata)) > LIMITS.maxReceiptBytes) throw new Error("RESEARCH_EVALUATION_SOURCE_METADATA_BYTE_LIMIT");
   signal.throwIfAborted();
-  return metadata;
+  return Object.freeze({ metadata, snapshot });
+}
+
+/** Metadata-only preparation facade. A parsed training receipt is not committed authority. */
+export async function prepareResearchDevelopmentEvaluationSourceMetadataV1(
+  input: Parameters<typeof loadResearchDevelopmentEvaluationSourceSnapshotV1>[0],
+) {
+  return (await loadResearchDevelopmentEvaluationSourceSnapshotV1(input)).metadata;
 }

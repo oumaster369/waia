@@ -312,6 +312,10 @@ on:
       - "tests/unit/postgres-historical-reconciliation-profile-proof-guard.test.ts"
       - "drizzle.postgres.config.ts"
       - ".github/workflows/postgres-integration.yml"
+      - "docs/plans/dee-1159-evaluation-source-owner.sql"
+      - "tests/integration/postgres-research-evaluation-source-v1.test.ts"
+      - "tests/unit/postgres-dee1159-evaluation-source-proof-guard.test.ts"
+      - "tests/unit/research-development-evaluation-source-v1.test.ts"
 
 env:
   DATABASE_URL_POSTGRES: postgresql://waia_it:waia_it@127.0.0.1:5432/waia_it
@@ -660,6 +664,72 @@ jobs:
           path: |
             .tmp/dee1222-postgres-source-manifest.json
             .tmp/dee1222-postgres-results.json
+          if-no-files-found: warn
+
+  dee1159-evaluation-source-postgres:
+    name: DEE-1159 evaluation source owner (executed PostgreSQL proof required)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: waia_it
+          POSTGRES_PASSWORD: waia_it
+          POSTGRES_DB: waia_hsv2_it_dee1159_eval_source_v1
+          # Disposable CI only: restricted login intentionally has no provisioned secret.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U waia_it -d waia_hsv2_it_dee1159_eval_source_v1"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      DATABASE_URL_POSTGRES: postgresql://waia_it:waia_it@127.0.0.1:5432/waia_hsv2_it_dee1159_eval_source_v1
+      DATABASE_URL_POSTGRES_SESSION: postgresql://waia_it:waia_it@127.0.0.1:5432/waia_hsv2_it_dee1159_eval_source_v1
+      WAIA_DB_BACKEND: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Auth prelude and current journal on fresh synthetic PostgreSQL 16
+        env:
+          WAIA_POSTGRES_CLI: "1"
+        run: pnpm db:postgres:auth-prelude && pnpm db:migrate:postgres
+      - name: Apply bounded research drafts and bind source before native execution
+        run: node scripts/postgres-validation/prepare-dee1159-evaluation-source-proof.mjs
+      - name: Execute DEE-1159 evaluation-source native suite and require zero skips
+        env:
+          WAIA_PG_INTEGRATION: "1"
+          WAIA_TRADER_CLI: "1"
+          WAIA_POSTGRES_CLI: "1"
+        run: |
+          mkdir -p .tmp
+          rm -f .tmp/dee1159-evaluation-source-results.json
+          set +e
+          pnpm test --run --no-file-parallelism --reporter=default --reporter=json --outputFile=.tmp/dee1159-evaluation-source-results.json \
+            tests/integration/postgres-research-evaluation-source-v1.test.ts
+          test_status=$?
+          node scripts/postgres-validation/assert-dee1159-evaluation-source-results.mjs .tmp/dee1159-evaluation-source-results.json
+          guard_status=$?
+          if [ "$test_status" -ne 0 ]; then exit "$test_status"; fi
+          exit "$guard_status"
+      - name: Retain exact source manifest and Vitest report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dee1159-evaluation-source-proof-${{ github.run_attempt }}
+          path: |
+            .tmp/dee1159-evaluation-source-source-manifest.json
+            .tmp/dee1159-evaluation-source-results.json
           if-no-files-found: warn
 
   capital-authority:
