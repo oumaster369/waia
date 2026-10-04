@@ -81,4 +81,53 @@ test.describe("/trader static shell boundary (AT-E1 S1)", () => {
       page.getByText("This workspace cannot enable live trading or change capital authority."),
     ).toBeVisible();
   });
+
+  test("lets an entitled user choose among accounts and inspect replacement/revoke confirmations", async ({
+    page,
+  }, testInfo) => {
+    const email = `e2e-trader-lifecycle-${Date.now()}@example.com`;
+    await signUpAndOpenDashboard(page, email);
+    grantTraderEntitlementByUserEmail(email);
+    const fixtureCredential = (id: string, exchangeAccountId: string) => ({
+      id,
+      venue: "htx",
+      exchangeAccountId,
+      apiKeyMasked: "fixture…key",
+      status: "active",
+      permissionMetadata: null,
+      createdAt: "2026-10-03T00:00:00.000Z",
+      updatedAt: "2026-10-03T00:00:00.000Z",
+      revokedAt: null,
+    });
+    await page.route("**/api/trader/exchange-credentials", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ credentials: [fixtureCredential("fixture-a", "account-a"), fixtureCredential("fixture-b", "account-b")] }),
+      }),
+    );
+    await page.route("**/api/trader/account-observation/**", (route) =>
+      route.fulfill({ status: 204 }),
+    );
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/trader");
+    const selector = page.getByTestId("trader-account-select");
+    await expect(selector).toHaveValue("");
+    await selector.selectOption("account-a");
+    await expect(selector).toHaveValue("account-a");
+    await page.getByTestId("trader-replace-button").focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("trader-connect-section")).toContainText("Это заменит подключение в WAIA");
+    await page.getByRole("button", { name: "Отмена" }).focus();
+    await page.keyboard.press("Enter");
+    await page.getByTestId("trader-disconnect-button").focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("group", { name: "Подтвердить отключение" })).toContainText(
+      "Сам ключ HTX и внешний исполнитель не изменятся",
+    );
+    await expect(page.getByTestId("trader-disconnect-confirm")).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("account-lifecycle-mobile.png") });
+    await page.getByRole("button", { name: "Отмена" }).focus();
+    await page.keyboard.press("Enter");
+  });
 });
