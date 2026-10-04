@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { assertSourceHashes, assertVitestProofReport, githubPathPatternMatches, requiredAssertionTitles, requiredAssertionTitlesBySuite, requiredSuites, sourcePaths, uncoveredSourcePathsForPullRequestWorkflow } from "@/scripts/postgres-validation/dee1159-evaluation-source-proof-contract.mjs";
+import { assertSourceHashes, assertVitestProofReport, draftSql, githubPathPatternMatches, requiredAssertionTitles, requiredAssertionTitlesBySuite, requiredSuites, sourcePaths, uncoveredSourcePathsForPullRequestWorkflow } from "@/scripts/postgres-validation/dee1159-evaluation-source-proof-contract.mjs";
 
 function report() {
   const testResults = requiredSuites.map(path => ({ name: `/workspace/${path}`, status: "passed",
@@ -31,6 +31,9 @@ describe("DEE-1159 evaluation source executed PostgreSQL proof guard", () => {
     const workflow = readFileSync(resolve(process.cwd(), ".github/workflows/postgres-integration.yml"), "utf8");
     expect(new Set(sourcePaths).size).toBeGreaterThan(0);
     expect(sourcePaths).toContain("lib/trader/research/research-owned-postgres-pool-v1.ts");
+    expect(sourcePaths).toContain("lib/trader/research/research-issued-training-diagnostic-postgres-v2.ts");
+    expect(draftSql).toContain("docs/plans/dee-1159-evaluation-stage-owner.sql");
+    expect(sourcePaths).toContain("docs/plans/dee-1159-evaluation-stage-owner.sql");
     expect(sourcePaths).toContain("package.json");
     expect(sourcePaths).toContain("pnpm-lock.yaml");
     expect(uncoveredSourcePathsForPullRequestWorkflow(workflow)).toEqual([]);
@@ -71,7 +74,7 @@ describe("DEE-1159 evaluation source executed PostgreSQL proof guard", () => {
     ["failed assertion", (value: ReturnType<typeof report>) => { value.testResults[0]!.assertionResults[0]!.status = "failed"; }],
     ["todo counter", (value: ReturnType<typeof report>) => { value.numTodoTests = 1; }],
     ["failed file status", (value: ReturnType<typeof report>) => { value.testResults[0]!.status = "failed"; }],
-    ["too few assertions", (value: ReturnType<typeof report>) => { value.numTotalTests = 9; value.numPassedTests = 9; value.testResults[0]!.assertionResults.pop(); }],
+    ["too few assertions", (value: ReturnType<typeof report>) => { value.numTotalTests = requiredAssertionTitles.length - 1; value.numPassedTests = value.numTotalTests; value.testResults[0]!.assertionResults.pop(); }],
     ["missing required poison case", (value: ReturnType<typeof report>) => { value.testResults[0]!.assertionResults[2]!.title = "unrelated case"; }],
     ["duplicate required poison case", (value: ReturnType<typeof report>) => { value.testResults[0]!.assertionResults[3]!.title = value.testResults[0]!.assertionResults[2]!.title; }],
   ])("refuses %s", (_label, mutate) => {

@@ -314,6 +314,7 @@ on:
       - ".github/workflows/postgres-integration.yml"
       - "docs/plans/dee-1159-evaluation-source-owner.sql"
       - "docs/plans/dee-1159-evaluation-claim-owner.sql"
+      - "docs/plans/dee-1159-evaluation-stage-owner.sql"
       - "tests/integration/postgres-research-evaluation-claim-v1.test.ts"
       - "tests/unit/trader-research-evaluation-claim-contract-v1.test.ts"
       - "tests/integration/postgres-research-evaluation-source-v1.test.ts"

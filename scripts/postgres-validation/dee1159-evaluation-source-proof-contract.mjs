@@ -30,12 +30,19 @@ export const requiredAssertionTitlesBySuite = {
   "lets only one concurrent command consume a frozen validation key, including across attempts",
   "rolls back the global consume when immutable claim insertion fails",
   "confirms lost COMMIT acknowledgement and leaves unavailable recovery for an explicit retry",
-  "enforces claim immutability and denies browser roles"
+  "enforces claim immutability and denies browser roles",
+  "requires a committed claim before reading the evaluation payload",
+  "commits validation and every walk-forward stage, then verifies an effect-free replay",
+  "rolls back every stage when a later result insert fails while retaining the prior claim",
+  "confirms the whole evaluation batch after a lost COMMIT acknowledgement",
+  "serializes concurrent evaluation calls for one committed claim into one batch and one replay",
+  "refuses a tampered committed stage trace on replay",
+  "enforces evaluation stage immutability and denies browser roles"
 ]
 };
 export const requiredAssertionTitles = Object.values(requiredAssertionTitlesBySuite).flat();
 export const draftSql = [...trainingDrafts, "docs/plans/dee-1159-evaluation-source-owner.sql",
-  "docs/plans/dee-1159-evaluation-claim-owner.sql"];
+  "docs/plans/dee-1159-evaluation-claim-owner.sql", "docs/plans/dee-1159-evaluation-stage-owner.sql"];
 export const sourcePaths = [...new Set([
   ...trainingSources,
   "lib/trader/research/research-development-evaluation-claim-contract-v1.ts",
@@ -52,6 +59,7 @@ export const sourcePaths = [...new Set([
   "lib/trader/research/research-development-evaluation-source-owner-postgres-v1.ts",
   "lib/trader/research/research-development-evaluation-source-read-v1.ts",
   "lib/trader/research/research-development-evaluation-source-role-v1.ts",
+  "lib/trader/research/research-issued-training-diagnostic-postgres-v2.ts",
   "lib/trader/historical-simulation-v2/dataset-registration-identity-v2.ts",
   "tests/unit/research-development-evaluation-source-v1.test.ts",
   "tests/unit/postgres-dee1159-evaluation-source-proof-guard.test.ts",

@@ -17,7 +17,8 @@ import { loadStrategyAdmissionJournal } from "@/lib/trader/research/strategy-adm
 import { RESEARCH_DEVELOPMENT_SOURCE_ORG_V1 as ORG } from "@/lib/trader/research/research-development-source-contract-v1";
 import { RESEARCH_EVALUATION_SOURCE_LOGIN_V1 } from "@/lib/trader/research/research-development-evaluation-source-issuance-v1";
 import { prepareResearchDevelopmentEvaluationSourcePostgresV1 } from "@/lib/trader/research/research-development-evaluation-source-owner-postgres-v1";
-import { reserveResearchDevelopmentEvaluationPostgresV1, runResearchIssuedTrainingDiagnosticPostgresV2,
+import { reserveResearchDevelopmentEvaluationPostgresV1, runResearchDevelopmentEvaluationPostgresV1,
+  runResearchIssuedTrainingDiagnosticPostgresV2,
   selectResearchIssuedTrainingFamilyPostgresV1 } from "@/lib/trader/research/research-issued-training-diagnostic-postgres-v2";
 
 const url = process.env.DATABASE_URL_POSTGRES?.trim();
@@ -42,10 +43,11 @@ describe.skipIf(!enabled)("DEE-1159 DEVELOPMENT evaluation claim PostgreSQL", ()
     return parsed.toString();
   };
 
-  async function readyFixture(label: string, options: { select?: boolean; incomplete?: boolean } = {}) {
+  async function readyFixture(label: string, options: { select?: boolean; incomplete?: boolean; evaluationDip?: boolean } = {}) {
     vi.stubEnv("DATABASE_URL_POSTGRES", url!);
     const source = createResearchDevelopmentSourceFixtureV1({
       barCount: 20, sourceReleaseSha: "a".repeat(40), releaseSha: "b".repeat(40),
+      ...(options.evaluationDip ? { closes: [...Array<number>(11).fill(100), 100, 100, 100, 100, 90, 100, 100, 100, 100] } : {}),
     });
     vi.stubEnv("WAIA_RELEASE_SHA", source.releaseSha);
     vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "");
@@ -138,6 +140,18 @@ describe.skipIf(!enabled)("DEE-1159 DEVELOPMENT evaluation claim PostgreSQL", ()
       (SELECT count(*)::int FROM public.trader_research_development_evaluation_claims_v1) AS claims,
       (SELECT count(*)::int FROM public.trader_strategy_admission_split_consume) AS consumes,
       (SELECT count(*)::int FROM public.trader_strategy_admission_journal) AS metrics`;
+    return row!;
+  }
+  async function evaluationCounts(claimId?: string) {
+    const [row] = await admin`SELECT
+      (SELECT count(*)::int FROM public.trader_research_development_evaluation_scopes_v1
+        WHERE ${claimId ?? null}::uuid IS NULL OR claim_id=${claimId ?? null}::uuid) AS scopes,
+      (SELECT count(*)::int FROM public.trader_research_development_evaluation_results_v1
+        WHERE ${claimId ?? null}::uuid IS NULL OR claim_id=${claimId ?? null}::uuid) AS results,
+      (SELECT count(*)::int FROM public.trader_orders WHERE historical_account_key LIKE 'research-evaluation-stage:%') AS orders,
+      (SELECT count(*)::int FROM public.trader_fills f JOIN public.trader_orders o ON o.id=f.order_id
+        WHERE o.historical_account_key LIKE 'research-evaluation-stage:%') AS fills,
+      (SELECT count(*)::int FROM public.trader_accounting_frontier WHERE account_key LIKE 'research-evaluation-stage:%') AS frontiers`;
     return row!;
   }
   async function modelEffects() {
@@ -362,8 +376,209 @@ describe.skipIf(!enabled)("DEE-1159 DEVELOPMENT evaluation claim PostgreSQL", ()
       await expect(admin`DELETE FROM public.trader_research_development_evaluation_claims_v1
         WHERE organization_id=${ORG}::uuid AND command_id=${f.request.commandId}`)
         .rejects.toThrow("RESEARCH_SOURCE_APPEND_ONLY");
-      await expect(admin`TRUNCATE public.trader_research_development_evaluation_claims_v1`)
+      await expect(admin`TRUNCATE public.trader_research_development_evaluation_claims_v1 CASCADE`)
         .rejects.toThrow("RESEARCH_SOURCE_APPEND_ONLY");
     } finally { f.source.cleanup(); }
   }, 240_000);
+
+  it("requires a committed claim before reading the evaluation payload", async () => {
+    const f = await readyFixture("evaluation-requires-claim");
+    try {
+      const before = await evaluationCounts();
+      const [datasetRow] = await admin`SELECT run_id,organization_id,
+        (membership_json->>'recordIndex')::int AS record_index
+        FROM public.trader_historical_dataset_authority_v2
+        WHERE organization_id=${ORG}::uuid AND run_id=${f.request.evaluationSourceId} LIMIT 1`;
+      expect(datasetRow).toBeTruthy();
+      await admin.unsafe("ALTER TABLE public.trader_historical_dataset_authority_v2 DISABLE TRIGGER ALL");
+      try {
+        await admin`UPDATE public.trader_historical_dataset_authority_v2 SET run_id=${`research-evaluation-source-v1:${"f".repeat(64)}`}
+          WHERE organization_id=${ORG}::uuid AND run_id=${f.request.evaluationSourceId}
+            AND (membership_json->>'recordIndex')::int=${datasetRow!.record_index}`;
+      } finally {
+        await admin.unsafe("ALTER TABLE public.trader_historical_dataset_authority_v2 ENABLE TRIGGER ALL");
+      }
+      await expect(runResearchDevelopmentEvaluationPostgresV1(f.request))
+        .rejects.toThrow("RESEARCH_EVALUATION_CLAIM_REFUSED:COMMITTED_CLAIM_REQUIRED");
+      expect(await evaluationCounts()).toEqual(before);
+    } finally { f.source.cleanup(); }
+  }, 240_000);
+
+  it("commits validation and every walk-forward stage, then verifies an effect-free replay", async () => {
+    const f = await readyFixture("evaluation-batch-commit-replay", { evaluationDip: true });
+    try {
+      const claim = await reserveResearchDevelopmentEvaluationPostgresV1(f.request);
+      if (!claim.receipt) throw new Error("DEE1159_EVALUATION_CLAIM_REQUIRED");
+      const before = await evaluationCounts();
+      const first = await runResearchDevelopmentEvaluationPostgresV1(f.request);
+      expect(first.status).toBe("COMMITTED");
+      if (!first.receipt) throw new Error("DEE1159_EVALUATION_RECEIPT_REQUIRED");
+      expect(first.receipt).toMatchObject({ schemaVersion: "waia.research.development-evaluation.v1",
+        claimId: claim.receipt.claimId, claimDigest: claim.receipt.contentDigest,
+        scientificQualified: false, capitalEligible: false,
+        contentDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
+      expect(first.receipt.stages).toHaveLength(3);
+      expect(first.receipt.stages.map(stage => [stage.stageOrdinal, stage.stageKind, stage.windowIndex])).toEqual([
+        [0, "VALIDATION", 0], [1, "WALK_FORWARD", 0], [2, "WALK_FORWARD", 1],
+      ]);
+      expect(new Set(first.receipt.stages.map(stage => stage.stageRunId)).size).toBe(3);
+      expect(new Set(first.receipt.stages.map(stage => stage.historicalAccountKey)).size).toBe(3);
+      for (const stage of first.receipt.stages) {
+        expect(stage.selectedParameters).toEqual(claim.receipt.selectedParameters);
+        expect(stage.trialIndex).toBe(claim.receipt.selectedIndex);
+        expect(stage.authority).toBe("EVALUATION_ENGINEERING_TRACE_ONLY");
+        expect(stage.evaluationPartitionSha256).toMatch(/^[a-f0-9]{64}$/);
+        const expectedFirstRecord = stage.stageOrdinal === 0 ? 11 : stage.stageOrdinal === 1 ? 11 : 14;
+        const expectedBarCount = stage.stageOrdinal === 0 ? 6 : 3;
+        expect(stage.inputUseReceipt.invocations.map(invocation => invocation.sourceBarIndex))
+          .toEqual(Array.from({ length: expectedBarCount }, (_, offset) => expectedFirstRecord + offset));
+        expect(stage).not.toHaveProperty("trainPartitionSha256");
+      }
+      expect(first.receipt.stages.map(stage => stage.evaluationPartitionSha256)).toEqual([
+        f.evaluation.issuance!.metadata.validation.contentSha256,
+        ...f.evaluation.issuance!.metadata.walkForward.map(part => part.contentSha256),
+      ]);
+      const afterFirst = await evaluationCounts(claim.receipt.claimId);
+      expect(afterFirst).toMatchObject({ scopes: 3, results: 3 });
+      expect(afterFirst.orders + afterFirst.fills + afterFirst.frontiers).toBeGreaterThan(0);
+      // The validation dip must reach actual modeled submission and filling;
+      // an all-NONE warmup run is not sufficient execution-path acceptance.
+      expect(first.receipt.stages[0]!.orderCount).toBeGreaterThan(0);
+      expect(first.receipt.stages[0]!.fillCount).toBeGreaterThan(0);
+      const frontierRows = await admin`SELECT s.stage_ordinal,count(f.account_key)::int AS frontier_count
+        FROM public.trader_research_development_evaluation_scopes_v1 s
+        LEFT JOIN public.trader_accounting_frontier f ON f.organization_id=s.organization_id
+          AND f.account_key=s.account_key AND f.run_id=s.stage_run_id::text
+        WHERE s.organization_id=${ORG}::uuid AND s.claim_id=${claim.receipt.claimId}::uuid
+        GROUP BY s.stage_ordinal ORDER BY s.stage_ordinal`;
+      expect(frontierRows.map(row => row.stage_ordinal)).toEqual([0, 1, 2]);
+      expect(frontierRows.every(row => row.frontier_count > 0)).toBe(true);
+
+      const replay = await runResearchDevelopmentEvaluationPostgresV1(f.request);
+      expect(replay.status).toBe("REPLAYED");
+      expect(replay.receipt).toEqual(first.receipt);
+      expect(await evaluationCounts(claim.receipt.claimId)).toEqual(afterFirst);
+      expect((await evaluationCounts()).scopes).toBe(before.scopes + 3);
+    } finally { f.source.cleanup(); }
+  }, 360_000);
+
+  it("rolls back every stage when a later result insert fails while retaining the prior claim", async () => {
+    const f = await readyFixture("evaluation-batch-rollback");
+    const trigger = `dee1159_eval_result_fail_${randomUUID().replaceAll("-", "")}`;
+    const fn = `${trigger}_fn`;
+    try {
+      const claim = await reserveResearchDevelopmentEvaluationPostgresV1(f.request);
+      if (!claim.receipt) throw new Error("DEE1159_EVALUATION_CLAIM_REQUIRED");
+      const claimRowsBefore = await rowCounts();
+      const countsBefore = await evaluationCounts(claim.receipt.claimId);
+      await admin.unsafe(`CREATE FUNCTION public.${fn}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+        IF NEW.stage_ordinal=1 THEN RAISE EXCEPTION 'DEE1159_INJECTED_LATE_STAGE_FAILURE'; END IF; RETURN NEW; END $$`);
+      await admin.unsafe(`CREATE TRIGGER ${trigger} BEFORE INSERT ON public.trader_research_development_evaluation_results_v1
+        FOR EACH ROW EXECUTE FUNCTION public.${fn}()`);
+      await expect(runResearchDevelopmentEvaluationPostgresV1(f.request)).rejects.toThrow("DEE1159_INJECTED_LATE_STAGE_FAILURE");
+      expect(await evaluationCounts(claim.receipt.claimId)).toEqual(countsBefore);
+      const claimRowsAfter = await rowCounts();
+      expect(claimRowsAfter.claims).toBe(claimRowsBefore.claims);
+      expect(claimRowsAfter.consumes).toBe(claimRowsBefore.consumes);
+      await admin.unsafe(`DROP TRIGGER IF EXISTS ${trigger} ON public.trader_research_development_evaluation_results_v1`);
+      await admin.unsafe(`DROP FUNCTION IF EXISTS public.${fn}()`);
+      const retry = await runResearchDevelopmentEvaluationPostgresV1(f.request);
+      expect(retry.status).toBe("COMMITTED");
+      expect(retry.receipt?.stages).toHaveLength(3);
+      expect(await evaluationCounts(claim.receipt.claimId)).toMatchObject({ scopes: 3, results: 3 });
+    } finally {
+      await admin.unsafe(`DROP TRIGGER IF EXISTS ${trigger} ON public.trader_research_development_evaluation_results_v1`);
+      await admin.unsafe(`DROP FUNCTION IF EXISTS public.${fn}()`);
+      f.source.cleanup();
+    }
+  }, 360_000);
+
+  it("confirms the whole evaluation batch after a lost COMMIT acknowledgement", async () => {
+    const f = await readyFixture("evaluation-batch-ack-loss");
+    const parsed = new URL(url!);
+    const proxyDatabaseUrl = (port: number) => { const p = new URL(url!); p.port = String(port); return p.toString(); };
+    const proxy = await startCommitAckLossProxy({ targetHost: "127.0.0.1", targetPort: Number(parsed.port || 5432) });
+    try {
+      const claim = await reserveResearchDevelopmentEvaluationPostgresV1(f.request);
+      if (!claim.receipt) throw new Error("DEE1159_EVALUATION_CLAIM_REQUIRED");
+      vi.stubEnv("DATABASE_URL_POSTGRES", proxyDatabaseUrl(proxy.port));
+      const result = await runResearchDevelopmentEvaluationPostgresV1(f.request);
+      expect(result.status).toBe("CONFIRMED_AFTER_UNCERTAINTY");
+      expect(result.receipt?.claimId).toBe(claim.receipt.claimId);
+      expect(result.receipt?.stages).toHaveLength(3);
+      expect(proxy.stats().commitResponsesWithheld).toBe(1);
+      expect(proxy.stats().protocolErrors).toBe(0);
+      vi.stubEnv("DATABASE_URL_POSTGRES", url!);
+      expect(await evaluationCounts(claim.receipt.claimId)).toMatchObject({ scopes: 3, results: 3 });
+    } finally { await proxy.close(); f.source.cleanup(); }
+  }, 360_000);
+
+  it("serializes concurrent evaluation calls for one committed claim into one batch and one replay", async () => {
+    const f = await readyFixture("evaluation-batch-concurrent-replay");
+    try {
+      const claim = await reserveResearchDevelopmentEvaluationPostgresV1(f.request);
+      if (!claim.receipt) throw new Error("DEE1159_EVALUATION_CLAIM_REQUIRED");
+      const outcomes = await Promise.all([
+        runResearchDevelopmentEvaluationPostgresV1(f.request),
+        runResearchDevelopmentEvaluationPostgresV1(f.request),
+      ]);
+      expect(outcomes.map(result => result.status).sort()).toEqual(["COMMITTED", "REPLAYED"]);
+      const firstReceipt = outcomes[0]!.receipt;
+      const secondReceipt = outcomes[1]!.receipt;
+      if (!firstReceipt || !secondReceipt) throw new Error("DEE1159_CONCURRENT_EVALUATION_RECEIPT_REQUIRED");
+      expect(firstReceipt).toEqual(secondReceipt);
+      expect(firstReceipt.stages).toHaveLength(3);
+      expect(await evaluationCounts(claim.receipt.claimId)).toMatchObject({ scopes: 3, results: 3 });
+      const [scopeAccounts] = await admin`SELECT count(DISTINCT account_key)::int AS n
+        FROM public.trader_research_development_evaluation_scopes_v1
+        WHERE organization_id=${ORG}::uuid AND claim_id=${claim.receipt.claimId}::uuid`;
+      expect(scopeAccounts!.n).toBe(3);
+    } finally { f.source.cleanup(); }
+  }, 360_000);
+
+  it("refuses a tampered committed stage trace on replay", async () => {
+    const f = await readyFixture("evaluation-batch-tampered-result");
+    try {
+      const claim = await reserveResearchDevelopmentEvaluationPostgresV1(f.request);
+      if (!claim.receipt) throw new Error("DEE1159_EVALUATION_CLAIM_REQUIRED");
+      const result = await runResearchDevelopmentEvaluationPostgresV1(f.request);
+      expect(result.status).toBe("COMMITTED");
+      await admin.unsafe("ALTER TABLE public.trader_research_development_evaluation_results_v1 DISABLE TRIGGER ALL");
+      try {
+        await admin`UPDATE public.trader_research_development_evaluation_results_v1 SET
+          trace_canonical_json=replace(trace_canonical_json,'"barCount":6','"barCount":5'),
+          trace_sha256=encode(sha256(convert_to(replace(trace_canonical_json,'"barCount":6','"barCount":5'),'UTF8')),'hex')
+          WHERE organization_id=${ORG}::uuid AND claim_id=${claim.receipt.claimId}::uuid AND stage_ordinal=0`;
+      } finally {
+        await admin.unsafe("ALTER TABLE public.trader_research_development_evaluation_results_v1 ENABLE TRIGGER ALL");
+      }
+      await expect(runResearchDevelopmentEvaluationPostgresV1(f.request))
+        .rejects.toThrow("RESEARCH_DEVELOPMENT_EVALUATION_REFUSED:COMMITTED_RESULT_CHANGED");
+    } finally { f.source.cleanup(); }
+  }, 360_000);
+
+  it("enforces evaluation stage immutability and denies browser roles", async () => {
+    const f = await readyFixture("evaluation-batch-grants-appendonly");
+    try {
+      const claim = await reserveResearchDevelopmentEvaluationPostgresV1(f.request);
+      if (!claim.receipt) throw new Error("DEE1159_EVALUATION_CLAIM_REQUIRED");
+      const result = await runResearchDevelopmentEvaluationPostgresV1(f.request);
+      expect(result.status).toBe("COMMITTED");
+      const [grants] = await admin`SELECT
+        has_table_privilege('anon','public.trader_research_development_evaluation_scopes_v1','SELECT') AS anon_scope_select,
+        has_table_privilege('authenticated','public.trader_research_development_evaluation_results_v1','SELECT') AS auth_result_select,
+        has_table_privilege('anon','public.trader_research_development_evaluation_scopes_v1','INSERT') AS anon_scope_insert,
+        has_table_privilege('authenticated','public.trader_research_development_evaluation_results_v1','INSERT') AS auth_result_insert`;
+      expect(grants).toEqual({ anon_scope_select: false, auth_result_select: false,
+        anon_scope_insert: false, auth_result_insert: false });
+      await expect(admin`UPDATE public.trader_research_development_evaluation_scopes_v1 SET account_key='mutated'
+        WHERE organization_id=${ORG}::uuid AND claim_id=${claim.receipt.claimId}::uuid`)
+        .rejects.toThrow("RESEARCH_SOURCE_APPEND_ONLY");
+      await expect(admin`DELETE FROM public.trader_research_development_evaluation_results_v1
+        WHERE organization_id=${ORG}::uuid AND claim_id=${claim.receipt.claimId}::uuid`)
+        .rejects.toThrow("RESEARCH_SOURCE_APPEND_ONLY");
+      await expect(admin`TRUNCATE public.trader_research_development_evaluation_scopes_v1 CASCADE`)
+        .rejects.toThrow("RESEARCH_SOURCE_APPEND_ONLY");
+    } finally { f.source.cleanup(); }
+  }, 360_000);
 });
