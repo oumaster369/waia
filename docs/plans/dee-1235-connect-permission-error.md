@@ -1,7 +1,7 @@
 ---
 integrationIssue: DEE-1235
 integrationTitle: "Restore new-user HTX Read + Trade observation connection"
-branch: dee-1235-connect-permission-error
+branch: dee-1235-observer-runtime-compatibility
 riskTier: T3
 prPolicy: one-integration-pr
 executionSurfaces: [local, github-pr-ci]
@@ -9,8 +9,8 @@ requiredValidation: [targeted-unit, mounted-e2e, lint, typecheck, build, canon, 
 approvalGates: [independent-review, exact-head-ci, fresh-merge-admission]
 state:
   status: implementing
-  prNumber: 765
-  prUrl: https://github.com/oumaster369/waia/pull/765
+  prNumber: null
+  prUrl: null
   lastValidatedGitSha: null
   nextAction: "Verify Read + Trade connect, encrypted persistence, deployed-posture collection and cabinet; release only the reviewed incident fix."
 provenance:
@@ -52,3 +52,13 @@ Before release: exact review, applicable CI, current source/journal/privilege/po
 ## Validation and exclusions
 
 Focused tests, fresh Next build, mounted Chromium, actual isolated PG17, typecheck/lint/canon/graphs and applicable PR CI. Do not repeat full local unit. No order, cancellation, stop edit, transfer, leverage/mode change, live activation, external executor change, unrelated research/scoring, or frozenPR762/Overview integration. Parents remain open until their full acceptance.
+
+## Post-release observer compatibility correction, 5 October
+
+PR765 is merged as09f053 and its Web connection fix is deployed. Actual observer deployment revealed two differences from its former image that the repository did not contain: Node could not resolve the bare preload module path, and the complete HTX spot balance list exceeded the order/history row budget and response cap. Historical snapshots contained1693 assets; the former image used a10000 raw-row and1MiB bound.
+
+This bounded follow-up makes the supervisor preload and consumer paths absolute and gives the unpaginated spot balance endpoint its own10000-row/1MiB limits. Every row remains strictly validated, duplicate buckets are refused, decimal arithmetic stays exact, and excessive responses fail as a whole. No silent skipping of malformed rows is restored. Other endpoint/page limits, signed GET allowlist, per-read admission, credentials, database privileges and TLS are unchanged. No migration, new infrastructure or web feature is included.
+
+Validation adds actual child preload resolution from a foreign working directory and a1693-asset synthetic response above262144 bytes, with exact amounts, over-limit refusal and unchanged order pagination. Retain all existing security/binding tests. Actual host snapshots and tenant cabinet remain required for recovery; do not claim partner acceptance from synthetic data. The production artifact must record exact source/patch identity; no untracked image-only source edits.
+
+The bounded production diagnostic confirmed3398 rows/280388 bytes, all amounts valid and no duplicate buckets. Twelve rows use six Han currency identifiers, matching the public HTX currency catalog exactly (1699 assets). The parser explicitly permits bounded lowercase Latin/digit/Han identifiers, preserves these balances, and still rejects whitespace, controls and malformed rows. The previous image silently skipped those six assets; that incomplete behavior is not restored.
