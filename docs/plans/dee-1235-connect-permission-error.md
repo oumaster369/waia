@@ -1,46 +1,54 @@
 ---
 integrationIssue: DEE-1235
-integrationTitle: "Explain HTX permission refusal during partner connection"
+integrationTitle: "Restore new-user HTX Read + Trade observation connection"
 branch: dee-1235-connect-permission-error
-riskTier: T2
+riskTier: T3
 prPolicy: one-integration-pr
-executionSurfaces: [local]
+executionSurfaces: [local, github-pr-ci]
 requiredValidation: [targeted-unit, mounted-e2e, lint, typecheck, build, canon, pr-governance]
 approvalGates: [independent-review, exact-head-ci, fresh-merge-admission]
 state:
   status: implementing
-  prNumber: null
-  prUrl: null
+  prNumber: 765
+  prUrl: https://github.com/oumaster369/waia/pull/765
   lastValidatedGitSha: null
-  nextAction: "Validate the exact refusal and successful Read-only path, review, then prepare the bounded corrective release."
+  nextAction: "Verify Read + Trade connect, encrypted persistence, deployed-posture collection and cabinet; release only the reviewed incident fix."
 provenance:
   createdFrom: chat
   gapRegistry: null
   supersedes: null
 ---
 
-# DEE-1235 — explain HTX permission refusal
+# DEE-1235 — restore new-user HTX connection for observation
 
-## Confirmed problem
+## Problem and Human scope
 
-On 5 October a partner reported a generic connection failure and the Human confirmed a Read + Trade key. The deployed HTX validator accepts that permission set, but credential storage rejects it when the existing organization live switch is not enabled. The rejection appears as INTERNAL_ERROR. No newly stored credential was observed during incident triage. The reported account identity has not independently been correlated to a server request, so unrelated authentication events are not incident proof.
+A newly registered user enters existing HTX Access and Secret with Read + Trade. The deployed storage gate incorrectly ties saving that verified key to enabling application trading. The dedicated collector also refuses that actual scope before decrypting. The Human explicitly requires this ordinary connection to work and explicitly forbids all trading, transfers, live enablement and interference with the existing external executor. The earlier error-only patch and Read-only replacement advice are superseded.
 
-## Bounded correction
+## Implementation
 
-After the existing current live-state read, classify the already-required refusal as READ_ONLY_KEY_REQUIRED before calling storage. Keep the original service storage guard intact. Give a clear Russian explanation that this connection requires a separate key with Read only and that an existing trading key must remain unchanged. Do not suggest enabling live trading to bypass this refusal.
+Store actual verified venue scopes in metadata version 2 with server-owned purpose `observation`. This purpose is not accepted from the request. Read and Read + Trade are allowed for observation, while forbidden/unknown scopes remain refused. Preserve legacy version-1 execution storage rules. All trade-purpose resolvers reject version 2, and older resolvers reject the unknown version. Encryption, membership, exact account identity and replacement compare-and-set remain mandatory.
 
-No credential admission expansion, schema change, role/grant change, live enablement, exchange mutation, collector behavior, replacement behavior, or secret exposure is authorized by this correction. Permission metadata still comes from HTX validation, never a client-supplied assertion. Existing enabled-live behavior remains unchanged.
+The new generated `observation_read_permitted` decision validates the complete version/purpose/account/venue contract before the restricted credential role may decrypt. It retains exact legacy Read acceptance and preserves 0229 unchanged. This is decryption eligibility, not new tenant snapshot-view authority; cabinet access still checks tenant, active binding and observation revision. Self-service Connect enrolls the exact saved identity using the existing bounded configuration. Reuse the already independently reviewed Node TLS implementation for all three dedicated host pools, with certificate and hostname verification unchanged.
+
+## Database and release sequence
+
+0230 metadata grants are already applied in production and copied byte-identically into this branch to reconcile source history. Candidate0231 adds only the new policy function, generated decision column and one column SELECT grant; no existing credential contents, RLS policy or role membership are changed. Deferred inventory PR759 has an unmerged0231 reservation and must move to0232 before a future integration. Its payload remains unapplied; this incident does not release it.
+
+The canonical migration baseline has a known inventory-policy gap tracked in PR759. A fresh read-only production catalog confirmed its two existing supplemental inventory SELECT policies on 5 October. Native incident tests must distinguish the canonical discovery refusal from a fixture explicitly matching that deployed posture. No fixture policy is applied to production, and this proof does not close PR759/DEE961.
+
+Before release: exact review, applicable CI, current source/journal/privilege/policy preflight, target host/image and verified TLS, candidate-only0231 transaction, reader-first rollout using the existing service, then web with PAPER_LOOP_ENABLED=0. Preserve existing secrets, limits, assignments and unrelated bindings; change only exact release identity and reviewed code. Rollback may stop observation or revert the web while retaining the validated reader; never restore a reader that misinterprets v2 credentials or remove the decryption guard. All production changes need the applicable Human admission for this incident; general requests do not release unrelated held PRs or infrastructure.
 
 ## Acceptance
 
-- A validated Read + Trade key with live disabled/absent receives the dedicated safe client error, with no credential insert, replacement, revoke, or credential audit write.
-- A Read-only key still reaches normal encrypted storage and metadata-only success.
-- Mounted cabinet shows the specific guidance, clears submitted secrets, refreshes metadata once and never automatically resubmits keys.
-- Existing trade-scope storage and tenant isolation checks remain effective.
-- Focused unit, mounted Chromium, typecheck, lint, build, canonical and graph checks pass; independent review covers the final bytes.
+- New registration/session and entitlement lead to one submission of two keys; Read + Trade connects without a live row or live enablement.
+- Truthful version-2 metadata, encrypted persistence and exact enrollment are verified with actual PostgreSQL; no keys leak into responses or logs.
+- The real restricted collector discovers the new row under the observed deployed posture, validates the exact key through fixed GET routes, and produces data visible only to the same user.
+- Wrong account, tenant, malformed purpose, unknown/withdraw/transfer/duplicate scopes and trade-purpose consumption fail closed.
+- Mounted UI shows the connected account and observation after one submission; no automatic key resubmission or trading request.
+- Native TLS, grants/RLS and revoke/replacement regression checks pass; independent review binds final source, and all applicable CI is green.
+- Actual production receipt and cabinet data are required before declaring the partner recovered. Synthetic browser, injected test authentication or stored metadata alone do not prove this.
 
-Full local unit is intentionally not repeated; full applicable checks run in PR CI. A local synthetic success is not a claim that the partner connected in production. Actual storage and cabinet observation acceptance remain tracked by DEE-1227.
+## Validation and exclusions
 
-## Integration and migration memory
-
-One T2 correction based on deployed/main 4fb4be88. Frozen PR762 and the local Overview delta remain separate and unchanged. No new infrastructure or pending rollout is admitted. Production migrations 0229 and 0230 are already applied; inventory0231 remains deferred. Production PAPER_LOOP_ENABLED=0 remains mandatory.
+Focused tests, fresh Next build, mounted Chromium, actual isolated PG17, typecheck/lint/canon/graphs and applicable PR CI. Do not repeat full local unit. No order, cancellation, stop edit, transfer, leverage/mode change, live activation, external executor change, unrelated research/scoring, or frozenPR762/Overview integration. Parents remain open until their full acceptance.

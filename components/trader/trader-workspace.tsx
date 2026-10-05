@@ -37,9 +37,9 @@ function PermissionExplainer() {
         <ol className="mt-2 list-decimal space-y-1 pl-5">
         <li>Откройте в HTX управление API и создайте ключ HMAC.</li>
         <li>
-          Включите только разрешение <span className="text-foreground">Read</span>. Не включайте Trade или
-          Withdraw. Если у вас уже есть торговый ключ, создайте отдельный ключ только для чтения:
-          подключение не изменит существующий ключ.
+          Разрешения <span className="text-foreground">Read</span> достаточно для отображения счёта;
+          ключ с Read и Trade тоже можно подключить. Не включайте Withdraw: WAIA использует ключ
+          только для наблюдения и не выполняет торговые операции.
         </li>
         <li>
           Оставьте список IP пустым, затем вставьте ниже Access Key и Secret Key. Секретный ключ
@@ -130,8 +130,6 @@ function credentialRequestError(code: string | undefined, status: number): strin
     case "CREDENTIAL_CONFLICT": return "Состояние аккаунта изменилось. Обновите список и повторите действие.";
     case "CREDENTIAL_NOT_FOUND": return "Подключение не найдено. Обновите список аккаунтов.";
     case "CREDENTIAL_VALIDATION_FAILED": return "HTX не подтвердил эти ключи. Проверьте их разрешения и попробуйте снова.";
-    case "READ_ONLY_KEY_REQUIRED":
-      return "Для подключения нужен отдельный ключ HTX только с разрешением Read, без Trade и Withdraw. Существующий торговый ключ не изменится.";
     case "UNAUTHORIZED": return "Войдите в аккаунт, чтобы управлять подключением HTX.";
     case "FORBIDDEN": return "У этого аккаунта нет доступа к AI-TRADER.";
     case "CSRF_INVALID": return "Запрос отклонён. Обновите страницу и повторите действие.";
@@ -505,8 +503,9 @@ function ExchangeTraderWorkspace() {
                   <p className="text-muted-foreground mt-1 text-sm">Предыдущая запись подключения отозвана в WAIA. Введённый ключ может относиться к другому аккаунту HTX; после ответа будет выбран аккаунт из результата. История сохранится.</p>
                 ) : (
                   <p className="text-muted-foreground mt-1 text-sm">
-                    Создайте отдельный ключ HTX HMAC только с разрешением Read — без Trade и Withdraw.
-                    Существующий торговый ключ не изменяйте. Вставьте ниже Access Key и Secret Key.
+                    Подключите ключ HTX HMAC с разрешением Read или Read и Trade. Withdraw включать
+                    нельзя: WAIA использует ключ только для наблюдения и не выставляет ордера.
+                    Вставьте ниже Access Key и Secret Key.
                   </p>
                 )}
                 <form className="mt-6 space-y-4" onSubmit={handleConnect} data-testid="trader-connect-form">

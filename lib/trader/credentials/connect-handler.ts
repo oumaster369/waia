@@ -40,13 +40,10 @@ import {
 } from "@/lib/trader/connectors/htx/htx-exchange-connector";
 import { createMasterKeyProvider } from "@/lib/trader/security/create-master-key-provider";
 import { assertCredentialStorageAllowed } from "@/lib/trader/security/credential-storage-gate";
-import { buildHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
-import { permissionMetadataIncludesTradeScopeV1 } from "@/lib/trader/credentials/trade-scope-storage-gate";
+import { buildHtxObservationPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
 import { MasterKeyConfigError, MasterKeyNotReadyError } from "@/lib/trader/security/errors";
 import { sanitizeClientErrorMessage } from "@/lib/trader/security/redaction";
 import type { MasterKeyProvider } from "@/lib/trader/security/master-key-provider";
-import { getOrgLiveEnableStatePostgres } from "@/lib/trader/live/repository-postgres";
-import { getOrgLiveEnableStateSqlite } from "@/lib/trader/live/repository-sqlite";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 import { requireOrgContext } from "@/lib/waia-core/scope/org-context";
 import {
@@ -382,7 +379,7 @@ export async function handleHtxConnectPost(
     );
   }
 
-  const permissionMetadata = buildHtxPermissionMetadata({
+  const permissionMetadata = buildHtxObservationPermissionMetadata({
     exchangeAccountId: validation.accountId,
     scopes: accountInfo.permissions,
     warnings: validation.warnings,
@@ -395,20 +392,6 @@ export async function handleHtxConnectPost(
     resolvedRuntime = runtime;
 
     const service = deps.createCredentialService(runtime, () => Promise.resolve(provider));
-    const liveState =
-      runtime.kind === "postgres"
-        ? await getOrgLiveEnableStatePostgres(runtime.db, context)
-        : getOrgLiveEnableStateSqlite(runtime.db, context);
-    if (
-      permissionMetadataIncludesTradeScopeV1(permissionMetadata) &&
-      liveState?.state !== "ENABLED"
-    ) {
-      return clientError(
-        400,
-        HTX_CONNECT_ERROR_CODES.READ_ONLY_KEY_REQUIRED,
-        "Use an HTX API key with Read permission only and without Trade or Withdraw permissions. Existing HTX trading keys are not changed.",
-      );
-    }
     const metadata = await service.storeCredentials(context, {
       venue: body.venue,
       exchangeAccountId: validation.accountId,
@@ -420,7 +403,6 @@ export async function handleHtxConnectPost(
       actorType: "user",
       actorId: auth.userId,
       expectedActiveCredentialId: body.replacementCredentialId ?? null,
-      orgLiveEnabled: liveState?.state === "ENABLED",
     });
     try {
       await enrollStoredHtxObservation(runtime, {

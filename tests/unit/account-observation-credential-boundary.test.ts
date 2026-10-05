@@ -70,7 +70,7 @@ async function encryptedRow(overrides: Row = {}): Promise<Row> {
     payload_key_version: envelope.payloadKeyVersion,
     wrapped_dek_key_version: envelope.wrappedDekKeyVersion,
     wrapped_dek_key: envelope.wrappedDekKey,
-    observation_read_only: true,
+    observation_read_permitted: true,
     ...overrides,
   };
 }
@@ -82,7 +82,7 @@ describe("DEE-1015 account-observation credential read boundary", () => {
       "organization_id",
       "exchange_account_id",
       "status",
-      "observation_read_only",
+      "observation_read_permitted",
       "encrypted_payload",
       "payload_key_version",
       "wrapped_dek_key_version",
@@ -233,7 +233,7 @@ describe("DEE-1015 account-observation credential read boundary", () => {
       }).getDecryptedCredentials({ organizationId: ORGANIZATION }, CREDENTIAL),
     ).rejects.toThrow("ACCOUNT_OBSERVATION_CREDENTIAL_REFUSED:IDENTITY_MISMATCH");
 
-    const trade = fakeSql([await encryptedRow({ observation_read_only: false })]);
+    const trade = fakeSql([await encryptedRow({ observation_read_permitted: false })]);
     await expect(
       createObservationCredentialReader({
         sql: trade.sql,
@@ -242,7 +242,7 @@ describe("DEE-1015 account-observation credential read boundary", () => {
       }).getDecryptedCredentials({ organizationId: ORGANIZATION }, CREDENTIAL),
     ).rejects.toThrow("ACCOUNT_OBSERVATION_CREDENTIAL_REFUSED:NOT_READ_ONLY");
 
-    const unclassified = fakeSql([await encryptedRow({ observation_read_only: undefined })]);
+    const unclassified = fakeSql([await encryptedRow({ observation_read_permitted: undefined })]);
     await expect(
       createObservationCredentialReader({
         sql: unclassified.sql,

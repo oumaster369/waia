@@ -131,47 +131,79 @@ test.describe("/trader static shell boundary (AT-E1 S1)", () => {
     await page.keyboard.press("Enter");
   });
 
-  test("explains rejected trading permissions and recovers with a separate read-only connection", async ({ page }, testInfo) => {
+  test("connects a synthetic Read+Trade key for observation and immediately shows account data", async ({ page }, testInfo) => {
     const email = `e2e-trader-permissions-${Date.now()}@example.com`;
     await signUpAndOpenDashboard(page, email);
     grantTraderEntitlementByUserEmail(email);
+    const binding = {
+      organizationId: "11111111-1111-4111-8111-111111111111",
+      credentialId: "22222222-2222-4222-8222-222222222222",
+      exchangeAccountId: "12345678",
+      credentialRevision: "1",
+      configurationRevision: "1",
+    };
     const credential = {
-      id: "fixture-read-only", venue: "htx", exchangeAccountId: "12345678",
-      apiKeyMasked: "fixture…only", status: "active", permissionMetadata: { scopes: ["read"] },
+      id: binding.credentialId, venue: "htx", exchangeAccountId: binding.exchangeAccountId,
+      apiKeyMasked: "fixture…trade", status: "active",
+      permissionMetadata: {
+        version: 2, purpose: "observation", marketType: "spot",
+        exchangeAccountId: binding.exchangeAccountId, scopes: ["read", "trade"], warnings: [],
+        withdrawForbidden: true, transferForbidden: true,
+      },
       createdAt: "2026-10-05T00:00:00.000Z", updatedAt: "2026-10-05T00:00:00.000Z", revokedAt: null,
     };
     let connected = false;
-    let attempts = 0;
+    const now = Date.now();
+    const complete = <T,>(values: T[]) => ({
+      status: "COMPLETE", values, sourceAsOfMs: now, readStartedAtMs: now,
+      readCompletedAtMs: now, error: null,
+    });
+    const balances = [{ asset: "USDT", free: "125.50", locked: "4.50", total: "130.00" }];
+    const observation = {
+      schemaVersion: "account-observation/v1", observationId: "33333333-3333-4333-8333-333333333333", binding,
+      collectionStartedAtMs: now, collectionCompletedAtMs: now, status: "COMPLETE",
+      balances: complete(balances), openOrders: complete([]),
+      trades: [{ symbol: "BTCUSDT", component: complete([]) }], holdings: balances,
+    };
+    let connectRequests = 0;
+    const tradingRequests: string[] = [];
+    page.on("request", (request) => {
+      const requestPath = new URL(request.url()).pathname;
+      if (requestPath === "/api/trader/exchange-credentials/connect") connectRequests += 1;
+      if (/^\/api\/trader\/(?:orders?|trades?|live-enable)(?:\/|$)/i.test(requestPath)) {
+        tradingRequests.push(requestPath);
+      }
+    });
     await page.route("**/api/trader/exchange-credentials", (route) => route.fulfill({
       status: 200, contentType: "application/json",
       body: JSON.stringify({ credentials: connected ? [credential] : [] }),
     }));
-    await page.route("**/api/trader/account-observation/**", (route) => route.fulfill({ status: 204 }));
+    await page.route("**/api/trader/account-observation/binding*", (route) => route.fulfill({
+      status: 200, contentType: "application/json", body: JSON.stringify(binding),
+    }));
+    await page.route("**/api/trader/account-observation/stream*", (route) => route.fulfill({
+      status: 200, contentType: "text/event-stream",
+      body: `event: observation\ndata: ${JSON.stringify(observation)}\n\n`,
+    }));
     await page.route("**/api/trader/exchange-credentials/connect", (route) => {
-      attempts += 1;
-      if (attempts === 1) return route.fulfill({
-        status: 400, contentType: "application/json",
-        body: JSON.stringify({ error: { code: "READ_ONLY_KEY_REQUIRED", message: "Use a separate Read-only key." } }),
-      });
       connected = true;
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(credential) });
     });
     await page.goto("/trader");
-    await page.getByTestId("trader-api-key").fill("synthetic-trade-key");
-    await page.getByTestId("trader-api-secret").fill("synthetic-secret-first");
-    await page.getByTestId("trader-connect-submit").click();
-    await expect(page.getByText("Для подключения нужен отдельный ключ HTX только с разрешением Read, без Trade и Withdraw. Существующий торговый ключ не изменится.", { exact: true })).toBeVisible();
-    await expect(page.getByTestId("trader-api-key")).toHaveValue("");
-    await expect(page.getByTestId("trader-api-secret")).toHaveValue("");
-    expect(attempts).toBe(1);
-    await page.screenshot({ path: testInfo.outputPath("permission-refusal.png") });
-    await page.getByTestId("trader-api-key").fill("synthetic-read-only-key");
-    await page.getByTestId("trader-api-secret").fill("synthetic-secret-second");
+    await expect(page.getByTestId("trader-permission-explainer")).toContainText("Read и Trade тоже можно подключить");
+    await page.getByTestId("trader-api-key").fill("synthetic-read-trade-key");
+    await page.getByTestId("trader-api-secret").fill("synthetic-secret");
     await page.getByTestId("trader-connect-submit").click();
     await expect(page.getByTestId("trader-account-select")).toHaveValue("12345678");
     await expect(page.getByTestId("trader-credential-account-id")).toHaveText("12345678");
+    await expect(page.getByTestId("trader-credential-scopes")).toHaveText("read, trade");
+    await expect(page.getByTestId("cabinet-usdt-free")).toContainText("125.50");
     await expect(page.getByTestId("trader-connect-form")).toHaveCount(0);
-    expect(attempts).toBe(2);
-    await page.screenshot({ path: testInfo.outputPath("read-only-connected.png") });
+    await expect(page.getByTestId("trader-authority-boundary")).toContainText("Только наблюдение");
+    await expect(page.getByRole("region", { name: "Account observation" })).toContainText("does not place orders");
+    await expect(page.getByTestId("trader-workspace")).not.toContainText("synthetic-secret");
+    expect(connectRequests).toBe(1);
+    expect(tradingRequests).toEqual([]);
+    await page.screenshot({ path: testInfo.outputPath("read-trade-observation-connected.png") });
   });
 });

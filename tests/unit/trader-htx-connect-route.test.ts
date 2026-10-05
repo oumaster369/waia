@@ -11,7 +11,7 @@ import {
 } from "@/app/api/trader/exchange-credentials/[credentialId]/route";
 import { GET as exchangeCredentialsGet } from "@/app/api/trader/exchange-credentials/route";
 import { getDb } from "@/db/client";
-import { auditLogs, exchangeCredentials, organizationEntitlements } from "@/db/schema";
+import { auditLogs, exchangeCredentials, organizationEntitlements, traderOrgLiveEnable } from "@/db/schema";
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { WaiaDb } from "@/db/types";
 import * as sessionUser from "@/lib/auth/session-user";
@@ -427,7 +427,7 @@ describe("HTX connect API (DEE-236)", () => {
     expect(audits.some((row) => row.entityId === body.id)).toBe(true);
   });
 
-  it("rejects a Trade-scoped key before replacement when the live switch is absent", async () => {
+  it("stores Read+Trade as observation metadata and replaces an existing key without live enablement", async () => {
     const isolatedSpotAccountId = 100011;
     const handlersForAccount = (apiKey: string, permission: string) =>
       defaultHtxHandlers({
@@ -465,6 +465,9 @@ describe("HTX connect API (DEE-236)", () => {
     expect(active!.status).toBe("active");
     const organizationId = personalOrganizationIdFromUserId(USER_WITH_TRADER);
     const db = getDb();
+    expect(
+      db.select().from(traderOrgLiveEnable).where(eq(traderOrgLiveEnable.organizationId, organizationId)).all(),
+    ).toHaveLength(0);
     const rowsBefore = db
       .select({
         id: exchangeCredentials.id,
@@ -486,7 +489,7 @@ describe("HTX connect API (DEE-236)", () => {
       );
 
     const tradeKey = "trade-scoped-access-key";
-    const rejected = await handleHtxConnectPost(
+    const connected = await handleHtxConnectPost(
       connectPostRequest({
         venue: "htx",
         apiKey: tradeKey,
@@ -503,12 +506,18 @@ describe("HTX connect API (DEE-236)", () => {
       }),
     );
 
-    expect(rejected.status).toBe(400);
-    expect(rejected.body).toMatchObject({
-      error: { code: HTX_CONNECT_ERROR_CODES.READ_ONLY_KEY_REQUIRED },
+    expect(connected.status).toBe(200);
+    const connectedBody = connected.body as { id: string; permissionMetadata: Record<string, unknown> };
+    expect(connectedBody.id).not.toBe(active!.id);
+    expect(connectedBody.permissionMetadata).toMatchObject({
+      version: 2,
+      purpose: "observation",
+      scopes: ["read", "trade"],
+      withdrawForbidden: true,
+      transferForbidden: true,
     });
-    expect(JSON.stringify(rejected.body)).not.toContain("trade-scoped-secret");
-    expect(JSON.stringify(rejected.body)).not.toContain(tradeKey);
+    expect(JSON.stringify(connected.body)).not.toContain("trade-scoped-secret");
+    expect(JSON.stringify(connected.body)).not.toContain(tradeKey);
 
     const after = await handleExchangeCredentialsGet(createDeps());
     const afterCredentials = (after.body as { credentials: Array<{ id: string; status: string }> })
@@ -532,9 +541,22 @@ describe("HTX connect API (DEE-236)", () => {
           row.action === traderAuditActions.credentialCreated ||
           row.action === traderAuditActions.credentialRotated,
       );
-    expect(afterCredentials).toEqual(beforeCredentials);
-    expect(rowsAfter).toEqual(rowsBefore);
-    expect(auditsAfter).toEqual(auditsBefore);
+    expect(afterCredentials).toHaveLength(beforeCredentials.length + 1);
+    expect(afterCredentials.find((credential) => credential.id === connectedBody.id)).toMatchObject({
+      status: "active",
+      permissionMetadata: {
+        version: 2,
+        purpose: "observation",
+        scopes: ["read", "trade"],
+      },
+    });
+    expect(afterCredentials.find((credential) => credential.id === active!.id)?.status).toBe("revoked");
+    expect(rowsAfter).toHaveLength(rowsBefore.length + 1);
+    expect(rowsAfter.find((row) => row.id === connectedBody.id)?.status).toBe("active");
+    expect(rowsAfter.find((row) => row.id === active!.id)?.status).toBe("revoked");
+    expect(auditsAfter).toHaveLength(auditsBefore.length + 1);
+    expect(auditsAfter.filter((row) => row.action === traderAuditActions.credentialRotated)).toHaveLength(1);
+    expect(auditsAfter.some((row) => row.entityId === connectedBody.id)).toBe(true);
   });
 
   it("replaces existing credentials and emits rotated audit", async () => {

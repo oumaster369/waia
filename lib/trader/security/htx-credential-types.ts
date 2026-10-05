@@ -6,8 +6,12 @@ export const HTX_CREDENTIAL_METADATA_VERSION = 1 as const;
 
 export type HtxCredentialPurpose = "read" | "trade";
 
+const OBSERVATION_POLICY_FIELDS = new Set([
+  "version", "purpose", "marketType", "exchangeAccountId", "scopes", "warnings",
+  "accountLabel", "withdrawForbidden", "transferForbidden",
+]);
+
 export type HtxPermissionMetadata = {
-  version: typeof HTX_CREDENTIAL_METADATA_VERSION;
   marketType: "spot";
   exchangeAccountId: string;
   scopes: string[];
@@ -15,7 +19,10 @@ export type HtxPermissionMetadata = {
   accountLabel?: string;
   withdrawForbidden: true;
   transferForbidden: true;
-};
+} & (
+  | { version: typeof HTX_CREDENTIAL_METADATA_VERSION; purpose?: never }
+  | { version: 2; purpose: "observation" }
+);
 
 export type HtxStoredCredentialRecord = {
   venue: "htx";
@@ -75,7 +82,7 @@ export function parseHtxPermissionMetadata(
     assertHtxPermissionMetadataSafe(metadata);
     // Preserve verified fields; never reconstruct policy flags or silently
     // filter malformed scopes into a different permission statement.
-    return {
+    const verified = {
       version: metadata.version,
       marketType: metadata.marketType,
       exchangeAccountId: metadata.exchangeAccountId,
@@ -85,6 +92,9 @@ export function parseHtxPermissionMetadata(
       transferForbidden: metadata.transferForbidden,
       ...(metadata.accountLabel === undefined ? {} : { accountLabel: metadata.accountLabel }),
     };
+    return metadata.version === 2
+      ? { ...verified, version: 2, purpose: "observation" }
+      : { ...verified, version: 1 };
   } catch {
     return null;
   }
@@ -95,7 +105,10 @@ export function assertHtxPermissionMetadataSafe(
   metadata: HtxPermissionMetadata,
   purpose: HtxCredentialPurpose = "read",
 ): void {
-  if (metadata.version !== HTX_CREDENTIAL_METADATA_VERSION ||
+  if ((metadata.version !== HTX_CREDENTIAL_METADATA_VERSION && metadata.version !== 2) ||
+      (metadata.version === 2 && metadata.purpose !== "observation") ||
+      (metadata.version === 2 && Object.keys(metadata).some((key) => !OBSERVATION_POLICY_FIELDS.has(key))) ||
+      (metadata.version === 1 && metadata.purpose !== undefined) ||
       typeof metadata.exchangeAccountId !== "string" ||
       !metadata.exchangeAccountId.trim() ||
       metadata.exchangeAccountId !== metadata.exchangeAccountId.trim() ||
@@ -114,9 +127,28 @@ export function assertHtxPermissionMetadataSafe(
   if (metadata.withdrawForbidden !== true || metadata.transferForbidden !== true) {
     throw new HtxConnectorValidationError("POLICY_VIOLATION", "HTX credential metadata must declare withdraw and transfer forbidden");
   }
+  if (metadata.version === 2 &&
+      (purpose === "trade" || new Set(metadata.scopes).size !== metadata.scopes.length)) {
+    throw new HtxConnectorValidationError("POLICY_VIOLATION", "Observation credentials cannot authorize execution");
+  }
   if (!metadata.scopes.includes("read") ||
       (purpose !== "read" && purpose !== "trade") ||
       (purpose === "trade" && !metadata.scopes.includes("trade"))) {
     throw new HtxConnectorValidationError("PERMISSION_METADATA_UNVERIFIED", "HTX required credential permissions are not verified");
   }
+}
+
+/**
+ * Application purpose and venue capabilities are separate. Preserve the actual
+ * verified scopes; version 2 never authorizes execution, even if live is enabled.
+ * Older resolvers reject this version instead of discarding its purpose.
+ */
+export function buildHtxObservationPermissionMetadata(
+  input: Parameters<typeof buildHtxPermissionMetadata>[0],
+): HtxPermissionMetadata {
+  const metadata: HtxPermissionMetadata = {
+    ...buildHtxPermissionMetadata(input), version: 2, purpose: "observation",
+  };
+  assertHtxPermissionMetadataSafe(metadata, "read");
+  return metadata;
 }

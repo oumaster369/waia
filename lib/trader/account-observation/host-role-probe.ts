@@ -97,10 +97,11 @@ export async function probeObservationCredentialPool(sql: Sql): Promise<string> 
           SELECT login_oid AS oid FROM identities UNION ALL SELECT parent_oid FROM identities
         ), protected AS (
           SELECT 'public.exchange_credentials'::regclass AS oid,
-            ARRAY['id','organization_id','exchange_account_id','status','observation_read_only',
-              'encrypted_payload','payload_key_version','wrapped_dek_key_version','wrapped_dek_key']::text[] AS allowed
+            ARRAY['id','organization_id','exchange_account_id','status','observation_read_only','observation_read_permitted',
+              'encrypted_payload','payload_key_version','wrapped_dek_key_version','wrapped_dek_key',
+              'observation_revision']::text[] AS allowed
           UNION ALL SELECT 'public.trader_account_collection_state'::regclass,
-            ARRAY['organization_id','credential_id','exchange_account_id']::text[]
+            ARRAY['organization_id','credential_id','exchange_account_id','configuration_revision']::text[]
           UNION ALL SELECT 'public.trader_account_observations'::regclass, ARRAY[]::text[]
         )
         SELECT session_user::text AS login, current_user = session_user AS original_session,
