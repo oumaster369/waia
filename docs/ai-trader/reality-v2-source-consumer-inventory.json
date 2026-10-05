@@ -500,7 +500,7 @@
       "id": "ACCOUNT_OBSERVATION_HTX_V5_READ_TRANSPORT",
       "pathPattern": "^lib/trader/account-observation/derivatives/htx-v5-read-transport\\.ts$",
       "disposition": "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
-      "reason": "DEE-1231 fixed six-route HTX V5 signed-GET transport with internally owned strict read-only admission and identity rechecks. It performs observation reads only; no arbitrary path/body, order, canonical Reality, Risk or capital authority."
+      "reason": "DEE-1231 fixed six-route HTX V5 signed-GET transport with same-key permission and identity rechecks. Credential permissions must be readOnly or explicitly consented readOnly,trade; fixed observation-only operations do not imply a strictly read-only credential scope. No arbitrary path/body, order, canonical Reality, Risk or capital authority."
     },
     {
       "id": "ACCOUNT_OBSERVATION_NORMALIZED_DTOS",
