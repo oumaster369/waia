@@ -3,10 +3,7 @@
 import Link from "next/link";
 import * as React from "react";
 
-import {
-  AdminErrorState,
-  AdminLoadingState,
-} from "@/components/trader/admin/admin-org-selector";
+import { AdminErrorState, AdminLoadingState } from "@/components/trader/admin/admin-org-selector";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import {
   ACCOUNT_OBSERVATION_STALE_AFTER_MS,
@@ -14,12 +11,14 @@ import {
   summarizeCabinetObservation,
   type FuturesBalanceSummary,
 } from "@/lib/trader/account-observation/cabinet-view";
+import { summarizeOverviewFutures } from "@/lib/trader/account-observation/overview-futures-summary";
 import {
   observationBindingSchema,
   parseAccountObservation,
   sameObservationBinding,
 } from "@/lib/trader/account-observation/validation";
 import type { ConnectedHtxAccountDto } from "@/lib/trader/credentials/connected-accounts.types";
+import { OverviewFuturesSummaryView } from "@/components/trader/admin-console/sections/overview/overview-futures-summary-view";
 
 type RowView = ConnectedHtxAccountDto & {
   observation: "loading" | "waiting" | "ready" | "unavailable";
@@ -105,9 +104,11 @@ async function readObservationRow(
     return { observation: "unavailable", ...empty };
   }
   const binding = observationBindingSchema.parse(await bindingResponse.json());
-  if (binding.organizationId !== account.organizationId ||
-      binding.credentialId !== account.credentialId ||
-      binding.exchangeAccountId !== account.exchangeAccountId) {
+  if (
+    binding.organizationId !== account.organizationId ||
+    binding.credentialId !== account.credentialId ||
+    binding.exchangeAccountId !== account.exchangeAccountId
+  ) {
     return { observation: "unavailable", ...empty };
   }
   const observationParams = new URLSearchParams(binding);
@@ -137,25 +138,42 @@ async function readObservationRow(
   };
 }
 
-async function readAccountDirectory(signal: AbortSignal): Promise<
-  { ok: true; accounts: ConnectedHtxAccountDto[] } | { ok: false; revoked: boolean }
-> {
+async function readAccountDirectory(
+  signal: AbortSignal,
+): Promise<{ ok: true; accounts: ConnectedHtxAccountDto[] } | { ok: false; revoked: boolean }> {
   try {
     const response = await fetch("/api/trader/admin/connected-accounts", {
-      cache: "no-store", credentials: "same-origin", signal,
+      cache: "no-store",
+      credentials: "same-origin",
+      signal,
     });
     // An access denial must clear retained account data even without a JSON body.
     if (response.status === 401 || response.status === 403) return { ok: false, revoked: true };
     if (!response.ok) return { ok: false, revoked: false };
     const body: unknown = await response.json();
-    if (body === null || typeof body !== "object" || !("accounts" in body) ||
-        !Array.isArray(body.accounts)) return { ok: false, revoked: false };
+    if (
+      body === null ||
+      typeof body !== "object" ||
+      !("accounts" in body) ||
+      !Array.isArray(body.accounts)
+    )
+      return { ok: false, revoked: false };
     const accounts = body.accounts;
-    if (!accounts.every((row): row is ConnectedHtxAccountDto => row !== null && typeof row === "object" &&
-      typeof row.organizationId === "string" && typeof row.credentialId === "string" &&
-      typeof row.exchangeAccountId === "string" && typeof row.accountName === "string" &&
-      typeof row.updatedAt === "string" && row.venue === "htx" && row.status === "active") ||
-      new Set(accounts.map(row => row.credentialId)).size !== accounts.length) {
+    if (
+      !accounts.every(
+        (row): row is ConnectedHtxAccountDto =>
+          row !== null &&
+          typeof row === "object" &&
+          typeof row.organizationId === "string" &&
+          typeof row.credentialId === "string" &&
+          typeof row.exchangeAccountId === "string" &&
+          typeof row.accountName === "string" &&
+          typeof row.updatedAt === "string" &&
+          row.venue === "htx" &&
+          row.status === "active",
+      ) ||
+      new Set(accounts.map((row) => row.credentialId)).size !== accounts.length
+    ) {
       return { ok: false, revoked: false };
     }
     return { ok: true, accounts };
@@ -232,11 +250,22 @@ function FuturesCell({ row, nowMs }: { row: RowView; nowMs: number }) {
   );
 }
 
-export function ConnectedAccountsTable() {
+export type ConnectedAccountsTableProps = {
+  variant?: "standalone" | "overview";
+  organizationId?: string | null;
+  exchangeAccountId?: string | null;
+};
+
+export function ConnectedAccountsTable({
+  variant = "standalone",
+  organizationId = null,
+  exchangeAccountId = null,
+}: ConnectedAccountsTableProps) {
   const [rows, setRows] = React.useState<RowView[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [refreshNotice, setRefreshNotice] = React.useState<string | null>(null);
+  const [directoryCurrent, setDirectoryCurrent] = React.useState(false);
   const [nowMs, setNowMs] = React.useState(() => Date.now());
   const hasTicks = rows.some((row) => row.lastTickMs !== null);
 
@@ -248,6 +277,9 @@ export function ConnectedAccountsTable() {
 
   React.useEffect(() => {
     const controller = new AbortController();
+    if (variant === "overview" && exchangeAccountId && !organizationId) {
+      return () => controller.abort();
+    }
     let generation = 0;
     async function load() {
       const ticket = ++generation;
@@ -259,6 +291,7 @@ export function ConnectedAccountsTable() {
       const result = await readAccountDirectory(controller.signal);
       if (controller.signal.aborted || ticket !== generation) return;
       if (!result.ok) {
+        setDirectoryCurrent(false);
         if (first || result.revoked) {
           setError(
             result.revoked
@@ -275,7 +308,12 @@ export function ConnectedAccountsTable() {
       }
       setError(null);
       setRefreshNotice(null);
-      const accounts = result.accounts;
+      setDirectoryCurrent(true);
+      const accounts = result.accounts.filter(
+        (account) =>
+          (!organizationId || account.organizationId === organizationId) &&
+          (!exchangeAccountId || account.exchangeAccountId === exchangeAccountId),
+      );
       setRows((current) => {
         const previous = new Map(current.map((row) => [row.credentialId, row]));
         return accounts.map((account) => {
@@ -283,7 +321,8 @@ export function ConnectedAccountsTable() {
           const sameAccount =
             prior &&
             prior.organizationId === account.organizationId &&
-            prior.exchangeAccountId === account.exchangeAccountId;
+            prior.exchangeAccountId === account.exchangeAccountId &&
+            prior.updatedAt === account.updatedAt;
           return sameAccount
             ? { ...prior, accountName: account.accountName, updatedAt: account.updatedAt }
             : {
@@ -325,70 +364,98 @@ export function ConnectedAccountsTable() {
       controller.abort();
       window.clearInterval(timer);
     };
-  }, []);
+  }, [exchangeAccountId, organizationId, variant]);
 
+  if (variant === "overview" && exchangeAccountId && !organizationId) {
+    return <AdminErrorState message="Для фильтра по счёту сначала выберите клиента." />;
+  }
   if (loading) return <AdminLoadingState label="Загрузка счетов HTX…" />;
   if (error) return <AdminErrorState message={error} />;
 
+  const overviewSummary =
+    variant === "overview"
+      ? summarizeOverviewFutures(
+          rows.map((row) => ({
+            organizationId: row.organizationId,
+            credentialId: row.credentialId,
+            exchangeAccountId: row.exchangeAccountId,
+            htxUid: row.htxUid,
+            observation: row.observation,
+            futures: row.futures,
+          })),
+          nowMs,
+          directoryCurrent,
+        )
+      : null;
+
   return (
-    <WaiaSurface variant="raised" className="space-y-4 p-5">
-      <div>
-        <h1 className="text-xl font-semibold">Счета HTX</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Личные счета AI-TRADER с активным подключением HTX. Финансовый результат здесь не рассчитывается.
-        </p>
-        {refreshNotice ? (
-          <p className="text-destructive mt-2 text-sm" role="status">
-            {refreshNotice}
+    <section aria-label={variant === "overview" ? "Фьючерсы" : undefined} className="space-y-4">
+      {overviewSummary ? <OverviewFuturesSummaryView summary={overviewSummary} /> : null}
+      <WaiaSurface variant="raised" className="space-y-4 p-5">
+        <div>
+          {variant === "overview" ? (
+            <h2 className="text-xl font-semibold">Счета HTX</h2>
+          ) : (
+            <h1 className="text-xl font-semibold">Счета HTX</h1>
+          )}
+          <p className="text-muted-foreground mt-1 text-sm">
+            {variant === "overview"
+              ? "Связанные счета в выбранном охвате. Фьючерсы показаны как текущие наблюдения в USD."
+              : "Личные счета AI-TRADER с активным подключением HTX. Финансовый результат здесь не рассчитывается."}
           </p>
-        ) : null}
-      </div>
-      {rows.length === 0 ? (
-        <p className="text-muted-foreground text-sm">Пока нет счетов с подключённым HTX.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm" data-testid="admin-connected-accounts">
-            <thead>
-              <tr className="text-muted-foreground border-b">
-                <th className="py-2 pr-3 font-medium">Счёт</th>
-                <th className="py-2 pr-3 font-medium">ID счёта HTX</th>
-                <th className="py-2 pr-3 font-medium">UID HTX</th>
-                <th className="py-2 pr-3 font-medium">Состояние</th>
-                <th className="py-2 pr-3 font-medium">Давность данных</th>
-                <th className="py-2 pr-3 font-medium">Спот USDT · доступно</th>
-                <th className="py-2 pr-3 font-medium">Спот USDT · в ордерах</th>
-                <th className="py-2 pr-3 font-medium">Спот · открытые ордера</th>
-                <th className="py-2 font-medium">Фьючерсы · USD</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.credentialId} className="border-border border-b last:border-0">
-                  <td className="py-2 pr-3">
-                    <Link className="underline-offset-2 hover:underline" href={drillHref(row)}>
-                      {row.accountName}
-                    </Link>
-                  </td>
-                  <td className="py-2 pr-3 font-mono">{row.exchangeAccountId}</td>
-                  <td className="py-2 pr-3 font-mono">{row.htxUid ?? "Не получен"}</td>
-                  <td className="py-2 pr-3">{freshnessLabel(row, nowMs)}</td>
-                  <td className="py-2 pr-3">
-                    {row.lastTickMs ? ageLabelRu(row.lastTickMs, nowMs) : "—"}
-                  </td>
-                  <td className="py-2 pr-3 font-mono">{row.usdtFree ?? "—"}</td>
-                  <td className="py-2 pr-3 font-mono">{row.usdtLocked ?? "—"}</td>
-                  <td className="py-2 font-mono">
-                    {row.openOrdersCount === null ? "—" : String(row.openOrdersCount)}
-                  </td>
-                  <td className="py-2">
-                    <FuturesCell row={row} nowMs={nowMs} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {refreshNotice ? (
+            <p className="text-destructive mt-2 text-sm" role="status">
+              {refreshNotice}
+            </p>
+          ) : null}
         </div>
-      )}
-    </WaiaSurface>
+        {rows.length === 0 ? (
+          <p className="text-muted-foreground text-sm">Пока нет счетов с подключённым HTX.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm" data-testid="admin-connected-accounts">
+              <thead>
+                <tr className="text-muted-foreground border-b">
+                  <th className="py-2 pr-3 font-medium">Счёт</th>
+                  <th className="py-2 pr-3 font-medium">ID счёта HTX</th>
+                  <th className="py-2 pr-3 font-medium">UID HTX</th>
+                  <th className="py-2 pr-3 font-medium">Состояние</th>
+                  <th className="py-2 pr-3 font-medium">Давность данных</th>
+                  <th className="py-2 pr-3 font-medium">Спот USDT · доступно</th>
+                  <th className="py-2 pr-3 font-medium">Спот USDT · в ордерах</th>
+                  <th className="py-2 pr-3 font-medium">Спот · открытые ордера</th>
+                  <th className="py-2 font-medium">Фьючерсы · USD</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.credentialId} className="border-border border-b last:border-0">
+                    <td className="py-2 pr-3">
+                      <Link className="underline-offset-2 hover:underline" href={drillHref(row)}>
+                        {row.accountName}
+                      </Link>
+                    </td>
+                    <td className="py-2 pr-3 font-mono">{row.exchangeAccountId}</td>
+                    <td className="py-2 pr-3 font-mono">{row.htxUid ?? "Не получен"}</td>
+                    <td className="py-2 pr-3">{freshnessLabel(row, nowMs)}</td>
+                    <td className="py-2 pr-3">
+                      {row.lastTickMs ? ageLabelRu(row.lastTickMs, nowMs) : "—"}
+                    </td>
+                    <td className="py-2 pr-3 font-mono">{row.usdtFree ?? "—"}</td>
+                    <td className="py-2 pr-3 font-mono">{row.usdtLocked ?? "—"}</td>
+                    <td className="py-2 font-mono">
+                      {row.openOrdersCount === null ? "—" : String(row.openOrdersCount)}
+                    </td>
+                    <td className="py-2">
+                      <FuturesCell row={row} nowMs={nowMs} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </WaiaSurface>
+    </section>
   );
 }

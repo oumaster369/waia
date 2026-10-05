@@ -136,13 +136,19 @@ export function OverviewPanel({ view }: { view: OverviewView }) {
   if (view.state === "unavailable") return <DataState state="unavailable" reason={view.reason} />;
   return (
     <section aria-label={RU.sections.overview} className="space-y-5">
+      <h2 className="px-1 text-lg font-semibold">Спот</h2>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {figure("Общий капитал", view.equity, view.currency, view.reasons?.equity?.[0])}
-        {figure("Свободно", view.free, view.currency, view.reasons?.free?.[0])}
-        {figure("В позициях", view.holdings, view.currency, view.reasons?.holdings?.[0])}
-        {figure("Резерв в ордерах", view.reserved, view.currency, view.reasons?.reserved?.[0])}
+        {figure("Капитал спота", view.equity, view.currency, view.reasons?.equity?.[0])}
+        {figure("Свободно · спот", view.free, view.currency, view.reasons?.free?.[0])}
+        {figure("В позициях · спот", view.holdings, view.currency, view.reasons?.holdings?.[0])}
         {figure(
-          "Результат Трейдера",
+          "Резерв в ордерах · спот",
+          view.reserved,
+          view.currency,
+          view.reasons?.reserved?.[0],
+        )}
+        {figure(
+          "Результат спота",
           view.pnl,
           view.currency,
           view.reasons?.pnl?.[0],

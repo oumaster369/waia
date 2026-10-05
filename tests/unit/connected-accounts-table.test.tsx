@@ -248,6 +248,91 @@ describe("admin connected accounts table", () => {
     expect(screen.getByText("Актуально")).toBeInTheDocument();
   });
 
+  it("shows the overview aggregate in native USD", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    const snapshot = observationWithFuturesBalance("COMPLETE", now, {
+      equityUsd: "100.25",
+      availableMarginUsd: "75.5",
+      profitUnrealUsd: "-2.25",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (url === "/api/trader/admin/connected-accounts")
+          return Response.json({ accounts: [account] });
+        if (url.includes("/binding?")) return Response.json(exactBinding);
+        if (url.includes("/api/trader/admin/account-observation?")) return Response.json(snapshot);
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    render(<ConnectedAccountsTable variant="overview" organizationId={account.organizationId} />);
+    await waitFor(() => expect(screen.getByText("Капитал фьючерсов")).toBeInTheDocument());
+    expect(screen.getByText("Капитал фьючерсов").closest("div")).toHaveTextContent("100,25");
+    expect(screen.getByText("Доступная маржа фьючерсов").closest("div")).toHaveTextContent("75,5");
+    expect(
+      screen.getByText("Нереализованный результат фьючерсов").closest("div"),
+    ).toHaveTextContent("−2,25");
+    expect(screen.getAllByText("USD")).toHaveLength(3);
+    expect(screen.getByText(/Текущие наблюдения HTX/)).toBeInTheDocument();
+  });
+
+  it("filters the directory by overview scope before requesting row observations", async () => {
+    const other = {
+      ...account,
+      organizationId: "99999999-9999-4999-8999-999999999999",
+      credentialId: "88888888-8888-4888-8888-888888888888",
+      exchangeAccountId: "73750149",
+      accountName: "Other organization",
+    };
+    const bindingCalls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (url === "/api/trader/admin/connected-accounts")
+          return Response.json({ accounts: [account, other] });
+        if (url.includes("/binding?")) {
+          bindingCalls.push(url);
+          return new Response(null, { status: 204 });
+        }
+        return new Response(null, { status: 404 });
+      }),
+    );
+
+    render(<ConnectedAccountsTable variant="overview" organizationId={account.organizationId} />);
+    await waitFor(() => expect(screen.getByText("Partner cabinet")).toBeInTheDocument());
+    expect(screen.queryByText("Other organization")).not.toBeInTheDocument();
+    expect(bindingCalls).toHaveLength(1);
+    expect(bindingCalls[0]).toContain(encodeURIComponent(account.credentialId));
+  });
+
+  it("rejects a directory containing duplicate credential identities", async () => {
+    const bindingFetch = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (url === "/api/trader/admin/connected-accounts") {
+          return Response.json({ accounts: [account, { ...account, accountName: "Duplicate" }] });
+        }
+        bindingFetch();
+        return new Response(null, { status: 204 });
+      }),
+    );
+
+    render(<ConnectedAccountsTable />);
+    await waitFor(() =>
+      expect(screen.getByText("Не удалось загрузить список счетов HTX.")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Partner cabinet")).not.toBeInTheDocument();
+    expect(bindingFetch).not.toHaveBeenCalled();
+  });
+
   it("shows an unavailable futures balance as unavailable and links to details", async () => {
     const snapshot = observationWithFuturesBalance("ERROR", now);
     const binding = {
@@ -555,7 +640,8 @@ describe("admin connected accounts table", () => {
             return Response.json({ accounts: [account] });
           }
           if (url.includes("/binding?")) return Response.json(exactBinding);
-          if (url.includes("/api/trader/admin/account-observation?")) return Response.json(snapshot);
+          if (url.includes("/api/trader/admin/account-observation?"))
+            return Response.json(snapshot);
           return new Response(null, { status: 404 });
         }),
       );
@@ -614,7 +700,8 @@ describe("admin connected accounts table", () => {
             return Response.json({ accounts: [account] });
           }
           if (url.includes("/binding?")) return Response.json(exactBinding);
-          if (url.includes("/api/trader/admin/account-observation?")) return Response.json(snapshot);
+          if (url.includes("/api/trader/admin/account-observation?"))
+            return Response.json(snapshot);
           return new Response(null, { status: 404 });
         }),
       );
@@ -663,7 +750,9 @@ describe("admin connected accounts table", () => {
       );
 
       render(<ConnectedAccountsTable />);
-      await waitFor(() => expect(screen.getByText("Данные фьючерсов недоступны")).toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.getByText("Данные фьючерсов недоступны")).toBeInTheDocument(),
+      );
       expect(snapshotFetch).not.toHaveBeenCalled();
       expect(screen.queryByText("12.5")).not.toBeInTheDocument();
       expect(screen.queryByText("13.5")).not.toBeInTheDocument();
