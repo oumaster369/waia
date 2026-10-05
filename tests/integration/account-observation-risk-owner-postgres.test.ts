@@ -440,7 +440,9 @@ describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational
         expect(client.statements).toContain("SET LOCAL lock_timeout = '1000ms'");
         expect(client.statements).toContain("SET LOCAL statement_timeout = '3000ms'");
       }
-      expect(opened.reader.statements).toContain("SET LOCAL ROLE waia_account_observation_reader");
+      expect(opened.reader.statements.map(statement => statement.replace(/\s+/g, " ").trim())).toContain(
+        "SET TRANSACTION READ ONLY; SET LOCAL ROLE waia_account_observation_reader; SET LOCAL statement_timeout = '3000ms'; SET LOCAL lock_timeout = '1000ms'; SET LOCAL transaction_timeout = '5000ms'",
+      );
       expect(opened.credential.statements).toContain("SET LOCAL ROLE waia_account_observation_credential");
       expect(opened.reader.statements.some(statement => statement.includes("SELECT state.symbols"))).toBe(true);
       expect(opened.credential.statements.some(statement => statement.includes("SELECT id, organization_id, exchange_account_id, status, observation_read_permitted, encrypted_payload"))).toBe(true);

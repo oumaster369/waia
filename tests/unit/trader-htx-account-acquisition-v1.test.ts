@@ -354,7 +354,9 @@ describe("DEE-1135 fixed protected acquisition composition", () => {
         "/v1/account/accounts", "/v2/user/uid", "/v2/user/api-key", "/v1/account/accounts/135/balance",
         "/v1/account/accounts", "/v2/user/uid", "/v2/user/api-key"]);
       expect(f.statements).toContain("SET LOCAL ROLE waia_account_observation_credential");
-      expect(f.statements).toContain("SET LOCAL ROLE waia_account_observation_reader");
+      expect(f.statements.map(statement => statement.replace(/\s+/g, " ").trim())).toContain(
+        "SET TRANSACTION READ ONLY; SET LOCAL ROLE waia_account_observation_reader; SET LOCAL statement_timeout = '3000ms'; SET LOCAL lock_timeout = '1000ms'; SET LOCAL transaction_timeout = '5000ms'",
+      );
       expect(f.statements).toContain("SET LOCAL transaction_timeout = '5000ms'");
       expect(f.statements.some(text => /SELECT \*/.test(text))).toBe(false);
     } finally { await owner.dispose(); }
