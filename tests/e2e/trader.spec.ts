@@ -130,4 +130,48 @@ test.describe("/trader static shell boundary (AT-E1 S1)", () => {
     await page.getByRole("button", { name: "Отмена" }).focus();
     await page.keyboard.press("Enter");
   });
+
+  test("explains rejected trading permissions and recovers with a separate read-only connection", async ({ page }, testInfo) => {
+    const email = `e2e-trader-permissions-${Date.now()}@example.com`;
+    await signUpAndOpenDashboard(page, email);
+    grantTraderEntitlementByUserEmail(email);
+    const credential = {
+      id: "fixture-read-only", venue: "htx", exchangeAccountId: "12345678",
+      apiKeyMasked: "fixture…only", status: "active", permissionMetadata: { scopes: ["read"] },
+      createdAt: "2026-10-05T00:00:00.000Z", updatedAt: "2026-10-05T00:00:00.000Z", revokedAt: null,
+    };
+    let connected = false;
+    let attempts = 0;
+    await page.route("**/api/trader/exchange-credentials", (route) => route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ credentials: connected ? [credential] : [] }),
+    }));
+    await page.route("**/api/trader/account-observation/**", (route) => route.fulfill({ status: 204 }));
+    await page.route("**/api/trader/exchange-credentials/connect", (route) => {
+      attempts += 1;
+      if (attempts === 1) return route.fulfill({
+        status: 400, contentType: "application/json",
+        body: JSON.stringify({ error: { code: "READ_ONLY_KEY_REQUIRED", message: "Use a separate Read-only key." } }),
+      });
+      connected = true;
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(credential) });
+    });
+    await page.goto("/trader");
+    await page.getByTestId("trader-api-key").fill("synthetic-trade-key");
+    await page.getByTestId("trader-api-secret").fill("synthetic-secret-first");
+    await page.getByTestId("trader-connect-submit").click();
+    await expect(page.getByText("Для подключения нужен отдельный ключ HTX только с разрешением Read, без Trade и Withdraw. Существующий торговый ключ не изменится.", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("trader-api-key")).toHaveValue("");
+    await expect(page.getByTestId("trader-api-secret")).toHaveValue("");
+    expect(attempts).toBe(1);
+    await page.screenshot({ path: testInfo.outputPath("permission-refusal.png") });
+    await page.getByTestId("trader-api-key").fill("synthetic-read-only-key");
+    await page.getByTestId("trader-api-secret").fill("synthetic-secret-second");
+    await page.getByTestId("trader-connect-submit").click();
+    await expect(page.getByTestId("trader-account-select")).toHaveValue("12345678");
+    await expect(page.getByTestId("trader-credential-account-id")).toHaveText("12345678");
+    await expect(page.getByTestId("trader-connect-form")).toHaveCount(0);
+    expect(attempts).toBe(2);
+    await page.screenshot({ path: testInfo.outputPath("read-only-connected.png") });
+  });
 });

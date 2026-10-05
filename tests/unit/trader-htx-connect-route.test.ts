@@ -11,7 +11,7 @@ import {
 } from "@/app/api/trader/exchange-credentials/[credentialId]/route";
 import { GET as exchangeCredentialsGet } from "@/app/api/trader/exchange-credentials/route";
 import { getDb } from "@/db/client";
-import { auditLogs, organizationEntitlements } from "@/db/schema";
+import { auditLogs, exchangeCredentials, organizationEntitlements } from "@/db/schema";
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb } from "@/db/waia-runtime-db";
 import type { WaiaDb } from "@/db/types";
 import * as sessionUser from "@/lib/auth/session-user";
@@ -425,6 +425,116 @@ describe("HTX connect API (DEE-236)", () => {
       .where(eq(auditLogs.action, traderAuditActions.credentialCreated))
       .all();
     expect(audits.some((row) => row.entityId === body.id)).toBe(true);
+  });
+
+  it("rejects a Trade-scoped key before replacement when the live switch is absent", async () => {
+    const isolatedSpotAccountId = 100011;
+    const handlersForAccount = (apiKey: string, permission: string) =>
+      defaultHtxHandlers({
+        "/v1/account/accounts": () =>
+          jsonResponse({
+            status: "ok",
+            data: [{ id: isolatedSpotAccountId, type: "spot", state: "working" }],
+          }),
+        "/v2/user/api-key": () =>
+          jsonResponse({
+            code: 200,
+            data: [{ accessKey: apiKey, permission, status: "normal" }],
+          }),
+      });
+    const priorKey = "prior-read-only-access-key";
+    const priorSecret = "prior-read-only-secret";
+    const prior = await handleHtxConnectPost(
+      connectPostRequest({ venue: "htx", apiKey: priorKey, apiSecret: priorSecret }),
+      createDeps({
+        createConnector: (config) =>
+          new HtxExchangeConnector({
+            ...config,
+            restHost: HTX_DEFAULT_REST_HOST,
+            fetchImpl: handlersForAccount(priorKey, "readOnly"),
+          }),
+      }),
+    );
+    expect(prior.status).toBe(200);
+
+    const before = await handleExchangeCredentialsGet(createDeps());
+    const beforeCredentials = (before.body as { credentials: Array<{ id: string; status: string }> })
+      .credentials;
+    const active = beforeCredentials.find((credential) => credential.id === (prior.body as { id: string }).id);
+    expect(active).toBeDefined();
+    expect(active!.status).toBe("active");
+    const organizationId = personalOrganizationIdFromUserId(USER_WITH_TRADER);
+    const db = getDb();
+    const rowsBefore = db
+      .select({
+        id: exchangeCredentials.id,
+        status: exchangeCredentials.status,
+        revokedAt: exchangeCredentials.revokedAt,
+      })
+      .from(exchangeCredentials)
+      .where(eq(exchangeCredentials.organizationId, organizationId))
+      .all();
+    const auditsBefore = db
+      .select({ id: auditLogs.id, action: auditLogs.action, entityId: auditLogs.entityId })
+      .from(auditLogs)
+      .where(eq(auditLogs.organizationId, organizationId))
+      .all()
+      .filter(
+        (row) =>
+          row.action === traderAuditActions.credentialCreated ||
+          row.action === traderAuditActions.credentialRotated,
+      );
+
+    const tradeKey = "trade-scoped-access-key";
+    const rejected = await handleHtxConnectPost(
+      connectPostRequest({
+        venue: "htx",
+        apiKey: tradeKey,
+        apiSecret: "trade-scoped-secret",
+        replacementCredentialId: active!.id,
+      }),
+      createDeps({
+        createConnector: (config) =>
+          new HtxExchangeConnector({
+            ...config,
+            restHost: HTX_DEFAULT_REST_HOST,
+            fetchImpl: handlersForAccount(tradeKey, "readOnly,trade"),
+          }),
+      }),
+    );
+
+    expect(rejected.status).toBe(400);
+    expect(rejected.body).toMatchObject({
+      error: { code: HTX_CONNECT_ERROR_CODES.READ_ONLY_KEY_REQUIRED },
+    });
+    expect(JSON.stringify(rejected.body)).not.toContain("trade-scoped-secret");
+    expect(JSON.stringify(rejected.body)).not.toContain(tradeKey);
+
+    const after = await handleExchangeCredentialsGet(createDeps());
+    const afterCredentials = (after.body as { credentials: Array<{ id: string; status: string }> })
+      .credentials;
+    const rowsAfter = db
+      .select({
+        id: exchangeCredentials.id,
+        status: exchangeCredentials.status,
+        revokedAt: exchangeCredentials.revokedAt,
+      })
+      .from(exchangeCredentials)
+      .where(eq(exchangeCredentials.organizationId, organizationId))
+      .all();
+    const auditsAfter = db
+      .select({ id: auditLogs.id, action: auditLogs.action, entityId: auditLogs.entityId })
+      .from(auditLogs)
+      .where(eq(auditLogs.organizationId, organizationId))
+      .all()
+      .filter(
+        (row) =>
+          row.action === traderAuditActions.credentialCreated ||
+          row.action === traderAuditActions.credentialRotated,
+      );
+    expect(afterCredentials).toEqual(beforeCredentials);
+    expect(rowsAfter).toEqual(rowsBefore);
+    expect(auditsAfter).toEqual(auditsBefore);
   });
 
   it("replaces existing credentials and emits rotated audit", async () => {

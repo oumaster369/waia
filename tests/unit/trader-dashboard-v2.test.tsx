@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { snapshotAgeText, TraderWorkspace } from "@/components/trader/trader-workspace";
@@ -85,6 +85,48 @@ describe("Trader Dashboard V2", () => {
     expect(screen.getByTestId("trader-authority-boundary")).toHaveTextContent("Только наблюдение");
     expect(screen.queryByRole("button", { name: /enable live/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /kill switch/i })).not.toBeInTheDocument();
+  });
+
+  it("clearly explains that Trade-scoped keys are rejected without changing an existing key", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === "/api/trader/exchange-credentials" && init?.method !== "POST") {
+        return new Response(JSON.stringify({ credentials: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url === "/api/trader/exchange-credentials/connect") {
+        return new Response(
+          JSON.stringify({ error: { code: "READ_ONLY_KEY_REQUIRED", message: "safe response" } }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(null, { status: 204 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TraderWorkspace />);
+
+    expect(await screen.findByTestId("trader-permission-explainer")).toHaveTextContent(
+      "Не включайте Trade или Withdraw",
+    );
+    expect(screen.getByTestId("trader-permission-explainer")).toHaveTextContent(
+      "создайте отдельный ключ только для чтения",
+    );
+    fireEvent.change(screen.getByTestId("trader-api-key"), { target: { value: "trade-key" } });
+    fireEvent.change(screen.getByTestId("trader-api-secret"), {
+      target: { value: "trade-secret" },
+    });
+    fireEvent.submit(screen.getByTestId("trader-connect-form"));
+
+    expect(await screen.findByTestId("trader-error-message")).toHaveTextContent(
+      "Для подключения нужен отдельный ключ HTX только с разрешением Read, без Trade и Withdraw. Существующий торговый ключ не изменится.",
+    );
+    expect(screen.getByTestId("trader-api-key")).toHaveValue("");
+    expect(screen.getByTestId("trader-api-secret")).toHaveValue("");
+    expect(screen.getByTestId("trader-error-message").textContent).not.toContain("trade-secret");
   });
 
   it("does not fetch or render real HTX workspace state while observing a historical campaign", async () => {
