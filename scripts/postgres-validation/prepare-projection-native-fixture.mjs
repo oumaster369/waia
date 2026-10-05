@@ -9,10 +9,9 @@ import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypt
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import postgres from "postgres";
-import { drizzle } from "drizzle-orm/postgres-js";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
 import databaseTls from "../../lib/trader/account-observation/database-node-tls.ts";
 import postgresReader from "../../lib/trader/account-observation/postgres-reader.ts";
+import migrationBudget from "../ops/postgres-migrate-with-session-lock-budget.ts";
 import observationRoleProbe from "../../lib/trader/account-observation/host-role-probe.ts";
 import {
   ACCOUNT_OBSERVATION_LOGIN_PLAN,
@@ -21,6 +20,7 @@ import {
 
 const { createAccountObservationDatabaseTlsOptions } = databaseTls;
 const { createPostgresObservationReader } = postgresReader;
+const { migratePostgresConnectionWithSessionLockBudget } = migrationBudget;
 const { observationPoolLimits, probeObservationPool } = observationRoleProbe;
 
 const FIXED_ORIGIN = "https://observation-reader.waia.life";
@@ -350,7 +350,7 @@ async function main() {
   stage = "apply-current-canonical-journal";
   await adminSql.unsafe("SET ROLE dee960_local_owner");
   try {
-    await migrate(drizzle(adminSql), { migrationsFolder: resolve(root, "db/migrations_postgres") });
+    await migratePostgresConnectionWithSessionLockBudget(adminSql, resolve(root, "db/migrations_postgres"));
   } finally {
     await adminSql.unsafe("RESET ROLE");
   }
