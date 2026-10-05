@@ -429,6 +429,7 @@ describe("account observation host supervisor", () => {
     ];
     expect(command).toBe(process.execPath);
     expect(args).toEqual([
+      "--network-family-autoselection-attempt-timeout=1000",
       "--import",
       "tsx",
       "--require",
@@ -453,7 +454,13 @@ describe("account observation host supervisor", () => {
     expect(spawnSpec.cwd).toBe(REPO_ROOT);
     const child = spawnSync(
       process.execPath,
-      ["--require", preloadPath, "-e", "require('server-only')"],
+      [
+        "--network-family-autoselection-attempt-timeout=1000",
+        "--require",
+        preloadPath,
+        "-e",
+        "const net = require('node:net'); if (net.getDefaultAutoSelectFamilyAttemptTimeout() !== 1000) process.exit(42); require('server-only')",
+      ],
       {
         cwd: os.tmpdir(),
         env: { PATH: process.env.PATH ?? "", WAIA_TRADER_CLI: "1", NODE_ENV: "test" },

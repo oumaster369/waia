@@ -45,9 +45,11 @@ function requireEnforcedObservationJob(source: string) {
   return block;
 }
 function hasSafeReaderPortGuard(source: string): boolean {
-  return source.includes('const requestedPort = process.env.DEE960_LOCAL_PG17_PORT ?? "55460";') &&
+  return source.includes('const dee1235ReaderFixture = process.env.DEE1235_READER_LOCAL_PG17 === "1";') &&
+    source.includes('const requestedPort = dee1235ReaderFixture ? "55738" : process.env.DEE960_LOCAL_PG17_PORT ?? "55460";') &&
+    source.includes('process.env.DEE960_LOCAL_PG17_PORT !== "55738"') &&
     source.includes('requestedPort !== "55460" && requestedPort !== "55461"') &&
-    source.includes('const localPort = requestedPort === "55461" ? "55461" : "55460";') &&
+    source.includes('const localPort = requestedPort === "55461" ? "55461" : requestedPort === "55738" ? "55738" : "55460";') &&
     source.includes('`postgres://waia_local_admin:local_validation_only@127.0.0.1:${localPort}/waia_dee960_local`') &&
     !/process\.env\.(?:DATABASE_URL|POSTGRES_URL)/.test(source);
 }
@@ -111,11 +113,15 @@ describe("account observation PostgreSQL CI contract", () => {
     const reader = readFileSync(readerPath, "utf8");
     expect(hasSafeReaderPortGuard(reader)).toBe(true);
     for (const mutation of [
+      reader.replace('DEE1235_READER_LOCAL_PG17 === "1"', 'DEE1235_READER_LOCAL_PG17 !== "1"'),
+      reader.replace('dee1235ReaderFixture ? "55738"', 'dee1235ReaderFixture ? "5432"'),
+      reader.replace('process.env.DEE960_LOCAL_PG17_PORT !== "55738"', 'process.env.DEE960_LOCAL_PG17_PORT !== "5432"'),
+      reader.replace('127.0.0.1:${localPort}/waia_dee960_local', 'example.com:${localPort}/waia_dee960_local'),
       reader.replace('requestedPort !== "55460" && requestedPort !== "55461"', 'requestedPort !== "55460"'),
       reader.replace('requestedPort !== "55460" && requestedPort !== "55461"', 'false'),
       reader.replace('127.0.0.1:${localPort}/waia_dee960_local', 'example.com:${localPort}/waia_dee960_local'),
       reader.replace('waia_dee960_local`', 'production`'),
-      reader.replace('const localPort = requestedPort === "55461" ? "55461" : "55460";', 'const localPort = requestedPort;'),
+      reader.replace('const localPort = requestedPort === "55461" ? "55461" : requestedPort === "55738" ? "55738" : "55460";', 'const localPort = requestedPort;'),
     ]) {
       expect(hasSafeReaderPortGuard(mutation)).toBe(false);
     }

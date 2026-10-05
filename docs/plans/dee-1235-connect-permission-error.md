@@ -1,7 +1,7 @@
 ---
 integrationIssue: DEE-1235
 integrationTitle: "Restore new-user HTX Read + Trade observation connection"
-branch: dee-1235-observer-runtime-compatibility
+branch: dee-1235-observation-read-latency
 riskTier: T3
 prPolicy: one-integration-pr
 executionSurfaces: [local, github-pr-ci]
@@ -62,3 +62,11 @@ This bounded follow-up makes the supervisor preload and consumer paths absolute 
 Validation adds actual child preload resolution from a foreign working directory and a1693-asset synthetic response above262144 bytes, with exact amounts, over-limit refusal and unchanged order pagination. Retain all existing security/binding tests. Actual host snapshots and tenant cabinet remain required for recovery; do not claim partner acceptance from synthetic data. The production artifact must record exact source/patch identity; no untracked image-only source edits.
 
 The bounded production diagnostic confirmed3398 rows/280388 bytes, all amounts valid and no duplicate buckets. Twelve rows use six Han currency identifiers, matching the public HTX currency catalog exactly (1699 assets). The parser explicitly permits bounded lowercase Latin/digit/Han identifiers, preserves these balances, and still rejects whitespace, controls and malformed rows. The previous image silently skipped those six assets; that incomplete behavior is not restored.
+
+## Regular observation latency correction, 5 October
+
+PR766 is merged as a220e774 and its strict complete-balance parser is deployed. Actual recurring observation still alternates successful reads and TIMEOUT. A bounded same-key diagnostic measured each current-binding database authorization at498–545ms; each financial GET performs fresh three-request venue admission both before and after the read. Five immutable transaction setup statements currently pay five separate round trips for each of these checks. Batch only these ordered static statements in a single simple-protocol message; retain the separate parameterized tenant scope query, every fresh current-binding check, all role/RLS restrictions and unchanged3s/1s/5s database timeouts. No caching or authorization relaxation is introduced.
+
+A separate public TLS-only comparison reproduced an independent network defect on the actual host: Node22 default250ms address-family connection attempts failed4/4, with IPv4 attempts timing out and IPv6 unavailable;1000ms attempts passed4/4 with verified TLS1.3 in722–755ms. Set Node's supported1000ms address-family attempt option only on the dedicated observation child. The parent, other services, TLS verification, endpoint allowlist, total10s read deadline, key admission, pool sizes and configuration identities remain unchanged. No retry loop or new exchange request is added.
+
+Validate the exact production-path latency with one bounded GET-only diagnostic using the changed source and ordinary protected adapters, no snapshot writes. Native PostgreSQL tests must check effective role/read-only/scope/timeouts, abort-on-setting-error and clean pooled reuse. Existing host tests must execute a child with the packaged arguments/preload and inspect its actual setting. Run targeted regressions, type/lint/build/canon/graphs and fresh exact-head CI; do not repeat prior full unit locally. Release only the source-qualified existing observer image after independent review. Require repeated fresh current-binding production observations across all existing accounts before claiming stable recovery; partner connection and cabinet acceptance remain separately unconfirmed.

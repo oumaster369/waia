@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import postgres, { type Sql } from "postgres";
+import postgres, { type Sql, type TransactionSql } from "postgres";
 import { createPostgresObservationReader } from "@/lib/trader/account-observation/postgres-reader";
 import { createPostgresObservationAssignmentSource } from "@/lib/trader/account-observation/postgres-assignments";
 import { createObservationConfiguration } from "@/lib/trader/account-observation/runtime";
@@ -12,11 +12,16 @@ import { accountObservationClock } from "@/lib/trader/account-observation/clock"
 
 // Explicit synthetic loopback-only target; never use production environment URLs.
 const enabled = process.env.DEE960_LOCAL_PG17 === "1";
-const requestedPort = process.env.DEE960_LOCAL_PG17_PORT ?? "55460";
-if (enabled && requestedPort !== "55460" && requestedPort !== "55461") {
+const dee1235ReaderFixture = process.env.DEE1235_READER_LOCAL_PG17 === "1";
+const requestedPort = dee1235ReaderFixture ? "55738" : process.env.DEE960_LOCAL_PG17_PORT ?? "55460";
+if (enabled && dee1235ReaderFixture && process.env.DEE960_LOCAL_PG17_PORT !== undefined &&
+  process.env.DEE960_LOCAL_PG17_PORT !== "55738") {
+  throw new Error("DEE1235_READER_LOCAL_PG17 is pinned to its isolated loopback port");
+}
+if (enabled && !dee1235ReaderFixture && requestedPort !== "55460" && requestedPort !== "55461") {
   throw new Error("DEE960_LOCAL_PG17_PORT must be one of the explicitly isolated loopback ports");
 }
-const localPort = requestedPort === "55461" ? "55461" : "55460";
+const localPort = requestedPort === "55461" ? "55461" : requestedPort === "55738" ? "55738" : "55460";
 const url = `postgres://waia_local_admin:local_validation_only@127.0.0.1:${localPort}/waia_dee960_local`;
 describe.skipIf(!enabled)("DEE-960 dedicated read-only LOGIN on actual PostgreSQL 17", () => {
   let root: Sql; let admin: Sql; let client: Sql;
@@ -93,10 +98,100 @@ describe.skipIf(!enabled)("DEE-960 dedicated read-only LOGIN on actual PostgreSQ
       return tx.unsafe(statement);
     });
   }
+  function interceptTransactions(expected: ObservationBinding, injectSetupFailure = false) {
+    const events: string[] = [];
+    let injected = false;
+    let scopeVisible = false;
+    const wrappedSql = new Proxy(client, {
+      get(target, property, receiver) {
+        if (property !== "begin") return Reflect.get(target, property, receiver);
+        return (callback: (tx: TransactionSql) => unknown, ...options: unknown[]) =>
+          Reflect.apply(target.begin, target, [async (rawTx: TransactionSql) => {
+            const wrappedTx = new Proxy(rawTx as unknown as (...args: unknown[]) => unknown, {
+              apply(query, _thisArg, args: unknown[]) {
+                const strings = args[0] as TemplateStringsArray;
+                const text = Array.from(strings).join("?");
+                if (text.includes("SELECT o.observation_id")) {
+                  events.push("protected-select");
+                  if (!scopeVisible) throw new Error("synthetic settings were not verified");
+                }
+                if (text.includes("set_config('waia.observation_org'")) {
+                  events.push("scope-set");
+                  return Promise.resolve(Reflect.apply(query, query, args)).then(async result => {
+                    const unsafe = rawTx.unsafe.bind(rawTx);
+                    const state = await unsafe(`SELECT current_user AS role,
+                      current_setting('transaction_read_only') = 'on' AS read_only,
+                      current_setting('statement_timeout')::interval = interval '3 seconds' AS statement_timeout,
+                      current_setting('lock_timeout')::interval = interval '1 second' AS lock_timeout,
+                      current_setting('transaction_timeout')::interval = interval '5 seconds' AS transaction_timeout,
+                      current_setting('waia.observation_org', true) AS organization_id,
+                      current_setting('waia.observation_credential', true) AS credential_id,
+                      current_setting('waia.observation_account', true) AS exchange_account_id`);
+                    const row = state[0];
+                    scopeVisible = row.role === "waia_account_observation_reader" && row.read_only === true &&
+                      row.statement_timeout === true && row.lock_timeout === true && row.transaction_timeout === true &&
+                      row.organization_id === expected.organizationId && row.credential_id === expected.credentialId &&
+                      row.exchange_account_id === expected.exchangeAccountId;
+                    events.push(scopeVisible ? "settings-visible" : "settings-mismatch");
+                    return result;
+                  });
+                }
+                return Reflect.apply(query, query, args);
+              },
+              get(query, property, receiver) {
+                if (property === "unsafe") return async (statement: string) => {
+                  if (statement.includes("SET TRANSACTION READ ONLY")) {
+                    if (injectSetupFailure && !injected) {
+                      injected = true;
+                      events.push("setup-failed");
+                      // Let PostgreSQL apply the local settings, then fail in the
+                      // same simple-query message; exercise actual rollback.
+                      return rawTx.unsafe(`${statement}; SELECT 1 / 0`);
+                    }
+                    events.push("setup-batch");
+                  }
+                  return Reflect.apply(Reflect.get(query, property, query) as (...args: unknown[]) => unknown,
+                    query, [statement]);
+                };
+                return Reflect.get(query, property, receiver);
+              },
+            }) as unknown as TransactionSql;
+            try { return await callback(wrappedTx); }
+            catch (error) { events.push("transaction-rejected"); throw error; }
+          }, ...options]);
+      },
+    });
+    return { sql: wrappedSql as Sql, events };
+  }
   it("resolves exact active binding and reads the same immutable observation", async () => {
     const { b, observation } = await seed();
     expect(await reader.resolveActiveBinding(scope(b))).toEqual(b);
     expect(await reader.resolveActiveBinding(b)).toEqual(b);
+    expect(await reader.readLatest(b)).toEqual(observation);
+  });
+  it("batches read-only transaction setup and rolls back cleanly on setup failure", async () => {
+    const { b, observation } = await seed();
+    const traced = interceptTransactions(b);
+    const tracedReader = createPostgresObservationReader(traced.sql);
+    expect(await tracedReader.readLatest(b)).toEqual(observation);
+    expect(traced.events).toEqual(["setup-batch", "scope-set", "settings-visible", "protected-select"]);
+
+    const failing = interceptTransactions(b, true);
+    const failingReader = createPostgresObservationReader(failing.sql);
+    await expect(failingReader.readLatest(b)).rejects.toThrow(/^ACCOUNT_OBSERVATION_READ_FAILED$/);
+    expect(failing.events).toEqual(["setup-failed", "transaction-rejected"]);
+    const reset = (await client`SELECT current_user AS role,
+      current_setting('transaction_read_only') = 'off' AS writable_default,
+      current_setting('statement_timeout') = '0' AS statement_default,
+      current_setting('lock_timeout') = '0' AS lock_default,
+      current_setting('transaction_timeout') = '0' AS transaction_default,
+      coalesce(current_setting('waia.observation_org', true), '') = '' AS no_org,
+      coalesce(current_setting('waia.observation_credential', true), '') = '' AS no_credential,
+      coalesce(current_setting('waia.observation_account', true), '') = '' AS no_account`)[0];
+    expect(reset).toEqual({ role: login, writable_default: true, statement_default: true,
+      lock_default: true, transaction_default: true, no_org: true, no_credential: true, no_account: true });
+    // Reuse the same underlying client after the aborted transaction: no partial
+    // session settings or failed setup state can leak into the next transaction.
     expect(await reader.readLatest(b)).toEqual(observation);
   });
   it("round-trips exact derivatives positions through the persisted observation projection", async () => {
