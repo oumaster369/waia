@@ -228,6 +228,8 @@ export function buildObservationHostConsumerSpawnSpecV1(nodeExecutable = process
   return Object.freeze({
     command: nodeExecutable,
     args: Object.freeze([
+      // HTX handshakes can exceed Node's 250ms per-address default; the overall read deadline stays bounded.
+      "--network-family-autoselection-attempt-timeout=1000",
       "--import",
       "tsx",
       "--require",

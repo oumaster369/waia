@@ -20,11 +20,12 @@ export function createPostgresObservationReader(sql: Sql) {
       const scope = scopeSchema.parse({ organizationId: input.organizationId,
         credentialId: input.credentialId, exchangeAccountId: input.exchangeAccountId });
       return await sql.begin(async tx => {
-        await tx.unsafe("SET TRANSACTION READ ONLY");
-        await tx.unsafe("SET LOCAL ROLE waia_account_observation_reader");
-        await tx.unsafe("SET LOCAL statement_timeout = '3000ms'");
-        await tx.unsafe("SET LOCAL lock_timeout = '1000ms'");
-        await tx.unsafe("SET LOCAL transaction_timeout = '5000ms'");
+        // Static settings share one round trip; tenant values stay separately parameterized.
+        await tx.unsafe(`SET TRANSACTION READ ONLY;
+          SET LOCAL ROLE waia_account_observation_reader;
+          SET LOCAL statement_timeout = '3000ms';
+          SET LOCAL lock_timeout = '1000ms';
+          SET LOCAL transaction_timeout = '5000ms'`);
         await tx`SELECT set_config('waia.observation_org', ${scope.organizationId}, true),
           set_config('waia.observation_credential', ${scope.credentialId}, true),
           set_config('waia.observation_account', ${scope.exchangeAccountId}, true)`;
