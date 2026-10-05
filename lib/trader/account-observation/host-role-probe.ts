@@ -4,6 +4,8 @@ import type { Sql } from "postgres";
 export type ObservationPoolPurpose = "collector" | "reader";
 export const observationPoolLimits = Object.freeze({ max: 2, connect_timeout: 3,
   max_lifetime: 300, prepare: false as const });
+/** Reader LOGIN hard cap remains two: one collector-host reader plus one projection reader. */
+export const observationReaderPoolLimits = Object.freeze({ ...observationPoolLimits, max: 1 });
 const fail = (): never => { throw new Error("OBSERVATION_HOST_ROLE_REFUSED"); };
 
 /** Bounded session/role attestation, not provisioning or a cluster-wide privilege audit.

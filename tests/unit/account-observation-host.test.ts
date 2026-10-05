@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Sql } from "postgres";
 import { createAccountObservationHost, type ObservationHostInput } from "@/lib/trader/account-observation/host";
-import { observationPoolLimits, probeObservationPool } from "@/lib/trader/account-observation/host-role-probe";
+import { observationPoolLimits, observationReaderPoolLimits, probeObservationPool } from "@/lib/trader/account-observation/host-role-probe";
 import { createObservationConfiguration } from "@/lib/trader/account-observation/runtime";
 import { accountObservationClock } from "@/lib/trader/account-observation/clock";
 
@@ -56,6 +56,7 @@ describe("explicit observation host lifecycle (synthetic resources, existing com
     expect(f.input.openCollector).not.toHaveBeenCalled(); expect(lifecycle.construct).not.toHaveBeenCalled();
     const work = host.run(new AbortController().signal); await vi.advanceTimersByTimeAsync(0);
     expect(f.input.openCollector).toHaveBeenCalledWith(expect.any(AbortSignal), observationPoolLimits);
+    expect(f.input.openReader).toHaveBeenCalledWith(expect.any(AbortSignal), observationReaderPoolLimits);
     expect(lifecycle.construct).toHaveBeenCalledWith(expect.objectContaining({ collectorSql: f.collector.sql,
       readerSql: f.reader.sql, protectedCredentialService: f.credentials.service }));
     expect(f.input.openCredentialService.mock.invocationCallOrder[0]).toBeGreaterThan(

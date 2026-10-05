@@ -31,7 +31,7 @@ import {
   type ObservationHostEvent,
   type ObservationSqlResource,
 } from "@/lib/trader/account-observation/host";
-import { observationPoolLimits, probeObservationCredentialPool } from "@/lib/trader/account-observation/host-role-probe";
+import { observationPoolLimits, observationReaderPoolLimits, probeObservationCredentialPool } from "@/lib/trader/account-observation/host-role-probe";
 import { isProductionDeployment } from "@/lib/trader/security/deployment-tier";
 import { SecretsStoreMasterKeyProvider } from "@/lib/trader/security/secrets-store-master-key-provider";
 
@@ -192,7 +192,7 @@ function openObservationSql(
 ) {
   return async (
     _signal: AbortSignal,
-    limits: typeof observationPoolLimits,
+    limits: typeof observationPoolLimits | typeof observationReaderPoolLimits,
   ): Promise<ObservationSqlResource> => {
     const sql = postgres(url, {
       ...limits,
