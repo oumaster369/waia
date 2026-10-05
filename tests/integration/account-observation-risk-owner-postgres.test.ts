@@ -30,7 +30,10 @@ import { createRiskAccountProfileV1, createRiskAccountReferenceV1, riskAccountDi
 import { ACCOUNT_OBSERVATION_LOGIN_PLAN, provisionAccountObservationLoginsV1 } from "@/scripts/ops/provision-account-observation-logins.mjs";
 
 const enabled = process.env.DEE960_LOCAL_PG17 === "1";
-const url = "postgres://waia_local_admin:local_validation_only@127.0.0.1:55460/waia_dee960_local";
+const localPortOverride = process.env.DEE1135_LOCAL_PG17_PORT;
+if (localPortOverride !== undefined && ((Boolean(process.env.CI) || Boolean(process.env.GITHUB_ACTIONS)) ||
+  localPortOverride !== "55740")) throw new Error("DEE1135_LOCAL_PG17_PORT_ISOLATED_LOCAL_ONLY");
+const url = `postgres://waia_local_admin:local_validation_only@127.0.0.1:${localPortOverride ?? "55460"}/waia_dee960_local`;
 // These are the existing synthetic CI passwords, never production credentials or environment URLs.
 const passwords = Object.freeze({ collector: "dee1015_synthetic_collector_password_0001",
   reader: "dee1015_synthetic_reader_password_00000002", credential: "dee1015_synthetic_credential_password_0003" });
@@ -493,18 +496,32 @@ describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational
 
   it("refuses an actual assignment revoke during protected acquisition admission", async () => {
     const f = await fixture(); let revoked = false;
+    const accountsPair = gate(), uidPair = gate(), releasePair = gate();
     const io = wire(f, async (path, occurrence) => {
       if (path === "/v1/account/accounts" && occurrence === 2) {
-        await controller.sql`UPDATE public.exchange_credentials SET status='revoked',revoked_at=clock_timestamp()
-          WHERE id=${f.assignment.binding.credentialId}::uuid`;
-        revoked = true;
+        accountsPair.release(); await releasePair.promise;
       }
+      if (path === "/v2/user/uid" && occurrence === 2) { uidPair.release(); await releasePair.promise; }
     }); vi.stubGlobal("fetch", io.fetchImpl);
-    const outcome = await watch(configured(f)).outcome; rejected("actual-revoke-refusal", outcome);
+    const work = watch(configured(f));
+    let gateFailed = false, gateFailure: unknown;
+    try {
+      await entered(accountsPair, work); await entered(uidPair, work);
+      await controller.sql`UPDATE public.exchange_credentials SET status='revoked',revoked_at=clock_timestamp()
+        WHERE id=${f.assignment.binding.credentialId}::uuid`;
+      revoked = true;
+    } catch (error) { gateFailed = true; gateFailure = error; }
+    finally { releasePair.release(); }
+    const outcome = await work.outcome;
+    if (gateFailed) throw gateFailure;
+    rejected("actual-revoke-refusal", outcome);
     expect(revoked).toBe(true);
     expect((await owner.sql`SELECT observation_revision::text AS revision,status FROM public.exchange_credentials
       WHERE id=${f.assignment.binding.credentialId}::uuid`)[0]).toMatchObject({ revision: "2", status: "revoked" });
-    expect(io.paths).toEqual(["/v1/account/accounts", "/v2/user/uid", "/v2/user/api-key", "/v1/account/accounts"]);
+    expect(io.paths.filter(path => path === "/v1/account/accounts")).toHaveLength(2);
+    expect(io.paths.filter(path => path === "/v2/user/uid")).toHaveLength(2);
+    expect(io.paths.filter(path => path === "/v2/user/api-key")).toHaveLength(1);
+    expect(io.paths.every(path => ["/v1/account/accounts", "/v2/user/uid", "/v2/user/api-key"].includes(path))).toBe(true);
     const saved = await snapshot(f); expect(saved.journal.map(entry => entry.kind)).toEqual(["START", "TERMINAL"]);
     expect(saved.journal.at(-1)?.payload).toMatchObject({ recordingStatus: "PARTIAL", pages: 0, members: 0,
       coverage: "PARTIAL", stateValidTime: "UNKNOWN" });
@@ -589,32 +606,50 @@ describe.skipIf(!enabled)("DEE-1135 actual PostgreSQL 17 protected observational
   }, 30000);
 
   it("retains pending ownership through late fetch and body cancellation", async () => {
-    const f = await fixture(), began = gate(), releaseFetch = gate(), cancelling = gate(), releaseCancel = gate();
+    const f = await fixture(), accountsBegan = gate(), uidBegan = gate(), releaseFetch = gate(), cancelling = gate(), releaseCancel = gate();
     const abort = new AbortController();
-    const io = wire(f, async () => {
-      began.release(); await releaseFetch.promise;
-      return new Response(new ReadableStream({ cancel() { cancelling.release(); return releaseCancel.promise; } }));
+    let cancellations = 0;
+    const io = wire(f, async path => {
+      if (path === "/v1/account/accounts") accountsBegan.release();
+      else if (path === "/v2/user/uid") uidBegan.release();
+      else throw new Error("UNEXPECTED_SYNTHETIC_METADATA_PATH");
+      await releaseFetch.promise;
+      return new Response(new ReadableStream({ cancel() {
+        cancellations++;
+        if (cancellations === 2) cancelling.release();
+        return releaseCancel.promise;
+      } }));
     }); vi.stubGlobal("fetch", io.fetchImpl);
     const work = watch(configured(f, abort.signal));
     try {
-      await entered(began, work); abort.abort(); await heldRuntime("late-fetch-owned", work.settled);
+      await entered(accountsBegan, work); await entered(uidBegan, work);
+      abort.abort(); await heldRuntime("late-fetch-owned", work.settled);
       releaseFetch.release(); await entered(cancelling, work); await heldRuntime("late-body-cancellation-owned", work.settled);
       releaseCancel.release(); rejected("late-fetch-body-refusal", await work.outcome);
-      expect(io.paths).toEqual(["/v1/account/accounts"]);
+      expect(cancellations).toBe(2);
+      expect([...io.paths].sort()).toEqual(["/v1/account/accounts", "/v2/user/uid"].sort());
+      expect(io.paths).not.toContain("/v2/user/api-key");
+      expect(io.paths.every(path => ["/v1/account/accounts", "/v2/user/uid", "/v2/user/api-key"].includes(path))).toBe(true);
       expect((await snapshot(f)).journal).toHaveLength(0); expect(await objects(f)).toHaveLength(0);
     } finally { abort.abort(); releaseFetch.release(); releaseCancel.release(); await work.outcome; }
   }, 30000);
 
   it("reports failed body cancellation without claiming successful settlement", async () => {
-    const f = await fixture(), reading = gate(), abort = new AbortController(); let cancellations = 0;
-    const io = wire(f, async () => new Response(new ReadableStream({ pull() { reading.release(); },
-      cancel() { cancellations++; return Promise.reject(new Error("SYNTHETIC_BODY_CANCELLATION_FAILED")); } })));
+    const f = await fixture(), bothBodiesReading = gate(), abort = new AbortController();
+    const bodyPathsReading = new Set<string>(); let cancellations = 0;
+    const io = wire(f, async path => {
+      if (path !== "/v1/account/accounts" && path !== "/v2/user/uid") throw new Error("UNEXPECTED_SYNTHETIC_METADATA_PATH");
+      return new Response(new ReadableStream({ pull() { bodyPathsReading.add(path); if (bodyPathsReading.size === 2) bothBodiesReading.release(); },
+        cancel() { cancellations++; return Promise.reject(new Error("SYNTHETIC_BODY_CANCELLATION_FAILED")); } }));
+    });
     vi.stubGlobal("fetch", io.fetchImpl); const work = watch(configured(f, abort.signal));
     try {
-      await entered(reading, work); abort.abort();
+      await entered(bothBodiesReading, work); abort.abort();
       const reason = rejected("failed-body-cancellation", await work.outcome);
-      expect(reason).toMatchObject({ reason: "TRANSPORT_SETTLEMENT_FAILED" }); expect(cancellations).toBe(1);
-      expect(io.paths).toEqual(["/v1/account/accounts"]);
+      expect(reason).toMatchObject({ reason: "TRANSPORT_SETTLEMENT_FAILED" }); expect(cancellations).toBe(2);
+      expect([...io.paths].sort()).toEqual(["/v1/account/accounts", "/v2/user/uid"].sort());
+      expect(io.paths).not.toContain("/v2/user/api-key");
+      expect(io.paths.every(path => ["/v1/account/accounts", "/v2/user/uid", "/v2/user/api-key"].includes(path))).toBe(true);
       expect((await snapshot(f)).journal).toHaveLength(0); expect(await objects(f)).toHaveLength(0);
       receipt("failed-cancellation-retained", { cancellations, authority: "NONE", settlement: "FAILED", poolsStillMustClose: true });
     } finally { abort.abort(); await work.outcome; }
