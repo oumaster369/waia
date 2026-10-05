@@ -1,11 +1,14 @@
 // @vitest-environment node
 import { EventEmitter } from "node:events";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildObservationHostConsumerSpawnSpecV1,
   buildObservationConsumerEnvironment,
   buildObservationHostRuntimeHealth,
   parseObservationHostRuntimeV1,
@@ -429,15 +432,38 @@ describe("account observation host supervisor", () => {
       "--import",
       "tsx",
       "--require",
-      "scripts/trader/trader-cli-server-only-prelude.cjs",
+      path.join(REPO_ROOT, "scripts/trader/trader-cli-server-only-prelude.cjs"),
       "--conditions=react-server",
-      "scripts/trader/account-observation-collector-host.ts",
+      path.join(REPO_ROOT, "scripts/trader/account-observation-collector-host.ts"),
     ]);
     expect(options.cwd).toBe("/srv/waia");
     expect(options.stdio).toEqual(["inherit", "inherit", "inherit", "ipc"]);
     expect(options).not.toHaveProperty("shell");
     expect(options.env.WAIA_OBSERVATION_MASTER_KEY).toBe(MASTER_KEY);
     expect(options.env).not.toHaveProperty("WAIA_OBSERVATION_HOST_MODE");
+  });
+
+  it("loads the supervisor's absolute server-only preload from outside the app root", () => {
+    const spawnSpec = buildObservationHostConsumerSpawnSpecV1();
+    const args = spawnSpec.args;
+    const preloadIndex = args.indexOf("--require");
+    const preloadPath = args[preloadIndex + 1];
+
+    expect(path.isAbsolute(preloadPath)).toBe(true);
+    expect(spawnSpec.cwd).toBe(REPO_ROOT);
+    const child = spawnSync(
+      process.execPath,
+      ["--require", preloadPath, "-e", "require('server-only')"],
+      {
+        cwd: os.tmpdir(),
+        env: { PATH: process.env.PATH ?? "", WAIA_TRADER_CLI: "1", NODE_ENV: "test" },
+        encoding: "utf8",
+      },
+    );
+
+    expect(child.error).toBeUndefined();
+    expect(child.status).toBe(0);
+    expect(child.stderr).toBe("");
   });
 
   it("becomes ready only on the consumer's own started message", () => {
