@@ -51,6 +51,11 @@ function hasSafeReaderPortGuard(source: string): boolean {
     source.includes('`postgres://waia_local_admin:local_validation_only@127.0.0.1:${localPort}/waia_dee960_local`') &&
     !/process\.env\.(?:DATABASE_URL|POSTGRES_URL)/.test(source);
 }
+function hasSafeCredentialPortGuard(source: string): boolean {
+  return source.includes('const HOST = process.env.DEE1235_CREDENTIAL_FIXTURE === "1" ? "127.0.0.1:55732" : "127.0.0.1:55460";') &&
+    source.includes('const url = `postgres://waia_local_admin:local_validation_only@${HOST}/waia_dee960_local`;') &&
+    !/process\.env\.(?:DATABASE_URL|POSTGRES_URL)/.test(source);
+}
 
 describe("account observation PostgreSQL CI contract", () => {
   it("retains both pre-existing historical jobs byte-for-byte", () => {
@@ -76,14 +81,29 @@ describe("account observation PostgreSQL CI contract", () => {
       expect(source).toContain('process.env.DEE960_LOCAL_PG17 === "1"');
       if (suite === "tests/integration/account-observation-reader-postgres.test.ts") {
         // The reader suite may target the separately provisioned, loopback-only
-        // PG17 validation cluster. The other four suites remain pinned to CI's
-        // 55460 service and never inherit this opt-in port.
+        // PG17 validation cluster. Other suites never inherit this reader port.
         expect(hasSafeReaderPortGuard(source)).toBe(true);
+      } else if (suite === "tests/integration/account-observation-credential-postgres.test.ts") {
+        // Separate owned TLS fixture: only this explicit flag can select its
+        // fixed loopback port; normal CI remains pinned to the 55460 service.
+        expect(hasSafeCredentialPortGuard(source)).toBe(true);
       } else {
         expect(source).toContain(`const url = "${syntheticUrl}"`);
       }
       expect(source).not.toMatch(/\b(?:describe|it|test)\.(?:skip|todo|only)\s*\(/);
     }
+  });
+
+  it("keeps the credential TLS fixture loopback-only and independent of database environment URLs", () => {
+    const source = readFileSync("tests/integration/account-observation-credential-postgres.test.ts", "utf8");
+    expect(hasSafeCredentialPortGuard(source)).toBe(true);
+    for (const mutation of [
+      source.replace('=== "1" ? "127.0.0.1:55732"', '!== "1" ? "127.0.0.1:55732"'),
+      source.replace('"127.0.0.1:55732"', '"example.com:55732"'),
+      source.replace('"127.0.0.1:55460"', '"127.0.0.1:5432"'),
+      source.replace('${HOST}/waia_dee960_local`', '${HOST}/production`'),
+      source + '\nconst unsafeUrl = process.env.DATABASE_URL;\n',
+    ]) expect(hasSafeCredentialPortGuard(mutation)).toBe(false);
   });
 
   it("keeps the reader's alternate PG17 port closed and loopback-only", () => {
