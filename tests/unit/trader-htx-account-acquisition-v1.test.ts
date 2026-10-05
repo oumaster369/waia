@@ -302,7 +302,7 @@ async function protectedAcquisitionFixture() {
   const state = { current: true, revision: "1", supported: true, rowStatus: "active", permission: "readOnly" };
   const statements: string[] = [], paths: string[] = [];
   const sql = (credential: boolean): Sql => {
-    const query = async (strings: TemplateStringsArray | string) => {
+    const runQuery = async (strings: TemplateStringsArray | string) => {
       const text = typeof strings === "string" ? strings : strings.join("?"); statements.push(text);
       if (text.includes("AS supported")) return [{
         login: credential ? "waia_account_observation_credential_login" : "synthetic-reader",
@@ -319,6 +319,11 @@ async function protectedAcquisitionFixture() {
         status: state.rowStatus, observation_read_permitted: true, encrypted_payload: encrypted.encryptedPayload, payload_key_version: encrypted.payloadKeyVersion,
         wrapped_dek_key_version: encrypted.wrappedDekKeyVersion, wrapped_dek_key: encrypted.wrappedDekKey }];
       return [];
+    };
+    const query = (strings: TemplateStringsArray | string) => {
+      const result = runQuery(strings);
+      // Model the driver's explicit dispatch surface as well as its thenable result.
+      return Object.assign(result, { execute: () => result });
     };
     const tx = Object.assign(query, { unsafe: query });
     return Object.assign(query, { begin: (body: (value: unknown) => Promise<unknown>) => body(tx),

@@ -13,18 +13,30 @@ const apiKey = "synthetic-key", apiSecret = "synthetic-secret";
 const digest = createHash("sha256").update(apiKey).digest("hex");
 const signal = () => new AbortController().signal;
 const json = (value: unknown) => new Response(JSON.stringify(value));
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(yes => { resolve = yes; });
+  return { promise, resolve };
+}
 function payload(path: string): unknown {
   if (path === "/v1/account/accounts") return { status: "ok", data: [{ id: 123, type: "spot", state: "working" }] };
   if (path === "/v2/user/uid") return { code: 200, data: 456 };
   return { code: 200, data: [{ accessKey: apiKey, status: "normal", permission: "readOnly" }] };
 }
 function setup(change?: (path: string, value: unknown) => unknown, options?: { requireReadOnlyPermission?: boolean }) {
+  let activeAuthorizations = 0, maxConcurrentAuthorizations = 0;
   const fetchImpl = vi.fn<typeof fetch>(async url => {
     const path = new URL(String(url)).pathname;
     return json(change ? change(path, payload(path)) : payload(path));
   });
   const credential = { binding: { ...binding }, apiKey, apiSecret, dispose: vi.fn() };
-  const authorizeCurrent = vi.fn(async () => true);
+  const authorizeCurrent = vi.fn(async () => {
+    activeAuthorizations++;
+    maxConcurrentAuthorizations = Math.max(maxConcurrentAuthorizations, activeAuthorizations);
+    await Promise.resolve();
+    activeAuthorizations--;
+    return true;
+  });
   const input: { credential: typeof credential; host: "api.huobi.pro"; clock: typeof accountObservationClock;
     fetchImpl: typeof fetchImpl; timeoutMs: number; maxResponseBytes: number;
     requireReadOnlyPermission?: boolean; authorizeCurrent: typeof authorizeCurrent } = {
@@ -35,17 +47,82 @@ function setup(change?: (path: string, value: unknown) => unknown, options?: { r
     input.requireReadOnlyPermission = options.requireReadOnlyPermission;
   }
   const admission = createHtxReadAdmission(input);
-  return { ...input, input, admission, check: () => admission.verifyReadAdmission(binding, digest, signal()) };
+  return { ...input, input, admission, maxConcurrentAuthorizations: () => maxConcurrentAuthorizations,
+    check: () => admission.verifyReadAdmission(binding, digest, signal()) };
 }
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-10T00:00:00Z")); });
 afterEach(() => vi.useRealTimers());
 
 describe("fresh exact-key read-only HTX admission, synthetic keys and mock fetch only", () => {
+  it("overlaps account and UID GETs, waits for both validations, then requests the exact key", async () => {
+    const f = setup();
+    const account = deferred<Response>(), uid = deferred<Response>();
+    f.fetchImpl.mockImplementation(url => {
+      const path = new URL(String(url)).pathname;
+      if (path === "/v1/account/accounts") return account.promise;
+      if (path === "/v2/user/uid") return uid.promise;
+      return Promise.resolve(json(payload(path)));
+    });
+    const pending = f.check();
+    await vi.waitFor(() => expect(f.fetchImpl).toHaveBeenCalledTimes(2));
+    const paths = f.fetchImpl.mock.calls.map(([url]) => new URL(String(url)).pathname);
+    expect(new Set(paths)).toEqual(new Set(["/v1/account/accounts", "/v2/user/uid"]));
+    uid.resolve(json(payload("/v2/user/uid")));
+    await vi.waitFor(() => expect(f.authorizeCurrent).toHaveBeenCalledTimes(3));
+    expect(f.fetchImpl.mock.calls.some(([url]) => new URL(String(url)).pathname === "/v2/user/api-key")).toBe(false);
+    account.resolve(json(payload("/v1/account/accounts")));
+    await expect(pending).resolves.toBe(true);
+    expect(f.fetchImpl).toHaveBeenCalledTimes(3);
+    expect(new URL(String(f.fetchImpl.mock.calls[2][0])).searchParams.get("uid")).toBe("456");
+    expect(f.maxConcurrentAuthorizations()).toBe(1);
+    f.admission.dispose();
+  });
+
+  it("does not start a queued authorization or either GET after the first currentness refusal", async () => {
+    const f = setup(); f.authorizeCurrent.mockResolvedValueOnce(false);
+    await expect(f.check()).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+    expect(f.authorizeCurrent).toHaveBeenCalledTimes(1);
+    expect(f.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["rate limit", "/v1/account/accounts", "RATE_LIMITED"],
+    ["malformed UID", "/v2/user/uid", "PERMISSION_DENIED"],
+    ["wrong account", "/v1/account/accounts", "PERMISSION_DENIED"],
+  ] as const)("cancels the sibling metadata GET after %s and never requests the key", async (name, failingPath, code) => {
+    const f = setup();
+    const sibling = deferred<Response>(); let siblingSignal: AbortSignal | undefined;
+    const canceled = vi.fn();
+    f.fetchImpl.mockImplementation((url, init) => {
+      const path = new URL(String(url)).pathname;
+      if (path === failingPath) {
+        if (name === "rate limit") return Promise.resolve(new Response("", { status: 429 }));
+        if (name === "malformed UID") return Promise.resolve(json({ code: 200, data: "456" }));
+        return Promise.resolve(json({ status: "ok", data: [{ id: 124, type: "spot", state: "working" }] }));
+      }
+      siblingSignal = init?.signal as AbortSignal;
+      siblingSignal.addEventListener("abort", () => canceled(), { once: true });
+      return sibling.promise;
+    });
+    await expect(f.check()).rejects.toMatchObject({ code });
+    expect(canceled).toHaveBeenCalledTimes(1);
+    expect(f.fetchImpl.mock.calls.some(([url]) => new URL(String(url)).pathname === "/v2/user/api-key")).toBe(false);
+    let settled = false;
+    const waiting = f.admission.settled().then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    sibling.resolve(new Response(new ReadableStream({ cancel: canceled })));
+    await waiting;
+    expect(settled).toBe(true);
+    expect(canceled).toHaveBeenCalledTimes(2);
+  });
+
   it("signs exactly three metadata GETs for the same key/account without an optimistic cache", async () => {
     const f = setup(); expect(f.fetchImpl).not.toHaveBeenCalled();
     expect(Object.keys(f.admission).sort()).toEqual(["dispose", "verifyReadAdmission"]);
     expect(await f.check()).toBe(true); expect(await f.check()).toBe(true);
     expect(f.fetchImpl).toHaveBeenCalledTimes(6); expect(f.authorizeCurrent).toHaveBeenCalledTimes(12);
+    expect(f.maxConcurrentAuthorizations()).toBe(1);
     for (const [url, init] of f.fetchImpl.mock.calls) {
       const u = new URL(String(url)); expect(u.origin).toBe("https://api.huobi.pro");
       expect(u.searchParams.get("AccessKeyId")).toBe(apiKey); expect(u.searchParams.has("Signature")).toBe(true);
@@ -70,7 +147,9 @@ describe("fresh exact-key read-only HTX admission, synthetic keys and mock fetch
           mode === "wrong" ? [{ ...row, id: 124 }] : mode === "ambiguous" ? [row, row] :
           mode === "unsafe" ? [{ ...row, id: Number.MAX_SAFE_INTEGER + 1 }] :
           mode === "inactive" ? [{ ...row, state: "locked" }] : [null] });
-      await expect(f.check()).rejects.toThrow(); expect(f.fetchImpl).toHaveBeenCalledTimes(1);
+      await expect(f.check()).rejects.toThrow();
+      expect(f.fetchImpl.mock.calls.some(([url]) => new URL(String(url)).pathname === "/v2/user/api-key")).toBe(false);
+      expect(f.fetchImpl.mock.calls.length).toBeLessThanOrEqual(2);
     });
   it.each([null, "456", 0, -1, 1.1, Number.MAX_SAFE_INTEGER + 1])("refuses malformed UID %s", async uid => {
     const f = setup((path, value) => path === "/v2/user/uid" ? { code: 200, data: uid } : value);
@@ -203,14 +282,34 @@ describe("fresh exact-key read-only HTX admission, synthetic keys and mock fetch
     await vi.advanceTimersByTimeAsync(1000); await rejected;
     const cancel = vi.fn(); finish(new Response(new ReadableStream({ cancel })));
     await vi.advanceTimersByTimeAsync(0); expect(cancel).toHaveBeenCalledTimes(1);
-    await expect(f.check()).rejects.toThrow(); expect(f.fetchImpl).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(0);
+    await expect(f.check()).rejects.toThrow(); expect(f.fetchImpl).toHaveBeenCalledTimes(2); expect(vi.getTimerCount()).toBe(0);
   });
   it("cancels active body reads and rejects overlapping admission", async () => {
     const f = setup(); const cancel = vi.fn(); f.fetchImpl.mockResolvedValueOnce(new Response(new ReadableStream({ cancel })));
     const abort = new AbortController(); const pending = f.admission.verifyReadAdmission(binding, digest, abort.signal);
     const rejected = expect(pending).rejects.toThrow(); await vi.advanceTimersByTimeAsync(0);
     await expect(f.check()).rejects.toThrow(); abort.abort(); await rejected;
-    expect(cancel).toHaveBeenCalledTimes(1); expect(f.fetchImpl).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(0);
+    expect(cancel).toHaveBeenCalledTimes(1); expect(f.fetchImpl).toHaveBeenCalledTimes(2); expect(vi.getTimerCount()).toBe(0);
+  });
+  it("returns on parent abort but settled joins both ignored fetches until their bodies are canceled", async () => {
+    const f = setup();
+    const account = deferred<Response>(), uid = deferred<Response>();
+    f.fetchImpl.mockImplementation(url => new URL(String(url)).pathname === "/v1/account/accounts"
+      ? account.promise : uid.promise);
+    const abort = new AbortController();
+    const pending = f.admission.verifyReadAdmission(binding, digest, abort.signal);
+    await vi.waitFor(() => expect(f.fetchImpl).toHaveBeenCalledTimes(2));
+    const rejected = expect(pending).rejects.toMatchObject({ code: "READ_FAILED" });
+    abort.abort(); await rejected;
+    let settled = false;
+    const waiting = f.admission.settled().then(() => { settled = true; });
+    await Promise.resolve(); expect(settled).toBe(false);
+    const cancel = vi.fn();
+    account.resolve(new Response(new ReadableStream({ cancel })));
+    uid.resolve(new Response(new ReadableStream({ cancel })));
+    await waiting;
+    expect(settled).toBe(true); expect(cancel).toHaveBeenCalledTimes(2);
+    expect(f.fetchImpl.mock.calls.some(([url]) => new URL(String(url)).pathname === "/v2/user/api-key")).toBe(false);
   });
   it("uses one aggregate deadline across the three metadata requests", async () => {
     const f = setup(); const cancel = vi.fn();
