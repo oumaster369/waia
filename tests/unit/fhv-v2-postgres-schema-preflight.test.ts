@@ -35,7 +35,7 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
   })();
 
   it("accepts all exact migration bytes applied by the full checkout migration job", () => {
-    expect(fullApplied).toHaveLength(230);
+    expect(fullApplied).toHaveLength(232);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: fullApplied }),
     ).not.toThrow();
@@ -75,6 +75,8 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
       "0227_trader_discovery_loop_postgres_v1",
       "0228_trader_discovery_loop_postgres_v1_rls",
       "0229_trader_observation_read_only_credential_v1",
+      "0230_trader_observation_consent_revision_grants_v1",
+      "0231_trader_observation_purpose_projection_v1",
     ]);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: baseline }),

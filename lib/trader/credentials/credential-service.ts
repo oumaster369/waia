@@ -133,6 +133,8 @@ export function createCredentialService(deps: CredentialServiceDeps): Credential
       assertTradeScopeStoredOnlyWhenLiveEnabledV1({
         permissionMetadata: input.permissionMetadata,
         orgLiveEnabled: input.orgLiveEnabled === true,
+        venue: input.venue,
+        exchangeAccountId: input.exchangeAccountId,
       });
       const provider = await createProvider();
       assertCredentialStorageAllowed(provider);
@@ -299,6 +301,8 @@ export function createSqliteCredentialService(
       assertTradeScopeStoredOnlyWhenLiveEnabledV1({
         permissionMetadata: input.permissionMetadata,
         orgLiveEnabled: input.orgLiveEnabled === true,
+        venue: input.venue,
+        exchangeAccountId: input.exchangeAccountId,
       });
       const provider = await createProvider();
       assertCredentialStorageAllowed(provider);

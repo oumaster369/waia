@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { snapshotAgeText, TraderWorkspace } from "@/components/trader/trader-workspace";
@@ -85,6 +85,118 @@ describe("Trader Dashboard V2", () => {
     expect(screen.getByTestId("trader-authority-boundary")).toHaveTextContent("Только наблюдение");
     expect(screen.queryByRole("button", { name: /enable live/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /kill switch/i })).not.toBeInTheDocument();
+  });
+
+  it("explains accepted Read+Trade observation access and immediately shows the synthetic account snapshot", async () => {
+    const now = Date.now();
+    const credential = {
+      id: "22222222-2222-4222-8222-222222222222",
+      venue: "htx",
+      exchangeAccountId: "account-read-trade",
+      apiKeyMasked: "synt…key",
+      status: "active",
+      permissionMetadata: {
+        version: 2,
+        purpose: "observation",
+        marketType: "spot",
+        exchangeAccountId: "account-read-trade",
+        scopes: ["read", "trade"],
+        warnings: [],
+        withdrawForbidden: true,
+        transferForbidden: true,
+      },
+      createdAt: new Date(now).toISOString(),
+      updatedAt: new Date(now).toISOString(),
+      revokedAt: null,
+    };
+    const binding = {
+      organizationId: "11111111-1111-4111-8111-111111111111",
+      credentialId: credential.id,
+      exchangeAccountId: credential.exchangeAccountId,
+      credentialRevision: "1",
+      configurationRevision: "1",
+    };
+    const component = <T,>(values: T[]) => ({
+      status: "COMPLETE",
+      values,
+      sourceAsOfMs: now,
+      readStartedAtMs: now,
+      readCompletedAtMs: now,
+      error: null,
+    });
+    const observation = {
+      schemaVersion: "account-observation/v1",
+      observationId: "33333333-3333-4333-8333-333333333333",
+      binding,
+      collectionStartedAtMs: now,
+      collectionCompletedAtMs: now,
+      status: "COMPLETE",
+      balances: component([{ asset: "USDT", free: "125.50", locked: "4.50", total: "130.00" }]),
+      openOrders: component([]),
+      trades: [{ symbol: "BTCUSDT", component: component([]) }],
+      holdings: [{ asset: "USDT", free: "125.50", locked: "4.50", total: "130.00" }],
+    };
+    let connected = false;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === "/api/trader/exchange-credentials" && init?.method !== "POST") {
+        return new Response(JSON.stringify({ credentials: connected ? [credential] : [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url === "/api/trader/exchange-credentials/connect") {
+        connected = true;
+        return new Response(JSON.stringify(credential), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/api/trader/account-observation/binding?")) {
+        return new Response(JSON.stringify(binding), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/api/trader/account-observation/stream?")) {
+        return new Response(`event: observation\ndata: ${JSON.stringify(observation)}\n\n`, {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        });
+      }
+      return new Response(null, { status: 204 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TraderWorkspace />);
+
+    expect(await screen.findByTestId("trader-permission-explainer")).toHaveTextContent(
+      "ключ с Read и Trade тоже можно подключить",
+    );
+    expect(screen.getByTestId("trader-permission-explainer")).toHaveTextContent(
+      "Не включайте Withdraw",
+    );
+    expect(screen.getByTestId("trader-permission-explainer")).toHaveTextContent(
+      "не выполняет торговые операции",
+    );
+    fireEvent.change(screen.getByTestId("trader-api-key"), { target: { value: "synthetic-read-trade-key" } });
+    fireEvent.change(screen.getByTestId("trader-api-secret"), {
+      target: { value: "synthetic-secret" },
+    });
+    fireEvent.submit(screen.getByTestId("trader-connect-form"));
+
+    expect(await screen.findByTestId("trader-credential-account-id")).toHaveTextContent("account-read-trade");
+    expect(screen.queryByTestId("trader-api-key")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("trader-api-secret")).not.toBeInTheDocument();
+    expect(screen.getByTestId("trader-credential-scopes")).toHaveTextContent("read, trade");
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/trader/account-observation/stream?"))).toBe(true),
+    );
+    expect(await screen.findByTestId("cabinet-usdt-free")).toHaveTextContent("125.50");
+    expect(screen.getByTestId("trader-authority-boundary")).toHaveTextContent("Только наблюдение");
+    expect(screen.getByText(/does not place orders/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("synthetic-secret");
   });
 
   it("does not fetch or render real HTX workspace state while observing a historical campaign", async () => {

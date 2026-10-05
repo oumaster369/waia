@@ -9,7 +9,8 @@ import type { MasterKeyProvider } from "@/lib/trader/security/master-key-provide
 export const ACCOUNT_OBSERVATION_CREDENTIAL_ROLE = "waia_account_observation_credential";
 
 /**
- * The exact column list migration 0210 grants. Never `SELECT *`: the generic credential
+ * Narrow projected authority including the versioned observation-purpose decision.
+ * Never `SELECT *`: the generic credential
  * repository's unprojected read is an implementation shape, not an authority requirement, and
  * this role has no privilege on `venue`, `api_key_masked`, `permission_metadata`,
  * `observation_revision`, `created_at`, `updated_at` or `revoked_at`.
@@ -19,7 +20,7 @@ export const ACCOUNT_OBSERVATION_CREDENTIAL_COLUMNS = Object.freeze([
   "organization_id",
   "exchange_account_id",
   "status",
-  "observation_read_only",
+  "observation_read_permitted",
   "encrypted_payload",
   "payload_key_version",
   "wrapped_dek_key_version",
@@ -64,7 +65,7 @@ type CredentialProjection = {
   organization_id: string;
   exchange_account_id: string;
   status: string;
-  observation_read_only: boolean;
+  observation_read_permitted: boolean;
   encrypted_payload: string | null;
   payload_key_version: string | null;
   wrapped_dek_key_version: string | null;
@@ -224,8 +225,9 @@ export function createObservationCredentialReader(
         refuse("IDENTITY_MISMATCH");
       }
       if (row.status !== "active") refuse("NOT_FOUND");
-      // Trade, unknown, and unparsable scopes are false. Decrypt only a read-only row.
-      if (row.observation_read_only !== true) refuse("NOT_READ_ONLY");
+      // Canonical v1 Read or v2 observation-purpose only. Actual venue Trade does
+      // not grant application execution. SQL owns this pre-decryption decision.
+      if (row.observation_read_permitted !== true) refuse("NOT_READ_ONLY");
 
       try {
         return await decryptCredentialPayload(provider, {

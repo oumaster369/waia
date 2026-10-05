@@ -22,6 +22,10 @@ import {
 } from "@/lib/trader/account-observation/assignment-manifest";
 import { createObservationCredentialReader } from "@/lib/trader/account-observation/credential-read-boundary";
 import {
+  createAccountObservationDatabaseTlsOptions,
+  type AccountObservationDatabaseTlsOptions,
+} from "@/lib/trader/account-observation/database-node-tls";
+import {
   createAccountObservationHost,
   type ObservationCredentialResource,
   type ObservationHostEvent,
@@ -181,13 +185,18 @@ export function parseAccountObservationCollectorRuntime(
   });
 }
 
-function openObservationSql(url: string, purpose: "collector" | "reader") {
+function openObservationSql(
+  url: string,
+  purpose: "collector" | "reader",
+  ssl: AccountObservationDatabaseTlsOptions,
+) {
   return async (
     _signal: AbortSignal,
     limits: typeof observationPoolLimits,
   ): Promise<ObservationSqlResource> => {
     const sql = postgres(url, {
       ...limits,
+      ssl,
       connection: { application_name: `waia-account-observation-${purpose}` },
       onnotice: () => {},
     });
@@ -209,6 +218,7 @@ function openObservationSql(url: string, purpose: "collector" | "reader") {
 function openObservationCredentialService(
   runtime: AccountObservationCollectorRuntime,
   trusted: TrustedAccountObservationAssignments,
+  ssl: AccountObservationDatabaseTlsOptions,
 ) {
   return async (signal: AbortSignal): Promise<ObservationCredentialResource> => {
     const requireActive = () => {
@@ -220,6 +230,7 @@ function openObservationCredentialService(
       connect_timeout: 3,
       max_lifetime: 300,
       prepare: false,
+      ssl,
       connection: { application_name: "waia-account-observation-credential" },
       onnotice: () => {},
     });
@@ -259,6 +270,8 @@ function openObservationCredentialService(
 export type AccountObservationCollectorDependencies = Readonly<{
   env?: Env;
   signal: AbortSignal;
+  /** In-process Node test seam only; never read from deployment configuration. */
+  databaseCertificateAuthority?: string;
   readManifest?(path: string): string;
   openCollector?: ReturnType<typeof openObservationSql>;
   openReader?: ReturnType<typeof openObservationSql>;
@@ -283,6 +296,7 @@ export async function runAccountObservationCollector(
   const env = dependencies.env ?? process.env;
   const runtime = parseAccountObservationCollectorRuntime(env);
   const { config } = runtime;
+  const databaseTls = createAccountObservationDatabaseTlsOptions(dependencies.databaseCertificateAuthority);
 
   const read = dependencies.readManifest ?? ((path: string) => readFileSync(path, "utf8"));
   let manifestText: string;
@@ -310,10 +324,10 @@ export async function runAccountObservationCollector(
     openTimeoutMs: trusted.openTimeoutMs,
     shutdownTimeoutMs: trusted.shutdownTimeoutMs,
     openCollector:
-      dependencies.openCollector ?? openObservationSql(config.collectorDatabaseUrl, "collector"),
-    openReader: dependencies.openReader ?? openObservationSql(config.readerDatabaseUrl, "reader"),
+      dependencies.openCollector ?? openObservationSql(config.collectorDatabaseUrl, "collector", databaseTls),
+    openReader: dependencies.openReader ?? openObservationSql(config.readerDatabaseUrl, "reader", databaseTls),
     openCredentialService:
-      dependencies.openCredentialService ?? openObservationCredentialService(runtime, trusted),
+      dependencies.openCredentialService ?? openObservationCredentialService(runtime, trusted, databaseTls),
     fetchImpl: dependencies.fetchImpl ?? fetch,
     clock: dependencies.clock ?? accountObservationClock,
     report,
