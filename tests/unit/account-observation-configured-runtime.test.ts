@@ -340,7 +340,11 @@ describe("configured observation runtime, real local composition with mock persi
     const runtime = createConfiguredHtxObservationRuntime(f.input);
     const work = runtime.run(new AbortController().signal);
     await vi.advanceTimersByTimeAsync(25000);
-    expect(f.fetchImpl).toHaveBeenCalledTimes(20);
+    const metadataPaths = f.fetchImpl.mock.calls.map(([url]) => new URL(String(url)).pathname);
+    expect(f.fetchImpl).toHaveBeenCalledTimes(40);
+    expect(metadataPaths.filter(path => path === "/v1/account/accounts")).toHaveLength(20);
+    expect(metadataPaths.filter(path => path === "/v2/user/uid")).toHaveLength(20);
+    expect(metadataPaths).not.toContain("/v2/user/api-key");
     expect(f.getDecryptedCredentials).toHaveBeenCalledTimes(20);
     expect(ports.commitIfCurrent).not.toHaveBeenCalled();
     runtime.dispose();
@@ -348,7 +352,7 @@ describe("configured observation runtime, real local composition with mock persi
     const cancel = vi.fn();
     for (const resolve of finish) resolve(new Response(new ReadableStream({ cancel })));
     await vi.advanceTimersByTimeAsync(0);
-    expect(cancel).toHaveBeenCalledTimes(20);
+    expect(cancel).toHaveBeenCalledTimes(40);
     expect(vi.getTimerCount()).toBe(0);
   });
   it("does no I/O before run, keeps pool roles separate, and commits through all local adapters", async () => {
@@ -446,7 +450,8 @@ describe("configured observation runtime, real local composition with mock persi
     stop.abort();
     await work;
     expect(f.verifyReadAdmission).toHaveBeenCalledTimes(1);
-    expect(f.fetchImpl).toHaveBeenCalledTimes(1);
+    const metadataPaths = f.fetchImpl.mock.calls.map(([url]) => new URL(String(url)).pathname);
+    expect(metadataPaths.sort()).toEqual(["/v1/account/accounts", "/v2/user/uid"]);
     expect(ports.commitIfCurrent).not.toHaveBeenCalled();
     expect(f.report).toHaveBeenCalledWith("COLLECTION_FAILED");
   });
@@ -596,7 +601,8 @@ describe("configured observation runtime, real local composition with mock persi
     const runtime = createConfiguredHtxObservationRuntime(f.input);
     const work = runtime.run(new AbortController().signal);
     await vi.advanceTimersByTimeAsync(0);
-    expect(f.fetchImpl).toHaveBeenCalledTimes(1);
+    const metadataPaths = f.fetchImpl.mock.calls.map(([url]) => new URL(String(url)).pathname);
+    expect(metadataPaths.sort()).toEqual(["/v1/account/accounts", "/v2/user/uid"]);
     await expect(runtime.run(new AbortController().signal)).rejects.toThrow();
     runtime.dispose();
     await work;

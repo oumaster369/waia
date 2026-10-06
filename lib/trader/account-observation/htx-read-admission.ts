@@ -48,13 +48,36 @@ export function createHtxReadAdmission(input: Readonly<{
       const apiSecret = z.string().min(1).max(512).parse(credential.apiSecret);
       if (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1 || maxResponseBytes > 1048576 ||
         typeof clock?.now !== "function" || typeof clock?.sleep !== "function") denied();
-      const transport = createHtxMetadataGetTransport({ binding, apiKey, apiSecret, host, clock,
-        fetchImpl, timeoutMs, authorizeCurrent });
+      // Pair the independent account/UID metadata reads on separate transports. Their
+      // DB admission checks still share one serialized lane, so no extra DB session or
+      // concurrent authorization transaction is introduced.
+      let authorizationLane = Promise.resolve();
+      let authorizationRefused = false;
+      const authorizeSerially = (currentBinding: ObservationBinding, signal: AbortSignal) => {
+        const result = authorizationLane.then(() => {
+          if (signal.aborted) throw new AccountObservationReadFailure("READ_FAILED");
+          if (authorizationRefused) throw new AccountObservationReadFailure("PERMISSION_DENIED");
+          return authorizeCurrent(currentBinding, signal).then(allowed => {
+            if (allowed !== true) authorizationRefused = true;
+            return allowed;
+          }, error => {
+            authorizationRefused = true;
+            throw error;
+          });
+        });
+        authorizationLane = result.then(() => undefined, () => undefined);
+        return result;
+      };
+      const createTransport = () => createHtxMetadataGetTransport({ binding, apiKey, apiSecret, host, clock,
+        fetchImpl, timeoutMs, authorizeCurrent: authorizeSerially });
+      const accountTransport = createTransport();
+      const uidTransport = createTransport();
       return { binding, apiKey, keyDigest: createHash("sha256").update(apiKey).digest("hex"),
-        transport, clock, timeoutMs, maxResponseBytes, requireReadOnlyPermission };
+        accountTransport, uidTransport, clock, timeoutMs, maxResponseBytes, requireReadOnlyPermission };
     } catch { return denied(); }
   })();
-  const { binding, keyDigest, transport, clock, timeoutMs, maxResponseBytes, requireReadOnlyPermission } = fixed;
+  const { binding, keyDigest, accountTransport, uidTransport, clock, timeoutMs,
+    maxResponseBytes, requireReadOnlyPermission } = fixed;
   let apiKey = fixed.apiKey; fixed.apiKey = "";
   let disposed = false; let active: AbortController | null = null;
   const pending = new Set<Promise<unknown>>();
@@ -63,12 +86,16 @@ export function createHtxReadAdmission(input: Readonly<{
     void promise.then(() => pending.delete(promise), () => pending.delete(promise));
     return promise;
   };
-  const dispose = () => { disposed = true; active?.abort(); transport.dispose(); apiKey = ""; };
+  const dispose = () => {
+    disposed = true; active?.abort(); accountTransport.dispose(); uidTransport.dispose(); apiKey = "";
+  };
   const owner = { dispose,
     async settled() {
       dispose();
       while (pending.size) await Promise.allSettled([...pending]);
-      await transport.settled();
+      const transportsSettled = await Promise.allSettled([accountTransport.settled(), uidTransport.settled()]);
+      const failedTransport = transportsSettled.find((result): result is PromiseRejectedResult => result.status === "rejected");
+      if (failedTransport) throw failedTransport.reason;
     },
     async verifyReadAdmission(requested: ObservationBinding, requestedDigest: string, signal: AbortSignal): Promise<boolean> {
       if (disposed || active || signal.aborted) return failed();
@@ -80,7 +107,8 @@ export function createHtxReadAdmission(input: Readonly<{
         controller.signal.addEventListener("abort", rejectAbort, { once: true });
       });
       const current = () => { if (disposed || controller.signal.aborted) failed(); };
-      const read = async (path: "/v1/account/accounts" | "/v2/user/uid" | "/v2/user/api-key", query: Record<string, string>) => {
+      const read = async (transport: typeof accountTransport | typeof uidTransport,
+        path: "/v1/account/accounts" | "/v2/user/uid" | "/v2/user/api-key", query: Record<string, string>) => {
         const result = await transport.signedGet({ method: "GET", path, query, signal: controller.signal, maxResponseBytes });
         current();
         if (result.httpStatus === 429) throw new AccountObservationReadFailure("RATE_LIMITED");
@@ -89,16 +117,21 @@ export function createHtxReadAdmission(input: Readonly<{
       };
       const work = async () => {
         if (!sameObservationBinding(observationBindingSchema.parse(requested), binding) || requestedDigest !== keyDigest) denied();
-        const accounts = z.object({ status: z.literal("ok"), data: z.array(accountSchema).max(100) }).strict()
-          .parse(await read("/v1/account/accounts", {}));
-        const working = accounts.data.filter(account => account.type === "spot" && account.state === "working");
-        if (working.length !== 1 || working[0].id !== binding.exchangeAccountId) denied();
-        const uid = z.object({ code: z.literal(200), data: positiveNumber, message: z.string().max(1024).optional(),
-          ok: z.literal(true).optional() }).strict()
-          .parse(await read("/v2/user/uid", {}));
+        const accountRequest = read(accountTransport, "/v1/account/accounts", {}).then(value => {
+          const accounts = z.object({ status: z.literal("ok"), data: z.array(accountSchema).max(100) })
+            .strict().parse(value);
+          const working = accounts.data.filter(account => account.type === "spot" && account.state === "working");
+          if (working.length !== 1 || working[0].id !== binding.exchangeAccountId) denied();
+          return accounts;
+        });
+        const uidRequest = read(uidTransport, "/v2/user/uid", {}).then(value =>
+          z.object({ code: z.literal(200), data: positiveNumber, message: z.string().max(1024).optional(),
+            ok: z.literal(true).optional() }).strict().parse(value));
+        const [, uid] = await Promise.all([accountRequest, uidRequest]);
+        current();
         const response = z.object({ code: z.literal(200), data: z.array(z.unknown()).max(100), message: z.string().max(1024).optional(),
           ok: z.literal(true).optional() }).strict()
-          .parse(await read("/v2/user/api-key", { uid: String(uid.data), accessKey: apiKey }));
+          .parse(await read(accountTransport, "/v2/user/api-key", { uid: String(uid.data), accessKey: apiKey }));
         // Validate identity on every row before selecting; never default to data[0].
         const rows = response.data.map(row => z.object({ accessKey: z.string().min(1).max(256) }).passthrough().parse(row));
         const matching = rows.filter(row => row.accessKey === apiKey);

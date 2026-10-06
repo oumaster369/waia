@@ -98,10 +98,79 @@ describe.skipIf(!enabled)("DEE-960 dedicated read-only LOGIN on actual PostgreSQ
       return tx.unsafe(statement);
     });
   }
-  function interceptTransactions(expected: ObservationBinding, injectSetupFailure = false) {
+  function interceptTransactions(expected: ObservationBinding, failAt?: "setup" | "scope" | "protected") {
     const events: string[] = [];
-    let injected = false;
-    let scopeVisible = false;
+    const settingsProjection = `current_user AS __role,
+      current_setting('transaction_read_only') = 'on' AS __read_only,
+      current_setting('statement_timeout')::interval = interval '3 seconds' AS __statement_timeout,
+      current_setting('lock_timeout')::interval = interval '1 second' AS __lock_timeout,
+      current_setting('transaction_timeout')::interval = interval '5 seconds' AS __transaction_timeout,
+      current_setting('waia.observation_org', true) AS __organization_id,
+      current_setting('waia.observation_credential', true) AS __credential_id,
+      current_setting('waia.observation_account', true) AS __exchange_account_id,`;
+    function instrumentResult(query: unknown, kind: "settings" | "scope" | "protected") {
+      return new Proxy(query as object, {
+        get(target, property, receiver) {
+          const value = Reflect.get(target, property, target);
+          if (property === "then" && typeof value === "function") {
+            return (onFulfilled?: (result: unknown) => unknown, onRejected?: (error: unknown) => unknown) =>
+              Reflect.apply(value, target, [
+                (result: unknown) => {
+                  events.push(`${kind}-complete`);
+                  if (kind === "protected") {
+                    const rows = result as Array<Record<string, unknown>>;
+                    const row = rows[0];
+                    const settingsVisible = Boolean(row) && row.__role === "waia_account_observation_reader" &&
+                      row.__read_only === true && row.__statement_timeout === true && row.__lock_timeout === true &&
+                      row.__transaction_timeout === true && row.__organization_id === expected.organizationId &&
+                      row.__credential_id === expected.credentialId &&
+                      row.__exchange_account_id === expected.exchangeAccountId;
+                    events.push(settingsVisible ? "protected-settings-visible" : "protected-settings-mismatch");
+                    if (!settingsVisible) throw new Error("synthetic protected query settings mismatch");
+                  }
+                  return onFulfilled ? onFulfilled(result) : result;
+                },
+                (error: unknown) => {
+                  events.push(`${kind}-failed`);
+                  return onRejected ? onRejected(error) : Promise.reject(error);
+                },
+              ]);
+          }
+          if (property === "execute" && typeof value === "function")
+            return (...args: unknown[]) => Promise.resolve(Reflect.apply(value, target, args)).then(
+              (result: unknown) => {
+                events.push(`${kind}-complete`);
+                if (kind === "protected") {
+                  const rows = result as Array<Record<string, unknown>>;
+                  const row = rows[0];
+                  const settingsVisible = Boolean(row) && row.__role === "waia_account_observation_reader" &&
+                    row.__read_only === true && row.__statement_timeout === true && row.__lock_timeout === true &&
+                    row.__transaction_timeout === true && row.__organization_id === expected.organizationId &&
+                    row.__credential_id === expected.credentialId &&
+                    row.__exchange_account_id === expected.exchangeAccountId;
+                  events.push(settingsVisible ? "protected-settings-visible" : "protected-settings-mismatch");
+                  if (!settingsVisible) throw new Error("synthetic protected query settings mismatch");
+                }
+                return result;
+              },
+              (error: unknown) => {
+                events.push(`${kind}-failed`);
+                throw error;
+              },
+            );
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    }
+    function templateWithPrefix(strings: TemplateStringsArray, prefix: string) {
+      const cooked = Array.from(strings);
+      const raw = Array.from(strings.raw);
+      const replace = (value: string) => value.replace(/^(\s*SELECT\s+)/, `$1${prefix}`);
+      cooked[0] = replace(cooked[0]!);
+      raw[0] = replace(raw[0]!);
+      Object.defineProperty(cooked, "raw", { value: raw });
+      return cooked as unknown as TemplateStringsArray;
+    }
     const wrappedSql = new Proxy(client, {
       get(target, property, receiver) {
         if (property !== "begin") return Reflect.get(target, property, receiver);
@@ -111,47 +180,29 @@ describe.skipIf(!enabled)("DEE-960 dedicated read-only LOGIN on actual PostgreSQ
               apply(query, _thisArg, args: unknown[]) {
                 const strings = args[0] as TemplateStringsArray;
                 const text = Array.from(strings).join("?");
-                if (text.includes("SELECT o.observation_id")) {
-                  events.push("protected-select");
-                  if (!scopeVisible) throw new Error("synthetic settings were not verified");
-                }
+                let kind: "scope" | "protected" | undefined;
+                let forwardedArgs = args;
                 if (text.includes("set_config('waia.observation_org'")) {
-                  events.push("scope-set");
-                  return Promise.resolve(Reflect.apply(query, query, args)).then(async result => {
-                    const unsafe = rawTx.unsafe.bind(rawTx);
-                    const state = await unsafe(`SELECT current_user AS role,
-                      current_setting('transaction_read_only') = 'on' AS read_only,
-                      current_setting('statement_timeout')::interval = interval '3 seconds' AS statement_timeout,
-                      current_setting('lock_timeout')::interval = interval '1 second' AS lock_timeout,
-                      current_setting('transaction_timeout')::interval = interval '5 seconds' AS transaction_timeout,
-                      current_setting('waia.observation_org', true) AS organization_id,
-                      current_setting('waia.observation_credential', true) AS credential_id,
-                      current_setting('waia.observation_account', true) AS exchange_account_id`);
-                    const row = state[0];
-                    scopeVisible = row.role === "waia_account_observation_reader" && row.read_only === true &&
-                      row.statement_timeout === true && row.lock_timeout === true && row.transaction_timeout === true &&
-                      row.organization_id === expected.organizationId && row.credential_id === expected.credentialId &&
-                      row.exchange_account_id === expected.exchangeAccountId;
-                    events.push(scopeVisible ? "settings-visible" : "settings-mismatch");
-                    return result;
-                  });
+                  kind = "scope";
+                  events.push("scope-dispatch");
+                  if (failAt === "scope") forwardedArgs = [templateWithPrefix(strings, "1 / 0 AS __injected_scope_failure, "), ...args.slice(1)];
+                } else if (text.includes("SELECT o.observation_id")) {
+                  kind = "protected";
+                  events.push("protected-dispatch");
+                  const injectedFailure = failAt === "protected" ? "1 / 0 AS __injected_protected_failure, " : "";
+                  forwardedArgs = [templateWithPrefix(strings, `${settingsProjection}${injectedFailure}`), ...args.slice(1)];
                 }
-                return Reflect.apply(query, query, args);
+                const result = Reflect.apply(query, query, forwardedArgs);
+                return kind ? instrumentResult(result, kind) : result;
               },
               get(query, property, receiver) {
-                if (property === "unsafe") return async (statement: string) => {
+                if (property === "unsafe") return (statement: string) => {
                   if (statement.includes("SET TRANSACTION READ ONLY")) {
-                    if (injectSetupFailure && !injected) {
-                      injected = true;
-                      events.push("setup-failed");
-                      // Let PostgreSQL apply the local settings, then fail in the
-                      // same simple-query message; exercise actual rollback.
-                      return rawTx.unsafe(`${statement}; SELECT 1 / 0`);
-                    }
-                    events.push("setup-batch");
+                    events.push("setup-dispatch");
+                    if (failAt === "setup") return instrumentResult(rawTx.unsafe(`${statement}; SELECT 1 / 0`), "settings");
                   }
-                  return Reflect.apply(Reflect.get(query, property, query) as (...args: unknown[]) => unknown,
-                    query, [statement]);
+                  return instrumentResult(Reflect.apply(Reflect.get(query, property, query) as (...args: unknown[]) => unknown,
+                    query, [statement]), "settings");
                 };
                 return Reflect.get(query, property, receiver);
               },
@@ -169,30 +220,36 @@ describe.skipIf(!enabled)("DEE-960 dedicated read-only LOGIN on actual PostgreSQ
     expect(await reader.resolveActiveBinding(b)).toEqual(b);
     expect(await reader.readLatest(b)).toEqual(observation);
   });
-  it("batches read-only transaction setup and rolls back cleanly on setup failure", async () => {
+  it("dispatches scoped work FIFO before awaiting and observes exact transaction state in the protected query", async () => {
     const { b, observation } = await seed();
     const traced = interceptTransactions(b);
     const tracedReader = createPostgresObservationReader(traced.sql);
     expect(await tracedReader.readLatest(b)).toEqual(observation);
-    expect(traced.events).toEqual(["setup-batch", "scope-set", "settings-visible", "protected-select"]);
+    expect(traced.events.slice(0, 3)).toEqual(["setup-dispatch", "scope-dispatch", "protected-dispatch"]);
+    expect(traced.events.indexOf("scope-dispatch")).toBeLessThan(traced.events.indexOf("settings-complete"));
+    expect(traced.events.indexOf("protected-dispatch")).toBeLessThan(traced.events.indexOf("settings-complete"));
+    expect(traced.events).toContain("protected-settings-visible");
 
-    const failing = interceptTransactions(b, true);
-    const failingReader = createPostgresObservationReader(failing.sql);
-    await expect(failingReader.readLatest(b)).rejects.toThrow(/^ACCOUNT_OBSERVATION_READ_FAILED$/);
-    expect(failing.events).toEqual(["setup-failed", "transaction-rejected"]);
-    const reset = (await client`SELECT current_user AS role,
-      current_setting('transaction_read_only') = 'off' AS writable_default,
-      current_setting('statement_timeout') = '0' AS statement_default,
-      current_setting('lock_timeout') = '0' AS lock_default,
-      current_setting('transaction_timeout') = '0' AS transaction_default,
-      coalesce(current_setting('waia.observation_org', true), '') = '' AS no_org,
-      coalesce(current_setting('waia.observation_credential', true), '') = '' AS no_credential,
-      coalesce(current_setting('waia.observation_account', true), '') = '' AS no_account`)[0];
-    expect(reset).toEqual({ role: login, writable_default: true, statement_default: true,
-      lock_default: true, transaction_default: true, no_org: true, no_credential: true, no_account: true });
-    // Reuse the same underlying client after the aborted transaction: no partial
-    // session settings or failed setup state can leak into the next transaction.
-    expect(await reader.readLatest(b)).toEqual(observation);
+    for (const failAt of ["setup", "scope", "protected"] as const) {
+      const failing = interceptTransactions(b, failAt);
+      const failingReader = createPostgresObservationReader(failing.sql);
+      await expect(failingReader.readLatest(b)).rejects.toThrow(/^ACCOUNT_OBSERVATION_READ_FAILED$/);
+      expect(failing.events.slice(0, 3)).toEqual(["setup-dispatch", "scope-dispatch", "protected-dispatch"]);
+      expect(failing.events).toContain(`${failAt === "setup" ? "settings" : failAt}-failed`);
+      expect(failing.events).toContain("transaction-rejected");
+      expect(failing.events).not.toContain("protected-settings-visible");
+      const reset = (await client`SELECT current_user AS role,
+        current_setting('transaction_read_only') = 'off' AS writable_default,
+        current_setting('statement_timeout') = '0' AS statement_default,
+        current_setting('lock_timeout') = '0' AS lock_default,
+        current_setting('transaction_timeout') = '0' AS transaction_default,
+        coalesce(current_setting('waia.observation_org', true), '') = '' AS no_org,
+        coalesce(current_setting('waia.observation_credential', true), '') = '' AS no_credential,
+        coalesce(current_setting('waia.observation_account', true), '') = '' AS no_account`)[0];
+      expect(reset).toEqual({ role: login, writable_default: true, statement_default: true,
+        lock_default: true, transaction_default: true, no_org: true, no_credential: true, no_account: true });
+      expect(await reader.readLatest(b)).toEqual(observation);
+    }
   });
   it("round-trips exact derivatives positions through the persisted observation projection", async () => {
     const row = (family: string) => ({
