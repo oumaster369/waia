@@ -1435,15 +1435,24 @@ describe.skipIf(!enabled)(
     describe("canonical existing-key consent grants (isolated database only)", () => {
       const configurationRevision = `sha256:${"c".repeat(64)}`;
       beforeAll(async () => {
+        // The canonical fixture already includes0230/0231. Exercise each missing
+        // metadata grant explicitly in this owned database, then restore it.
         await expect(probeObservationCredentialPool(open("credential"), true))
-          .rejects.toThrow("OBSERVATION_CREDENTIAL_ROLE_REFUSED");
-        await admin.begin(async tx => {
-          await tx.unsafe("SET LOCAL ROLE dee1015_cred_owner");
-          const migration = readFileSync("db/migrations_postgres/0230_trader_observation_consent_revision_grants_v1.sql", "utf8");
-          for (const statement of migration.split("--> statement-breakpoint")) {
-            if (statement.trim()) await tx.unsafe(statement);
+          .resolves.toBe("waia_account_observation_credential_login");
+        for (const [table, column] of [
+          ["exchange_credentials", "observation_revision"],
+          ["trader_account_collection_state", "configuration_revision"],
+        ] as const) {
+          try {
+            await admin.unsafe(`REVOKE SELECT (${column}) ON public.${table} FROM waia_account_observation_credential`);
+            await expect(probeObservationCredentialPool(open("credential"), true))
+              .rejects.toThrow("OBSERVATION_CREDENTIAL_ROLE_REFUSED");
+          } finally {
+            await admin.unsafe(`GRANT SELECT (${column}) ON public.${table} TO waia_account_observation_credential`);
           }
-        });
+        }
+        await expect(probeObservationCredentialPool(open("credential"), true))
+          .resolves.toBe("waia_account_observation_credential_login");
       });
 
       it("requires the coordinated new projection without granting general credential reads or writes", async () => {
