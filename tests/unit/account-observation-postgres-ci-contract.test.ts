@@ -58,6 +58,16 @@ function hasSafeCredentialPortGuard(source: string): boolean {
     source.includes('const url = `postgres://waia_local_admin:local_validation_only@${HOST}/waia_dee960_local`;') &&
     !/process\.env\.(?:DATABASE_URL|POSTGRES_URL)/.test(source);
 }
+function hasSafeRiskOwnerPortGuard(source: string): boolean {
+  const guardedUrl = [
+    'const localPortOverride = process.env.DEE1135_LOCAL_PG17_PORT;',
+    'if (localPortOverride !== undefined && ((Boolean(process.env.CI) || Boolean(process.env.GITHUB_ACTIONS)) ||',
+    '  localPortOverride !== "55740")) throw new Error("DEE1135_LOCAL_PG17_PORT_ISOLATED_LOCAL_ONLY");',
+    'const url = `postgres://waia_local_admin:local_validation_only@127.0.0.1:${localPortOverride ?? "55460"}/waia_dee960_local`;',
+  ].join("\n");
+  return source.includes(guardedUrl) &&
+    !/process\.env\.(?:DATABASE_URL|POSTGRES_URL)/.test(source);
+}
 
 describe("account observation PostgreSQL CI contract", () => {
   it("retains both pre-existing historical jobs byte-for-byte", () => {
@@ -89,11 +99,35 @@ describe("account observation PostgreSQL CI contract", () => {
         // Separate owned TLS fixture: only this explicit flag can select its
         // fixed loopback port; normal CI remains pinned to the 55460 service.
         expect(hasSafeCredentialPortGuard(source)).toBe(true);
+      } else if (suite === "tests/integration/account-observation-risk-owner-postgres.test.ts") {
+        // Its reviewed local fixture uses only 55740; any supplied override
+        // is refused in CI, which keeps the canonical 55460 service.
+        expect(hasSafeRiskOwnerPortGuard(source)).toBe(true);
       } else {
         expect(source).toContain(`const url = "${syntheticUrl}"`);
       }
       expect(source).not.toMatch(/\b(?:describe|it|test)\.(?:skip|todo|only)\s*\(/);
     }
+  });
+
+  it("keeps the risk-owner fixture override local-only and closed in either CI environment", () => {
+    const source = readFileSync("tests/integration/account-observation-risk-owner-postgres.test.ts", "utf8");
+    expect(hasSafeRiskOwnerPortGuard(source)).toBe(true);
+    for (const mutation of [
+      source.replace('localPortOverride !== undefined', 'localPortOverride === undefined'),
+      source.replace('Boolean(process.env.CI)', 'false'),
+      source.replace('Boolean(process.env.GITHUB_ACTIONS)', 'false'),
+      source.replace('Boolean(process.env.CI)', 'process.env.CI === "true"'),
+      source.replace('Boolean(process.env.GITHUB_ACTIONS)', 'process.env.GITHUB_ACTIONS === "true"'),
+      source.replace('localPortOverride !== "55740"', 'false'),
+      source.replace('localPortOverride !== "55740"', 'localPortOverride !== "5432"'),
+      source.replace('throw new Error("DEE1135_LOCAL_PG17_PORT_ISOLATED_LOCAL_ONLY")', 'console.warn("ignored")'),
+      source.replace('localPortOverride ?? "55460"', 'localPortOverride ?? "5432"'),
+      source.replace('127.0.0.1:${localPortOverride', 'example.com:${localPortOverride'),
+      source.replace('/waia_dee960_local`', '/production`'),
+      source + '\nconst unsafeUrl = process.env.DATABASE_URL;\n',
+      source + '\nconst unsafeUrl = process.env.POSTGRES_URL;\n',
+    ]) expect(hasSafeRiskOwnerPortGuard(mutation)).toBe(false);
   });
 
   it("keeps the credential TLS fixture loopback-only and independent of database environment URLs", () => {
