@@ -38,7 +38,7 @@ Human T3/rollout admission remain separate; no live deployment is implied.
 
 ## Problem and scope
 
-The existing /admin Overview calls canonical spot valuation while labelling it total capital. PR762 adds V5 account detail but intentionally does not change Overview totals. Complete this display slice without changing canonical financial history, billing, trading or database readers.
+The existing /admin Overview calls canonical spot valuation while labelling it total capital. The original PR762 delta added V5 account detail without changing Overview totals. Complete this display slice without changing canonical financial history, billing, trading or database readers.
 
 1. Label existing financial cards as Spot, including spot result. Preserve their values, quotes, freshness and scope. No combined spot-plus-futures total is introduced.
 2. Mount the existing authorized connected-account observation component on /admin, using a bounded overview variant. Reuse its exact directory → current binding → same-binding persisted snapshot path. No HTX requests, new endpoint or database connection.
@@ -60,6 +60,6 @@ Return currency USD, state complete/partial/unavailable/empty, included/total co
 
 ## Acceptance
 
-Targeted pure tests: exact decimal/scientific/negative/zero, mixed complete/missing, all missing, stale/future times, duplicate UID/account/credential, invalid values, stale directory. Mounted component tests: 3 accounts, scope change during pending request, no live fetch in paper/history/invalid scope, directory revocation, native currency independent of console filter. Existing connected-account and overview tests must pass. Fresh build plus targeted mounted Chromium main /admin proof with deterministic local API fixtures; no production/browser policy bypass. Typecheck, lint, build and applicable graph/canon checks once final delta is ready. Independent exact-delta review before commit/publication decision. No full local unit or parent CI rerun.
+Targeted pure tests: exact decimal/scientific/negative/zero, mixed complete/missing, all missing, stale/future times, duplicate UID/account/credential, invalid values, stale directory. Mounted component tests: 3 accounts, scope change during pending request, no live fetch in paper/history/invalid scope, directory revocation, native currency independent of console filter. Existing connected-account and overview tests must pass. Fresh build plus targeted mounted Chromium main /admin proof with deterministic local API fixtures; no production/browser policy bypass. Typecheck, lint, build and applicable graph/canon checks once final delta is ready. Independent exact-delta review before commit/publication decision. No redundant full local unit run; exact integrated-head PR CI remains required.
 
 Main/PR762 production gates remain separate. Local success is not current-key/HTX/cadence/ingress/production acceptance. This slice does not claim confirmed stops, net daily PnL, registration completeness, all currencies/futures families, research qualification or autonomous trading.
