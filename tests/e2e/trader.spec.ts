@@ -200,7 +200,9 @@ test.describe("/trader static shell boundary (AT-E1 S1)", () => {
     await expect(page.getByTestId("cabinet-usdt-free")).toContainText("125.50");
     await expect(page.getByTestId("trader-connect-form")).toHaveCount(0);
     await expect(page.getByTestId("trader-authority-boundary")).toContainText("Только наблюдение");
-    await expect(page.getByRole("region", { name: "Account observation" })).toContainText("does not place orders");
+    await expect(page.getByRole("region", { name: "Account observation" })).toContainText(
+      /Только просмотр\..*заявки отсюда не отправляются\./,
+    );
     await expect(page.getByTestId("trader-workspace")).not.toContainText("synthetic-secret");
     expect(connectRequests).toBe(1);
     expect(tradingRequests).toEqual([]);
