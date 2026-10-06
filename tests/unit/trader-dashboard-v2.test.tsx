@@ -195,7 +195,7 @@ describe("Trader Dashboard V2", () => {
     );
     expect(await screen.findByTestId("cabinet-usdt-free")).toHaveTextContent("125.50");
     expect(screen.getByTestId("trader-authority-boundary")).toHaveTextContent("Только наблюдение");
-    expect(screen.getByText(/does not place orders/)).toBeInTheDocument();
+    expect(screen.getByText(/Только просмотр\..*заявки отсюда не отправляются\./)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("synthetic-secret");
   });
 
