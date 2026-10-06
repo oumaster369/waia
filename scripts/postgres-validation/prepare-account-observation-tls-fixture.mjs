@@ -14,7 +14,9 @@ if (metadata.Config.Image !== "postgres:17-alpine" || !metadata.State.Running ||
   !expectedEnv.every(value => metadata.Config.Env.includes(value)) ||
   !metadata.NetworkSettings.Ports["5432/tcp"]?.length) throw new Error("Unexpected synthetic PostgreSQL service");
 
-const directory = resolve(".tmp/account-observation-tls");
+const fixtureName = process.argv[3] ?? "account-observation-tls";
+if (!/^account-observation-[a-z-]+$/.test(fixtureName)) throw new Error("Synthetic fixture name required");
+const directory = resolve(".tmp", fixtureName);
 mkdirSync(directory, { recursive: true, mode: 0o700 });
 const file = name => resolve(directory, name);
 writeFileSync(file("ca.cnf"), `[req]\nprompt=no\ndistinguished_name=dn\nx509_extensions=ca\n[dn]\nCN=WAIA disposable observation TLS test CA\n[ca]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\n`, { mode: 0o600 });

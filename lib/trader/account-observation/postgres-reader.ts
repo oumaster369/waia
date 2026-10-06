@@ -20,15 +20,24 @@ export function createPostgresObservationReader(sql: Sql) {
       const scope = scopeSchema.parse({ organizationId: input.organizationId,
         credentialId: input.credentialId, exchangeAccountId: input.exchangeAccountId });
       return await sql.begin(async tx => {
-        await tx.unsafe("SET TRANSACTION READ ONLY");
-        await tx.unsafe("SET LOCAL ROLE waia_account_observation_reader");
-        await tx.unsafe("SET LOCAL statement_timeout = '3000ms'");
-        await tx.unsafe("SET LOCAL lock_timeout = '1000ms'");
-        await tx.unsafe("SET LOCAL transaction_timeout = '5000ms'");
-        await tx`SELECT set_config('waia.observation_org', ${scope.organizationId}, true),
+        // Dispatch FIFO on this transaction's reserved connection. With the dedicated
+        // prepare:false pool, overlap static setup with scope-query parsing, then wait for
+        // every issued query before returning to sql.begin (commit/rollback stays last).
+        const settings = tx.unsafe(`SET TRANSACTION READ ONLY;
+          SET LOCAL ROLE waia_account_observation_reader;
+          SET LOCAL statement_timeout = '3000ms';
+          SET LOCAL lock_timeout = '1000ms';
+          SET LOCAL transaction_timeout = '5000ms'`).execute();
+        const scopeSettings = tx`SELECT set_config('waia.observation_org', ${scope.organizationId}, true),
           set_config('waia.observation_credential', ${scope.credentialId}, true),
-          set_config('waia.observation_account', ${scope.exchangeAccountId}, true)`;
-        return fn(tx, scope);
+          set_config('waia.observation_account', ${scope.exchangeAccountId}, true)`.execute();
+        let protectedWork: Promise<T>;
+        try { protectedWork = Promise.resolve(fn(tx, scope)); }
+        catch (error) { protectedWork = Promise.reject(error); }
+        const settled = await Promise.allSettled([settings, scopeSettings, protectedWork]);
+        const failure = settled.find((item): item is PromiseRejectedResult => item.status === "rejected");
+        if (failure) throw failure.reason;
+        return (settled[2] as PromiseFulfilledResult<T>).value;
       }) as T;
     } catch { throw new ObservationReaderFailure(); }
   }

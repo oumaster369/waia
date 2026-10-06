@@ -37,8 +37,9 @@ function PermissionExplainer() {
         <ol className="mt-2 list-decimal space-y-1 pl-5">
         <li>Откройте в HTX управление API и создайте ключ HMAC.</li>
         <li>
-          Включите только разрешение <span className="text-foreground">Read</span>. Не включайте Withdraw.
-          Разрешение Trade для этого кабинета не требуется.
+          Разрешения <span className="text-foreground">Read</span> достаточно для отображения счёта;
+          ключ с Read и Trade тоже можно подключить. Не включайте Withdraw: WAIA использует ключ
+          только для наблюдения и не выполняет торговые операции.
         </li>
         <li>
           Оставьте список IP пустым, затем вставьте ниже Access Key и Secret Key. Секретный ключ
@@ -502,7 +503,8 @@ function ExchangeTraderWorkspace() {
                   <p className="text-muted-foreground mt-1 text-sm">Предыдущая запись подключения отозвана в WAIA. Введённый ключ может относиться к другому аккаунту HTX; после ответа будет выбран аккаунт из результата. История сохранится.</p>
                 ) : (
                   <p className="text-muted-foreground mt-1 text-sm">
-                    Создайте ключ HTX HMAC только с разрешением чтения. Не включайте Withdraw.
+                    Подключите ключ HTX HMAC с разрешением Read или Read и Trade. Withdraw включать
+                    нельзя: WAIA использует ключ только для наблюдения и не выставляет ордера.
                     Вставьте ниже Access Key и Secret Key.
                   </p>
                 )}

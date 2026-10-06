@@ -44,32 +44,54 @@ database credential revision; config changes fence existing leases and projectio
 Removing a deployed consent requires configuration/state coordination and process drain,
 not merely editing a file while an old process continues running.
 
-The stored `observation_read_only` bit remains mandatory before decryption. It describes
-the canonical stored read-purpose policy, not proof of the actual exchange key's scopes.
-The consented path additionally matches both revisions in that same database query.
-Fresh venue metadata must then match the pinned `readOnly,trade` permission before and
-after private V5 GETs; no-consent V5 and composed spot defaults require `readOnly`.
-Unknown scopes and changes away from the expected permission fail closed. This is not
-a historical guarantee about unobserved permission changes between polls. The credential
-itself still has trading authority; the observation code exposes only fixed read routes.
-Legacy derivatives readers are excluded from existing-key consent. No orders, cancels,
-stop edits, transfers, account-mode changes, execution flags or second executor are added.
+The stored `observation_read_permitted` projection from applied migration0231 remains
+mandatory before decryption. It recognizes canonical v1 Read and v2 observation-purpose
+Read+Trade metadata while preserving truthful venue scopes. It is not itself venue evidence.
+The consented path additionally matches both revisions in the same database query.
+Fresh venue metadata must match pinned `readOnly,trade` for explicitly consented V5 reads;
+no-consent V5 and legacy derivatives retain their strict `readOnly` admission. Ordinary
+Spot observation with V5/derivatives disabled retains the released Read+Trade admission
+and must not require legacy manifest consent. Consent is never inherited by new bindings.
+Unknown scopes and changes away from a configured exact permission fail closed. The
+credential still has trading authority; this code exposes only fixed GET routes. Legacy
+derivatives are excluded from existing-key consent. No orders, cancels, stop edits,
+transfers, mode changes, execution flags or second executor are added.
 
-Two additional metadata-column grants allow the exact pre-decryption query. On October 4
-the Human explicitly approved assigning 0230 to these grants and moving PR759's still
-unapplied inventory payload to 0231 without changing its bytes or releasing its HOLD.
-The canonical source is `db/migrations_postgres/0230_trader_observation_consent_revision_grants_v1.sql`,
-with journal idx230/when1780000000230. It replaces the local proof draft; applied0229 and
-the complete journal prefix through it remain unchanged. There are no schema-model
-changes: this migration grants access to two existing metadata columns only.
-This sequence decision does not authorize a production apply or final T3 merge.
-Inventory0231 must not be included in the eventual targeted 0230 apply packet.
-Strict read-only mode remains compatible before/after these additive grants. Consent mode
-refuses startup if either required metadata-column grant is missing.
+Migrations0229,0230 and0231 are already applied and independently verified. The current
+main journal contains232 canonical entries through
+`0231_trader_observation_purpose_projection_v1`; integration preserves every SQL byte,
+identity and timestamp.0230 grants two existing metadata-column SELECT privileges.
+Deferred inventory PR759 now targets the next free slot0232 and is not part of this PR
+or a production apply. Do not run a general migrator or replay these migrations.
 
-Local PostgreSQL and synthetic-HTTP proof do not establish real-key/native account
-coverage, cadence or deployment acceptance. This package remains draft and unactivated,
-pending canonical privilege rollout, whole-PR/exact-head checks and Human T3 admission.
+## 6 October — integration after accepted connection incident
+
+The Human confirmed the working cabinet and requested next parallel tasks. Reconcile
+existing PR762 with main `a69ac317e1db8f334e8099c735210f054179c4f1`, retaining the deployed
+purpose-aware credential projection, ordered single-connection SQL authorization,
+paired accounts/UID metadata GETs, join-both cleanup and verified Node TLS. The exact-key
+metadata request waits for both validated responses; all financial reads remain serial
+and current-binding guarded. Preserve PR762 identity evidence, exact V5 permission,
+revision-bound consent, and lease ownership through transport settlement.
+
+The ready Overview delta `1730aefb602113ac4fd162f78d2b7eca9fdf11da` follows this integration
+without redesigning its display contract. Its separate Spot/Futures currency/coverage
+summaries belong to DEE1233 and do not alter canonical finance, risk or billing.
+
+Required integration regressions include ordinary dynamic Read+Trade Spot collection,
+explicit-consent revision drift/refusal, paired admission cancellation and no financial
+reads after failed currentness, and strict V5/derivatives scope behavior. Update canonical
+fixture counts to232 and retain the released local-only fixture overrides and CI refusals.
+Run focused changed-surface checks, native restricted-role acceptance for the changed
+composition, type/lint/build/governance and mounted shared UI acceptance. Old base4fb
+CI/artifact evidence is historical, not qualification of this cumulative candidate.
+
+This is local integration authorization, not production activation. The bridge-only
+Worker route cannot be deployed until the concrete HTTPS ingress/Access/secret/resource
+and cost packet is admitted and proven. No plaintext fallback is allowed. Actual current
+keys/UID/mode/nonempty/cadence/rate-budget and reader-first rollback acceptance plus exact
+T3 release admission remain separate. Previously completed unchanged proofs are reused
+with explicit identity, not rerun for ceremony.
 
 ## Goal
 

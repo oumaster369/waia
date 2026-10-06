@@ -9,7 +9,7 @@ import type { MasterKeyProvider } from "@/lib/trader/security/master-key-provide
 export const ACCOUNT_OBSERVATION_CREDENTIAL_ROLE = "waia_account_observation_credential";
 
 /**
- * The legacy read-only projection from 0210/0229. Never `SELECT *`: the generic credential
+ * The versioned observation-purpose projection through 0231. Never `SELECT *`: the generic credential
  * repository's unprojected read is an implementation shape, not an authority requirement, and
  * this role has no privilege on `venue`, `api_key_masked`, `permission_metadata`,
  * `created_at`, `updated_at` or `revoked_at`. Explicit existing-key consent uses a separate
@@ -20,7 +20,7 @@ export const ACCOUNT_OBSERVATION_CREDENTIAL_COLUMNS = Object.freeze([
   "organization_id",
   "exchange_account_id",
   "status",
-  "observation_read_only",
+  "observation_read_permitted",
   "encrypted_payload",
   "payload_key_version",
   "wrapped_dek_key_version",
@@ -71,7 +71,7 @@ type CredentialProjection = {
   organization_id: string;
   exchange_account_id: string;
   status: string;
-  observation_read_only: boolean;
+  observation_read_permitted: boolean;
   observation_revision?: string;
   configuration_revision?: string;
   encrypted_payload: string | null;
@@ -269,8 +269,9 @@ export function createObservationCredentialReader(
         if (row.observation_revision !== consent.credentialRevision ||
             row.configuration_revision !== consent.configurationRevision) refuse("IDENTITY_MISMATCH");
       }
-      // Keep 0229's pre-decryption guard for EVERY path, including explicit consent.
-      if (row.observation_read_only !== true) refuse("NOT_READ_ONLY");
+      // Keep 0231's canonical observation-purpose guard for EVERY path, including
+      // explicit consent. Venue Trade never grants application execution authority.
+      if (row.observation_read_permitted !== true) refuse("NOT_READ_ONLY");
 
       try {
         return await decryptCredentialPayload(provider, {

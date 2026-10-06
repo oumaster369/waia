@@ -17,8 +17,9 @@ import { createObservationHealthServer } from "./server.mjs";
 
 const SERVICE_NAME = "ai-trader-account-observation-host";
 const CONSUMER_MODE = "account-observation-recurring";
-const CONSUMER_SCRIPT = "scripts/trader/account-observation-collector-host.ts";
-const SERVER_ONLY_PRELUDE = "scripts/trader/trader-cli-server-only-prelude.cjs";
+const APP_ROOT = resolve(fileURLToPath(new URL("../../", import.meta.url)));
+const CONSUMER_SCRIPT = resolve(APP_ROOT, "scripts/trader/account-observation-collector-host.ts");
+const SERVER_ONLY_PRELUDE = resolve(APP_ROOT, "scripts/trader/trader-cli-server-only-prelude.cjs");
 const CONSUMER_STARTED = "waia.account_observation_collector.started.v1";
 const MANIFEST_SCHEMA = "waia.account_observation_assignment_manifest.v1";
 const MANIFEST_MAX_BYTES = 65536;
@@ -222,6 +223,24 @@ export function buildObservationConsumerEnvironment(env, config) {
   });
 }
 
+/** Absolute child paths are stable even if the supervisor is launched from another cwd. */
+export function buildObservationHostConsumerSpawnSpecV1(nodeExecutable = process.execPath) {
+  return Object.freeze({
+    command: nodeExecutable,
+    args: Object.freeze([
+      // HTX handshakes can exceed Node's 250ms per-address default; the overall read deadline stays bounded.
+      "--network-family-autoselection-attempt-timeout=1000",
+      "--import",
+      "tsx",
+      "--require",
+      SERVER_ONLY_PRELUDE,
+      "--conditions=react-server",
+      CONSUMER_SCRIPT,
+    ]),
+    cwd: APP_ROOT,
+  });
+}
+
 /** Truthful, secret-free lifecycle state. Digests and counts only. */
 export function buildObservationHostRuntimeHealth(config, collector) {
   const idle = config.mode === "idle" && collector.state === "idle";
@@ -277,7 +296,8 @@ export function startObservationHostSupervisorV1(options = {}) {
   };
   const createServer = options.createServer ?? createObservationHealthServer;
   const spawnChild = options.spawnChild ?? spawn;
-  const cwd = options.cwd ?? process.cwd();
+  const spawnSpec = buildObservationHostConsumerSpawnSpecV1();
+  const cwd = options.cwd ?? spawnSpec.cwd;
   // A failed consumer must terminate the service so the orchestrator restarts a clean process
   // rather than leave a listener claiming a collector that is not running.
   const exit = options.exit ?? ((code) => process.exit(code));
@@ -312,15 +332,8 @@ export function startObservationHostSupervisorV1(options = {}) {
       return;
     }
     child = spawnChild(
-      process.execPath,
-      [
-        "--import",
-        "tsx",
-        "--require",
-        SERVER_ONLY_PRELUDE,
-        "--conditions=react-server",
-        CONSUMER_SCRIPT,
-      ],
+      spawnSpec.command,
+      [...spawnSpec.args],
       {
         cwd,
         env: childEnvironment,

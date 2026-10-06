@@ -2,7 +2,7 @@
 /**
  * Prepare one owned, disposable PostgreSQL 17 fixture for the projection child-service proof.
  * This script has no production URL/env fallback and refuses any journal other than entries
- * 0000..0230. Successful resources are intentionally retained for an explicit root-agent handoff.
+ * 0000..0231. Successful resources are intentionally retained for an explicit root-agent handoff.
  */
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
@@ -270,10 +270,11 @@ async function main() {
   const journalBytes = readFileSync(journalPath);
   const journal = JSON.parse(journalBytes.toString("utf8"));
   const entries = journal.entries;
-  if (journal.dialect !== "postgresql" || entries.length !== 231 || entries[0]?.idx !== 0 ||
-      entries[230]?.idx !== 230 || entries[230]?.tag !== "0230_trader_observation_consent_revision_grants_v1" ||
+  if (journal.version !== "7" || journal.dialect !== "postgresql" || entries.length !== 232 || entries[0]?.idx !== 0 ||
+      entries[230]?.tag !== "0230_trader_observation_consent_revision_grants_v1" || entries[230]?.when !== 1780000000230 ||
+      entries[231]?.idx !== 231 || entries[231]?.tag !== "0231_trader_observation_purpose_projection_v1" || entries[231]?.when !== 1780000000231 ||
       entries.some((entry, index) => entry.idx !== index || !/^(?:\d{4}|0)_/.test(entry.tag))) {
-    refuse("CANONICAL_231_ENTRY_JOURNAL_REQUIRED");
+    refuse("CANONICAL_232_ENTRY_JOURNAL_REQUIRED");
   }
 
   stage = "inspect-local-image";

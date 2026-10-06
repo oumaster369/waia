@@ -339,7 +339,7 @@ describe("configured observation runtime, real local composition with mock persi
       "/linear-swap-api/v1/swap_cross_account_info", "/linear-swap-api/v1/swap_cross_position_info",
     ]);
   });
-  it("retains exact consented config while inventory uses only a no-consent template", async () => {
+  it("retains exact consented config while dynamic inventory accepts ordinary Read + Trade spot without consent", async () => {
     const f = setup();
     const { revision: _revision, ...parameters } = f.item.config;
     const consentId = "55555555-5555-4555-8555-555555555555";
@@ -389,8 +389,8 @@ describe("configured observation runtime, real local composition with mock persi
         data: [{ id: account, type: "spot", state: "working" }] });
       if (target.pathname === "/v2/user/uid") return Response.json({ code: 200, data: account + 1000 });
       if (target.pathname === "/v2/user/api-key") return Response.json({ code: 200,
-        data: [{ accessKey, status: "normal", permission: accessKey === "synthetic-key-consented"
-          ? "readOnly,trade" : "readOnly" }] });
+        data: [{ accessKey, status: "normal", permission: accessKey === "synthetic-key-template"
+          ? "readOnly" : "readOnly,trade" }] });
       return Response.json({ status: "ok", data: target.pathname.endsWith("/balance")
         ? { id: account, type: "spot", state: "working", list: [] } : [] });
     });
@@ -405,22 +405,36 @@ describe("configured observation runtime, real local composition with mock persi
     expect(committedBindings.map(binding => binding.exchangeAccountId).sort()).toEqual(["123", "124", "789"]);
     expect(committedBindings.find(binding => binding.exchangeAccountId === "123")).toEqual(consented.binding);
     expect(committedBindings.some(binding => binding.exchangeAccountId === "456")).toBe(false);
+    const inventoryObservation = ports.commitIfCurrent.mock.calls
+      .find(([value]) => value.observation.binding.exchangeAccountId === "789")?.[0].observation;
+    expect(inventoryObservation).toMatchObject({
+      schemaVersion: "account-observation/v1",
+      binding: inventoryBinding,
+      balances: { status: "COMPLETE", values: [] },
+    });
+    expect(inventoryObservation.htxV5).toBeUndefined();
+    expect(derivativesCalls(f)).toHaveLength(0);
+    expect(f.fetchImpl.mock.calls.every(([, options]) => options?.method === "GET")).toBe(true);
     expect(getCredentials.mock.calls.map(([, credentialId]) => credentialId).sort()).toEqual(
       [...keys.keys()].sort(),
     );
   });
-  it("does not let an extra verifier grant a derivatives read for a trading key", async () => {
-    const f = setup();
-    f.input.configured = [withDerivatives(f.item)];
-    const spot = f.fetchImpl.getMockImplementation()!;
-    f.fetchImpl.mockImplementation((url, options) => new URL(String(url)).pathname === "/v2/user/api-key"
-      ? Promise.resolve(Response.json({ code: 200, data: [{ accessKey: "synthetic-key", status: "normal", permission: "readOnly,trade" }] }))
-      : spot(url, options));
-    await stopAfterTick(f);
-    expect(f.verifyReadAdmission).toHaveBeenCalled();
-    expect(derivativesCalls(f)).toHaveLength(0);
-    expect(ports.commitIfCurrent).not.toHaveBeenCalled();
-  });
+  it.each(["legacy derivatives", "V5"] as const)(
+    "does not let an extra verifier grant a %s read for a trading key without consent",
+    async (mode) => {
+      const f = setup();
+      f.input.configured = [mode === "V5" ? withV5(f.item) : withDerivatives(f.item)];
+      if (mode === "V5") f.input.iterationTimeoutMs = 200_000;
+      const spot = f.fetchImpl.getMockImplementation()!;
+      f.fetchImpl.mockImplementation((url, options) => new URL(String(url)).pathname === "/v2/user/api-key"
+        ? Promise.resolve(Response.json({ code: 200, data: [{ accessKey: "synthetic-key", status: "normal", permission: "readOnly,trade" }] }))
+        : spot(url, options));
+      await stopAfterTick(f);
+      expect(f.verifyReadAdmission).toHaveBeenCalled();
+      expect(derivativesCalls(f)).toHaveLength(0);
+      expect(ports.commitIfCurrent).not.toHaveBeenCalled();
+    },
+  );
   it("fences the tick if fresh venue permission changes during the balance read", async () => {
     const f = setup();
     f.input.configured = [withDerivatives(f.item)];
@@ -491,16 +505,22 @@ describe("configured observation runtime, real local composition with mock persi
     const runtime = createConfiguredHtxObservationRuntime(f.input);
     const work = runtime.run(new AbortController().signal);
     await vi.advanceTimersByTimeAsync(25000);
-    expect(f.fetchImpl).toHaveBeenCalledTimes(1);
+    const metadataPaths = f.fetchImpl.mock.calls.map(([url]) => new URL(String(url)).pathname);
+    expect(metadataPaths.sort()).toEqual(["/v1/account/accounts", "/v2/user/uid"]);
     expect(f.getDecryptedCredentials).toHaveBeenCalledTimes(1);
     expect(ports.commitIfCurrent).not.toHaveBeenCalled();
     expect(ports.release).not.toHaveBeenCalled();
     runtime.dispose();
     const cancel = vi.fn();
-    for (const resolve of finish) resolve(new Response(new ReadableStream({ cancel })));
-    await work;
+    expect(finish).toHaveLength(2);
+    finish[0](new Response(new ReadableStream({ cancel })));
     await vi.advanceTimersByTimeAsync(0);
     expect(cancel).toHaveBeenCalledTimes(1);
+    expect(ports.release).not.toHaveBeenCalled();
+    finish[1](new Response(new ReadableStream({ cancel })));
+    await work;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cancel).toHaveBeenCalledTimes(2);
     expect(ports.release).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -599,7 +619,8 @@ describe("configured observation runtime, real local composition with mock persi
     stop.abort();
     await work;
     expect(f.verifyReadAdmission).toHaveBeenCalledTimes(1);
-    expect(f.fetchImpl).toHaveBeenCalledTimes(1);
+    const metadataPaths = f.fetchImpl.mock.calls.map(([url]) => new URL(String(url)).pathname);
+    expect(metadataPaths.sort()).toEqual(["/v1/account/accounts", "/v2/user/uid"]);
     expect(ports.commitIfCurrent).not.toHaveBeenCalled();
     expect(f.report).toHaveBeenCalledWith("COLLECTION_FAILED");
   });
@@ -755,7 +776,8 @@ describe("configured observation runtime, real local composition with mock persi
     const runtime = createConfiguredHtxObservationRuntime(f.input);
     const work = runtime.run(new AbortController().signal);
     await vi.advanceTimersByTimeAsync(0);
-    expect(f.fetchImpl).toHaveBeenCalledTimes(1);
+    const metadataPaths = f.fetchImpl.mock.calls.map(([url]) => new URL(String(url)).pathname);
+    expect(metadataPaths.sort()).toEqual(["/v1/account/accounts", "/v2/user/uid"]);
     await expect(runtime.run(new AbortController().signal)).rejects.toThrow();
     runtime.dispose();
     await vi.advanceTimersByTimeAsync(0);

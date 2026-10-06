@@ -350,8 +350,15 @@ export function createConfiguredHtxObservationRuntime(
                   fetchImpl,
                   timeoutMs: readerOptions.readTimeoutMs,
                   maxResponseBytes: readerOptions.maxResponseBytes,
-                  requireReadOnlyPermission: !config.existingKeyReadConsentId,
-                  expectedPermission: config.existingKeyReadConsentId ? "readOnly,trade" : "readOnly",
+                  // Ordinary observation-purpose Spot retains released Read+Trade admission.
+                  // V5/legacy derivatives keep their separately approved exact scope contract.
+                  requireReadOnlyPermission: !config.existingKeyReadConsentId &&
+                    Boolean(config.htxDerivativesFamilies?.length || config.htxV5?.enabled),
+                  ...(config.existingKeyReadConsentId
+                    ? { expectedPermission: "readOnly,trade" as const }
+                    : config.htxDerivativesFamilies?.length || config.htxV5?.enabled
+                      ? { expectedPermission: "readOnly" as const }
+                      : {}),
                   authorizeCurrent: source.authorizeOpen,
                 });
                 admissions.add(admission);
