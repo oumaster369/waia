@@ -1,7 +1,7 @@
 ---
 integrationIssue: DEE-1233
 integrationTitle: "Spot and Futures on the main Admin Overview"
-branch: null
+branch: dee-1231-htx-v5-readonly
 riskTier: T2
 prPolicy: one-integration-pr
 executionSurfaces: [local]
@@ -12,12 +12,12 @@ state:
   currentWorkPackage: WP-OVERVIEW
   completedWorkPackages: []
   remainingWorkPackages: [WP-OVERVIEW]
-  prNumber: null
-  prUrl: null
+  prNumber: 762
+  prUrl: https://github.com/oumaster369/waia/pull/762
   lastValidatedGitSha: null
   lastValidationAt: null
-  blockedReason: "Isolated local preparation based on frozen draft PR762; no publication or rollout authority."
-  nextAction: "Complete local mounted acceptance and retain exact delta for a later integration decision."
+  blockedReason: "Local integration and mounted acceptance complete; exact-head CI, ingress and Human release admission remain."
+  nextAction: "Publish the coherent integrated PR762 candidate; preserve production HOLD until infrastructure and release admission."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -26,7 +26,15 @@ provenance:
 
 # DEE-1233 — Spot and Futures on the main Admin Overview
 
-Local implementation preparation for DEE-1233 / acceptance parent DEE-1227. Based on frozen PR762 a9e147f7982fbcceca030fc4079719a06d20d850 in an isolated detached worktree; no changes to PR762, new PR, merge or production authority. User requested all connected accounts on the main screen and supplied its current screenshot on 5 October. Evidence: local audit oct05-admin-overview-scope-gap.json.
+This display slice for DEE-1233 / parent DEE-1227 was prepared as isolated
+`1730aefb602113ac4fd162f78d2b7eca9fdf11da` on PR762a9e1. On6October the Human confirmed
+the repaired cabinet and explicitly requested next tasks and parallel engineering.
+Root integrated existing PR762 with maina69 and imported the ten Overview paths
+without changing their implementation. Publication uses the existing coherent account-
+observation PR762; no second PR or automatic completion of DEE1233/1227 is claimed.
+Fresh cumulative source review, build and four mounted Admin/cabinet/Overview scenarios
+passed with synthetic data. Production ingress, actual V5 accounts/cadence and exact
+Human T3/rollout admission remain separate; no live deployment is implied.
 
 ## Problem and scope
 
