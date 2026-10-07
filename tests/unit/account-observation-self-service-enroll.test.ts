@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { WaiaPostgresDb } from "@/db/waia-postgres-transaction";
 import { createAccountObservationSelfServiceConfiguration } from "@/lib/trader/account-observation/self-service-envelope";
 import {
@@ -6,15 +6,19 @@ import {
   enrollSelfServiceAccountObservation,
 } from "@/lib/trader/account-observation/self-service-enroll";
 
+import { handleExchangeCredentialsGet, type ConnectHandlerDeps } from "@/lib/trader/credentials/connect-handler";
+import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
+
+const USER_ID = "11111111-1111-4111-8111-111111111111";
 const INPUT = {
-  organizationId: "11111111-1111-4111-8111-111111111111",
+  organizationId: personalOrganizationIdFromUserId(USER_ID),
   credentialId: "22222222-2222-4222-8222-222222222222",
   exchangeAccountId: "73750148",
 };
 
 function fakeDb(script: {
   credential?: Record<string, string> | null;
-  existing?: { configurationRevision: string; symbols: string[] } | null;
+  existing?: { configurationRevision: string; symbols: string[]; [key: string]: unknown } | null;
   activeCount?: number;
 }): {
   db: WaiaPostgresDb;
@@ -63,7 +67,11 @@ function fakeDb(script: {
       return {
         values(row: unknown) {
           inserted.push(row);
-          return Promise.resolve();
+          return {
+            onConflictDoNothing() {
+              return { returning: async () => [{ credentialId: INPUT.credentialId }] };
+            },
+          };
         },
       };
     },
@@ -73,6 +81,7 @@ function fakeDb(script: {
           return {
             where() {
               updated.push(row);
+              if (script.existing) Object.assign(script.existing, row);
               return Promise.resolve();
             },
           };
@@ -133,18 +142,74 @@ describe("DEE-1032 self-service observation envelope", () => {
     expect(inserted).toEqual([]);
   });
 
-  it("realigns a stale envelope for the exact stored triple", async () => {
-    const { db, inserted, updated } = fakeDb({
-      existing: { configurationRevision: "sha256:old", symbols: ["ETHUSDT"] },
-    });
-    await expect(enrollSelfServiceAccountObservation(db, INPUT)).resolves.toBe("PROVISIONED");
+  function existingOperatorState() {
+    return {
+      configurationRevision: "sha256:" + "a".repeat(64),
+      symbols: ["BTCUSDT", "ETHUSDT"],
+      nextDueAt: "2026-01-01T00:01:00.000Z",
+      lastObservationId: "33333333-3333-4333-8333-333333333333",
+      consecutiveFailures: 2,
+      leaseToken: "44444444-4444-4444-8444-444444444444",
+      leaseOwner: "synthetic-v5-observer",
+      leaseExpiresAt: "2026-01-01T00:02:00.000Z",
+    };
+  }
+
+  it("preserves an existing operator V5 revision, symbols, schedule and active lease", async () => {
+    const existing = existingOperatorState();
+    const before = structuredClone(existing);
+    const { db, inserted, updated, executed } = fakeDb({ existing, activeCount: 20 });
+    await expect(enrollSelfServiceAccountObservation(db, INPUT)).resolves.toBe(
+      "ALREADY_PROVISIONED",
+    );
+    expect(existing).toEqual(before);
     expect(inserted).toEqual([]);
-    expect(updated).toEqual([
-      {
-        configurationRevision: createAccountObservationSelfServiceConfiguration().revision,
-        symbols: ["BTCUSDT"],
-      },
-    ]);
+    expect(updated).toEqual([]);
+    expect(executed).toEqual([]);
+  });
+
+  it("listing a connected Read+Trade account preserves its configured observation binding", async () => {
+    const existing = existingOperatorState();
+    const before = structuredClone(existing);
+    const { db, inserted, updated, executed } = fakeDb({ existing });
+    const metadata = {
+      id: INPUT.credentialId,
+      venue: "htx",
+      exchangeAccountId: INPUT.exchangeAccountId,
+      apiKeyMasked: "synthetic-mask",
+      status: "active" as const,
+      permissionMetadata: { scopes: ["readOnly", "trade"], observationReadPermitted: true },
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      revokedAt: null,
+    };
+    const createProvider = vi.fn(async () => { throw new Error("NO_DECRYPTION_IN_LIST"); });
+    const createConnector = vi.fn(() => { throw new Error("NO_VENUE_CALL_IN_LIST"); });
+    const disposeRuntimeDb = vi.fn(async () => undefined);
+    const deps: ConnectHandlerDeps = {
+      getUserId: async () => USER_ID,
+      hasTraderAccess: async () => true,
+      getRuntimeDb: async () => ({ kind: "postgres", db }),
+      disposeRuntimeDb,
+      createProvider,
+      createConnector,
+      createCredentialService: () => ({
+        listCredentialMetadata: async () => [metadata],
+        storeCredentials: async () => { throw new Error("NO_STORE_IN_LIST"); },
+        getDecryptedCredentials: async () => { throw new Error("NO_DECRYPTION_IN_LIST"); },
+        revokeCredentials: async () => { throw new Error("NO_REVOKE_IN_LIST"); },
+      }),
+    };
+    const result = await handleExchangeCredentialsGet(deps);
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({ credentials: [{ id: INPUT.credentialId }] });
+    expect(existing).toEqual(before);
+    expect(inserted).toEqual([]);
+    expect(updated).toEqual([]);
+    expect(executed).toEqual([]);
+    expect(createProvider).not.toHaveBeenCalled();
+    expect(createConnector).not.toHaveBeenCalled();
+    expect(disposeRuntimeDb).toHaveBeenCalledOnce();
   });
 
   it("refuses non-HTX, revoked, or mismatched credentials", async () => {
@@ -163,16 +228,24 @@ describe("DEE-1032 self-service observation envelope", () => {
         status: "revoked",
       },
       {
+        organizationId: INPUT.organizationId,
+        venue: "htx",
+        exchangeAccountId: "different-account",
+        status: "active",
+      },
+      {
         organizationId: "33333333-3333-4333-8333-333333333333",
         venue: "htx",
         exchangeAccountId: INPUT.exchangeAccountId,
         status: "active",
       },
     ]) {
-      const { db } = fakeDb({ credential });
+      const { db, inserted, updated } = fakeDb({ credential, existing: existingOperatorState() });
       await expect(enrollSelfServiceAccountObservation(db, INPUT)).rejects.toMatchObject({
         code: "CREDENTIAL",
       });
+      expect(inserted).toEqual([]);
+      expect(updated).toEqual([]);
     }
   });
 
