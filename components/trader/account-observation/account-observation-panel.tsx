@@ -15,6 +15,7 @@ import {
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import type { AccountObservationView } from "./use-account-observation";
 import { DerivativesAccountSection } from "./derivatives-account-section";
+import { HtxV5AccountSection } from "./htx-v5-account-section";
 
 const MAX_VISIBLE_ROWS = 100;
 const time = (value: number | null) =>
@@ -117,9 +118,9 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Live account</h2>
+          <h2 className="text-lg font-semibold">Счёт HTX</h2>
           <p className="text-muted-foreground mt-1 text-sm">
-            Read-only HTX account display. Spot totals are not a valuation; futures PnL is shown as reported by HTX. This cabinet does not place orders.
+            Только просмотр. Данные спота и фьючерсов показаны отдельно; заявки отсюда не отправляются.
           </p>
         </div>
         <p
@@ -149,82 +150,114 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
         </p>
       ) : (
         <>
-          <p className="text-sm">
-            HTX {observation.binding.exchangeAccountId} · last update{" "}
-            {ageLabel(observation.collectionCompletedAtMs, nowMs)} ·{" "}
-            {nextIn > 0 ? `next update in ${nextIn}s` : "awaiting the next collector tick"}
-          </p>
+          <WaiaSurface variant="raised" className="space-y-2 p-4" data-testid="account-identity-summary">
+            <h3 className="font-semibold">
+              HTX · счёт {observation.binding.exchangeAccountId} · UID{" "}
+              {observation.htxV5?.htxUid ?? "не указан в снимке"}
+            </h3>
+            <p className="text-muted-foreground text-sm">
+              Спот и фьючерсы ниже приведены отдельно. Общая стоимость активов не рассчитывается.
+            </p>
+            <p className="text-sm">
+              Результат за день: недоступен. Для него нет подтверждённой дневной базы и полного учёта переводов,
+              финансирования и комиссий.
+            </p>
+            <p className="text-muted-foreground text-xs">
+              Обновлено {ageLabel(observation.collectionCompletedAtMs, nowMs)} ·{" "}
+              {nextIn > 0 ? `следующее обновление через ${nextIn} с` : "ожидается следующий сбор"}
+            </p>
+          </WaiaSurface>
           <p className="text-muted-foreground text-xs">
             Last received observation — do not treat it as a current complete account snapshot.
           </p>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <Metric
-              label="USDT free"
-              value={usdt ? usdt.free : "—"}
-              hint={usdt ? "Available to open orders" : "Not in this snapshot"}
-              testId="cabinet-usdt-free"
-            />
-            <Metric
-              label="USDT in open orders"
-              value={usdt ? usdt.locked : "—"}
-              hint={usdt ? "Locked on HTX" : "Not in this snapshot"}
-              testId="cabinet-usdt-locked"
-            />
-            <Metric
-              label="Open orders"
-              value={
-                observation.openOrders.values === null
-                  ? "—"
-                  : String(observation.openOrders.values.length)
-              }
-              hint="Working orders, not marked positions"
-              testId="cabinet-open-orders"
-            />
-          </div>
-          <DerivativesAccountSection
-            projection={observation.schemaVersion === "account-observation/v2" ? observation.derivatives ?? null : null}
-            stale={view.stale}
-            nowMs={nowMs}
-          />
-          {observation.balances.error ? <p>Read error: {observation.balances.error}</p> : null}
-          {observation.balances.values === null ? <p>Unavailable — not an observed zero.</p> : null}
-          {observation.holdings === null ? <p>Unavailable — not an observed zero.</p> : null}
-          {inventory.length > 0 ? (
-            <section className="border-border space-y-2 rounded-lg border p-3">
-              <h3 className="font-medium">Spot inventory (not PnL)</h3>
-              <ul>
-                {inventory.slice(0, MAX_VISIBLE_ROWS).map((row, i) => (
-                  <li key={`${row.asset}-${i}`}>
-                    {row.asset}: free {row.free}, locked {row.locked}, total {row.total}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-          <Rows
-            title="Open orders"
-            component={observation.openOrders}
-            emptyComplete="No working orders."
-          >
-            {(row, i) => <li key={`${row.orderId}-${i}`}>{formatOrderLine(row)}</li>}
-          </Rows>
-          {observation.trades.length === 0 && (
-            <p>No trade symbols included; no all-market completeness claim.</p>
-          )}
-          {observation.trades.map(({ symbol, component }) => (
+          <section aria-label="Спот" className="border-border space-y-3 rounded-xl border p-4">
+            <h3 className="text-base font-semibold">Спот · баланс и заявки</h3>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <Metric
+                label="USDT доступно"
+                value={usdt ? usdt.free : "—"}
+                hint={usdt ? "Свободный остаток" : "Нет в этом снимке"}
+                testId="cabinet-usdt-free"
+              />
+              <Metric
+                label="USDT в открытых заявках"
+                value={usdt ? usdt.locked : "—"}
+                hint={usdt ? "Зарезервировано на HTX" : "Нет в этом снимке"}
+                testId="cabinet-usdt-locked"
+              />
+              <Metric
+                label="Открытые заявки"
+                value={
+                  observation.openOrders.values === null
+                    ? "—"
+                    : String(observation.openOrders.values.length)
+                }
+                hint="Активные заявки, отдельно от позиций"
+                testId="cabinet-open-orders"
+              />
+            </div>
+            {observation.balances.error ? <p>Read error: {observation.balances.error}</p> : null}
+            {observation.balances.values === null ? (
+              <p>Unavailable — not an observed zero.</p>
+            ) : null}
+            {observation.holdings === null ? <p>Unavailable — not an observed zero.</p> : null}
+            {inventory.length > 0 ? (
+              <section className="border-border space-y-2 rounded-lg border p-3">
+                <h4 className="font-medium">Spot inventory (not PnL)</h4>
+                <ul>
+                  {inventory.slice(0, MAX_VISIBLE_ROWS).map((row, i) => (
+                    <li key={`${row.asset}-${i}`}>
+                      {row.asset}: free {row.free}, locked {row.locked}, total {row.total}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
             <Rows
-              key={symbol}
-              title="Trades"
-              component={component}
-              emptyComplete="No fills in this window."
+              title="Open orders"
+              component={observation.openOrders}
+              emptyComplete="No working orders."
             >
-              {(row, i) => (
-                <li key={`${row.tradeId}-${i}`}>{formatTradeLine({ ...row, symbol })}</li>
-              )}
+              {(row, i) => <li key={`${row.orderId}-${i}`}>{formatOrderLine(row)}</li>}
             </Rows>
-          ))}
+            {observation.trades.length === 0 && (
+              <p>No trade symbols included; no all-market completeness claim.</p>
+            )}
+            {observation.trades.map(({ symbol, component }) => (
+              <Rows
+                key={symbol}
+                title="Trades"
+                component={component}
+                emptyComplete="No fills in this window."
+              >
+                {(row, i) => (
+                  <li key={`${row.tradeId}-${i}`}>{formatTradeLine({ ...row, symbol })}</li>
+                )}
+              </Rows>
+            ))}
+          </section>
+          <section aria-label="Фьючерсы" className="border-border space-y-3 rounded-xl border p-4">
+            <h3 className="text-base font-semibold">Фьючерсы · маржа, позиции и заявки</h3>
+            <DerivativesAccountSection
+              projection={
+                observation.schemaVersion === "account-observation/v2" ||
+                observation.schemaVersion === "account-observation/v3"
+                  ? (observation.derivatives ?? null)
+                  : null
+              }
+              stale={view.stale}
+              nowMs={nowMs}
+            />
+            {observation.htxV5 ? (
+              <HtxV5AccountSection
+                projection={observation.htxV5}
+                stale={view.stale}
+                nowMs={nowMs}
+              />
+            ) : null}
+          </section>
           <p className="text-muted-foreground text-sm">
-            Monthly statement is not published in this cabinet yet. Nothing is inferred.
+            Месячная выписка здесь не публикуется. Недостающие значения не выводятся из предположений.
           </p>
           <dl className="text-muted-foreground grid gap-1 text-xs">
             <dt>Observation ID</dt>

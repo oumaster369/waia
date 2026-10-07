@@ -53,9 +53,10 @@ describe("BP-6 architecture boundaries (DEE-339 ratification)", () => {
       .map((entry) => entry.name)
       .sort();
 
-    // DEE-1015 added the dedicated account-observation host as a third approved service; it is a
-    // separate runtime authority and does not relax any execution-host boundary below.
+    // Human approved DEE-1231/DEE-1234 snapshot bridge code and isolated tests on 4 Oct;
+    // the inventory grants no deployment or merge authority.
     expect(entries).toEqual([
+      "account-observation-projection",
       "ai-trader-account-observation-host",
       "ai-trader-execution-host",
       "ai-trader-fhv-observer",

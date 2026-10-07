@@ -9,12 +9,12 @@ const mocks = vi.hoisted(() => ({
   membership: vi.fn(),
   entitlement: vi.fn(),
   permission: vi.fn(),
-  postgres: vi.fn(),
+  projection: vi.fn(),
   end: vi.fn(),
   resolve: vi.fn(),
   latest: vi.fn(),
 }));
-vi.mock("postgres", () => ({ default: mocks.postgres }));
+
 vi.mock("@/lib/auth/session-user", () => ({ getFreshOptionalAdminSessionUserId: mocks.user }));
 vi.mock("@/db/waia-runtime-db", () => ({
   getWaiaRuntimeDb: mocks.access,
@@ -29,11 +29,8 @@ vi.mock("@/lib/waia-core/entitlements/authoritative", () => ({
 vi.mock("@/lib/waia-core/permissions/admin-http", () => ({
   assertAdminPermission: mocks.permission,
 }));
-vi.mock("@/lib/trader/account-observation/postgres-reader", () => ({
-  createPostgresObservationReader: () => ({
-    resolveActiveBinding: mocks.resolve,
-    readLatest: mocks.latest,
-  }),
+vi.mock("@/lib/trader/account-observation/projection-client", () => ({
+  createProjectionClient: mocks.projection,
 }));
 import {
   accountObservationRoute,
@@ -90,10 +87,19 @@ function seedCabinet(
   }
 }
 
+function configureProjection() {
+  vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_ENABLED", "1");
+  vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_HMAC_KEY_HEX", "09".repeat(32));
+  vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_EPOCH", "11111111-1111-4111-8111-111111111111");
+  vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_KEY_ID", "synthetic-key-id");
+  vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_ACCESS_CLIENT_ID", "synthetic-access-id");
+  vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_ACCESS_CLIENT_SECRET", "synthetic-access-secret");
+  vi.stubEnv("WAIA_RELEASE_SHA", "a".repeat(40));
+}
 let cabinet: Database.Database;
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_DATABASE_URL", "");
+  vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_ENABLED", "0");
   cabinet = cabinetSqlite();
   seedCabinet(cabinet, {
     id: binding.organizationId,
@@ -110,7 +116,7 @@ beforeEach(() => {
   mocks.resolve.mockResolvedValue(binding);
   mocks.latest.mockResolvedValue(null);
   mocks.end.mockResolvedValue(undefined);
-  mocks.postgres.mockReturnValue({ end: mocks.end });
+  mocks.projection.mockReturnValue({ resolveActiveBinding: mocks.resolve, readLatest: mocks.latest, dispose: mocks.end });
 });
 afterEach(() => {
   cabinet?.close();
@@ -120,13 +126,13 @@ describe("account observation route wiring, no external requests", () => {
   it.each([tenantStream, adminStream])(
     "stream wrapper opens/disposes independent read contexts and revalidates fresh identity",
     async (get) => {
-      vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_DATABASE_URL", "synthetic-reader-url");
+      configureProjection();
       vi.useFakeTimers();
       try {
         const response = await get(request());
         const reader = response.body!.getReader();
         await reader.read();
-        expect(mocks.postgres).toHaveBeenCalledTimes(2);
+        expect(mocks.projection).toHaveBeenCalledTimes(2);
         expect(mocks.end).toHaveBeenCalledTimes(2);
         expect(mocks.dispose).toHaveBeenCalledTimes(2);
         expect(mocks.user.mock.calls.length).toBeGreaterThanOrEqual(8);
@@ -135,7 +141,7 @@ describe("account observation route wiring, no external requests", () => {
         await vi.advanceTimersByTimeAsync(5000);
         expect(new TextDecoder().decode((await next).value)).toContain("event: revoked");
         expect((await reader.read()).done).toBe(true);
-        expect(mocks.postgres).toHaveBeenCalledTimes(2);
+        expect(mocks.projection).toHaveBeenCalledTimes(2);
         expect(vi.getTimerCount()).toBe(0);
       } finally {
         vi.useRealTimers();
@@ -146,22 +152,25 @@ describe("account observation route wiring, no external requests", () => {
     mocks.user.mockResolvedValue(null);
     expect((await accountObservationRoute(request(), "tenant")).status).toBe(401);
     expect(mocks.access).not.toHaveBeenCalled();
-    expect(mocks.postgres).not.toHaveBeenCalled();
+    expect(mocks.projection).not.toHaveBeenCalled();
   });
-  it("missing dedicated connection fails closed without general DB fallback", async () => {
+  it("missing projection configuration fails closed without direct SQL fallback", async () => {
     vi.stubEnv("DATABASE_URL_POSTGRES", "synthetic-forbidden-fallback");
+    vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_DATABASE_URL", "synthetic-reader-fallback");
     const response = await accountObservationRoute(request(), "tenant");
     expect(response.status).toBe(503);
-    expect(mocks.postgres).not.toHaveBeenCalled();
+    expect(mocks.projection).not.toHaveBeenCalled();
     expect(await response.text()).not.toContain("fallback");
     expect(mocks.dispose).toHaveBeenCalledOnce();
   });
-  it("uses only dedicated bounded connection and disposes it after every poll", async () => {
-    vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_DATABASE_URL", "synthetic-reader-url");
+  it("uses the fixed projection and disposes it after every poll", async () => {
+    configureProjection();
     expect((await accountObservationRoute(request(), "tenant")).status).toBe(204);
-    expect(mocks.postgres).toHaveBeenCalledWith(
-      "synthetic-reader-url",
-      expect.objectContaining({ max: 1, prepare: false, connect_timeout: 3 }),
+    expect(mocks.projection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tuple: expect.objectContaining({ audience: "https://observation-reader.waia.life", releaseSha: "a".repeat(40) }),
+        deadlineMs: expect.any(Number), accessClientId: "synthetic-access-id",
+      }),
     );
     expect(mocks.end).toHaveBeenCalledOnce();
     expect(mocks.dispose).toHaveBeenCalledOnce();
@@ -195,19 +204,51 @@ describe("account observation route wiring, no external requests", () => {
   it("does not give an unauthorized operator a projection connection", async () => {
     mocks.permission.mockResolvedValue({ allowed: false });
     expect((await accountObservationRoute(request(), "admin")).status).toBe(403);
-    expect(mocks.postgres).not.toHaveBeenCalled();
+    expect(mocks.projection).not.toHaveBeenCalled();
   });
   it("does not fall back to SQLite for this new storage path", async () => {
     mocks.access.mockResolvedValue({ kind: "sqlite", db: {} });
     expect((await accountObservationRoute(request(), "tenant")).status).toBe(503);
-    expect(mocks.postgres).not.toHaveBeenCalled();
+    expect(mocks.projection).not.toHaveBeenCalled();
   });
   it("never exposes driver details and still closes a failed reader", async () => {
-    vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_DATABASE_URL", "synthetic-reader-url");
+    configureProjection();
     mocks.resolve.mockRejectedValue(new Error("synthetic-private-driver-detail"));
     const response = await accountObservationRoute(request(), "tenant");
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain("driver-detail");
+    expect(mocks.end).toHaveBeenCalledOnce();
+  });
+  it("captures the shared deadline before auth awaits and passes exact three-field resolve scopes", async () => {
+    configureProjection();
+    const now = 1_800_000_000_000;
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    mocks.user.mockImplementation(async () => { clock.mockReturnValue(now + 4000); return "synthetic-user"; });
+    try {
+      expect((await accountObservationRoute(request(), "tenant")).status).toBe(204);
+      expect(mocks.projection.mock.calls[0][0].deadlineMs).toBe(now + 5000);
+      for (const [scope, signal] of mocks.resolve.mock.calls) {
+        expect(scope).toEqual({ organizationId: binding.organizationId,
+          credentialId: binding.credentialId, exchangeAccountId: binding.exchangeAccountId });
+        expect(signal).toBeInstanceOf(AbortSignal);
+      }
+      expect(mocks.latest).toHaveBeenCalledWith(binding, expect.any(AbortSignal));
+    } finally { clock.mockRestore(); }
+  });
+  it("expired authorization never starts signing and does not renew the route deadline", async () => {
+    configureProjection();
+    const now = 1_800_000_000_000;
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    mocks.user.mockImplementation(async () => { clock.mockReturnValue(now + 5000); return "synthetic-user"; });
+    try {
+      expect((await accountObservationRoute(request(), "tenant")).status).toBe(503);
+      expect(mocks.projection).not.toHaveBeenCalled();
+    } finally { clock.mockRestore(); }
+  });
+  it("revoked access after the read returns no snapshot and still disposes the transport", async () => {
+    configureProjection();
+    mocks.latest.mockImplementation(async () => { mocks.user.mockResolvedValue(null); return null; });
+    expect((await accountObservationRoute(request(), "tenant")).status).toBe(403);
     expect(mocks.end).toHaveBeenCalledOnce();
   });
 });

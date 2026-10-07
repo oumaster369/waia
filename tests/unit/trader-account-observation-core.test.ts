@@ -3,7 +3,7 @@ import { AccountObservationFailure, AccountObservationReadFailure, createAccount
   "@/lib/trader/account-observation/service";
 import { parseAccountObservation } from "@/lib/trader/account-observation/validation";
 import type { AccountObservation, AccountObservationReader, ObservationBinding, ObservationClock,
-  ObservationConfig, ObservationLease, ObservationRepository, ObservedOrder, ReadEnvelope } from
+  HtxV5AccountObservation, ObservationConfig, ObservationLease, ObservationRepository, ObservedOrder, ReadEnvelope } from
   "@/lib/trader/account-observation/types";
 import type { Balance, Trade } from "@/lib/trader/connectors/types";
 import { HTX_DERIVATIVES_ACCOUNT_FAMILIES, type HtxDerivativesAccountFamily,
@@ -82,15 +82,226 @@ function setup(overrides: Partial<ObservationConfig> = {}) {
   const openReader = vi.fn(async (_binding: ObservationBinding, _signal: AbortSignal) => {
     void _binding; void _signal; return reader;
   });
+  const settleReader = vi.fn(async (_binding: ObservationBinding) => { void _binding; });
   const deps = { repository, clock, openReader,
+    ...(overrides.htxV5?.enabled ? { settleReader } : {}),
     newObservationId: () => `10000000-0000-4000-8000-${String(state.counter).padStart(12, "0")}` };
   const service = createAccountObservationService(deps, { ...config, ...overrides });
-  return { state, repository, reader, openReader, service, envelope, snapshot, position, beforeCommit, deps };
+  return { state, repository, reader, openReader, service, envelope, snapshot, position, beforeCommit, deps, settleReader };
+}
+function htxV5Projection(htxUid = "456", withPartialError = false): HtxV5AccountObservation {
+  const started = Date.now();
+  const completeValue = <T>(value: T) => ({ status: "COMPLETE" as const, value,
+    readStartedAtMs: started, readCompletedAtMs: started, responseGeneratedAtMs: null, error: null });
+  const completeRows = <T>(values: readonly T[]) => ({ status: "COMPLETE" as const, values,
+    readStartedAtMs: started, readCompletedAtMs: started, responseGeneratedAtMs: null, error: null, pageScope: null });
+  const algoTypes = ["tp", "sl", "tpsl", "trigger", "trailing_stop"] as const;
+  return { schemaVersion: "htx-v5-observation/v1", htxUid,
+    assetMode: completeValue("1"),
+    balance: completeValue({ state: "normal", account: { equityUsd: "0", initialMarginUsd: "0",
+      maintenanceMarginUsd: "0", maintenanceMarginRate: "0", profitUnrealUsd: "0", availableMarginUsd: "0",
+      voucherValue: "0", createdTimeMs: null, updatedTimeMs: null }, details: [] }),
+    positions: completeRows([]),
+    openOrders: withPartialError ? { status: "PARTIAL", values: [], readStartedAtMs: started,
+      readCompletedAtMs: started, responseGeneratedAtMs: null, error: "INVALID_RESPONSE",
+      pageScope: { pageSize: 100, maxPages: 2, pagesRead: 1, nextFrom: null, completeness: "UNKNOWN" } }
+      : { status: "PARTIAL", values: [], readStartedAtMs: started, readCompletedAtMs: started,
+        responseGeneratedAtMs: null, error: null,
+        pageScope: { pageSize: 100, maxPages: 2, pagesRead: 1, nextFrom: null, completeness: "UNKNOWN" } },
+    algoOrders: { status: "PARTIAL", values: [], readStartedAtMs: started, readCompletedAtMs: started,
+      responseGeneratedAtMs: null, error: null, pageScope: { pageSize: 20, maxPagesPerType: 2,
+        queries: algoTypes.map(type => ({ type, pagesRead: 1, nextFrom: null })), completeness: "UNKNOWN" } },
+    fills: { status: "NOT_CONFIGURED", values: null, readStartedAtMs: null, readCompletedAtMs: null,
+      responseGeneratedAtMs: null, error: null, coverage: "NOT_CONFIGURED", contracts: [],
+      windowStartMs: null, windowEndMs: null, pageScope: null } };
 }
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(10000); });
 afterEach(() => { vi.useRealTimers(); });
 
 describe("DEE-960 injected account observation — no production adapter or real venue", () => {
+  it("validates the additional V5 lease budget and backs off on a partial classified failure", async () => {
+    expect(() => setup({ htxV5: { enabled: true }, leaseTtlMs: 120_050 })).toThrow();
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection: htxV5Projection("456", true) })) });
+    const result = await f.service.tick(initial, "owner");
+    expect(result).toMatchObject({ status: "COMMITTED", observation: { schemaVersion: "account-observation/v3",
+      htxV5: { htxUid: "456", openOrders: { status: "PARTIAL", error: "INVALID_RESPONSE" } } } });
+    expect(f.state.failures).toBe(1);
+    expect(f.state.nextDue).toBe(Date.now() + 200);
+  });
+
+  it.each([
+    { enabled: false, fillContracts: ["BTC-USDT"] },
+    { enabled: false, expectedHtxUid: "456" },
+    { enabled: true, fillContracts: ["BTC-USDT", "BTC-USDT"] },
+  ])("rejects invalid direct-service V5 configuration %#", htxV5 => {
+    const f = setup();
+    expect(() => createAccountObservationService(f.deps, {
+      ...config, htxV5, leaseTtlMs: 120_051,
+    })).toThrow();
+  });
+
+  it("fences a changed lease after the V5 reader returns and before repository commit", async () => {
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => {
+      f.state.active = false;
+      return { binding: { ...f.state.binding }, projection: htxV5Projection() };
+    }) });
+    expect(await f.service.tick(initial, "owner")).toEqual({ status: "FENCED" });
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.reader.readHtxV5).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a V5 fill projection whose contract scope differs from the digest-bound configuration", async () => {
+    const f = setup({ htxV5: { enabled: true, fillContracts: ["BTC-USDT"] }, leaseTtlMs: 120_051 });
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection: htxV5Projection() })) });
+    const result = await f.service.tick(initial, "owner");
+    expect(result).toMatchObject({ status: "COMMITTED", observation: { schemaVersion: "account-observation/v3",
+      htxV5: { fills: { status: "ERROR", error: "INVALID_RESPONSE", coverage: "CONFIGURED_CONTRACTS_AND_WINDOW",
+        contracts: ["BTC-USDT"], windowStartMs: null, windowEndMs: null } } } });
+    expect(f.state.failures).toBe(1);
+  });
+
+  it("rejects fill data when no contracts were configured", async () => {
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    const base = htxV5Projection();
+    const projection: HtxV5AccountObservation = { ...base, fills: { status: "ERROR", values: null,
+      readStartedAtMs: 10_000, readCompletedAtMs: 10_000,
+      responseGeneratedAtMs: null, error: "READ_FAILED", coverage: "CONFIGURED_CONTRACTS_AND_WINDOW",
+      contracts: ["BTC-USDT"], windowStartMs: null, windowEndMs: null, pageScope: null } };
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection })) });
+    const result = await f.service.tick(initial, "owner");
+    expect(result).toMatchObject({ status: "COMMITTED", observation: { schemaVersion: "account-observation/v3",
+      htxV5: { assetMode: { status: "ERROR", error: "INVALID_RESPONSE" },
+        fills: { status: "NOT_CONFIGURED", error: null, coverage: "NOT_CONFIGURED", contracts: [] } } } });
+  });
+
+  it("keeps total V5 read failure as an unavailable observation when the expected UID was never observed", async () => {
+    const f = setup({ htxV5: { enabled: true, expectedHtxUid: "456" }, leaseTtlMs: 120_051 });
+    const base = htxV5Projection();
+    const errorValue = <T>(value: T | null) => ({ status: "ERROR" as const, value,
+      readStartedAtMs: 10_000, readCompletedAtMs: 10_000, responseGeneratedAtMs: null,
+      error: "READ_FAILED" as const });
+    const errorRows = { status: "ERROR" as const, values: null, readStartedAtMs: 10_000,
+      readCompletedAtMs: 10_000, responseGeneratedAtMs: null, error: "READ_FAILED" as const, pageScope: null };
+    const projection: HtxV5AccountObservation = { ...base, htxUid: null,
+      assetMode: errorValue(null), balance: errorValue(null), positions: errorRows, openOrders: errorRows,
+      algoOrders: { status: "ERROR", values: null, readStartedAtMs: 10_000, readCompletedAtMs: 10_000,
+        responseGeneratedAtMs: null, error: "READ_FAILED", pageScope: null } };
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection })) });
+    const result = await f.service.tick(initial, "owner");
+    expect(result).toMatchObject({ status: "COMMITTED", observation: { schemaVersion: "account-observation/v3",
+      htxV5: { htxUid: null, assetMode: { status: "ERROR", error: "READ_FAILED" } } } });
+    expect(f.state.failures).toBe(1);
+  });
+
+  it("fences a missing UID when any V5 component reports data", async () => {
+    const f = setup({ htxV5: { enabled: true, expectedHtxUid: "456" }, leaseTtlMs: 120_051 });
+    const base = htxV5Projection();
+    const projection = { ...base, htxUid: null };
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection })) });
+    expect(await f.service.tick(initial, "owner")).toEqual({ status: "FENCED" });
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+  });
+
+  it("does not commit a timed-out V5 projection or release its lease before reader settlement", async () => {
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(() => new Promise(() => {})) });
+    let drain!: () => void;
+    f.settleReader.mockImplementation(() => new Promise<void>(resolve => { drain = resolve; }));
+    const work = f.service.tick(initial, "owner");
+    await vi.advanceTimersByTimeAsync(120_000);
+    await vi.waitFor(() => expect(f.settleReader).toHaveBeenCalledOnce());
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.repository.release).not.toHaveBeenCalled();
+    expect(f.state.lease).not.toBeNull();
+    drain();
+    const result = await work;
+    expect(result).toMatchObject({ status: "COMMITTED", observation: { schemaVersion: "account-observation/v3",
+      htxV5: { assetMode: { status: "ERROR", error: "TIMEOUT" } } } });
+    expect(f.repository.commitIfCurrent).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a partial V5 read fenced until cancelled reader cleanup has settled", async () => {
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection: htxV5Projection("456", true) })) });
+    const stop = new AbortController(); let drain!: () => void;
+    f.settleReader.mockImplementation(() => new Promise<void>(resolve => { drain = resolve; }));
+    const work = f.service.tick(initial, "owner", stop.signal);
+    await vi.waitFor(() => expect(f.settleReader).toHaveBeenCalledOnce());
+    stop.abort();
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.repository.release).not.toHaveBeenCalled();
+    expect(f.state.lease).not.toBeNull();
+    drain();
+    expect(await work).toEqual({ status: "FENCED" });
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.repository.release).toHaveBeenCalledOnce();
+  });
+
+  it("holds the lease for a late reader open and its cleanup before releasing", async () => {
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    const stop = new AbortController(); let finishOpen!: (reader: AccountObservationReader) => void;
+    let finishDrain!: () => void;
+    f.openReader.mockReturnValue(new Promise(resolve => { finishOpen = resolve; }));
+    f.settleReader.mockImplementation(() => new Promise<void>(resolve => { finishDrain = resolve; }));
+    const work = f.service.tick(initial, "owner", stop.signal);
+    await vi.advanceTimersByTimeAsync(0);
+    stop.abort();
+    await vi.waitFor(() => expect(f.openReader).toHaveBeenCalledOnce());
+    expect(f.repository.release).not.toHaveBeenCalled();
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    finishOpen(f.reader);
+    await vi.waitFor(() => expect(f.settleReader).toHaveBeenCalledOnce());
+    expect(f.reader.dispose).toHaveBeenCalledOnce();
+    expect(f.repository.release).not.toHaveBeenCalled();
+    expect(f.state.lease).not.toBeNull();
+    finishDrain();
+    expect(await work.catch(error => error)).toMatchObject({ code: "ACCOUNT_OBSERVATION_OPEN_FAILED" });
+    expect(f.repository.release).toHaveBeenCalledOnce();
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+  });
+
+  it("retains the lease and refuses commit when reader settlement rejects", async () => {
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection: htxV5Projection() })) });
+    f.settleReader.mockRejectedValue(new Error("synthetic-cleanup-secret"));
+    await expect(f.service.tick(initial, "owner")).rejects.toThrow("ACCOUNT_OBSERVATION_INTERNAL_FAILURE");
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.repository.release).not.toHaveBeenCalled();
+    expect(f.state.lease).not.toBeNull();
+    expect(JSON.stringify(vi.mocked(f.repository.release).mock.calls)).not.toContain("synthetic-cleanup-secret");
+  });
+
+  it("waits for V5 settlement after dispose throws, then rejects without releasing the lease", async () => {
+    const f = setup({ htxV5: { enabled: true }, leaseTtlMs: 120_051 });
+    Object.defineProperty(f.reader, "readHtxV5", { configurable: true, value: vi.fn(async () => ({
+      binding: { ...f.state.binding }, projection: htxV5Projection() })) });
+    vi.mocked(f.reader.dispose).mockImplementation(() => { throw new Error("synthetic-dispose-error"); });
+    let drain!: () => void;
+    f.settleReader.mockImplementation(() => new Promise<void>(resolve => { drain = resolve; }));
+    let settled = false;
+    const work = f.service.tick(initial, "owner").catch(error => { settled = true; return error; });
+    await vi.waitFor(() => expect(f.settleReader).toHaveBeenCalledOnce());
+    expect(settled).toBe(false);
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.repository.release).not.toHaveBeenCalled();
+    expect(f.state.lease).not.toBeNull();
+    drain();
+    const error = await work;
+    expect(error).toMatchObject({ code: "ACCOUNT_OBSERVATION_DISPOSAL_FAILED" });
+    expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
+    expect(f.repository.release).not.toHaveBeenCalled();
+    expect(f.state.lease).not.toBeNull();
+  });
+
   it.each(["before-read", "before-commit"])("fences cancellation during async currentness %s", async phase => {
     const f = setup(); const stop = new AbortController();
     let finish!: (value: boolean) => void; let reached!: () => void;
@@ -473,7 +684,7 @@ describe("DEE-960 injected account observation — no production adapter or real
   });
   it("disposal failure prevents commit and redacts the underlying exception", async () => {
     const f = setup(); vi.mocked(f.reader.dispose).mockImplementation(() => { throw new Error("synthetic-secret"); });
-    await expect(f.service.tick(initial, "owner")).rejects.toThrow("ACCOUNT_OBSERVATION_INTERNAL_FAILURE");
+    await expect(f.service.tick(initial, "owner")).rejects.toThrow("ACCOUNT_OBSERVATION_DISPOSAL_FAILED");
     expect(f.reader.dispose).toHaveBeenCalledOnce(); expect(f.state.lease).toBeNull(); expect(f.state.observations).toEqual([]);
   });
   it("pre-cancelled tick makes no claim or reads", async () => {

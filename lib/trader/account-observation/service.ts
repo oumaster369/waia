@@ -12,6 +12,7 @@ import {
 import type {
   AccountObservation,
   AccountObservationReader,
+  HtxV5AccountObservation,
   ObservationBinding,
   ObservationClock,
   DerivativesAccountFamilyObservation,
@@ -28,6 +29,8 @@ import type {
   ObservedTrade,
   ReadEnvelope,
 } from "./types";
+import { HTX_V5_READ_BUDGET_MS } from "./types";
+import { htxV5ObservationConfigurationSchema } from "./coverage";
 import {
   deriveAccountObservationStatus,
   parseAccountObservation,
@@ -249,6 +252,36 @@ function fill(value: unknown, family: HtxDerivativesAccountFamily): HtxDerivativ
   });
 }
 
+function htxV5FailureProjection(
+  code: ObservationReadError,
+  startedAtMs: number,
+  completedAtMs: number,
+  contracts: readonly string[],
+): HtxV5AccountObservation {
+  const valueFailure = (value: null) => Object.freeze({ status: "ERROR" as const, value,
+    readStartedAtMs: startedAtMs, readCompletedAtMs: completedAtMs,
+    responseGeneratedAtMs: null, error: code });
+  const rowsFailure = Object.freeze({ status: "ERROR" as const, values: null,
+    readStartedAtMs: startedAtMs, readCompletedAtMs: completedAtMs,
+    responseGeneratedAtMs: null, error: code, pageScope: null });
+  return Object.freeze({ schemaVersion: "htx-v5-observation/v1", htxUid: null,
+    assetMode: valueFailure(null),
+    balance: valueFailure(null),
+    positions: rowsFailure,
+    openOrders: rowsFailure,
+    algoOrders: Object.freeze({ status: "ERROR" as const, values: null,
+      readStartedAtMs: startedAtMs, readCompletedAtMs: completedAtMs,
+      responseGeneratedAtMs: null, error: code, pageScope: null }),
+    fills: contracts.length ? Object.freeze({ status: "ERROR" as const, values: null,
+      readStartedAtMs: startedAtMs, readCompletedAtMs: completedAtMs,
+      responseGeneratedAtMs: null, error: code, coverage: "CONFIGURED_CONTRACTS_AND_WINDOW" as const,
+      contracts: Object.freeze([...contracts]), windowStartMs: null, windowEndMs: null, pageScope: null })
+      : Object.freeze({ status: "NOT_CONFIGURED" as const, values: null, readStartedAtMs: null,
+        readCompletedAtMs: null, responseGeneratedAtMs: null, error: null, coverage: "NOT_CONFIGURED" as const,
+        contracts: Object.freeze([]), windowStartMs: null, windowEndMs: null, pageScope: null }),
+  });
+}
+
 /** Injected domain core. NOT a runtime or PostgreSQL adapter; no background work starts here. */
 export function createAccountObservationService(
   deps: Readonly<{
@@ -256,6 +289,8 @@ export function createAccountObservationService(
     clock: ObservationClock;
     newObservationId(): string;
     openReader(binding: ObservationBinding, signal: AbortSignal): Promise<AccountObservationReader>;
+    /** Owned opening/admission/transport cleanup; required by V5. Host bounds shutdown. */
+    settleReader?(binding: ObservationBinding): Promise<void>;
   }>,
   inputConfig: ObservationConfig,
 ) {
@@ -287,6 +322,12 @@ export function createAccountObservationService(
             Object.freeze({ family: item.family, contract: item.contract }),
           ),
         );
+  const htxV5 = inputConfig.htxV5 === undefined
+    ? undefined
+    : Object.freeze({ ...htxV5ObservationConfigurationSchema.parse(inputConfig.htxV5),
+        ...(inputConfig.htxV5.fillContracts
+          ? { fillContracts: Object.freeze([...inputConfig.htxV5.fillContracts].sort()) }
+          : {}) });
   const config = Object.freeze({
     ...inputConfig,
     symbols: Object.freeze([...inputConfig.symbols]),
@@ -294,6 +335,7 @@ export function createAccountObservationService(
       ? { htxDerivativesFamilies: Object.freeze([...derivativeFamilies]) }
       : {}),
     ...(fillContracts ? { htxDerivativesFillContracts: fillContracts } : {}),
+    ...(htxV5 ? { htxV5 } : {}),
   });
   text(config.revision);
   if (
@@ -316,7 +358,13 @@ export function createAccountObservationService(
         (3 +
           config.symbols.length +
           (derivativeFamilies?.length ?? 0) +
-          (fillContracts?.length ?? 0)) ||
+          (fillContracts?.length ?? 0)) +
+        (htxV5?.enabled ? HTX_V5_READ_BUDGET_MS : 0) ||
+    (htxV5 !== undefined &&
+      ((!htxV5.enabled &&
+        (htxV5.fillContracts !== undefined || htxV5.expectedHtxUid !== undefined)) ||
+        new Set(htxV5.fillContracts ?? []).size !== (htxV5.fillContracts?.length ?? 0))) ||
+    (htxV5?.enabled && typeof deps.settleReader !== "function") ||
     (fillContracts !== undefined &&
       (derivativeFamilies === undefined ||
         new Set(fillContracts.map((item) => `${item.family}\u0000${item.contract}`)).size !==
@@ -333,6 +381,7 @@ export function createAccountObservationService(
   async function open(
     binding: ObservationBinding,
     signal?: AbortSignal,
+    trackOpening?: (settled: Promise<void>) => void,
   ): Promise<AccountObservationReader> {
     if (signal?.aborted) throw new AccountObservationFailure("ACCOUNT_OBSERVATION_OPEN_FAILED");
     const abort = new AbortController();
@@ -359,13 +408,14 @@ export function createAccountObservationService(
       if (signal?.aborted) cancel();
     });
     const pending = Promise.resolve().then(() => deps.openReader(binding, abort.signal));
-    void pending.then(
+    const openingSettled = pending.then(
       (reader) => {
         resolved = reader;
         if (abandoned) disposeLate();
       },
       () => {},
     );
+    trackOpening?.(openingSettled);
     try {
       return await Promise.race([
         pending,
@@ -647,6 +697,67 @@ export function createAccountObservationService(
       abort.abort();
     }
   }
+  async function readHtxV5(
+    lease: ObservationLease,
+    reader: AccountObservationReader,
+    signal?: AbortSignal,
+  ): Promise<HtxV5AccountObservation | null> {
+    const started = now();
+    const contracts = config.htxV5?.fillContracts ?? [];
+    const abort = new AbortController();
+    const cancel = () => abort.abort();
+    signal?.addEventListener("abort", cancel, { once: true });
+    const failed = (code: ObservationReadError) => htxV5FailureProjection(code, started,
+      Math.max(started, now()), contracts);
+    try {
+      if (signal?.aborted) return null;
+      const read = reader.readHtxV5;
+      if (typeof read !== "function") return failed("READ_FAILED");
+      const response = await Promise.race([
+        read.call(reader, abort.signal),
+        deps.clock.sleep(HTX_V5_READ_BUDGET_MS, abort.signal).then(() => {
+          throw new AccountObservationReadFailure("TIMEOUT");
+        }),
+      ]);
+      const ended = now();
+      if (ended < started) return failed("INVALID_RESPONSE");
+      if (!response || !response.binding || !sameObservationBinding(lease.binding, response.binding))
+        return null;
+      const projection = response.projection;
+      if (!projection || projection.schemaVersion !== "htx-v5-observation/v1")
+        return failed("INVALID_RESPONSE");
+      const components = [projection.assetMode, projection.balance, projection.positions,
+        projection.openOrders, projection.algoOrders, projection.fills];
+      const onlyUnavailableWithoutUid = projection.htxUid === null && components.every(component =>
+        component.status === "ERROR" || component.status === "NOT_CONFIGURED");
+      if (config.htxV5?.expectedHtxUid && projection.htxUid !== config.htxV5.expectedHtxUid &&
+        !onlyUnavailableWithoutUid) return null;
+      const fills = projection.fills;
+      const configuredContracts = [...contracts].sort();
+      if (configuredContracts.length > 0
+        ? fills.coverage !== "CONFIGURED_CONTRACTS_AND_WINDOW" ||
+          fills.contracts.length !== configuredContracts.length ||
+          fills.contracts.some((contract, index) => contract !== configuredContracts[index])
+        : fills.coverage !== "NOT_CONFIGURED" || fills.contracts.length !== 0) {
+        return failed("INVALID_RESPONSE");
+      }
+      if (components.some(component => component.error === "IDENTITY_MISMATCH" ||
+        component.error === "PERMISSION_DENIED")) return null;
+      return projection;
+    } catch (error) {
+      if (signal?.aborted) return null;
+      const code = error instanceof AccountObservationReadFailure && errors.includes(error.code)
+        ? error.code
+        : error instanceof Error && error.message === "HTX_V5_INVALID_RESPONSE"
+          ? "INVALID_RESPONSE"
+          : "READ_FAILED";
+      if (code === "IDENTITY_MISMATCH" || code === "PERMISSION_DENIED") return null;
+      return failed(code);
+    } finally {
+      signal?.removeEventListener("abort", cancel);
+      abort.abort();
+    }
+  }
   return Object.freeze({
     async tick(
       requestedBinding: ObservationBinding,
@@ -661,12 +772,28 @@ export function createAccountObservationService(
       let reader: AccountObservationReader | undefined;
       let primary: AccountObservationFailure | undefined;
       let committed = false;
+      let openingSettled: Promise<void> | undefined;
+      let cleanupReady = true;
+      let cleanupWork: Promise<void> | undefined;
       let releaseClaim: Pick<ObservationLease, "binding" | "ownerId" | "token"> | undefined;
       const dispose = () => {
         const owned = reader;
         reader = undefined;
         owned?.dispose();
       };
+      const disposeAndSettle = () => cleanupWork ??= (async () => {
+        let disposalFailed = false;
+        try { dispose(); } catch { disposalFailed = true; }
+        if (openingSettled && deps.settleReader) {
+          // Abort is a request, not proof that transport stopped. Keep the shared lease
+          // until this owner drains. The host bounds shutdown; expiry handles a crash
+          // or an uncooperative transport and still fences every stale database write.
+          await openingSettled;
+          await deps.settleReader(binding);
+        }
+        if (disposalFailed) throw new AccountObservationFailure("ACCOUNT_OBSERVATION_DISPOSAL_FAILED");
+        cleanupReady = true;
+      })();
       try {
         let rawLease: ObservationLease | null;
         try {
@@ -689,7 +816,8 @@ export function createAccountObservationService(
           !(await active())
         )
           return { status: "FENCED" };
-        reader = await open(binding, signal);
+        cleanupReady = !deps.settleReader;
+        reader = await open(binding, signal, (settled) => { openingSettled = settled; });
         if (!(await active())) return { status: "FENCED" };
         if (
           config.htxDerivativesFamilies?.length &&
@@ -734,6 +862,7 @@ export function createAccountObservationService(
         const common = (
           collectionCompletedAtMs: number,
           derivativeFamilies: readonly DerivativesAccountFamilyObservation[] = [],
+          htxV5: HtxV5AccountObservation | undefined = undefined,
         ) => ({
           observationId,
           binding,
@@ -750,8 +879,11 @@ export function createAccountObservationService(
                     ...(item.executions && item.executions.status !== "NOT_CONFIGURED"
                       ? [item.executions.status]
                       : []),
-                  ],
+                ],
             ),
+            ...(htxV5 ? [htxV5.assetMode.status, htxV5.balance.status, htxV5.positions.status,
+              htxV5.openOrders.status, htxV5.algoOrders.status, htxV5.fills.status]
+              .filter((status): status is Exclude<typeof status, "NOT_CONFIGURED"> => status !== "NOT_CONFIGURED") : []),
           ]),
           balances,
           openOrders,
@@ -805,18 +937,32 @@ export function createAccountObservationService(
             families: Object.freeze(families),
           });
         }
-        dispose();
+        let htxV5: HtxV5AccountObservation | undefined;
+        if (config.htxV5?.enabled) {
+          if (!(await active())) return { status: "FENCED" };
+          const projection = await readHtxV5(lease, reader!, signal);
+          if (!projection || !(await active())) return { status: "FENCED" };
+          htxV5 = projection;
+        }
+        await disposeAndSettle();
         if (!(await active())) return { status: "FENCED" };
         const ended = now();
         if (ended < started) invalid();
         const candidate = Object.freeze(
-          derivatives
+          htxV5
             ? {
+                schemaVersion: "account-observation/v3" as const,
+                ...common(ended, derivatives?.families ?? [], htxV5),
+                ...(derivatives ? { derivatives } : {}),
+                htxV5,
+              }
+            : derivatives
+              ? {
                 schemaVersion: "account-observation/v2" as const,
                 ...common(ended, derivatives.families),
                 derivatives,
-              }
-            : { schemaVersion: "account-observation/v1" as const, ...common(ended) },
+                }
+              : { schemaVersion: "account-observation/v1" as const, ...common(ended) },
         );
         parseAccountObservation(candidate);
         const observation: AccountObservation = candidate;
@@ -830,8 +976,12 @@ export function createAccountObservationService(
               item.executions?.status === "ERROR",
           ) ??
             false);
-        const failures = failed ? Math.min(lease.consecutiveFailures + 1, 30) : 0;
-        const delay = !failed
+        const htxV5Failed = htxV5 ? [htxV5.assetMode, htxV5.balance, htxV5.positions,
+          htxV5.openOrders, htxV5.algoOrders, htxV5.fills].some(component =>
+          component.status === "ERROR" || component.error !== null) : false;
+        const collectionFailed = failed || htxV5Failed;
+        const failures = collectionFailed ? Math.min(lease.consecutiveFailures + 1, 30) : 0;
+        const delay = !collectionFailed
           ? config.pollIntervalMs
           : Math.min(config.maxBackoffMs, config.pollIntervalMs * 2 ** failures);
         const nextDueAtMs = timestamp(ended + delay);
@@ -853,12 +1003,12 @@ export function createAccountObservationService(
       } finally {
         let cleanup: AccountObservationFailure | undefined;
         try {
-          dispose();
+          await disposeAndSettle();
         } catch {
           cleanup = new AccountObservationFailure("ACCOUNT_OBSERVATION_DISPOSAL_FAILED");
         }
         // Successful commit atomically released its token; do not invent a second release obligation.
-        if (!committed && releaseClaim)
+        if (!committed && releaseClaim && cleanupReady)
           try {
             // Even a malformed claim response cannot redirect cleanup into another scope/owner.
             await deps.repository.release(releaseClaim);

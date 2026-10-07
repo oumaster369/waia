@@ -147,6 +147,55 @@ export type CabinetObservationSummary = Readonly<{
   observationStatus: string | null;
 }>;
 
+export type FuturesBalanceSummary = Readonly<{
+  equityUsd: string | null;
+  availableMarginUsd: string | null;
+  profitUnrealUsd: string | null;
+  readCompletedAtMs: number | null;
+  stale: boolean;
+  hasLegacyDerivatives: boolean;
+  hasFuturesProjection: boolean;
+}>;
+
+/** Only the separately-read V5 futures balance can supply the Admin USD summary. */
+export function summarizeFuturesBalance(
+  observation: AccountObservation | null,
+  nowMs: number,
+): FuturesBalanceSummary {
+  const empty: FuturesBalanceSummary = {
+    equityUsd: null,
+    availableMarginUsd: null,
+    profitUnrealUsd: null,
+    readCompletedAtMs: null,
+    stale: false,
+    hasLegacyDerivatives: Boolean(observation?.derivatives),
+    hasFuturesProjection: false,
+  };
+  if (observation?.schemaVersion !== "account-observation/v3" || !observation.htxV5) {
+    return empty;
+  }
+
+  const balance = observation.htxV5.balance;
+  const readCompletedAtMs = balance.readCompletedAtMs;
+  const stale =
+    readCompletedAtMs !== null &&
+    Number.isFinite(readCompletedAtMs) &&
+    readCompletedAtMs <= nowMs &&
+    nowMs - readCompletedAtMs >= ACCOUNT_OBSERVATION_STALE_AFTER_MS;
+  if (balance.status !== "COMPLETE" || balance.value === null) {
+    return { ...empty, readCompletedAtMs, stale, hasFuturesProjection: true };
+  }
+  return {
+    equityUsd: balance.value.account.equityUsd,
+    availableMarginUsd: balance.value.account.availableMarginUsd,
+    profitUnrealUsd: balance.value.account.profitUnrealUsd,
+    readCompletedAtMs,
+    stale,
+    hasLegacyDerivatives: false,
+    hasFuturesProjection: true,
+  };
+}
+
 export function summarizeCabinetObservation(
   observation: AccountObservation | null,
 ): CabinetObservationSummary {

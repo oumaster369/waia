@@ -5,7 +5,7 @@ import { createConfiguredHtxObservationRuntime, type ConfiguredHtxObservationAss
 import { createObservationConfiguration, type ObservationRuntimeEvent } from "./runtime";
 import { observationBindingSchema } from "./validation";
 import { htxObservationCoverageSchema, htxObservationReaderLimitsSchema } from "./coverage";
-import { observationPoolLimits, probeObservationPool } from "./host-role-probe";
+import { observationPoolLimits, observationReaderPoolLimits, probeObservationPool } from "./host-role-probe";
 import type { ObservationClock } from "./types";
 
 type OwnedResource = Readonly<{ dispose(): Promise<void> }>;
@@ -21,7 +21,7 @@ export type ObservationHostInput = Readonly<{
   ownerId: string; intervalMs: number; iterationTimeoutMs: number;
   openTimeoutMs: number; shutdownTimeoutMs: number;
   openCollector(signal: AbortSignal, limits: typeof observationPoolLimits): Promise<ObservationSqlResource>;
-  openReader(signal: AbortSignal, limits: typeof observationPoolLimits): Promise<ObservationSqlResource>;
+  openReader(signal: AbortSignal, limits: typeof observationReaderPoolLimits): Promise<ObservationSqlResource>;
   openCredentialService(signal: AbortSignal): Promise<ObservationCredentialResource>;
   fetchImpl: typeof fetch; clock: ObservationClock; report(event: ObservationHostEvent): void;
 }>;
@@ -126,7 +126,7 @@ export function createAccountObservationHost(raw: ObservationHostInput) {
       if (controller.signal.aborted) return;
       const collector = await acquire(s => input.openCollector(s, observationPoolLimits));
       const collectorLogin = await bounded(probeObservationPool(collector.sql, "collector"), input.openTimeoutMs, controller.signal);
-      const reader = await acquire(s => input.openReader(s, observationPoolLimits));
+      const reader = await acquire(s => input.openReader(s, observationReaderPoolLimits));
       if (reader === collector || reader.sql === collector.sql) throw failure();
       const readerLogin = await bounded(probeObservationPool(reader.sql, "reader"), input.openTimeoutMs, controller.signal);
       if (collectorLogin === readerLogin) throw failure();

@@ -56,7 +56,10 @@ function hasSafeReaderPortGuard(source: string): boolean {
 function hasSafeCredentialPortGuard(source: string): boolean {
   return source.includes('const HOST = process.env.DEE1235_CREDENTIAL_FIXTURE === "1" ? "127.0.0.1:55732" : "127.0.0.1:55460";') &&
     source.includes('const url = `postgres://waia_local_admin:local_validation_only@${HOST}/waia_dee960_local`;') &&
-    !/process\.env\.(?:DATABASE_URL|POSTGRES_URL)/.test(source);
+    source.includes('collector: "dee1015_synthetic_collector_password_0001"') &&
+    source.includes('reader: "dee1015_synthetic_reader_password_00000002"') &&
+    source.includes('credential: "dee1015_synthetic_credential_password_0003"') &&
+    !/process\.env\.(?:DATABASE_URL|POSTGRES_URL|PGURL)/.test(source);
 }
 function hasSafeRiskOwnerPortGuard(source: string): boolean {
   const guardedUrl = [
@@ -138,7 +141,14 @@ describe("account observation PostgreSQL CI contract", () => {
       source.replace('"127.0.0.1:55732"', '"example.com:55732"'),
       source.replace('"127.0.0.1:55460"', '"127.0.0.1:5432"'),
       source.replace('${HOST}/waia_dee960_local`', '${HOST}/production`'),
+      source.replace('waia_local_admin:local_validation_only', 'production:secret'),
+      source.replace('dee1015_synthetic_collector_password_0001', 'production-secret'),
+      source.replace('dee1015_synthetic_reader_password_00000002', 'production-secret'),
+      source.replace('dee1015_synthetic_credential_password_0003', 'production-secret'),
       source + '\nconst unsafeUrl = process.env.DATABASE_URL;\n',
+      source + '\nconst unsafeUrl = process.env.DATABASE_URL_POSTGRES;\n',
+      source + '\nconst unsafeUrl = process.env.POSTGRES_URL;\n',
+      source + '\nconst unsafeUrl = process.env.PGURL;\n',
     ]) expect(hasSafeCredentialPortGuard(mutation)).toBe(false);
   });
 

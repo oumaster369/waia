@@ -270,6 +270,63 @@ describe("DEE-1015 account-observation credential read boundary", () => {
     ).rejects.toThrow("ACCOUNT_OBSERVATION_CREDENTIAL_REFUSED:NOT_FOUND");
   });
 
+  describe("explicit existing-key observation consent", () => {
+    const consent = Object.freeze({ consentId: OTHER_CREDENTIAL, credentialRevision: "7",
+      configurationRevision: `sha256:${"a".repeat(64)}` });
+    const approved = { ...ASSIGNMENT, existingKeyReadConsent: consent };
+    const classification = { observation_read_permitted: true,
+      observation_revision: consent.credentialRevision, configuration_revision: consent.configurationRevision };
+
+    it("requires exact revisions in the single projected ciphertext query", async () => {
+      const { sql, statements, parameters } = fakeSql([await encryptedRow(classification)]);
+      const reader = createObservationCredentialReader({ sql, provider: await provider(), assignments: [approved] });
+      await expect(reader.getDecryptedCredentials({ organizationId: ORGANIZATION }, CREDENTIAL))
+        .resolves.toEqual({ apiKey: "unit-api-key", apiSecret: "unit-api-secret" });
+      expect(statements.at(-1)).toContain("c.observation_revision::text=$4");
+      expect(statements.at(-1)).toContain("s.configuration_revision=$5");
+      expect(statements.at(-1)).not.toContain("permission_metadata");
+      expect(parameters.at(-1)).toEqual([CREDENTIAL, ORGANIZATION, ACCOUNT, "7", consent.configurationRevision]);
+    });
+
+    it.each([
+      { observation_read_permitted: false }, { observation_read_permitted: undefined }, { observation_revision: "8" },
+      { configuration_revision: `sha256:${"b".repeat(64)}` }, { status: "revoked" },
+    ])("refuses changed/missing classification or binding before decrypt: %j", async (change) => {
+      // Deliberately invalid ciphertext: the refusal must precede the crypto boundary.
+      const row = await encryptedRow({ ...classification, ...change, encrypted_payload: "not-decryptable" });
+      const reader = createObservationCredentialReader({ sql: fakeSql([row]).sql,
+        provider: await provider(), assignments: [approved] });
+      await expect(reader.getDecryptedCredentials({ organizationId: ORGANIZATION }, CREDENTIAL))
+        .rejects.toThrow(/REFUSED:(NOT_READ_ONLY|IDENTITY_MISMATCH|NOT_FOUND)$/);
+    });
+
+    it("does not confer consent through a self-service identity triple", async () => {
+      const reader = createObservationCredentialReader({
+        sql: fakeSql([await encryptedRow({ ...classification, observation_read_permitted: false, id: OTHER_CREDENTIAL })]).sql,
+        provider: await provider(), assignments: [approved],
+      });
+      await expect(reader.getDecryptedCredentials({ organizationId: ORGANIZATION, exchangeAccountId: ACCOUNT }, OTHER_CREDENTIAL))
+        .rejects.toThrow("REFUSED:NOT_READ_ONLY");
+    });
+
+    it("snapshots the exact approved revision rather than retaining a mutable grant object", async () => {
+      const mutable: { consentId: string; credentialRevision: string; configurationRevision: string } = { ...consent };
+      const reader = createObservationCredentialReader({ sql: fakeSql([await encryptedRow(classification)]).sql,
+        provider: await provider(), assignments: [{ ...ASSIGNMENT, existingKeyReadConsent: mutable }] });
+      mutable.credentialRevision = "8";
+      await expect(reader.getDecryptedCredentials({ organizationId: ORGANIZATION }, CREDENTIAL))
+        .resolves.toEqual({ apiKey: "unit-api-key", apiSecret: "unit-api-secret" });
+    });
+
+    it.each([{ consentId: "not-a-uuid" }, { credentialRevision: "0" }, { configurationRevision: "other" }])(
+      "rejects malformed consent binding at construction: %j", async (change) => {
+        const masterKeyProvider = await provider();
+        expect(() => createObservationCredentialReader({ sql: fakeSql([]).sql,
+          provider: masterKeyProvider, assignments: [{ ...ASSIGNMENT, existingKeyReadConsent: { ...consent, ...change } }] }))
+          .toThrow("REFUSED:ASSIGNMENTS_INVALID");
+      });
+  });
+
   it("never leaks ciphertext, key material or SQL text in a refusal", async () => {
     const { sql } = fakeSql([await encryptedRow({ encrypted_payload: "not-decryptable" })]);
     const reader = createObservationCredentialReader({

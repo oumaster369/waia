@@ -95,20 +95,21 @@ export async function handleAccountObservationGet(
       if (!parsed.success) return error(400);
       const scope = parsed.data;
       async function allowed(): Promise<boolean> {
-        if (
-          abort.signal.aborted ||
-          (await deps.getUserId(abort.signal)) !== userId ||
-          !(await deps.hasTraderAccess(userId!, scope.organizationId, abort.signal))
-        )
-          return false;
+        if (abort.signal.aborted) return false;
+        const currentUserId = await deps.getUserId(abort.signal);
+        if (abort.signal.aborted || currentUserId !== userId) return false;
+        const hasTraderAccess = await deps.hasTraderAccess(userId!, scope.organizationId, abort.signal);
+        if (abort.signal.aborted || !hasTraderAccess) return false;
         // Admin is platform-operator authority on the target org, not membership.
         // Tenant stays membership-gated. RLS still binds the row to this exact account.
         if (surface === "admin") {
-          if (!(await deps.hasOperatorAccess(userId!, scope.organizationId, abort.signal)))
-            return false;
-          return deps.isAdminListedOrganization(scope.organizationId, abort.signal);
+          const hasOperatorAccess = await deps.hasOperatorAccess(userId!, scope.organizationId, abort.signal);
+          if (abort.signal.aborted || !hasOperatorAccess) return false;
+          const isAdminListed = await deps.isAdminListedOrganization(scope.organizationId, abort.signal);
+          return !abort.signal.aborted && isAdminListed;
         }
-        return deps.hasOrgMembership(userId!, scope.organizationId, abort.signal);
+        const hasOrgMembership = await deps.hasOrgMembership(userId!, scope.organizationId, abort.signal);
+        return !abort.signal.aborted && hasOrgMembership;
       }
       if (!(await allowed())) return error(403);
       const current = await deps.resolveActiveBinding(scope, userId, abort.signal);

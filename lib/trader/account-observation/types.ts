@@ -7,6 +7,15 @@ import type {
   HtxDerivativesFillRow,
   HtxDerivativesPositionRow,
 } from "./derivatives/types";
+import type {
+  HtxV5AlgoOrder,
+  HtxV5AssetMode,
+  HtxV5BalanceDetail,
+  HtxV5BalanceSnapshot,
+  HtxV5Fill,
+  HtxV5OpenOrder,
+  HtxV5Position,
+} from "./derivatives/htx-v5-read-contract";
 
 export type ObservationBinding = Readonly<{
   organizationId: string;
@@ -53,6 +62,8 @@ export type AccountObservationReader = Readonly<{
   readBalances(signal: AbortSignal): Promise<ReadEnvelope<Balance>>;
   readOpenOrders(signal: AbortSignal): Promise<ReadEnvelope<ObservedOrder>>;
   readTrades(symbol: string, signal: AbortSignal): Promise<ReadEnvelope<ObservedTrade>>;
+  /** Present only for an enabled digest-bound V5 assignment. */
+  readHtxV5?(signal: AbortSignal): Promise<HtxV5ObservationReadResult>;
   /** Optional unless this exact family list is present in digest-bound config. */
   readDerivativesAccount?(
     family: HtxDerivativesAccountFamily,
@@ -66,6 +77,8 @@ export type AccountObservationReader = Readonly<{
     }>
   >;
   dispose(): void;
+  /** Resolves only after disposed transport work has actually settled, including late responses. */
+  settled?(): Promise<void>;
 }>;
 export type DerivativesExecutionsObservation = Readonly<{
   status: "NOT_CONFIGURED" | "COMPLETE" | "PARTIAL" | "ERROR";
@@ -104,6 +117,90 @@ export type DerivativesAccountObservation = Readonly<{
   schemaVersion: "htx-derivatives-observation/v1";
   families: readonly DerivativesAccountFamilyObservation[];
 }>;
+export type HtxV5ComponentStatus = "NOT_CONFIGURED" | "COMPLETE" | "PARTIAL" | "ERROR";
+export type HtxV5ValueObservation<T> = Readonly<{
+  status: Exclude<HtxV5ComponentStatus, "NOT_CONFIGURED" | "PARTIAL">;
+  value: T | null;
+  readStartedAtMs: number | null;
+  readCompletedAtMs: number | null;
+  responseGeneratedAtMs: number | null;
+  error: ObservationReadError | null;
+}>;
+export type HtxV5PageScope = Readonly<{
+  pageSize: number;
+  maxPages: number;
+  pagesRead: number;
+  nextFrom: string | null;
+  completeness: "UNKNOWN";
+}>;
+export type HtxV5RowsObservation<T> = Readonly<{
+  status: Exclude<HtxV5ComponentStatus, "NOT_CONFIGURED">;
+  values: readonly T[] | null;
+  readStartedAtMs: number | null;
+  readCompletedAtMs: number | null;
+  responseGeneratedAtMs: number | null;
+  error: ObservationReadError | null;
+  /** Unpaginated endpoints use null; cursor-driven endpoints preserve unknown coverage. */
+  pageScope: HtxV5PageScope | null;
+}>;
+export type HtxV5AlgoOrdersObservation = Readonly<{
+  status: Exclude<HtxV5ComponentStatus, "NOT_CONFIGURED">;
+  values: readonly HtxV5AlgoOrder[] | null;
+  readStartedAtMs: number | null;
+  readCompletedAtMs: number | null;
+  responseGeneratedAtMs: number | null;
+  error: ObservationReadError | null;
+  pageScope: Readonly<{
+    pageSize: number;
+    maxPagesPerType: number;
+    queries: readonly Readonly<{ type: string; pagesRead: number; nextFrom: string | null }>[];
+    completeness: "UNKNOWN";
+  }> | null;
+}>;
+export type HtxV5FillsObservation = Readonly<{
+  status: HtxV5ComponentStatus;
+  values: readonly HtxV5Fill[] | null;
+  readStartedAtMs: number | null;
+  readCompletedAtMs: number | null;
+  responseGeneratedAtMs: number | null;
+  error: ObservationReadError | null;
+  coverage: "NOT_CONFIGURED" | "CONFIGURED_CONTRACTS_AND_WINDOW";
+  contracts: readonly string[];
+  windowStartMs: number | null;
+  windowEndMs: number | null;
+  pageScope: Readonly<{
+    pageSize: number;
+    maxPagesPerContract: number;
+    queries: readonly Readonly<{ contractCode: string; pagesRead: number; nextFrom: string | null }>[];
+    completeness: "UNKNOWN";
+  }> | null;
+}>;
+export type HtxV5AccountObservation = Readonly<{
+  schemaVersion: "htx-v5-observation/v1";
+  /** Descriptive source identity only; never a reusable authorization receipt. */
+  htxUid: string | null;
+  assetMode: HtxV5ValueObservation<HtxV5AssetMode>;
+  balance: HtxV5ValueObservation<Readonly<{
+    state: "normal" | "liquidating" | "adl" | "open_limit";
+    account: HtxV5BalanceSnapshot["account"];
+    details: readonly HtxV5BalanceDetail[];
+  }>>;
+  positions: HtxV5RowsObservation<HtxV5Position>;
+  openOrders: HtxV5RowsObservation<HtxV5OpenOrder>;
+  algoOrders: HtxV5AlgoOrdersObservation;
+  fills: HtxV5FillsObservation;
+}>;
+export type HtxV5ObservationConfiguration = Readonly<{
+  enabled: boolean;
+  fillContracts?: readonly string[];
+  expectedHtxUid?: string;
+}>;
+/** Fixed reader bound used in the scheduler lease inequality and service timeout. */
+export const HTX_V5_READ_BUDGET_MS = 120_000;
+export type HtxV5ObservationReadResult = Readonly<{
+  binding: ObservationBinding;
+  projection: HtxV5AccountObservation;
+}>;
 export type AccountObservationFields = Readonly<{
   observationId: string;
   binding: ObservationBinding;
@@ -116,12 +213,12 @@ export type AccountObservationFields = Readonly<{
   /** Holdings are not strategy positions, marked equity or an entry-cost/PnL claim. */
   holdings: readonly Balance[] | null;
 }>;
-/** Runtime validation enforces that v1 has no `derivatives` and v2 requires it. */
-export type AccountObservation = AccountObservationFields &
-  Readonly<{
-    schemaVersion: "account-observation/v1" | "account-observation/v2";
-    derivatives?: DerivativesAccountObservation;
-  }>;
+/** Runtime validation enforces version-specific required/forbidden projection fields. */
+export type AccountObservation = AccountObservationFields & Readonly<{
+  schemaVersion: "account-observation/v1" | "account-observation/v2" | "account-observation/v3";
+  derivatives?: DerivativesAccountObservation;
+  htxV5?: HtxV5AccountObservation;
+}>;
 export type ObservationRepository = Readonly<{
   /** Atomically require active exact credential/config, next-due and unowned/expired lease. */
   claimDue(
@@ -165,6 +262,10 @@ export type ObservationConfig = Readonly<{
   }>[];
   /** Required by the configured HTX composition; generic injected readers may omit it. */
   htxCoverage?: HtxObservationCoverage;
+  /** Identifier for an independently persisted existing-key consent, if explicitly bound. */
+  existingKeyReadConsentId?: string;
+  /** Optional protected V5 observation scope; omitted preserves legacy behavior. */
+  htxV5?: HtxV5ObservationConfiguration;
 }>;
 export type ObservationTickResult =
   | Readonly<{ status: "NOT_CLAIMED" | "FENCED" }>

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Sql } from "postgres";
-import { observationPoolLimits } from "@/lib/trader/account-observation/host-role-probe";
+import { observationPoolLimits, observationReaderPoolLimits } from "@/lib/trader/account-observation/host-role-probe";
 import { accountObservationClock } from "@/lib/trader/account-observation/clock";
 import {
   ACCOUNT_OBSERVATION_LOGIN_ROLES,
@@ -359,7 +359,7 @@ describe("account observation collector composition", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(f.openCollector).toHaveBeenCalledWith(expect.any(AbortSignal), observationPoolLimits);
-    expect(f.openReader).toHaveBeenCalledWith(expect.any(AbortSignal), observationPoolLimits);
+    expect(f.openReader).toHaveBeenCalledWith(expect.any(AbortSignal), observationReaderPoolLimits);
     expect(lifecycle.construct).toHaveBeenCalledTimes(1);
     const composed = lifecycle.construct.mock.calls[0][0];
     expect(composed.collectorSql).toBe(f.collector.sql);

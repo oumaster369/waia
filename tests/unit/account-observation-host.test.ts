@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Sql } from "postgres";
 import { createAccountObservationHost, type ObservationHostInput } from "@/lib/trader/account-observation/host";
-import { observationPoolLimits, probeObservationPool } from "@/lib/trader/account-observation/host-role-probe";
+import { observationPoolLimits, observationReaderPoolLimits, probeObservationPool } from "@/lib/trader/account-observation/host-role-probe";
 import { createObservationConfiguration } from "@/lib/trader/account-observation/runtime";
 import { accountObservationClock } from "@/lib/trader/account-observation/clock";
 
@@ -56,6 +56,7 @@ describe("explicit observation host lifecycle (synthetic resources, existing com
     expect(f.input.openCollector).not.toHaveBeenCalled(); expect(lifecycle.construct).not.toHaveBeenCalled();
     const work = host.run(new AbortController().signal); await vi.advanceTimersByTimeAsync(0);
     expect(f.input.openCollector).toHaveBeenCalledWith(expect.any(AbortSignal), observationPoolLimits);
+    expect(f.input.openReader).toHaveBeenCalledWith(expect.any(AbortSignal), observationReaderPoolLimits);
     expect(lifecycle.construct).toHaveBeenCalledWith(expect.objectContaining({ collectorSql: f.collector.sql,
       readerSql: f.reader.sql, protectedCredentialService: f.credentials.service }));
     expect(f.input.openCredentialService.mock.invocationCallOrder[0]).toBeGreaterThan(
@@ -164,6 +165,27 @@ describe("explicit observation host lifecycle (synthetic resources, existing com
     expect(await result).toBe("ACCOUNT_OBSERVATION_HOST_FAILED"); expect(await stop).toBe("ACCOUNT_OBSERVATION_HOST_FAILED");
     expect(f.collector.dispose).toHaveBeenCalledTimes(1); expect(f.input.report).toHaveBeenCalledWith("HOST_CLEANUP_FAILED");
     expect(f.input.report).not.toHaveBeenCalledWith("HOST_STOPPED"); expect(vi.getTimerCount()).toBe(0);
+  });
+  it("bounds a runtime waiting on unsettled transport, reports failure and still closes its pools", async () => {
+    const f = setup();
+    let settle!: () => void;
+    lifecycle.run.mockImplementation(() => new Promise<void>(resolve => { settle = resolve; }));
+    const host = createAccountObservationHost(f.input);
+    const result = host.run(new AbortController().signal).catch(error => error.message);
+    await vi.advanceTimersByTimeAsync(0);
+    const stop = host.stop().catch(error => error.message);
+    await vi.advanceTimersByTimeAsync(501);
+    expect(await result).toBe("ACCOUNT_OBSERVATION_HOST_FAILED");
+    expect(await stop).toBe("ACCOUNT_OBSERVATION_HOST_FAILED");
+    expect(f.collector.dispose).toHaveBeenCalledOnce();
+    expect(f.reader.dispose).toHaveBeenCalledOnce();
+    expect(f.credentials.dispose).toHaveBeenCalledOnce();
+    expect(f.input.report).toHaveBeenCalledWith("HOST_CLEANUP_FAILED");
+    expect(f.input.report).not.toHaveBeenCalledWith("HOST_STOPPED");
+    settle();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.input.report).not.toHaveBeenCalledWith("HOST_STOPPED");
+    expect(vi.getTimerCount()).toBe(0);
   });
   it("restart needs a fresh composition and repeats all protected resource checks", async () => {
     const first = setup(); const second = setup();

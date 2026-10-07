@@ -41,7 +41,7 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
     ).not.toThrow();
   });
 
-  it("requires the complete Cody policy prefix and admits 0208-0229 only as explicit compatible additive", () => {
+  it("requires the complete Cody policy prefix and admits 0208-0231 only as explicit compatible additive", () => {
     const journal = JSON.parse(
       readFileSync(join(process.cwd(), "db/migrations_postgres/meta/_journal.json"), "utf8"),
     ) as { entries: Array<{ idx: number; when: number; tag: string }> };

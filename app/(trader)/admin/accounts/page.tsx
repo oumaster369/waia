@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { PaperPortfolios } from "@/components/trader/admin-console/sections/accounts/paper-portfolios";
 import { AccountDetails } from "@/components/trader/admin-console/sections/accounts/account-details";
 import { useAdminRead } from "@/components/trader/admin-console/data/use-admin-read";
@@ -40,6 +41,12 @@ export default function AdminAccountsPage() {
   if (read.loading) return <ConsoleLoading />;
   return (
     <div className="space-y-5">
+      <Link
+        href="/admin/account-observation"
+        className="text-waia-fg-muted underline-offset-2 hover:underline"
+      >
+        Спот и фьючерсы подключённых счетов
+      </Link>
       {read.reason ? <DataState state="unavailable" reason={read.reason} /> : null}
       {context.params.get("mode") === "paper" ? <PaperPortfolios /> : null}
       {all ? (

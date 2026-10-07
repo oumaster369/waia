@@ -7,7 +7,7 @@ import { createAccountObservationService } from "./service";
 import { createObservationScheduler } from "./scheduler";
 import { observationBindingSchema } from "./validation";
 import { accountObservationClock } from "./clock";
-import { htxObservationCoverageSchema } from "./coverage";
+import { htxObservationCoverageSchema, htxV5ObservationConfigurationSchema } from "./coverage";
 import {
   HTX_DERIVATIVES_ACCOUNT_FAMILIES,
   HTX_DERIVATIVES_FILL_CONTRACT_LIMIT,
@@ -19,6 +19,8 @@ import type {
   ObservationClock,
   ObservationConfig,
 } from "./types";
+import { HTX_V5_READ_BUDGET_MS } from "./types";
+
 
 const configurationSchema = z
   .object({
@@ -31,6 +33,7 @@ const configurationSchema = z
     readTimeoutMs: z.number().int().min(100).max(60000),
     leaseTtlMs: z.number().int().min(1000).max(3600000),
     htxCoverage: htxObservationCoverageSchema.optional(),
+    existingKeyReadConsentId: z.string().uuid().optional(),
     htxDerivativesFamilies: z
       .array(z.enum(HTX_DERIVATIVES_ACCOUNT_FAMILIES))
       .min(1)
@@ -48,6 +51,7 @@ const configurationSchema = z
       .min(1)
       .max(HTX_DERIVATIVES_FILL_CONTRACT_LIMIT)
       .optional(),
+    htxV5: htxV5ObservationConfigurationSchema.optional(),
   })
   .strict()
   .refine((c) => {
@@ -57,6 +61,7 @@ const configurationSchema = z
       new Set(c.symbols).size === c.symbols.length &&
       new Set(c.htxDerivativesFamilies ?? []).size === (c.htxDerivativesFamilies?.length ?? 0) &&
       new Set(fills.map((item) => `${item.family}\u0000${item.contract}`)).size === fills.length &&
+      new Set(c.htxV5?.fillContracts ?? []).size === (c.htxV5?.fillContracts?.length ?? 0) &&
       fills.every(
         (item) =>
           families.has(item.family) && isHtxDerivativesFillContract(item.family, item.contract),
@@ -64,7 +69,8 @@ const configurationSchema = z
       c.maxBackoffMs >= c.pollIntervalMs &&
       c.leaseTtlMs >
         c.readTimeoutMs *
-          (3 + c.symbols.length + (c.htxDerivativesFamilies?.length ?? 0) + fills.length)
+          (3 + c.symbols.length + (c.htxDerivativesFamilies?.length ?? 0) + fills.length) +
+        (c.htxV5?.enabled ? HTX_V5_READ_BUDGET_MS : 0)
     );
   });
 
@@ -75,6 +81,16 @@ export function createObservationConfiguration(
   input: Omit<ObservationConfig, "revision">,
 ): ObservationConfig {
   const config = configurationSchema.parse(input);
+  // The explicit existing-key authorization covers the fixed spot/V5 GET owners.
+  // Legacy derivatives readers retain their original exact read-only admission.
+  if (config.existingKeyReadConsentId && config.htxDerivativesFamilies?.length) {
+    throw new Error("existing-key consent does not authorize legacy derivatives readers");
+  }
+  if (config.htxV5 && (!config.htxV5.enabled &&
+      (config.htxV5.fillContracts !== undefined || config.htxV5.expectedHtxUid !== undefined) ||
+    new Set(config.htxV5.fillContracts ?? []).size !== (config.htxV5.fillContracts?.length ?? 0))) {
+    throw new Error("invalid V5 observation configuration");
+  }
   if (config.htxDerivativesFillContracts) {
     config.htxDerivativesFillContracts.sort((left, right) => {
       const family =
@@ -85,6 +101,7 @@ export function createObservationConfiguration(
       );
     });
   }
+  config.htxV5?.fillContracts?.sort();
   const revision = "sha256:" + createHash("sha256").update(JSON.stringify(config)).digest("hex");
   return Object.freeze({
     ...config,
@@ -100,6 +117,9 @@ export function createObservationConfiguration(
         }
       : {}),
     ...(config.htxCoverage ? { htxCoverage: Object.freeze({ ...config.htxCoverage }) } : {}),
+    ...(config.htxV5 ? { htxV5: Object.freeze({ ...config.htxV5,
+      ...(config.htxV5.fillContracts ? { fillContracts: Object.freeze([...config.htxV5.fillContracts]) } : {}),
+    }) } : {}),
     revision,
   });
 }
@@ -124,6 +144,7 @@ export function createPostgresAccountObservationRuntime(
     sql: Sql;
     loadAssignments(signal: AbortSignal): Promise<readonly ObservationAssignment[]>;
     openReader(binding: ObservationBinding, signal: AbortSignal): Promise<AccountObservationReader>;
+    settleReader?(binding: ObservationBinding): Promise<void>;
     report(event: ObservationRuntimeEvent): void;
     ownerId?: string;
     clock?: ObservationClock;
@@ -176,7 +197,8 @@ export function createPostgresAccountObservationRuntime(
         const assignment = assignments.get(key(binding));
         if (!assignment) return { status: "FENCED" };
         const service = createAccountObservationService(
-          { repository, clock, openReader: input.openReader, newObservationId: randomUUID },
+          { repository, clock, openReader: input.openReader, settleReader: input.settleReader,
+            newObservationId: randomUUID },
           assignment.config,
         );
         return service.tick(assignment.binding, ownerId, signal);
