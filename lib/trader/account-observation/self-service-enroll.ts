@@ -30,7 +30,7 @@ function countFromExecute(result: unknown): number {
 }
 
 /** Insert collection-state for the exact credential Connect just stored.
- * Idempotent on an exact existing row. Does not grant the collector INSERT. */
+ * Preserves any existing exact-identity row. Does not grant the collector INSERT. */
 export async function enrollSelfServiceAccountObservation(
   db: WaiaPostgresDb,
   input: Readonly<{
@@ -63,11 +63,8 @@ export async function enrollSelfServiceAccountObservation(
       throw new AccountObservationSelfServiceEnrollError("CREDENTIAL");
     }
 
-    const [existing] = await tx
-      .select({
-        configurationRevision: pgSchema.traderAccountCollectionState.configurationRevision,
-        symbols: pgSchema.traderAccountCollectionState.symbols,
-      })
+    const existingState = () => tx
+      .select({ credentialId: pgSchema.traderAccountCollectionState.credentialId })
       .from(pgSchema.traderAccountCollectionState)
       .where(
         and(
@@ -77,32 +74,17 @@ export async function enrollSelfServiceAccountObservation(
         ),
       )
       .limit(1);
-    if (existing) {
-      if (
-        existing.configurationRevision === config.revision &&
-        JSON.stringify(existing.symbols) === JSON.stringify(symbols)
-      ) {
-        return "ALREADY_PROVISIONED";
-      }
-      await tx
-        .update(pgSchema.traderAccountCollectionState)
-        .set({
-          configurationRevision: config.revision,
-          symbols,
-        })
-        .where(
-          and(
-            eq(pgSchema.traderAccountCollectionState.organizationId, input.organizationId),
-            eq(pgSchema.traderAccountCollectionState.credentialId, input.credentialId),
-            eq(pgSchema.traderAccountCollectionState.exchangeAccountId, input.exchangeAccountId),
-          ),
-        );
-      return "PROVISIONED";
-    }
+    // Enrollment only creates missing state. An existing configuration belongs to
+    // the collector operator and may bind V5 coverage or revision-scoped consent.
+    // Listing/reconnecting a credential must not reset it, its symbols or cadence.
+    if ((await existingState()).length) return "ALREADY_PROVISIONED";
 
     await tx.execute(
       sql`lock table public.trader_account_collection_state in share row exclusive mode`,
     );
+    // Another enrollment may have committed while this transaction waited for
+    // the capacity lock. Preserve that winner before counting or inserting.
+    if ((await existingState()).length) return "ALREADY_PROVISIONED";
     const counted = await tx.execute(
       sql`select count(*)::int as n
           from public.trader_account_collection_state s
@@ -116,13 +98,19 @@ export async function enrollSelfServiceAccountObservation(
       throw new AccountObservationSelfServiceEnrollError("CAPACITY");
     }
 
-    await tx.insert(pgSchema.traderAccountCollectionState).values({
+    const inserted = await tx.insert(pgSchema.traderAccountCollectionState).values({
       organizationId: input.organizationId,
       credentialId: input.credentialId,
       exchangeAccountId: input.exchangeAccountId,
       configurationRevision: config.revision,
       symbols,
-    });
-    return "PROVISIONED";
+    }).onConflictDoNothing({
+      target: [
+        pgSchema.traderAccountCollectionState.organizationId,
+        pgSchema.traderAccountCollectionState.credentialId,
+        pgSchema.traderAccountCollectionState.exchangeAccountId,
+      ],
+    }).returning({ credentialId: pgSchema.traderAccountCollectionState.credentialId });
+    return inserted.length ? "PROVISIONED" : "ALREADY_PROVISIONED";
   });
 }
