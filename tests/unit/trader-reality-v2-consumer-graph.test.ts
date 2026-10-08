@@ -16,6 +16,16 @@ const ROOT = process.cwd();
 const INVENTORY = join(ROOT, "docs/ai-trader/reality-v2-source-consumer-inventory.json");
 const VALIDATOR = join(ROOT, "scripts/trader/validate-reality-v2-consumer-graph.ts");
 
+function hasRuntimeDynamicImport(ast: ts.SourceFile): boolean {
+  let found = false;
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) found = true;
+    ts.forEachChild(node, visit);
+  };
+  visit(ast);
+  return found;
+}
+
 describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => {
   it("passes the pinned repository graph validator", () => {
     const output = execFileSync(process.execPath, ["--import", "tsx", VALIDATOR], {
@@ -217,7 +227,7 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
     ).toEqual(["buildSignedPostQueryString", "formatHtxTimestamp"]);
   });
 
-  it("excludes exactly the three normalized account-observation consumers without Reality or venue-write authority", () => {
+  it("excludes exactly the three normalized account-observation consumers, including optional bills, without Reality or venue-write authority", () => {
     const inventory = JSON.parse(readFileSync(INVENTORY, "utf8")) as {
       consumerRules: { id: string; pathPattern: string; disposition: string }[];
       admittedBoundaryFiles: string[];
@@ -228,6 +238,7 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
     expect(rule).toMatchObject({
       pathPattern: "^lib/trader/account-observation/(service|types|htx-reader)\\.ts$",
       disposition: "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
+      reason: "Read-only normalized account DTO collection and its injected GET-only HTX reader are not canonical Reality ingress or execution authority; no raw-capture lineage is admitted by these files.",
     });
     const paths = [
       "lib/trader/account-observation/htx-reader.ts",
@@ -319,7 +330,7 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
             expect(
               bindings && ts.isNamedImports(bindings) && bindings.elements.map((element) => element.name.text),
             ).toEqual([
-              "HtxV5AlgoOrder", "HtxV5AssetMode", "HtxV5BalanceDetail", "HtxV5BalanceSnapshot",
+              "HtxV5Bill", "HtxV5AlgoOrder", "HtxV5AssetMode", "HtxV5BalanceDetail", "HtxV5BalanceSnapshot",
               "HtxV5Fill", "HtxV5OpenOrder", "HtxV5Position",
             ]);
             continue;
@@ -343,6 +354,20 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
             expect(bindings && ts.isNamedImports(bindings) &&
               bindings.elements.map((element) => element.name.text)).toEqual([
               "htxV5ObservationConfigurationSchema",
+            ]);
+            continue;
+          }
+          if (
+            file === "lib/trader/account-observation/service.ts" &&
+            (statement.moduleSpecifier as ts.StringLiteral).text === "./derivatives/htx-v5-bill-groups"
+          ) {
+            const bindings = statement.importClause?.namedBindings;
+            expect(statement.importClause?.isTypeOnly).toBe(false);
+            expect(bindings && ts.isNamedImports(bindings) &&
+              bindings.elements.map((element) => element.name.text)).toEqual([
+              "financialScopeUnavailable",
+              "unavailableHtxV5Bills",
+              "htxV5FinancialScopeAt",
             ]);
             continue;
           }
@@ -393,7 +418,8 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
           "getTradeHistory",
         ]),
       ).toEqual([]);
-      expect(body).not.toMatch(/import\s*\(|require\s*\(|(?:globalThis|window)\.fetch/);
+      expect(hasRuntimeDynamicImport(ast)).toBe(false);
+      expect(body).not.toMatch(/require\s*\(|(?:globalThis|window)\.fetch/);
       // The service's local `fetch` parameter is an injected read callback, not global fetch.
       const visit = (node: ts.Node): void => {
         if (
@@ -455,9 +481,34 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
           ),
         ),
     ).toEqual(["htxObservationReaderLimitsSchema", "htxObservationCoverageSchema",
-      "htxV5ObservationConfigurationSchema"]);
+      "htxV5FinancialHistoryScopeSchema", "htxV5ObservationConfigurationSchema"]);
+    const refinementArrows: string[] = [];
+    let otherFunctionSyntax = 0;
+    const visit = (node: ts.Node): void => {
+      if (ts.isArrowFunction(node)) {
+        const parent = node.parent;
+        expect(
+          ts.isCallExpression(parent) &&
+            ts.isPropertyAccessExpression(parent.expression) &&
+            parent.expression.name.text === "refine" &&
+            parent.arguments[0] === node,
+        ).toBe(true);
+        refinementArrows.push(node.getText(ast));
+      } else if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) {
+        otherFunctionSyntax += 1;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(ast);
+    expect(refinementArrows).toEqual([
+      "s => s.windowStartMs < s.windowEndMs && s.windowEndMs - s.windowStartMs <= 172800000 &&\n" +
+        "  s.windowEndMs <= s.validFromMs && s.validFromMs < s.validUntilMs && s.validUntilMs - s.validFromMs <= 600000",
+      "c => !c.financialHistory || c.enabled && !!c.expectedHtxUid && c.fillContracts === undefined",
+    ]);
+    expect(otherFunctionSyntax).toBe(0);
+    expect(hasRuntimeDynamicImport(ast)).toBe(false);
     expect(body).not.toMatch(
-      /import\s*\(|require\s*\(|fetch|process\.env|globalThis|window|=>|\bfunction\b/,
+      /require\s*\(|\bfetch\b|process\.env|\bglobalThis\b|\bwindow\b|\bfunction\b/,
     );
     const inventory = JSON.parse(readFileSync(INVENTORY, "utf8"));
     expect(inventory.admittedBoundaryFiles).not.toContain(file);
