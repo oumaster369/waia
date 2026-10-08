@@ -15,6 +15,8 @@ COPY lib/trader/account-observation/projection-protocol.ts ./lib/trader/account-
 COPY lib/trader/account-observation/projection-service-config.ts ./lib/trader/account-observation/projection-service-config.ts
 COPY lib/trader/account-observation/projection-service.ts ./lib/trader/account-observation/projection-service.ts
 COPY lib/trader/account-observation/types.ts ./lib/trader/account-observation/types.ts
+COPY lib/trader/account-observation/coverage.ts ./lib/trader/account-observation/coverage.ts
+COPY lib/trader/account-observation/derivatives/htx-v5-bill-groups.ts ./lib/trader/account-observation/derivatives/htx-v5-bill-groups.ts
 COPY lib/trader/account-observation/validation.ts ./lib/trader/account-observation/validation.ts
 RUN node scripts/trader/build-account-observation-projection.mjs /out
 
