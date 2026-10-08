@@ -5,9 +5,12 @@ import { buildSignedQueryString, formatHtxTimestamp } from "@/lib/trader/connect
 import { AccountObservationReadFailure } from "../service";
 import { createHtxReadAdmission, type HtxExpectedPermission, type HtxReadIdentityEvidence } from "../htx-read-admission";
 import type { HtxObservationCredentialHandle } from "../htx-reader-opener";
-import type { ObservationBinding, ObservationClock } from "../types";
+import type { ObservationBinding, ObservationClock, HtxV5FinancialHistoryScope, HtxV5FinancialUnavailableReason } from "../types";
+import { financialScopeUnavailable } from "./htx-v5-bill-groups";
+import { htxV5FinancialHistoryScopeSchema } from "../coverage";
 import { observationBindingSchema, sameObservationBinding } from "../validation";
 import {
+  buildHtxV5BillsRequest,
   buildHtxV5AlgoOrdersRequest,
   buildHtxV5AssetModeRequest,
   buildHtxV5BalanceRequest,
@@ -39,7 +42,12 @@ export type HtxV5ReadResponse = Readonly<{
   receivedAt: number;
 }>;
 
+export class HtxV5FinancialScopeUnavailable extends Error {
+  constructor(readonly reason: HtxV5FinancialUnavailableReason) { super(reason); }
+}
+
 export type HtxV5ReadTransport = Readonly<{
+  readBills(scope: HtxV5FinancialHistoryScope, signal: AbortSignal): Promise<HtxV5ReadResponse>;
   readAssetMode(signal: AbortSignal): Promise<HtxV5ReadResponse>;
   readBalance(signal: AbortSignal): Promise<HtxV5ReadResponse>;
   readPositions(
@@ -105,8 +113,9 @@ function snapshotConfig(value: unknown): Record<string, unknown> {
   return result;
 }
 
-function safeReadError(error: unknown): AccountObservationReadFailure {
+function safeReadError(error: unknown): AccountObservationReadFailure | HtxV5FinancialScopeUnavailable {
   try {
+    if (error instanceof HtxV5FinancialScopeUnavailable) return error;
     if (error instanceof AccountObservationReadFailure) {
       const code = error.code;
       if (
@@ -322,7 +331,15 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
   async function perform(
     request: HtxV5ReadRequest,
     parentSignal: AbortSignal,
+    financialScope?: HtxV5FinancialHistoryScope,
   ): Promise<HtxV5ReadResponse> {
+    const checkScope = () => {
+      if (financialScope) {
+        const reason = financialScopeUnavailable(financialScope, clock.now());
+        if (reason) throw new HtxV5FinancialScopeUnavailable(reason);
+      }
+    };
+    checkScope();
     if (
       disposed ||
       active ||
@@ -357,13 +374,17 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
     const checkAfter = async (): Promise<HtxReadIdentityEvidence> => {
       if (!before || afterCheckStarted) return fail("READ_FAILED");
       afterCheckStarted = true;
+      checkScope();
       const after = await freshIdentity(controller.signal);
+      checkScope();
       identityMatches(before, after);
       return after;
     };
     const work = async (): Promise<HtxV5ReadResponse> => {
       try {
+        checkScope();
         before = await freshIdentity(controller.signal);
+        checkScope();
         const now = clock.now();
         if (!Number.isSafeInteger(now) || now < before.checkedAt) fail("INVALID_RESPONSE");
         const signedQuery = buildSignedQueryString({
@@ -449,6 +470,7 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
         const receivedAt = clock.now();
         if (!Number.isSafeInteger(receivedAt) || receivedAt < now) fail("INVALID_RESPONSE");
         const finalIdentity = await checkAfter();
+        checkScope();
         if (disposed || controller.signal.aborted) fail("READ_FAILED");
         return Object.freeze({ body, identity: finalIdentity, receivedAt });
       } catch (error) {
@@ -468,7 +490,8 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
       return await Promise.race([
         track(work()),
         aborted,
-        clock.sleep(timeoutMs, timer.signal).then(() => fail("TIMEOUT")),
+        clock.sleep(financialScope ? Math.min(timeoutMs, financialScope.validUntilMs - clock.now()) : timeoutMs, timer.signal)
+          .then(() => { checkScope(); return fail("TIMEOUT"); }),
       ]);
     } catch (error) {
       dispose();
@@ -484,6 +507,10 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
   }
 
   return Object.freeze({
+    readBills: (scope: HtxV5FinancialHistoryScope, signal: AbortSignal) => {
+      const safeScope = Object.freeze(htxV5FinancialHistoryScopeSchema.parse(scope));
+      return perform(buildHtxV5BillsRequest({ windowStartMs: safeScope.windowStartMs, windowEndMs: safeScope.windowEndMs }), signal, safeScope);
+    },
     readAssetMode: (signal: AbortSignal) => perform(buildHtxV5AssetModeRequest(), signal),
     readBalance: (signal: AbortSignal) => perform(buildHtxV5BalanceRequest(), signal),
     readPositions: (

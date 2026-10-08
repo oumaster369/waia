@@ -38,7 +38,7 @@ export function createPostgresObservationAssignmentSource(
   }
   // Only a spot envelope can admit self-service inventory, regardless of manifest order.
   const envelope = [...approved.values()].find(item =>
-    !item.config.existingKeyReadConsentId && !item.config.htxDerivativesFamilies?.length);
+    !item.config.existingKeyReadConsentId && !item.config.htxDerivativesFamilies?.length && !item.config.htxV5?.financialHistory);
   const reader = createPostgresObservationReader(sql);
   let loading = false;
   let live = new Map<string, ObservationAssignment>();
@@ -56,7 +56,7 @@ export function createPostgresObservationAssignmentSource(
     // access or displace exact manifest-listed assignments from the bounded list.
     if (!collectorSql || !envelope || envelope.config.existingKeyReadConsentId ||
         envelope.config.htxDerivativesFamilies?.length ||
-        envelope.config.htxV5?.expectedHtxUid) return [];
+        (envelope.config.htxV5?.expectedHtxUid || envelope.config.htxV5?.financialHistory)) return [];
     cancelled(signal);
     try {
       const rows = await collectorSql.begin(async (tx) => {

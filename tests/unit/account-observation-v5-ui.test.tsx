@@ -12,7 +12,7 @@ const unknownPage = {
   completeness: "UNKNOWN" as const,
 };
 
-function projection(patch: Partial<HtxV5AccountObservation> = {}): HtxV5AccountObservation {
+function projection(patch: Partial<Extract<HtxV5AccountObservation, { schemaVersion: "htx-v5-observation/v1" }>> = {}): HtxV5AccountObservation {
   return {
     schemaVersion: "htx-v5-observation/v1",
     htxUid: "9988776655",

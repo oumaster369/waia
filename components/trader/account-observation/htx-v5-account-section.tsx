@@ -17,6 +17,7 @@ import type {
   HtxV5Position,
 } from "@/lib/trader/account-observation/derivatives/htx-v5-read-contract";
 import { htxV5PositionOrderDisplay, type StopEvidenceReason } from "@/lib/trader/account-observation/htx-v5-position-order-display";
+import { HtxV5BillsSection } from "./htx-v5-bills-section";
 
 const MAX_VISIBLE_ROWS = 100;
 const MAX_VISIBLE_POSITION_ORDERS = 10;
@@ -629,6 +630,11 @@ export function HtxV5AccountSection({
         )}
       />
       <Fills observation={projection.fills} inheritedStale={inheritedStale} nowMs={nowMs} />
+      <HtxV5BillsSection
+        observation={projection.schemaVersion === "htx-v5-observation/v2" ? projection.bills : null}
+        inheritedStale={inheritedStale}
+        nowMs={nowMs}
+      />
     </section>
   );
 }

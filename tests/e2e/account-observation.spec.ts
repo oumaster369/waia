@@ -18,7 +18,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
   page,
   context,
 }, testInfo) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   const traderWrites: string[] = [];
   context.on("request", request => {
     const path = new URL(request.url()).pathname;
@@ -34,6 +34,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
   grantPlatformAdminByUserEmail(email);
   let version = 1;
   let v5Enabled = false;
+  let financialState: "OFF" | "PARTIAL" | "UNAVAILABLE" = "OFF";
   let denied = false;
   let streamFailed = false;
   const started = Date.now();
@@ -149,7 +150,35 @@ test("mounted Admin and tenant update the same observation automatically and cle
       ],
     ] as const;
     const htxV5 = {
-      schemaVersion: "htx-v5-observation/v1",
+      schemaVersion: financialState === "OFF" ? "htx-v5-observation/v1" : "htx-v5-observation/v2",
+      ...(financialState === "OFF" ? {} : { bills: {
+        status: financialState,
+        unavailableReason: financialState === "UNAVAILABLE" ? "SCOPE_EXPIRED" : null,
+        scopeId: "55555555-5555-4555-8555-555555555555",
+        windowStartMs: started - 3_600_000, windowEndMs: started - 1_000,
+        validFromMs: started - 1_000, validUntilMs: financialState === "UNAVAILABLE" ? at : started + 599_000,
+        windowConvention: "START_INCLUSIVE_END_EXCLUSIVE",
+        values: financialState === "UNAVAILABLE" ? null : [
+          { id: "80001", contractCode: "", marginMode: "cross", currency: "USDT", type: "31",
+            category: "FUNDING_EXPENDITURE", amount: "-0.750000000000000001", createdTimeMs: started - 2_000 },
+          { id: "80002", contractCode: "", marginMode: "cross", currency: "USD", type: "999",
+            category: "UNKNOWN", amount: "1.125", createdTimeMs: started - 2_000 },
+        ],
+        groups: financialState === "UNAVAILABLE" ? null : [
+          { currency: "USD", type: "999", category: "UNKNOWN", observedAmountSum: "1.125", recordCount: 1 },
+          { currency: "USDT", type: "31", category: "FUNDING_EXPENDITURE", observedAmountSum: "-0.750000000000000001", recordCount: 1 },
+        ],
+        readStartedAtMs: financialState === "UNAVAILABLE" ? null : at,
+        responseReceivedAtMs: financialState === "UNAVAILABLE" ? null : at,
+        readCompletedAtMs: financialState === "UNAVAILABLE" ? null : at,
+        responseGeneratedAtMs: financialState === "UNAVAILABLE" ? null : at,
+        error: null,
+        pageScope: financialState === "UNAVAILABLE" ? null : {
+          pageSize: 100, maxPages: 1, pagesRead: 1, nextFrom: "80002", completeness: "UNKNOWN",
+        },
+        completeness: "UNKNOWN", amountSemantics: "RAW_SIGNED_AMOUNTS_NO_SIGN_CONVERSION",
+        accountBinding: "NOT_ESTABLISHED_BY_BILLS_RESPONSE", netPnl: null, dailyPnl: null,
+      } }),
       htxUid: "9988776655",
       assetMode: {
         status: "COMPLETE",
@@ -294,12 +323,10 @@ test("mounted Admin and tenant update the same observation automatically and cle
       },
     };
     return parseAccountObservation({
-      schemaVersion: v5Enabled ? "account-observation/v3" : "account-observation/v2",
+      schemaVersion: v5Enabled ? financialState === "OFF" ? "account-observation/v3" : "account-observation/v4" : "account-observation/v2",
       binding,
       observationId:
-        version === 1
-          ? "33333333-3333-4333-8333-333333333333"
-          : "44444444-4444-4444-8444-444444444444",
+        `${String(version).repeat(8)}-${String(version).repeat(4)}-4${String(version).repeat(3)}-8${String(version).repeat(3)}-${String(version).repeat(12)}`,
       collectionStartedAtMs: at,
       collectionCompletedAtMs: at,
       status: v5Enabled ? "PARTIAL" : "COMPLETE",
@@ -307,7 +334,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
       openOrders: empty,
       holdings: [],
       trades: [{ symbol: "BTCUSDT", component: empty }],
-      derivatives: {
+      ...(financialState === "OFF" ? { derivatives: {
         schemaVersion: "htx-derivatives-observation/v1",
         families: families.map(([family, accounts]) => ({
           family,
@@ -340,7 +367,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
             error: null,
           },
         })),
-      },
+      } } : {}),
       ...(v5Enabled ? { htxV5 } : {}),
     });
   };
@@ -518,6 +545,27 @@ test("mounted Admin and tenant update the same observation automatically and cle
     await expect(v5.getByRole("alert")).toHaveText("Наличие защиты открытой позиции не подтверждено этим снимком.");
     await expect(v5.getByRole("button")).toHaveCount(0);
   }
+  financialState = "PARTIAL";
+  version = 3;
+  for (const panel of [tenantPanel, adminPanel]) {
+    const bills = panel.getByRole("region", { name: "Финансовые записи HTX", exact: true });
+    await expect(bills.getByText("-0.750000000000000001 USDT", { exact: true })).toBeVisible({ timeout: 12_000 });
+    await expect(bills.getByText("1.125 USD", { exact: true })).toBeVisible();
+    await expect(bills.getByText("Частичное; полнота неизвестна", { exact: true })).toBeVisible();
+    await expect(panel.getByText("Капитал счёта (USD)")).toBeVisible();
+    await expect(panel.getByText(/Результат за день: недоступен/)).toBeVisible();
+  }
+  await tenantPanel.getByRole("region", { name: "Финансовые записи HTX", exact: true }).screenshot({
+    path: testInfo.outputPath("bills-desktop.png"),
+  });
+  financialState = "UNAVAILABLE";
+  version = 4;
+  for (const panel of [tenantPanel, adminPanel]) {
+    const bills = panel.getByRole("region", { name: "Финансовые записи HTX", exact: true });
+    await expect(bills.getByText(/Срок разрешённого периода чтения финансовых записей истёк/)).toBeVisible({ timeout: 12_000 });
+    await expect(bills.getByRole("table")).toHaveCount(0);
+    await expect(panel.getByText("Капитал счёта (USD)")).toBeVisible();
+  }
   streamFailed = true;
   await expect(
     tenantPanel.getByText("Automatic polling fallback; stream retry scheduled."),
@@ -551,6 +599,8 @@ test("mounted Admin and tenant update the same observation automatically and cle
   // Spot/Futures cabinet and Admin index at desktop and mobile widths.
   denied = false;
   streamFailed = false;
+  financialState = "PARTIAL";
+  version = 5;
   await page.goto("/trader");
   const restoredTenantPanel = page.getByRole("region", {
     name: "Account observation",
@@ -576,6 +626,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
+  await restoredTenantPanel.getByRole("region", { name: "Финансовые записи HTX", exact: true }).screenshot({ path: testInfo.outputPath("bills-mobile.png") });
   await restoredTenantPanel.getByRole("heading", { name: "Полученные стоп-заявки и цели", exact: true })
     .locator("..").screenshot({ path: testInfo.outputPath("stop-evidence-mobile.png") });
   await restoredTenantPanel

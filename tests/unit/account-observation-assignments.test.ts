@@ -237,3 +237,19 @@ describe("explicit assignments filtered by current read-only DB state", () => {
     expect(ports.isCurrentAssignment).not.toHaveBeenCalled();
   });
 });
+
+// A finite optional capability never becomes a temporal gate on base observations.
+it("retains an expired financial fixed assignment without inheriting its scope into inventory", async () => {
+  const a = assignment(); const { revision: _revision, ...parameters } = a.config; void _revision;
+  const config = createObservationConfiguration({ ...parameters, leaseTtlMs: 300000,
+    htxV5: { enabled: true, expectedHtxUid: "456", financialHistory: { enabled: true,
+      scopeId: "00000000-0000-4000-8000-000000000008", windowStartMs: 1, windowEndMs: 2,
+      validFromMs: 2, validUntilMs: 3 } } });
+  const current = { binding: { ...a.binding, configurationRevision: config.revision }, config };
+  const begin = vi.fn(); ports.isCurrentAssignment.mockResolvedValue(true);
+  const source = createPostgresObservationAssignmentSource(sql, [current], { begin } as never);
+  expect(await source.loadAssignments(signal())).toEqual([current]);
+  expect(await source.authorizeOpen(current.binding, signal())).toBe(true);
+  expect(begin).not.toHaveBeenCalled();
+  expect(await source.authorizeOpen({ ...current.binding, exchangeAccountId: "999" }, signal())).toBe(false);
+});

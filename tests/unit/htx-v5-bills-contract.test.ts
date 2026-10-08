@@ -1,16 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { HTX_V5_READ_ONLY_ROUTES, parseHtxV5Bills } from "@/lib/trader/account-observation/derivatives/htx-v5-read-contract";
+import { parseHtxV5Bills } from "@/lib/trader/account-observation/derivatives/htx-v5-read-contract";
 
 const bill = { id: "7071168", type: "15", currency: "USDT", amount: "-1", contract_code: "", margin_mode: "cross", created_time: "1767694969541" };
 const response = (rows: unknown[] = [bill]) => JSON.stringify({ code: 200, message: "Success", data: rows, ts: 1767696593837 });
 
-describe("unwired HTX V5 bills normalization", () => {
+describe("HTX V5 bills normalization", () => {
   it("accepts the official empty-contract transfer example without inventing a contract or amount sign", () => {
     expect(parseHtxV5Bills(response())).toEqual({
       rows: [{ id: "7071168", type: "15", category: "CONTRACT_TO_SPOT_TRANSFER", currency: "USDT", amount: "-1", contractCode: "", marginMode: "cross", createdTimeMs: 1767694969541 }],
       nextFrom: "7071168", completeness: "unknown", responseGeneratedAtMs: 1767696593837,
     });
-    expect(Object.values(HTX_V5_READ_ONLY_ROUTES)).not.toContain("/v5/account/bills");
   });
 
   it("preserves numeric JSON IDs and amount lexemes beyond Number precision", () => {

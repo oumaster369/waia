@@ -1,6 +1,8 @@
 /** Static, read-only contract for documented HTX USDT-M V5 observation routes.
  * Mode and route capability remain separate. This module performs no I/O. */
 import { types } from "node:util";
+import { HTX_V5_BILL_CATEGORIES, type HtxV5BillCategory } from "./htx-v5-bill-groups";
+export type { HtxV5BillCategory } from "./htx-v5-bill-groups";
 
 export const HTX_V5_READ_ONLY_ROUTES = Object.freeze({
   assetMode: "/v5/account/asset_mode",
@@ -9,6 +11,7 @@ export const HTX_V5_READ_ONLY_ROUTES = Object.freeze({
   openOrders: "/v5/trade/order/opens",
   algoOrders: "/v5/algo/order/opens",
   fills: "/v5/trade/order/details",
+  bills: "/v5/account/bills",
 } as const);
 
 export type HtxV5ReadRoute = (typeof HTX_V5_READ_ONLY_ROUTES)[keyof typeof HTX_V5_READ_ONLY_ROUTES];
@@ -244,6 +247,17 @@ export function buildHtxV5FillsRequest(
   const from = boundedCursor(safeInput.from);
   if (from !== undefined) query.from = from;
   return request(HTX_V5_READ_ONLY_ROUTES.fills, query);
+}
+
+/** One explicitly scoped page. This local window policy does not establish venue coverage. */
+export function buildHtxV5BillsRequest(input: Readonly<{ windowStartMs: number; windowEndMs: number }>): HtxV5ReadRequest {
+  const value = snapshotBuilderInput(input, ["windowStartMs", "windowEndMs"]);
+  const start = value.windowStartMs, end = value.windowEndMs;
+  if (typeof start !== "number" || typeof end !== "number" || !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(end) || start < 0 || end <= start || end > 8.64e15 || end - start > MAX_FILL_WINDOW_MS)
+    return badRequest();
+  return request(HTX_V5_READ_ONLY_ROUTES.bills, { start_time: String(start), end_time: String(end - 1),
+    from: "0", limit: "100", direct: "next" });
 }
 
 /** Raw HTX account setting only. This enum does not prove which API family is enabled. */
@@ -762,25 +776,6 @@ export function parseHtxV5Fills(payload: string, expectedContract: string): HtxV
 }
 
 /** Documented bill labels only; neither amount sign nor a net-PnL formula is specified. */
-const HTX_V5_BILL_CATEGORIES = Object.freeze({
-  "3": "CLOSE_LONG", "4": "CLOSE_SHORT",
-  "5": "OPEN_FEE_TAKER", "6": "OPEN_FEE_MAKER",
-  "7": "CLOSE_FEE_TAKER", "8": "CLOSE_FEE_MAKER",
-  "9": "DELIVERY_CLOSE_LONG", "10": "DELIVERY_CLOSE_SHORT", "11": "DELIVERY_FEE",
-  "12": "LIQUIDATION_CLOSE_LONG", "13": "LIQUIDATION_CLOSE_SHORT",
-  "14": "SPOT_TO_CONTRACT_TRANSFER", "15": "CONTRACT_TO_SPOT_TRANSFER",
-  "16": "UNREALIZED_SETTLEMENT_LONG", "17": "UNREALIZED_SETTLEMENT_SHORT",
-  "19": "CLAWBACK", "26": "SYSTEM", "28": "ACTIVITY_REWARD", "29": "REBATE",
-  "30": "FUNDING_INCOME", "31": "FUNDING_EXPENDITURE",
-  "34": "TRANSFER_TO_SUB", "35": "TRANSFER_FROM_SUB",
-  "36": "TRANSFER_TO_MASTER", "37": "TRANSFER_FROM_MASTER",
-  "38": "TRANSFER_FROM_MARGIN_ACCOUNT", "39": "TRANSFER_TO_MARGIN_ACCOUNT",
-  "46": "ADL_CLOSE_LONG", "47": "ADL_CLOSE_SHORT",
-  "66": "SYSTEM_ADVANCE_TRANSFER_OUT", "67": "SYSTEM_ADVANCE_TRANSFER_IN",
-  "141": "LIQUIDATION_FEE",
-} as const);
-
-export type HtxV5BillCategory = (typeof HTX_V5_BILL_CATEGORIES)[keyof typeof HTX_V5_BILL_CATEGORIES] | "UNKNOWN";
 export type HtxV5Bill = Readonly<{
   id: string;
   /** Empty is valid in the official transfer example; never infer a contract. */
@@ -795,8 +790,8 @@ export type HtxV5Bill = Readonly<{
   createdTimeMs: number;
 }>;
 
-/** UNWIRED parser only. Does not add bills to the live route allowlist or establish
- * account identity, page ordering, exhaustion, or a financial reporting period. */
+/** Normalizes received bills only; the separately scoped reader establishes account association.
+ * This parser never establishes page ordering, exhaustion, or a financial reporting period. */
 export function parseHtxV5Bills(payload: string): HtxV5Page<HtxV5Bill> {
   const env = rowsEnvelope(payload);
   const rows = env.rows.map((row): HtxV5Bill => {

@@ -1,30 +1,30 @@
 ---
 integrationIssue: DEE-1233
-integrationTitle: "Explain received stop evidence without overstating protection"
+integrationTitle: "Received stop evidence and bounded optional financial observations"
 branch: dee-1233-protection-evidence
-riskTier: T2
+riskTier: T3
 prPolicy: one-integration-pr
 executionSurfaces: [local]
 requiredValidation: [targeted-unit, mounted-e2e, lint, typecheck, build]
-approvalGates: [independent-review]
+approvalGates: [independent-review, exact-runtime-admission]
 state:
   status: in-progress
-  currentWorkPackage: WP-DAY-RESULT
-  completedWorkPackages: [WP-STOP-EVIDENCE, WP-DAY-LEDGER-CONTRACT]
-  remainingWorkPackages: [WP-COMPLETE-PROTECTION, WP-DAY-RESULT]
+  currentWorkPackage: WP-FINANCIAL-INGESTION
+  completedWorkPackages: [WP-STOP-EVIDENCE, WP-DAY-LEDGER-CONTRACT, WP-FINANCIAL-INGESTION]
+  remainingWorkPackages: [WP-RUNTIME-QUALIFICATION, WP-COMPLETE-PROTECTION, WP-DAY-RESULT]
   prNumber: null
   prUrl: null
-  lastValidatedGitSha: null
-  lastValidationAt: "2026-10-08T00:44:45Z"
+  lastValidatedGitSha: ce1464be2f69a64d120968ea8922c02ee7497be3
+  lastValidationAt: "2026-10-08"
   blockedReason: "V5 selection completeness and remaining closing-quantity semantics are not yet qualified; full-day ledger remains incomplete."
-  nextAction: "Bind financial-history collection and persisted coverage before wiring the qualified local parser into a day-result display; keep protection unconfirmed while its completeness and closing semantics remain unqualified."
+  nextAction: "Publish the locally qualified source as a draft PR, require new-head CI, then qualify exact release/runtime compatibility and finite current-account scope before any activation. Complete protection and daily result remain separate."
 provenance:
   createdFrom: chat
   gapRegistry: null
   supersedes: null
 ---
 
-# DEE-1233 — stop evidence
+# DEE-1233 — received stop and financial evidence
 
 The user requests autonomous continuation of the Trader and prohibits trades or
 changes to the external executor. Main03e and protected reader have been deployed;
@@ -145,3 +145,77 @@ An initial test-table fixture expanded empty arrays into arguments; those two te
 fixtures were corrected and the failed result retained. Independent review approved
 all four code/test paths and this work-package plan. No production or account API
 calls, new build, existing-test campaign or authority expansion occurred.
+
+
+## WP-FINANCIAL-INGESTION — optional bounded received records
+
+Implement a default-absent financial capability on an exact V5 assignment under the
+existing non-trading authority. A fresh technical scope ID, expected UID, fixed
+half-open window of at most 48 hours, and a finite validity interval of at most ten
+minutes are bound into the configuration revision and explicit financial manifest
+v2. This does not introduce another blanket Human-consent requirement. Existing
+scope/consent IDs, enrollment templates and stored observations cannot activate it.
+No renewal, configuration CAS, manifest mutation or production activation occurs here.
+
+The reader may issue one fixed signed GET `/v5/account/bills` page of at most 100 rows.
+Financial scope cannot coexist with fill contracts or legacy derivatives in this
+first slice. The existing V5 31-attempt/120-second budgets, scheduler cadence, lease
+limits, credential purpose, exact permission/UID/key binding, connection/TLS limits
+and cancellation ownership remain in place. Separate current-key admission associates
+received records with the account; the bills body itself does not prove account identity.
+
+Only a configured financial assignment emits strict V5 observation v2/account
+observation v4. Old DTO versions and omitted-configuration hashes remain unchanged.
+Persist raw signed rows and exact groups by currency and raw type. Unknown types are
+retained; empty means no received records; every successful page is PARTIAL/UNKNOWN.
+Net/day PnL stays null. No sign conversion, currency conversion, fills reconciliation,
+page exhaustion, backfill cursor, ledger completeness or canonical Billing input exists.
+
+### Optional-scope availability invariant
+
+Temporal unavailability is local to financial history. Expired/not-yet-valid scope
+emits `UNAVAILABLE` with `SCOPE_EXPIRED`/`SCOPE_NOT_YET_VALID`; financial rows, groups,
+page scope and all read times are null, as are financial errors and all PnL outputs.
+Base Spot/Futures observations remain authorized under the same current binding.
+The manifest/fixed assignment and already-authorized shared credential opening are
+not refused solely because optional scope is unavailable. Structural scope errors
+still fail configuration parsing. The financial transport rechecks its scope before
+and after awaited admission and aborts on expiry; no extra decrypt is introduced.
+Optional financial errors do not change the base collection's cadence/backoff.
+
+Database insertion chooses the allowed/sanitized DTO using database time. An
+amount-bearing result must also pass the final latest-pointer publication predicate
+and post-write clock check. If a slow INSERT/trigger crosses optional expiry, a private
+marker rolls back that transaction and retries exactly once with the same observation
+ID, current binding and live lease, forcing only the amount-free UNAVAILABLE variant.
+No immutable record is updated; no new lease, scope, remote request or authority is
+created. The publication gate is the linearization point, not the later network
+COMMIT acknowledgement. Financial commits return the exact actual stored DTO. An
+old amount-bearing acknowledgement cannot be replayed under an expired scope.
+
+### Implementation and qualification boundary
+
+Core reader/admission/configuration/DTO/grouping and JSON append changes are local.
+No database schema, migration, role/grant, host, key, schedule, order, Grok, production
+or research changes are part of this package. The browser-safe grouping extraction
+was validated through the affected parser/arithmetic tests. Core focused tests cover
+absent capability, fixed signed one-page query, multiple currencies/unknown types,
+empty/error/invalid input, temporal expiry before/during request, after awaited
+admission, abort settlement, service sanitization/actual acknowledgement, old manifest
+compatibility, strict DTO tamper refusal and expired fixed-assignment availability.
+The previous stop59/build/protected-runtime proof is not repeated for unchanged bytes.
+
+A separately gated native test is authored at
+`tests/integration/account-observation-financial-postgres.test.ts`; root alone runs it
+on the explicitly created empty loopback TLS fixture at port 55841, database
+`waia_financial_fixture`. It checks actual restricted LOGIN/RLS append/readLatest,
+expiry sanitization and idempotency, stale/revoked scope fences, and a delayed INSERT
+with exactly two insertion attempts but one immutable record and latest pointer.
+Root subsequently executed five native cases plus one added adversarial caller-mutation case successfully. The repository captures the observation, binding, lease and cadence before its first await; retry cannot be redirected by changing the original input. The controlled delayed-insert proof retained exactly one record/pointer after two attempts. Root also qualified the UI, mounted browser scenario and fresh build; independent source review resolved the mutable-input finding. Production
+consumer compatibility and a fresh exact technical execution receipt remain separate
+admission gates; no live financial-history or whole-Trader readiness is claimed.
+
+Core local verification: 330 distinct focused tests across 12 affected suites passed
+in the scoped runs (including 26 new financial-ingestion cases). Full typecheck
+passed after core/native-test authoring; scoped lint had zero errors (four existing
+unused-variable warnings in the assignment test). Root subsequently qualified six distinct native cases; nine cabinet-view and seven bills-UI tests also passed. Full lint has zero errors and 337 existing warnings; typecheck, fresh Next build and mounted tenant/admin Chromium scenario passed. Desktop/mobile layouts preserve exact raw signed amounts, separate USD/USDT, partial coverage and unavailable state; revocation clears account data and no trading request is sent. Production activation and complete-history/PnL/protection acceptance remain pending.
