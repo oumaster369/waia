@@ -10,6 +10,7 @@ import { resolveCurrentResearchExecutableIdentityV1 } from "./research-executabl
 import { canonicalJsonString, computeStableJsonDigest } from "./digest";
 import { RESEARCH_DEVELOPMENT_SOURCE_ORG_V1 } from "./research-development-source-contract-v1";
 import { readResearchDevelopmentSourceIssuanceV1, readResearchDevelopmentSourceRowsV1 } from "./research-development-source-read-v1";
+import { assertResearchDevelopmentEvaluationRangesV1 } from "./research-development-evaluation-ranges-v1";
 
 const SCHEMA = "waia.research.issued-attempt.v2" as const;
 const org = z.string().uuid().transform(value => value.toLowerCase())
@@ -68,6 +69,10 @@ export async function readResearchIssuedSourceAndExperimentV2(tx: postgres.Sql, 
       canonicalJsonString(spec.partitions.train) !== canonicalJsonString(training)) {
     throw new Error("RESEARCH_ISSUED_EXPERIMENT_SOURCE_BINDING_MISMATCH");
   }
+  // This owner only supports DEVELOPMENT. Validate future declared ranges
+  // before any caller can materialize payload, insert an attempt or score train.
+  // This proves no validation-source availability or disclosure authority.
+  assertResearchDevelopmentEvaluationRangesV1(spec);
   return { issuance, experiment: identity };
 }
 

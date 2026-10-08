@@ -23,6 +23,10 @@ import { canonicalJsonString, computeStableJsonDigest } from "./digest";
 import { captureResearchIssuedTrainingRequestV2, RESEARCH_ISSUED_TRAINING_DIAGNOSTIC_V2, type ResearchIssuedTrainingRequestV2 } from "./research-issued-training-contract-v2";
 import { readResearchIssuedSourceAndExperimentV2 } from "./research-issued-attempt-postgres-v2";
 import { readResearchDevelopmentSourceRowsV1 } from "./research-development-source-read-v1";
+import { readResearchEvaluationSourceIssuanceV1, readResearchEvaluationSourceRowsV1 } from "./research-development-evaluation-source-read-v1";
+import { captureResearchDevelopmentEvaluationClaimRequestV1, RESEARCH_DEVELOPMENT_EVALUATION_CLAIM_V1,
+  type ResearchDevelopmentEvaluationClaimRequestV1 } from "./research-development-evaluation-claim-contract-v1";
+import { strategyAdmissionHypothesisId } from "./strategy-admission-v1";
 import { resolveCurrentResearchExecutableIdentityV1 } from "./research-executable-runtime-identity-v1";
 import { resolveResearchTrainingPolicyV1 } from "./research-training-policy-v1";
 import { validateResearchTrainingCyclesV1 } from "./research-training-payload-postgres-v1";
@@ -397,6 +401,377 @@ export async function selectResearchIssuedTrainingFamilyPostgresV1(supplied: unk
       const confirmed = await ownedSession(url, signal, deadline, true, (tx, executor, checkDeadline) =>
         verifyFamilyAndPersist(tx, executor, request, runtime, true, checkDeadline, expectedDigest));
       return Object.freeze({ status: "CONFIRMED_AFTER_UNCERTAINTY", receipt: confirmed.receipt });
+    } catch { return Object.freeze({ status: "COMMIT_UNCERTAIN", receipt: null }); }
+  }
+}
+
+type EvaluationClaimRow = {
+  claim_id: string; organization_id: string; command_id: string; attempt_id: string;
+  spec_sha256: string; hypothesis_id: string; split: string; selection_sha256: string;
+  evaluation_source_id: string; evaluation_source_digest: string;
+  receipt_canonical_json: string; receipt_sha256: string;
+};
+function claimRefuse(reason: string): never { throw new Error(`RESEARCH_EVALUATION_CLAIM_REFUSED:${reason}`); }
+
+/** This private operation reads evaluation metadata only. Training verification
+ * cannot execute a missing trial; all its payload belongs to already spent train. */
+async function buildVerifiedEvaluationClaim(tx: postgres.Sql, executor: ReturnType<typeof heldExecutor>["executor"],
+  request: ResearchDevelopmentEvaluationClaimRequestV1, runtime: Runtime, checkDeadline: () => void) {
+  const { attempt, bound } = await readIssuedMetadata(tx, request, runtime, true);
+  const evaluation = await readResearchEvaluationSourceIssuanceV1(tx, request.organizationId, request.evaluationSourceId);
+  if (!evaluation) claimRefuse("COMMITTED_EVALUATION_SOURCE_REQUIRED");
+  const m = evaluation.metadata;
+  const train = bound.issuance;
+  const { spec } = bound.experiment;
+  const partition = (value: typeof m.validation) => ({ contentSha256: value.contentSha256,
+    firstOpenMs: value.firstOpenMs, lastCloseMs: value.lastCloseMs, barCount: value.barCount });
+  if (m.request.trainingSourceRunId !== attempt.source_run_id ||
+      m.request.trainingSourceIssuanceDigest !== attempt.source_issuance_digest ||
+      m.releaseSha !== runtime.releaseSha || m.request.symbol !== spec.universe.symbol ||
+      m.sourceReleaseSha !== train.sourceReleaseSha || m.qualificationReceiptDigest !== train.qualificationReceiptDigest ||
+      m.runtimeRequalificationDigest !== train.runtimeRequalificationDigest ||
+      m.partitionRawSha256 !== train.partitionRawSha256 || m.partitionSemanticDigest !== train.partitionSemanticDigest ||
+      m.volumeQualificationDigest !== train.volumeQualificationDigest ||
+      canonicalJsonString(partition(m.validation)) !== canonicalJsonString(spec.partitions.validation) ||
+      canonicalJsonString(m.walkForward.map(partition)) !== canonicalJsonString(spec.partitions.walkForward)) {
+    claimRefuse("REGISTERED_EVALUATION_SOURCE_BINDING_MISMATCH");
+  }
+  const verified = await verifyFamilyAndPersist(tx, executor, request, runtime, true, checkDeadline);
+  const family = verified.receipt;
+  // This is the admission journal's existing string-valued parameter convention,
+  // not a new identity namespace derived from attempt, source or command IDs.
+  const parameters = Object.fromEntries(Object.entries(family.selectedParameters).map(([key, value]) => [key, String(value)]));
+  const hypothesisId = strategyAdmissionHypothesisId(attempt.spec_sha256, parameters);
+  const claimId = deterministicUuidV8(computeStableJsonDigest({ schemaVersion: RESEARCH_DEVELOPMENT_EVALUATION_CLAIM_V1,
+    organizationId: request.organizationId, commandId: request.commandId }));
+  const body = { schemaVersion: RESEARCH_DEVELOPMENT_EVALUATION_CLAIM_V1,
+    authority: "PRE_DISCLOSURE_VALIDATION_RESERVATION_ONLY" as const,
+    scientificQualified: false as const, capitalEligible: false as const,
+    sourceAvailability: "PIT_SOURCE_AVAILABILITY_NOT_ESTABLISHED" as const,
+    claimId, organizationId: request.organizationId, commandId: request.commandId, attemptId: request.attemptId,
+    experimentSpecSha256: attempt.spec_sha256, hypothesisId, split: "validation" as const,
+    trainingSourceRunId: attempt.source_run_id, trainingSourceIssuanceDigest: attempt.source_issuance_digest,
+    trainingFamilyReceiptSha256: family.contentDigest,
+    selectedIndex: family.selectedIndex, selectedParameters: family.selectedParameters,
+    observedExecutableIdentity: runtime, policyDigestHex: family.policyDigestHex,
+    historicalExecutionModelSha256: family.historicalExecutionModelSha256,
+    evaluationSourceId: request.evaluationSourceId, evaluationSourceIssuanceDigest: evaluation.contentDigest,
+    evaluationRowSetSha256: evaluation.rowSetSha256,
+    validation: spec.partitions.validation, walkForward: spec.partitions.walkForward };
+  return deepFreezeInquiry({ ...body, contentDigest: computeStableJsonDigest(body) });
+}
+export type ResearchDevelopmentEvaluationClaimReceiptV1 = Awaited<ReturnType<typeof buildVerifiedEvaluationClaim>>;
+type EvaluationClaimOutcome = Readonly<{ status: "COMMITTED" | "REPLAYED" | "CONFIRMED_AFTER_UNCERTAINTY";
+  receipt: ResearchDevelopmentEvaluationClaimReceiptV1 }> | Readonly<{ status: "COMMIT_UNCERTAIN"; receipt: null }>;
+
+async function reserveOrVerifyEvaluationClaim(tx: postgres.Sql, executor: ReturnType<typeof heldExecutor>["executor"],
+  request: ResearchDevelopmentEvaluationClaimRequestV1, runtime: Runtime, readOnly: boolean,
+  checkDeadline: () => void, expectedDigest?: string) {
+  if (!readOnly) await tx`SELECT pg_advisory_xact_lock(hashtextextended(
+    ${`research-evaluation-claim-v1:${request.organizationId}:${request.commandId}`},0))`;
+  const receipt = await buildVerifiedEvaluationClaim(tx, executor, request, runtime, checkDeadline);
+  const { contentDigest, ...body } = receipt;
+  const canonical = canonicalJsonString(body);
+  if (Buffer.byteLength(canonical, "utf8") > 262144) claimRefuse("RECEIPT_BYTE_LIMIT");
+  if (expectedDigest !== undefined && contentDigest !== expectedDigest) claimRefuse("CONFIRMATION_MISMATCH");
+  const readRows = () => tx<EvaluationClaimRow[]>`
+    SELECT claim_id::text,organization_id::text,command_id,attempt_id::text,spec_sha256,hypothesis_id,split,
+      selection_sha256,evaluation_source_id,evaluation_source_digest,receipt_canonical_json,receipt_sha256
+    FROM public.trader_research_development_evaluation_claims_v1
+    WHERE organization_id=${request.organizationId}::uuid AND command_id=${request.commandId}
+      AND octet_length(receipt_canonical_json)<=262144`;
+  const assertExact = (rows: EvaluationClaimRow[]) => {
+    const row = rows[0];
+    if (rows.length !== 1 || !row || row.claim_id !== receipt.claimId || row.organization_id !== request.organizationId ||
+        row.command_id !== request.commandId || row.attempt_id !== request.attemptId ||
+        row.spec_sha256 !== receipt.experimentSpecSha256 || row.hypothesis_id !== receipt.hypothesisId ||
+        row.split !== "validation" || row.selection_sha256 !== receipt.trainingFamilyReceiptSha256 ||
+        row.evaluation_source_id !== receipt.evaluationSourceId ||
+        row.evaluation_source_digest !== receipt.evaluationSourceIssuanceDigest ||
+        row.receipt_canonical_json !== canonical || row.receipt_sha256 !== contentDigest) claimRefuse("COMMITTED_CLAIM_CHANGED");
+  };
+  const rows = await readRows();
+  if (rows.length) {
+    assertExact(rows);
+    const consumed = await tx`SELECT spec_sha256 FROM public.trader_strategy_admission_split_consume
+      WHERE spec_sha256=${receipt.experimentSpecSha256} AND hypothesis_id=${receipt.hypothesisId} AND split='validation'`;
+    if (consumed.length !== 1) claimRefuse("COMMITTED_CONSUME_REQUIRED");
+    return Object.freeze({ status: "REPLAYED" as const, receipt });
+  }
+  if (readOnly) claimRefuse("COMMITTED_CLAIM_REQUIRED");
+  // The existing global primary key arbitrates both legacy and this new owner.
+  // SERIALIZABLE conflict with an invisible winner retries the whole snapshot.
+  // A visible spent key is never adopted merely by supplying a new command.
+  const inserted = await tx`INSERT INTO public.trader_strategy_admission_split_consume(spec_sha256,hypothesis_id,split)
+    VALUES (${receipt.experimentSpecSha256},${receipt.hypothesisId},'validation')
+    ON CONFLICT (spec_sha256,hypothesis_id,split) DO NOTHING RETURNING spec_sha256`;
+  if (inserted.length !== 1) claimRefuse("VALIDATION_ALREADY_CONSUMED");
+  await tx`INSERT INTO public.trader_research_development_evaluation_claims_v1
+    (organization_id,claim_id,command_id,attempt_id,spec_sha256,hypothesis_id,split,selection_sha256,
+     evaluation_source_id,evaluation_source_digest,receipt_canonical_json,receipt_sha256)
+    VALUES (${request.organizationId}::uuid,${receipt.claimId}::uuid,${request.commandId},${request.attemptId}::uuid,
+      ${receipt.experimentSpecSha256},${receipt.hypothesisId},'validation',${receipt.trainingFamilyReceiptSha256},
+      ${receipt.evaluationSourceId},${receipt.evaluationSourceIssuanceDigest},${canonical},${contentDigest})`;
+  assertExact(await readRows());
+  checkDeadline();
+  return Object.freeze({ status: "COMMITTED" as const, receipt });
+}
+
+/** Closed reservation only. Owns a root commit before returning metadata; never
+ * exposes evaluation payload or invokes a validation/WF kernel. */
+export async function reserveResearchDevelopmentEvaluationPostgresV1(supplied: unknown): Promise<EvaluationClaimOutcome> {
+  const deadline = performance.now() + 180_000;
+  const signal = AbortSignal.timeout(180_000);
+  const request = captureResearchDevelopmentEvaluationClaimRequestV1(supplied);
+  const runtime = resolveCurrentResearchExecutableIdentityV1();
+  const url = process.env.DATABASE_URL_POSTGRES;
+  if (!url) claimRefuse("DATABASE_REQUIRED");
+  let candidate: ResearchDevelopmentEvaluationClaimReceiptV1 | undefined;
+  try {
+    return await ownedSession(url, signal, deadline, false, async (tx, executor, checkDeadline) => {
+      candidate = undefined;
+      const result = await reserveOrVerifyEvaluationClaim(tx, executor, request, runtime, false, checkDeadline);
+      checkDeadline(); candidate = result.receipt; return result;
+    });
+  } catch (error) {
+    const code = (error as { code?: string } | null)?.code ?? "";
+    if (!candidate || (/^[0-9A-Z]{5}$/.test(code) && !/^(08|57)/.test(code))) throw error;
+    const expectedDigest = candidate.contentDigest;
+    try {
+      const confirmed = await ownedSession(url, signal, deadline, true, (tx, executor, checkDeadline) =>
+        reserveOrVerifyEvaluationClaim(tx, executor, request, runtime, true, checkDeadline, expectedDigest));
+      return Object.freeze({ status: "CONFIRMED_AFTER_UNCERTAINTY", receipt: confirmed.receipt });
+    } catch { return Object.freeze({ status: "COMMIT_UNCERTAIN", receipt: null }); }
+  }
+}
+
+const EVALUATION_STAGE_V1 = "waia.research.development-evaluation-stage.v1" as const;
+const EVALUATION_V1 = "waia.research.development-evaluation.v1" as const;
+type EvaluationTrace = Pick<VerifiedTrace, "stageRunId" | "scopeDigestHex" | "decisions" | "orders" |
+  "openPositions" | "equity" | "netUnrealizedPnl" | "orderCount" | "fillCount" | "accountingSequence" |
+  "finalAccountingDigestHex" | "ledgerDigestHex" | "traceSha256" | "inputUseReceipt"> & Readonly<Record<string, unknown> & {
+  authority: "EVALUATION_ENGINEERING_TRACE_ONLY"; claimId: string; claimDigest: string;
+  stageOrdinal: number; stageKind: "VALIDATION" | "WALK_FORWARD"; windowIndex: number;
+  historicalAccountKey: string; selectedParameters: ResearchDevelopmentEvaluationClaimReceiptV1["selectedParameters"];
+}>;
+type EvaluationScopeRow = { stage_ordinal: number; stage_run_id: string; account_key: string;
+  scope_canonical_json: string; scope_sha256: string };
+type EvaluationResultRow = { stage_ordinal: number; stage_run_id: string;
+  trace_canonical_json: string; trace_sha256: string };
+function evaluationRefuse(reason: string): never { throw new Error(`RESEARCH_DEVELOPMENT_EVALUATION_REFUSED:${reason}`); }
+
+async function executeOrVerifyEvaluation(tx: postgres.Sql, executor: ReturnType<typeof heldExecutor>["executor"],
+  request: ResearchDevelopmentEvaluationClaimRequestV1, runtime: Runtime, checkDeadline: () => void,
+  verificationOnly: boolean) {
+  // Read-only verification cannot create/adopt a claim. Because this is a new,
+  // privately owned root transaction, visibility proves its earlier root commit.
+  const { receipt: claim } = await reserveOrVerifyEvaluationClaim(tx, executor, request, runtime, true, checkDeadline);
+  const { bound } = await readIssuedMetadata(tx, request, runtime, true);
+  const evaluation = await readResearchEvaluationSourceIssuanceV1(tx, request.organizationId, request.evaluationSourceId);
+  if (!evaluation || evaluation.contentDigest !== claim.evaluationSourceIssuanceDigest ||
+      evaluation.rowSetSha256 !== claim.evaluationRowSetSha256) evaluationRefuse("CLAIM_SOURCE_CHANGED");
+  const ranges = [evaluation.metadata.validation, ...evaluation.metadata.walkForward];
+  if (ranges.reduce((sum, range) => sum + range.barCount, 0) > request.limits.maxBars) {
+    evaluationRefuse("AGGREGATE_BAR_BUDGET");
+  }
+  const policy = resolveResearchTrainingPolicyV1(bound.experiment.spec);
+  const model = createHistoricalExecutionModelV1();
+  if (policy.guardianResolvedPolicySha256 !== claim.policyDigestHex ||
+      computeStableJsonDigest(model) !== claim.historicalExecutionModelSha256) evaluationRefuse("POLICY_MODEL_CHANGED");
+  const scopes = ranges.map((range, stageOrdinal) => {
+    const partition = { contentSha256: range.contentSha256, firstOpenMs: range.firstOpenMs,
+      lastCloseMs: range.lastCloseMs, barCount: range.barCount };
+    const identity = { schemaVersion: EVALUATION_STAGE_V1, organizationId: request.organizationId,
+      attemptId: request.attemptId, experimentSpecSha256: claim.experimentSpecSha256,
+      sourceRunId: request.evaluationSourceId, sourceIssuanceDigest: evaluation.contentDigest,
+      trialIndex: claim.selectedIndex, parameters: claim.selectedParameters,
+      partitionSha256: partition.contentSha256, claimId: claim.claimId, claimDigest: claim.contentDigest,
+      stageOrdinal, stageKind: stageOrdinal === 0 ? "VALIDATION" as const : "WALK_FORWARD" as const,
+      windowIndex: Math.max(0, stageOrdinal - 1) };
+    const contentDigest = computeStableJsonDigest(identity);
+    const stageRunId = deterministicUuidV8(contentDigest);
+    const accountKey = `research-evaluation-stage:${stageRunId}`;
+    return { range, partition, identity, contentDigest, stageRunId, accountKey,
+      canonical: canonicalJsonString(identity) };
+  });
+  if (!verificationOnly) await tx`SELECT pg_advisory_xact_lock(hashtextextended(
+    ${`research-evaluation-v1:${request.organizationId}:${claim.claimId}`},0))`;
+  const [size] = await tx<{ scopes: number; results: number; bytes: string }[]>`
+    SELECT (SELECT count(*)::integer FROM public.trader_research_development_evaluation_scopes_v1
+        WHERE organization_id=${request.organizationId}::uuid AND claim_id=${claim.claimId}::uuid) AS scopes,
+      count(*)::integer AS results,coalesce(sum(octet_length(trace_canonical_json)),0)::text AS bytes
+    FROM public.trader_research_development_evaluation_results_v1
+    WHERE organization_id=${request.organizationId}::uuid AND claim_id=${claim.claimId}::uuid`;
+  if (!size || !Number.isSafeInteger(Number(size.bytes)) || Number(size.bytes) > request.limits.maxTraceBytes ||
+      (size.scopes !== 0 && size.scopes !== scopes.length) ||
+      (size.results !== 0 && size.results !== scopes.length) || size.scopes !== size.results) {
+    evaluationRefuse("INCOMPLETE_OR_OVERSIZED_COMMITTED_BATCH");
+  }
+  const replay = size.results !== 0;
+  if (verificationOnly && !replay) evaluationRefuse("COMMIT_NOT_CONFIRMED");
+  const existingScopes = await tx<EvaluationScopeRow[]>`
+    SELECT stage_ordinal,stage_run_id::text,account_key,scope_canonical_json,scope_sha256
+    FROM public.trader_research_development_evaluation_scopes_v1
+    WHERE organization_id=${request.organizationId}::uuid AND claim_id=${claim.claimId}::uuid
+    ORDER BY stage_ordinal LIMIT ${scopes.length + 1}`;
+  if (existingScopes.length !== size.scopes) evaluationRefuse("SCOPE_COUNT_CHANGED");
+  for (const [index, scope] of scopes.entries()) {
+    const [foreignAccount] = await tx<{ present: boolean }[]>`SELECT
+      EXISTS(SELECT 1 FROM public.trader_orders
+        WHERE historical_account_key=${scope.accountKey}
+          AND (historical_run_id IS DISTINCT FROM ${scope.stageRunId} OR organization_id<>${request.organizationId}::uuid)) OR
+      EXISTS(SELECT 1 FROM public.trader_accounting_frontier
+        WHERE account_key=${scope.accountKey}
+          AND (run_id IS DISTINCT FROM ${scope.stageRunId} OR organization_id<>${request.organizationId}::uuid)) AS present`;
+    if (!foreignAccount || foreignAccount.present) evaluationRefuse("FOREIGN_STAGE_ACCOUNT");
+    if (replay) {
+      const row = existingScopes[index];
+      if (!row || row.stage_ordinal !== index || row.stage_run_id !== scope.stageRunId ||
+          row.account_key !== scope.accountKey || row.scope_canonical_json !== scope.canonical ||
+          row.scope_sha256 !== scope.contentDigest) evaluationRefuse("COMMITTED_SCOPE_CHANGED");
+    } else {
+      const inserted = await tx`INSERT INTO public.trader_research_development_evaluation_scopes_v1
+        (organization_id,claim_id,claim_digest,stage_ordinal,stage_run_id,account_key,scope_canonical_json,scope_sha256)
+        VALUES (${request.organizationId}::uuid,${claim.claimId}::uuid,${claim.contentDigest},${index},
+          ${scope.stageRunId}::uuid,${scope.accountKey},${scope.canonical},${scope.contentDigest})
+        ON CONFLICT (organization_id,claim_id,stage_ordinal) DO NOTHING RETURNING stage_run_id`;
+      if (inserted.length !== 1) evaluationRefuse("STAGE_OWNERSHIP_CONFLICT");
+    }
+  }
+  // No evaluation row query precedes the committed-claim check and scope proof.
+  // The metadata-only verifier and this private bounded read share one snapshot.
+  await readResearchEvaluationSourceRowsV1(tx, evaluation, { maxBytes: request.limits.maxBytes });
+  type Cycle = ReturnType<typeof validateResearchTrainingCyclesV1>[number];
+  const rows = await tx<{ sealed_cycle_json: Cycle }[]>`
+    SELECT sealed_cycle_json FROM public.trader_historical_dataset_authority_v2
+    WHERE organization_id=${request.organizationId}::uuid AND run_id=${request.evaluationSourceId}
+    ORDER BY (membership_json->>'recordIndex')::bigint LIMIT ${evaluation.metadata.validation.barCount + 1}`;
+  if (rows.length !== evaluation.metadata.validation.barCount) evaluationRefuse("EVALUATION_ROW_COUNT_CHANGED");
+  const cycles = validateResearchTrainingCyclesV1(rows.map(row => row.sealed_cycle_json),
+    bound.experiment.spec.replay.volumeQualificationSha256);
+  const results = replay ? await tx<EvaluationResultRow[]>`
+    SELECT stage_ordinal,stage_run_id::text,trace_canonical_json,trace_sha256
+    FROM public.trader_research_development_evaluation_results_v1
+    WHERE organization_id=${request.organizationId}::uuid AND claim_id=${claim.claimId}::uuid
+    ORDER BY stage_ordinal LIMIT ${scopes.length + 1}` : [];
+  if (results.length !== size.results) evaluationRefuse("RESULT_COUNT_CHANGED");
+  const traces: EvaluationTrace[] = [];
+  let traceBytes = 0;
+  for (const [index, scope] of scopes.entries()) {
+    checkDeadline();
+    const offset = scope.range.firstRecordIndex - evaluation.metadata.validation.firstRecordIndex;
+    const selectedCycles = cycles.slice(offset, offset + scope.range.barCount);
+    if (selectedCycles.length !== scope.range.barCount) evaluationRefuse("STAGE_RANGE_CHANGED");
+    const source: ResearchModeledStageSourceV1 = {
+      authority: "TRAINING_EXECUTION_INPUT_INTEGRITY_ONLY", source: "PRE_HOLDOUT_DEVELOPMENT_AUTHORITY_V2",
+      sourceRunId: request.evaluationSourceId, datasetAuthorityDigest: evaluation.metadata.qualificationReceiptDigest,
+      scope: { authority: "ROW_SCOPE_ONLY", identity: scope.identity, contentDigest: scope.contentDigest,
+        logicalAccountKey: bound.experiment.spec.replay.accountKey,
+        ledgerScope: captureHistoricalMockLedgerScope({ organizationId: request.organizationId,
+          historicalRunId: scope.stageRunId, historicalAccountKey: scope.accountKey }) },
+      partition: scope.partition, cycles: selectedCycles, bars: selectedCycles.map(cycle => cycle.closedBar),
+      experiment: bound.experiment, volumeQualificationSha256: evaluation.metadata.volumeQualificationDigest };
+    const invocations = source.cycles.map((cycle, stageIndex) => evaluateResearchFeatureInvocationV1({
+      parameters: claim.selectedParameters, bars: source.bars, symbol: bound.experiment.spec.universe.symbol,
+      interval: "1m", index: stageIndex, sourceBarIndex: cycle.barIndex, cycleId: cycle.cycleId }).invocationReceipt);
+    const expected = { schemaVersion: EVALUATION_STAGE_V1, authority: "EVALUATION_ENGINEERING_TRACE_ONLY",
+      organizationId: request.organizationId, attemptId: request.attemptId, trialIndex: claim.selectedIndex,
+      claimId: claim.claimId, claimDigest: claim.contentDigest, stageOrdinal: index,
+      stageKind: scope.identity.stageKind, windowIndex: scope.identity.windowIndex,
+      selectedParameters: claim.selectedParameters, historicalAccountKey: scope.accountKey,
+      stageRunId: scope.stageRunId, scopeDigestHex: scope.contentDigest, experimentSpecSha256: claim.experimentSpecSha256,
+      sourceRunId: request.evaluationSourceId, sourceIssuanceDigest: evaluation.contentDigest,
+      evaluationPartitionSha256: scope.partition.contentSha256, barCount: scope.range.barCount,
+      inputUseReceipt: bindInputUseReceipt(source, policy, runtime, invocations),
+      policyDigestHex: policy.guardianResolvedPolicySha256, historicalExecutionModelSha256: claim.historicalExecutionModelSha256,
+      requestedExecutableSourceSha256: policy.requestedExecutableSourceSha256, observedExecutableIdentity: runtime,
+      requestedPointInTimeEvidenceSha256: policy.requestedPointInTimeEvidenceSha256,
+      scientificQualified: false, capitalEligible: false, sourceQualification: "NOT_ESTABLISHED",
+      sourceAvailability: "PIT_SOURCE_AVAILABILITY_NOT_ESTABLISHED", strategyGuardianQualification: "UNQUALIFIED",
+      accountGuardianQualification: "UNQUALIFIED", appliedProtectionScope: "ACCOUNT_D20_SIGNAL_ADMISSION_ONLY" };
+    const proof = await readResearchStageLedgerProofV1(executor, { organizationId: request.organizationId,
+      stageRunId: scope.stageRunId, accountKey: scope.accountKey });
+    if (replay) {
+      const row = results[index]!;
+      if (row.stage_ordinal !== index || row.stage_run_id !== scope.stageRunId) evaluationRefuse("RESULT_SCOPE_CHANGED");
+      const trace = readCurrentTrace(row, EVALUATION_STAGE_V1);
+      if (Object.entries(expected).some(([key, value]) => canonicalJsonString(trace[key]) !== canonicalJsonString(value)) ||
+          Object.prototype.hasOwnProperty.call(trace, "trainPartitionSha256") ||
+          !Array.isArray(trace.decisions) || !Array.isArray(trace.orders) || !Array.isArray(trace.openPositions) ||
+          !Number.isSafeInteger(trace.orderCount) || !Number.isSafeInteger(trace.fillCount) ||
+          !Number.isSafeInteger(trace.accountingSequence)) evaluationRefuse("COMMITTED_RESULT_CHANGED");
+      const [last] = await executor.execute<{ semantic_content_digest: string }>(query`
+        SELECT semantic_content_digest FROM public.trader_accounting_frontier
+        WHERE organization_id=${request.organizationId}::uuid AND account_key=${scope.accountKey} AND run_id=${scope.stageRunId}
+        ORDER BY accounting_sequence DESC LIMIT 1`);
+      if (proof.ledger.order_count !== String(trace.orderCount) || proof.ledger.fill_count !== String(trace.fillCount) ||
+          proof.ledger.frontier_count !== String(trace.accountingSequence) ||
+          last?.semantic_content_digest !== trace.finalAccountingDigestHex ||
+          await proof.readLedgerDigest() !== trace.ledgerDigestHex) evaluationRefuse("COMMITTED_LEDGER_DIVERGENT");
+      traces.push(deepFreezeInquiry({ ...trace, traceSha256: row.trace_sha256 }) as unknown as EvaluationTrace);
+    } else {
+      if (proof.ledger.order_count !== "0" || proof.ledger.fill_count !== "0" || proof.ledger.frontier_count !== "0") {
+        evaluationRefuse("UNCOMMITTED_STAGE_LEDGER");
+      }
+      const stage = await runOwnedResearchModeledStageV1({ executor,
+        descriptor: sealOwnedResearchModeledStageDescriptorV1({ attemptId: request.attemptId,
+          trialIndex: claim.selectedIndex, policy, model }), payload: source });
+      const summary = buildResearchTrainingTraceV1({ source, request: { attemptId: request.attemptId, trialIndex: claim.selectedIndex },
+        policy, observedExecutableIdentity: runtime, stage, ledgerDigestHex: await proof.readLedgerDigest() });
+      // Reuse accounting serialization, but never label evaluation as training.
+      const trace: Record<string, unknown> = { ...summary, ...expected };
+      delete trace.trainPartitionSha256;
+      // Bind actual calls, not just independently reconstructed feature inputs.
+      if (canonicalJsonString(summary.inputUseReceipt) !== canonicalJsonString(expected.inputUseReceipt)) {
+        evaluationRefuse("KERNEL_INPUT_USE_MISMATCH");
+      }
+      const canonical = canonicalJsonString(trace);
+      traceBytes += Buffer.byteLength(canonical, "utf8");
+      if (traceBytes > request.limits.maxTraceBytes) evaluationRefuse("AGGREGATE_TRACE_BUDGET");
+      const digest = computeStableJsonDigest(trace);
+      await tx`INSERT INTO public.trader_research_development_evaluation_results_v1
+        (organization_id,claim_id,stage_ordinal,stage_run_id,trace_canonical_json,trace_sha256)
+        VALUES (${request.organizationId}::uuid,${claim.claimId}::uuid,${index},${scope.stageRunId}::uuid,${canonical},${digest})`;
+      traces.push(deepFreezeInquiry({ ...trace, traceSha256: digest }) as unknown as EvaluationTrace);
+    }
+  }
+  const body = { schemaVersion: EVALUATION_V1, authority: "DEVELOPMENT_ENGINEERING_TRACE_ONLY" as const,
+    scientificQualified: false as const, capitalEligible: false as const, claimId: claim.claimId,
+    claimDigest: claim.contentDigest, stages: traces };
+  return deepFreezeInquiry({ status: replay ? "REPLAYED" as const : "COMMITTED" as const,
+    receipt: { ...body, contentDigest: computeStableJsonDigest(body) } });
+}
+
+type EvaluationReceipt = Awaited<ReturnType<typeof executeOrVerifyEvaluation>>["receipt"];
+type EvaluationOutcome = Readonly<{ status: "COMMITTED" | "REPLAYED" | "CONFIRMED_AFTER_UNCERTAINTY";
+  receipt: EvaluationReceipt }> | Readonly<{ status: "COMMIT_UNCERTAIN"; receipt: null }>;
+
+/** Synthetic/native engineering owner. Never reserves a scientific use here:
+ * a prior root commit must already bind the selected candidate and consume key.
+ * No caller-supplied payload, transaction, ledger identity or kernel is accepted. */
+export async function runResearchDevelopmentEvaluationPostgresV1(supplied: unknown): Promise<EvaluationOutcome> {
+  const deadline = performance.now() + 180_000;
+  const signal = AbortSignal.timeout(180_000);
+  const request = captureResearchDevelopmentEvaluationClaimRequestV1(supplied);
+  const runtime = resolveCurrentResearchExecutableIdentityV1();
+  const url = process.env.DATABASE_URL_POSTGRES;
+  if (!url) evaluationRefuse("DATABASE_REQUIRED");
+  let candidate: EvaluationReceipt | undefined;
+  try {
+    return await ownedSession(url, signal, deadline, false, async (tx, executor, checkDeadline) => {
+      candidate = undefined;
+      const result = await executeOrVerifyEvaluation(tx, executor, request, runtime, checkDeadline, false);
+      checkDeadline(); candidate = result.receipt; return result;
+    });
+  } catch (error) {
+    const code = (error as { code?: string } | null)?.code ?? "";
+    if (!candidate || (/^[0-9A-Z]{5}$/.test(code) && !/^(08|57)/.test(code))) throw error;
+    const expectedDigest = candidate.contentDigest;
+    try {
+      const confirmed = await ownedSession(url, signal, deadline, true, (tx, executor, checkDeadline) =>
+        executeOrVerifyEvaluation(tx, executor, request, runtime, checkDeadline, true));
+      if (confirmed.receipt.contentDigest !== expectedDigest) evaluationRefuse("CONFIRMATION_DIVERGENT");
+      return deepFreezeInquiry({ status: "CONFIRMED_AFTER_UNCERTAINTY", receipt: confirmed.receipt });
     } catch { return Object.freeze({ status: "COMMIT_UNCERTAIN", receipt: null }); }
   }
 }
