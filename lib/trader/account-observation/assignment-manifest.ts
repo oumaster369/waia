@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { htxObservationReaderLimitsSchema } from "./coverage";
+import { htxObservationReaderLimitsSchema, htxV5ObservationConfigurationSchema } from "./coverage";
 import { createObservationConfiguration } from "./runtime";
 import type { ConfiguredHtxObservationAssignment } from "./configured-runtime";
 import {
@@ -41,6 +41,7 @@ const assignmentSchema = z
       .max(256)
       .regex(/^[1-9]\d*$/),
     configurationRevision: z.string().min(1).max(256),
+    existingKeyReadConsentId: z.string().uuid().optional(),
     symbols: z
       .array(z.string().regex(/^[A-Z0-9]{2,32}$/))
       .min(1)
@@ -68,6 +69,7 @@ const assignmentSchema = z
       .min(1)
       .max(HTX_DERIVATIVES_FILL_CONTRACT_LIMIT)
       .optional(),
+    htxV5: htxV5ObservationConfigurationSchema.optional(),
   })
   .strict();
 
@@ -170,12 +172,16 @@ export function parseAccountObservationAssignmentManifest(
         readTimeoutMs: item.readTimeoutMs,
         leaseTtlMs: item.leaseTtlMs,
         htxCoverage: { ...readerLimits, host: body.host },
+        ...(item.existingKeyReadConsentId
+          ? { existingKeyReadConsentId: item.existingKeyReadConsentId }
+          : {}),
         ...(item.htxDerivativesFamilies
           ? { htxDerivativesFamilies: item.htxDerivativesFamilies }
           : {}),
         ...(item.htxDerivativesFillContracts
           ? { htxDerivativesFillContracts: item.htxDerivativesFillContracts }
           : {}),
+        ...(item.htxV5 ? { htxV5: item.htxV5 } : {}),
       });
     } catch {
       refuse("COVERAGE");

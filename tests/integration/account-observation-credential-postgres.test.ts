@@ -10,9 +10,10 @@ import { probeObservationCredentialPool } from "@/lib/trader/account-observation
 import { createObservationCredentialReader } from "@/lib/trader/account-observation/credential-read-boundary";
 import { encryptCredentialPayload } from "@/lib/trader/credentials/envelope-crypto";
 import { SecretsStoreMasterKeyProvider } from "@/lib/trader/security/secrets-store-master-key-provider";
-import { buildHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
+import { buildHtxObservationPermissionMetadata, buildHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
 import { requireHtxStoredPermissionMetadata } from "@/lib/trader/security/htx-secure-credential-resolver";
 import { runAccountObservationCollector } from "@/scripts/trader/account-observation-collector-host";
+import { createAccountObservationDatabaseTlsOptions } from "@/lib/trader/account-observation/database-node-tls";
 import {
   ACCOUNT_OBSERVATION_LOGIN_PLAN,
   provisionAccountObservationLoginsV1,
@@ -25,9 +26,11 @@ import {
 
 // Explicit synthetic loopback-only target; never use production environment URLs.
 const enabled = process.env.DEE960_LOCAL_PG17 === "1";
-const url = "postgres://waia_local_admin:local_validation_only@127.0.0.1:55460/waia_dee960_local";
-const HOST = "127.0.0.1:55460";
+const HOST = process.env.DEE1235_CREDENTIAL_FIXTURE === "1" ? "127.0.0.1:55732" : "127.0.0.1:55460";
+const url = `postgres://waia_local_admin:local_validation_only@${HOST}/waia_dee960_local`;
 const MASTER_KEY = Buffer.alloc(32, 7).toString("base64");
+const databaseCertificateAuthority = enabled ? readFileSync(process.env.DEE1235_CREDENTIAL_FIXTURE === "1"
+  ? ".tmp/account-observation-credential-tls/ca.crt" : ".tmp/account-observation-tls/ca.crt", "utf8") : undefined;
 
 /** Distinct, synthetic, >=32 characters; never a production secret. */
 const PASSWORDS = Object.freeze({
@@ -42,6 +45,8 @@ const MIGRATIONS = Object.freeze([
   "db/migrations_postgres/0205_trader_account_observation_v1.sql",
   "db/migrations_postgres/0210_trader_account_observation_credential_v1.sql",
   "db/migrations_postgres/0229_trader_observation_read_only_credential_v1.sql",
+  "db/migrations_postgres/0230_trader_observation_consent_revision_grants_v1.sql",
+  "db/migrations_postgres/0231_trader_observation_purpose_projection_v1.sql",
 ]);
 
 describe.skipIf(!enabled)(
@@ -183,11 +188,7 @@ describe.skipIf(!enabled)(
     }
 
     async function credentialReader(
-      assignments: readonly {
-        organizationId: string;
-        credentialId: string;
-        exchangeAccountId: string;
-      }[],
+      assignments: Parameters<typeof createObservationCredentialReader>[0]["assignments"],
     ) {
       return createObservationCredentialReader({
         sql: open("credential"),
@@ -298,6 +299,36 @@ describe.skipIf(!enabled)(
       );
     });
 
+    it("decrypts only canonical observation purpose while retaining actual venue scopes and immutable legacy decision", async () => {
+      const assignment = await seed({ permissionMetadata: account => JSON.stringify(
+        buildHtxObservationPermissionMetadata({ exchangeAccountId: account, scopes: ["read", "trade"] }),
+      ) });
+      const reader = await credentialReader([assignment]);
+      const canonical = buildHtxObservationPermissionMetadata({
+        exchangeAccountId: assignment.exchangeAccountId, scopes: ["read", "trade"],
+      });
+      for (const change of [null, { scopes: ["read"] }, { purpose: "trade" },
+        { version: 1 }, { version: "2" }, { scopes: ["trade"] },
+        { scopes: ["read", "trade", "withdraw"] }, { scopes: ["read", "read", "trade"] },
+        { scopes: ["read", "transfer"] }, { unexpected: true }, { warnings: [2] },
+        { withdrawForbidden: false }, { exchangeAccountId: "foreign" }]) {
+        const candidate = { ...canonical, ...change };
+        const allowed = change === null || ("scopes" in change && JSON.stringify(change.scopes) === '["read"]');
+        await admin`UPDATE public.exchange_credentials SET permission_metadata=${JSON.stringify(candidate)}
+          WHERE id=${assignment.credentialId}`;
+        const [row] = await admin`SELECT observation_read_only, observation_read_permitted, permission_metadata
+          FROM public.exchange_credentials WHERE id=${assignment.credentialId}`;
+        expect(row.observation_read_permitted).toBe(allowed);
+        if (candidate.version === 2) expect(row.observation_read_only).toBe(false);
+        expect(JSON.parse(row.permission_metadata).scopes).toEqual(candidate.scopes);
+        const read = reader.getDecryptedCredentials({ organizationId: assignment.organizationId }, assignment.credentialId);
+        if (allowed) await expect(read).resolves.toMatchObject({ apiKey: "synthetic-observation-key" });
+        else await expect(read).rejects.toThrow("ACCOUNT_OBSERVATION_CREDENTIAL_REFUSED:NOT_READ_ONLY");
+        expect(() => requireHtxStoredPermissionMetadata({ purpose: "trade", venue: "htx",
+          exchangeAccountId: assignment.exchangeAccountId, permissionMetadata: candidate })).toThrow();
+      }
+    });
+
     it("declares only the minimal credential projection and no whole-table SELECT", async () => {
       const privileges = await admin`SELECT
         has_table_privilege('waia_account_observation_credential',
@@ -336,7 +367,7 @@ describe.skipIf(!enabled)(
         metadata: false,
         venue: false,
         masked: false,
-        revision: false,
+        revision: true,
         observation_decision: true,
         credential_writes: false,
         observation_reads: false,
@@ -589,7 +620,6 @@ describe.skipIf(!enabled)(
         "SELECT permission_metadata FROM public.exchange_credentials",
         "SELECT venue FROM public.exchange_credentials",
         "SELECT api_key_masked FROM public.exchange_credentials",
-        "SELECT observation_revision FROM public.exchange_credentials",
       ]) {
         expect(await attempt("credential", statement, assignment)).toBe("42501");
       }
@@ -707,6 +737,35 @@ describe.skipIf(!enabled)(
       expect(historical[0].no_historical_membership).toBe(true);
     });
 
+    it("verifies the actual PostgreSQL certificate and hostname, refusing the wrong trust root or name", async () => {
+      for (const client of clients.values()) await client.end({ timeout: 2 });
+      clients.clear();
+      const strict = createAccountObservationDatabaseTlsOptions(databaseCertificateAuthority);
+      const valid = postgres(runtimeUrl("reader"), { max: 1, connect_timeout: 3, prepare: false, ssl: strict });
+      try {
+        const [session] = await valid`SELECT ssl, version FROM pg_stat_ssl WHERE pid = pg_backend_pid()`;
+        expect(session.ssl).toBe(true);
+        expect(session.version).toMatch(/^TLSv1\.[23]$/);
+      } finally { await valid.end({ timeout: 2 }); }
+
+      const wrongRoot = postgres(runtimeUrl("reader"), { max: 1, connect_timeout: 3, prepare: false,
+        ssl: createAccountObservationDatabaseTlsOptions() });
+      try {
+        await expect(wrongRoot`SELECT 1`).rejects.toMatchObject({ code: expect.stringMatching(
+          /^(UNABLE_TO_VERIFY_LEAF_SIGNATURE|SELF_SIGNED_CERT_IN_CHAIN|UNABLE_TO_GET_ISSUER_CERT_LOCALLY)$/,
+        ) });
+      } finally { await wrongRoot.end({ timeout: 2 }); }
+
+      // Same owned PostgreSQL listener and CA, but a name absent from the server certificate.
+      // The explicit name is test input only; the production helper never overrides identity checks.
+      const wrongName = postgres(runtimeUrl("reader"), {
+        max: 1, connect_timeout: 3, prepare: false,
+        ssl: { ...strict, servername: "wrong.fixture.invalid" },
+      });
+      try { await expect(wrongName`SELECT 1`).rejects.toMatchObject({ code: "ERR_TLS_CERT_ALTNAME_INVALID" }); }
+      finally { await wrongName.end({ timeout: 2 }); }
+    }, 30000);
+
     it("starts the actual collector through all three provisioned runtime identities", async () => {
       // The three logins carry CONNECTION LIMIT 2, so release the shared qualification clients
       // and let the real host own its own bounded pools.
@@ -762,6 +821,7 @@ describe.skipIf(!enabled)(
       let run: Promise<void> | undefined;
       try {
         run = runAccountObservationCollector({
+          databaseCertificateAuthority,
           env: {
             WAIA_TRADER_CLI: "1",
             WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
@@ -791,6 +851,17 @@ describe.skipIf(!enabled)(
         expect(url).toContain("AccessKeyId=synthetic-observation-key");
         expect(url.startsWith("https://api.huobi.pro/")).toBe(true);
         expect(events).toContain("HOST_STARTED");
+        const encrypted = await admin`
+          SELECT a.usename, count(*)::integer AS sessions, bool_and(s.ssl) AS encrypted
+          FROM pg_stat_activity a JOIN pg_stat_ssl s ON s.pid = a.pid
+          WHERE a.datname = ${database} AND a.usename = ANY (${ACCOUNT_OBSERVATION_LOGIN_PLAN.map(entry => entry.loginRole)})
+          GROUP BY a.usename ORDER BY a.usename`;
+        expect(encrypted).toHaveLength(3);
+        for (const session of encrypted) {
+          expect(session.sessions).toBeGreaterThan(0);
+          expect(session.sessions).toBeLessThanOrEqual(2);
+          expect(session.encrypted).toBe(true);
+        }
       } finally {
         controller.abort();
         await run?.catch(() => {});
@@ -945,7 +1016,7 @@ describe.skipIf(!enabled)(
         // Restore that exact baseline rather than mistaking a later refusal for a new case.
         const restoreProjection =
           privilege === "SELECT ON public.exchange_credentials" && grantee === parent
-            ? `; GRANT SELECT (id, organization_id, exchange_account_id, status, observation_read_only, encrypted_payload,
+            ? `; GRANT SELECT (id, organization_id, exchange_account_id, status, observation_read_only, observation_read_permitted, observation_revision, encrypted_payload,
               payload_key_version, wrapped_dek_key_version, wrapped_dek_key) ON public.exchange_credentials TO ${parent}`
             : "";
         await changedPosture(
@@ -1074,6 +1145,7 @@ describe.skipIf(!enabled)(
           let deadline: ReturnType<typeof setTimeout> | undefined;
           try {
             run = runAccountObservationCollector({
+          databaseCertificateAuthority,
               env: {
                 WAIA_TRADER_CLI: "1",
                 WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
@@ -1145,6 +1217,7 @@ describe.skipIf(!enabled)(
           await admin.unsafe(`ALTER ROLE ${login} INHERIT`);
           await expect(
             runAccountObservationCollector({
+          databaseCertificateAuthority,
               env: {
                 WAIA_TRADER_CLI: "1",
                 WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
@@ -1180,6 +1253,7 @@ describe.skipIf(!enabled)(
         clients.clear();
         const restart = new AbortController();
         await runAccountObservationCollector({
+          databaseCertificateAuthority,
           env: {
             WAIA_TRADER_CLI: "1",
             WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
@@ -1356,6 +1430,161 @@ describe.skipIf(!enabled)(
           }),
         ).rejects.toThrow("ACCOUNT_OBSERVATION_LOGIN_REFUSED:ADMIN_ROLE");
       });
+    });
+
+    describe("canonical existing-key consent grants (isolated database only)", () => {
+      const configurationRevision = `sha256:${"c".repeat(64)}`;
+      beforeAll(async () => {
+        // The canonical fixture already includes0230/0231. Exercise each missing
+        // metadata grant explicitly in this owned database, then restore it.
+        await expect(probeObservationCredentialPool(open("credential"), true))
+          .resolves.toBe("waia_account_observation_credential_login");
+        for (const [table, column] of [
+          ["exchange_credentials", "observation_revision"],
+          ["trader_account_collection_state", "configuration_revision"],
+        ] as const) {
+          try {
+            await admin.unsafe(`REVOKE SELECT (${column}) ON public.${table} FROM waia_account_observation_credential`);
+            await expect(probeObservationCredentialPool(open("credential"), true))
+              .rejects.toThrow("OBSERVATION_CREDENTIAL_ROLE_REFUSED");
+          } finally {
+            await admin.unsafe(`GRANT SELECT (${column}) ON public.${table} TO waia_account_observation_credential`);
+          }
+        }
+        await expect(probeObservationCredentialPool(open("credential"), true))
+          .resolves.toBe("waia_account_observation_credential_login");
+      });
+
+      it("requires the coordinated new projection without granting general credential reads or writes", async () => {
+        // Removing consent later must not strand the ordinary read-only deployment.
+        await expect(probeObservationCredentialPool(open("credential")))
+          .resolves.toBe("waia_account_observation_credential_login");
+        await expect(probeObservationCredentialPool(open("credential"), true))
+          .resolves.toBe("waia_account_observation_credential_login");
+        const scope = await seed();
+        expect(await attempt("credential", "SELECT permission_metadata FROM public.exchange_credentials", scope)).toBe("42501");
+        expect(await attempt("credential", "UPDATE public.exchange_credentials SET status='revoked'", scope)).toBe("42501");
+        expect(await attempt("reader", "SELECT encrypted_payload FROM public.exchange_credentials", scope)).toBe("42501");
+      });
+
+      it("keeps the original stored read-purpose guard even with explicit consent", async () => {
+        const scope = await seed({ configurationRevision, permissionMetadata: account =>
+          JSON.stringify(buildHtxPermissionMetadata({ exchangeAccountId: account, scopes: ["read", "trade"] })) });
+        const reader = await credentialReader([{ ...scope, existingKeyReadConsent: {
+          consentId: randomUUID(), credentialRevision: "1", configurationRevision } }]);
+        await expect(reader.getDecryptedCredentials({ organizationId: scope.organizationId }, scope.credentialId))
+          .rejects.toThrow("REFUSED:NOT_READ_ONLY");
+      });
+
+      it("pins consent to the current stored read-purpose credential and refuses permission-metadata changes", async () => {
+        const scope = await seed({ configurationRevision });
+        const consent = { consentId: randomUUID(), credentialRevision: "1", configurationRevision };
+        const allowed = await credentialReader([{ ...scope, existingKeyReadConsent: consent }]);
+        await expect(allowed.getDecryptedCredentials({ organizationId: scope.organizationId }, scope.credentialId))
+          .resolves.toEqual({ apiKey: "synthetic-observation-key", apiSecret: "synthetic-observation-secret" });
+        const strict = await credentialReader([scope]);
+        await expect(strict.getDecryptedCredentials({ organizationId: scope.organizationId }, scope.credentialId))
+          .resolves.toEqual({ apiKey: "synthetic-observation-key", apiSecret: "synthetic-observation-secret" });
+
+        await admin`UPDATE public.exchange_credentials SET permission_metadata = ${JSON.stringify(
+          buildHtxPermissionMetadata({ exchangeAccountId: scope.exchangeAccountId, scopes: ["read", "trade"] }))}
+          WHERE id=${scope.credentialId}`;
+        await expect(allowed.getDecryptedCredentials({ organizationId: scope.organizationId }, scope.credentialId))
+          .rejects.toThrow("REFUSED:NOT_FOUND");
+        // Returning to original scopes advances the revision again: old consent never revives.
+        await admin`UPDATE public.exchange_credentials SET permission_metadata = ${JSON.stringify(
+          buildHtxPermissionMetadata({ exchangeAccountId: scope.exchangeAccountId, scopes: ["read"] }))}
+          WHERE id=${scope.credentialId}`;
+        await expect(allowed.getDecryptedCredentials({ organizationId: scope.organizationId }, scope.credentialId))
+          .rejects.toThrow("REFUSED:NOT_FOUND");
+      });
+
+      it("refuses a config change, revoked credential, and a new credential with the old consent", async () => {
+        const scope = await seed({ configurationRevision });
+        const allowed = await credentialReader([{ ...scope, existingKeyReadConsent: {
+          consentId: randomUUID(), credentialRevision: "1", configurationRevision } }]);
+        await admin`UPDATE public.trader_account_collection_state SET configuration_revision='changed'
+          WHERE credential_id=${scope.credentialId}`;
+        await expect(allowed.getDecryptedCredentials({ organizationId: scope.organizationId }, scope.credentialId))
+          .rejects.toThrow("REFUSED:NOT_FOUND");
+        await admin`UPDATE public.trader_account_collection_state SET configuration_revision=${configurationRevision}
+          WHERE credential_id=${scope.credentialId}`;
+        await admin`UPDATE public.exchange_credentials SET status='revoked' WHERE id=${scope.credentialId}`;
+        await expect(allowed.getDecryptedCredentials({ organizationId: scope.organizationId }, scope.credentialId))
+          .rejects.toThrow("REFUSED:NOT_FOUND");
+        const replacement = await seed({ configurationRevision, permissionMetadata: account =>
+          JSON.stringify(buildHtxPermissionMetadata({ exchangeAccountId: account, scopes: ["read", "trade"] })) });
+        await expect(allowed.getDecryptedCredentials({ organizationId: replacement.organizationId,
+          exchangeAccountId: replacement.exchangeAccountId }, replacement.credentialId))
+          .rejects.toThrow("REFUSED:NOT_READ_ONLY");
+      });
+
+      it("opens the actual consented host through restricted roles and reaches only a synthetic V5 GET", async () => {
+        for (const client of clients.values()) await client.end({ timeout: 2 });
+        clients.clear();
+        const scope = await seed();
+        const bound = manifestAssignment({ ...scope, existingKeyReadConsentId: randomUUID(),
+          htxV5: { enabled: true, expectedHtxUid: "456" }, leaseTtlMs: 200000 });
+        const manifest = sealManifest({ assignments: [bound] });
+        await admin`UPDATE public.trader_account_collection_state SET configuration_revision=${bound.configurationRevision}
+          WHERE credential_id=${scope.credentialId}`;
+        const directory = mkdtempSync(join(tmpdir(), "waia-consent-host-"));
+        const manifestPath = join(directory, "assignments.json");
+        writeFileSync(manifestPath, manifest.text);
+        const requested: { method: string | undefined; host: string; path: string }[] = [];
+        let reached!: () => void;
+        const v5Reached = new Promise<void>(resolve => { reached = resolve; });
+        const controller = new AbortController();
+        const previousTier = process.env.WAIA_DEPLOYMENT_TIER;
+        process.env.WAIA_DEPLOYMENT_TIER = "production";
+        let run: Promise<void> | undefined;
+        let deadline: ReturnType<typeof setTimeout> | undefined;
+        try {
+          run = runAccountObservationCollector({
+          databaseCertificateAuthority,
+            env: { WAIA_TRADER_CLI: "1", WAIA_RELEASE_SHA: MANIFEST_RELEASE_SHA,
+              WAIA_OBSERVATION_OWNER_ID: "synthetic-consent-host",
+              WAIA_OBSERVATION_ASSIGNMENT_MANIFEST: manifestPath,
+              WAIA_OBSERVATION_ASSIGNMENT_MANIFEST_SHA256: manifest.digest,
+              WAIA_OBSERVATION_COLLECTOR_DATABASE_URL: runtimeUrl("collector"),
+              WAIA_OBSERVATION_READER_DATABASE_URL: runtimeUrl("reader"),
+              WAIA_OBSERVATION_CREDENTIAL_DATABASE_URL: runtimeUrl("credential"),
+              WAIA_OBSERVATION_MASTER_KEY: MASTER_KEY },
+            signal: controller.signal,
+            // Entire network is synthetic; no HTX endpoint is contacted.
+            fetchImpl: async (input, init) => {
+              const url = new URL(String(input));
+              requested.push({ method: init?.method, host: url.host, path: url.pathname });
+              expect(url.searchParams.get("AccessKeyId")).toBe("synthetic-observation-key");
+              if (url.pathname === "/v1/account/accounts") return Response.json({ status: "ok",
+                data: [{ id: Number(scope.exchangeAccountId), type: "spot", state: "working" }] });
+              if (url.pathname === "/v2/user/uid") return Response.json({ code: 200, data: 456 });
+              if (url.pathname === "/v2/user/api-key") return Response.json({ code: 200, data: [
+                { accessKey: "synthetic-observation-key", status: "normal", permission: "readOnly,trade" }] });
+              if (url.pathname === "/v5/account/asset_mode") {
+                reached();
+                return Response.json({ code: 200, data: { asset_mode: "1" }, ts: Date.now() });
+              }
+              return Response.json({ status: "ok", data: url.pathname.endsWith("/balance")
+                ? { id: Number(scope.exchangeAccountId), type: "spot", state: "working", list: [] } : [] });
+            },
+            report: () => {},
+          });
+          await Promise.race([v5Reached, run.then(() => { throw new Error("HOST_ENDED_BEFORE_V5_READ"); }),
+            new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new Error("NO_CONSENTED_V5_READ")), 15000); })]);
+        } finally {
+          if (deadline) clearTimeout(deadline);
+          controller.abort();
+          await run?.catch(() => {});
+          if (previousTier === undefined) delete process.env.WAIA_DEPLOYMENT_TIER;
+          else process.env.WAIA_DEPLOYMENT_TIER = previousTier;
+          rmSync(directory, { recursive: true, force: true });
+        }
+        expect(requested.some(request => request.host === "api.hbdm.com" && request.path === "/v5/account/asset_mode")).toBe(true);
+        expect(requested.every(request => request.method === "GET")).toBe(true);
+        expect(requested.every(request => ["api.huobi.pro", "api.hbdm.com"].includes(request.host))).toBe(true);
+        for (const request of requested) expect(request.path).not.toMatch(/place|cancel|transfer|withdraw|leverage|switch/);
+      }, 30000);
     });
   },
 );

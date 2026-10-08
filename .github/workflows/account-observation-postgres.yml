@@ -88,6 +88,8 @@ jobs:
           node-version: 22
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
+      - name: Enable verified TLS on the disposable PostgreSQL service
+        run: node scripts/postgres-validation/prepare-account-observation-tls-fixture.mjs '${{ job.services.postgres.id }}'
       - name: Account observation CI contract
         run: pnpm test --run tests/unit/account-observation-postgres-ci-contract.test.ts tests/unit/account-observation-test-results-guard.test.ts
       - name: Full migrations, recurring collector and dedicated reader on PostgreSQL 17

@@ -242,7 +242,7 @@ function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | 
   return Object.freeze(owner);
 }
 
-export function createHtxObservationGetTransport(input: TransportInput): HtxObservationGetTransport {
+export function createHtxObservationGetTransport(input: TransportInput): HtxObservationGetTransport & Pick<BoundedGetTransport, "settled"> {
   return createBoundedGetTransport(input, "OBSERVATION");
 }
 

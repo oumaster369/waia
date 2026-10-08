@@ -45,10 +45,30 @@ function requireEnforcedObservationJob(source: string) {
   return block;
 }
 function hasSafeReaderPortGuard(source: string): boolean {
-  return source.includes('const requestedPort = process.env.DEE960_LOCAL_PG17_PORT ?? "55460";') &&
+  return source.includes('const dee1235ReaderFixture = process.env.DEE1235_READER_LOCAL_PG17 === "1";') &&
+    source.includes('const requestedPort = dee1235ReaderFixture ? "55738" : process.env.DEE960_LOCAL_PG17_PORT ?? "55460";') &&
+    source.includes('process.env.DEE960_LOCAL_PG17_PORT !== "55738"') &&
     source.includes('requestedPort !== "55460" && requestedPort !== "55461"') &&
-    source.includes('const localPort = requestedPort === "55461" ? "55461" : "55460";') &&
+    source.includes('const localPort = requestedPort === "55461" ? "55461" : requestedPort === "55738" ? "55738" : "55460";') &&
     source.includes('`postgres://waia_local_admin:local_validation_only@127.0.0.1:${localPort}/waia_dee960_local`') &&
+    !/process\.env\.(?:DATABASE_URL|POSTGRES_URL)/.test(source);
+}
+function hasSafeCredentialPortGuard(source: string): boolean {
+  return source.includes('const HOST = process.env.DEE1235_CREDENTIAL_FIXTURE === "1" ? "127.0.0.1:55732" : "127.0.0.1:55460";') &&
+    source.includes('const url = `postgres://waia_local_admin:local_validation_only@${HOST}/waia_dee960_local`;') &&
+    source.includes('collector: "dee1015_synthetic_collector_password_0001"') &&
+    source.includes('reader: "dee1015_synthetic_reader_password_00000002"') &&
+    source.includes('credential: "dee1015_synthetic_credential_password_0003"') &&
+    !/process\.env\.(?:DATABASE_URL|POSTGRES_URL|PGURL)/.test(source);
+}
+function hasSafeRiskOwnerPortGuard(source: string): boolean {
+  const guardedUrl = [
+    'const localPortOverride = process.env.DEE1135_LOCAL_PG17_PORT;',
+    'if (localPortOverride !== undefined && ((Boolean(process.env.CI) || Boolean(process.env.GITHUB_ACTIONS)) ||',
+    '  localPortOverride !== "55740")) throw new Error("DEE1135_LOCAL_PG17_PORT_ISOLATED_LOCAL_ONLY");',
+    'const url = `postgres://waia_local_admin:local_validation_only@127.0.0.1:${localPortOverride ?? "55460"}/waia_dee960_local`;',
+  ].join("\n");
+  return source.includes(guardedUrl) &&
     !/process\.env\.(?:DATABASE_URL|POSTGRES_URL)/.test(source);
 }
 
@@ -76,9 +96,16 @@ describe("account observation PostgreSQL CI contract", () => {
       expect(source).toContain('process.env.DEE960_LOCAL_PG17 === "1"');
       if (suite === "tests/integration/account-observation-reader-postgres.test.ts") {
         // The reader suite may target the separately provisioned, loopback-only
-        // PG17 validation cluster. The other four suites remain pinned to CI's
-        // 55460 service and never inherit this opt-in port.
+        // PG17 validation cluster. Other suites never inherit this reader port.
         expect(hasSafeReaderPortGuard(source)).toBe(true);
+      } else if (suite === "tests/integration/account-observation-credential-postgres.test.ts") {
+        // Separate owned TLS fixture: only this explicit flag can select its
+        // fixed loopback port; normal CI remains pinned to the 55460 service.
+        expect(hasSafeCredentialPortGuard(source)).toBe(true);
+      } else if (suite === "tests/integration/account-observation-risk-owner-postgres.test.ts") {
+        // Its reviewed local fixture uses only 55740; any supplied override
+        // is refused in CI, which keeps the canonical 55460 service.
+        expect(hasSafeRiskOwnerPortGuard(source)).toBe(true);
       } else {
         expect(source).toContain(`const url = "${syntheticUrl}"`);
       }
@@ -86,16 +113,59 @@ describe("account observation PostgreSQL CI contract", () => {
     }
   });
 
+  it("keeps the risk-owner fixture override local-only and closed in either CI environment", () => {
+    const source = readFileSync("tests/integration/account-observation-risk-owner-postgres.test.ts", "utf8");
+    expect(hasSafeRiskOwnerPortGuard(source)).toBe(true);
+    for (const mutation of [
+      source.replace('localPortOverride !== undefined', 'localPortOverride === undefined'),
+      source.replace('Boolean(process.env.CI)', 'false'),
+      source.replace('Boolean(process.env.GITHUB_ACTIONS)', 'false'),
+      source.replace('Boolean(process.env.CI)', 'process.env.CI === "true"'),
+      source.replace('Boolean(process.env.GITHUB_ACTIONS)', 'process.env.GITHUB_ACTIONS === "true"'),
+      source.replace('localPortOverride !== "55740"', 'false'),
+      source.replace('localPortOverride !== "55740"', 'localPortOverride !== "5432"'),
+      source.replace('throw new Error("DEE1135_LOCAL_PG17_PORT_ISOLATED_LOCAL_ONLY")', 'console.warn("ignored")'),
+      source.replace('localPortOverride ?? "55460"', 'localPortOverride ?? "5432"'),
+      source.replace('127.0.0.1:${localPortOverride', 'example.com:${localPortOverride'),
+      source.replace('/waia_dee960_local`', '/production`'),
+      source + '\nconst unsafeUrl = process.env.DATABASE_URL;\n',
+      source + '\nconst unsafeUrl = process.env.POSTGRES_URL;\n',
+    ]) expect(hasSafeRiskOwnerPortGuard(mutation)).toBe(false);
+  });
+
+  it("keeps the credential TLS fixture loopback-only and independent of database environment URLs", () => {
+    const source = readFileSync("tests/integration/account-observation-credential-postgres.test.ts", "utf8");
+    expect(hasSafeCredentialPortGuard(source)).toBe(true);
+    for (const mutation of [
+      source.replace('=== "1" ? "127.0.0.1:55732"', '!== "1" ? "127.0.0.1:55732"'),
+      source.replace('"127.0.0.1:55732"', '"example.com:55732"'),
+      source.replace('"127.0.0.1:55460"', '"127.0.0.1:5432"'),
+      source.replace('${HOST}/waia_dee960_local`', '${HOST}/production`'),
+      source.replace('waia_local_admin:local_validation_only', 'production:secret'),
+      source.replace('dee1015_synthetic_collector_password_0001', 'production-secret'),
+      source.replace('dee1015_synthetic_reader_password_00000002', 'production-secret'),
+      source.replace('dee1015_synthetic_credential_password_0003', 'production-secret'),
+      source + '\nconst unsafeUrl = process.env.DATABASE_URL;\n',
+      source + '\nconst unsafeUrl = process.env.DATABASE_URL_POSTGRES;\n',
+      source + '\nconst unsafeUrl = process.env.POSTGRES_URL;\n',
+      source + '\nconst unsafeUrl = process.env.PGURL;\n',
+    ]) expect(hasSafeCredentialPortGuard(mutation)).toBe(false);
+  });
+
   it("keeps the reader's alternate PG17 port closed and loopback-only", () => {
     const readerPath = "tests/integration/account-observation-reader-postgres.test.ts";
     const reader = readFileSync(readerPath, "utf8");
     expect(hasSafeReaderPortGuard(reader)).toBe(true);
     for (const mutation of [
+      reader.replace('DEE1235_READER_LOCAL_PG17 === "1"', 'DEE1235_READER_LOCAL_PG17 !== "1"'),
+      reader.replace('dee1235ReaderFixture ? "55738"', 'dee1235ReaderFixture ? "5432"'),
+      reader.replace('process.env.DEE960_LOCAL_PG17_PORT !== "55738"', 'process.env.DEE960_LOCAL_PG17_PORT !== "5432"'),
+      reader.replace('127.0.0.1:${localPort}/waia_dee960_local', 'example.com:${localPort}/waia_dee960_local'),
       reader.replace('requestedPort !== "55460" && requestedPort !== "55461"', 'requestedPort !== "55460"'),
       reader.replace('requestedPort !== "55460" && requestedPort !== "55461"', 'false'),
       reader.replace('127.0.0.1:${localPort}/waia_dee960_local', 'example.com:${localPort}/waia_dee960_local'),
       reader.replace('waia_dee960_local`', 'production`'),
-      reader.replace('const localPort = requestedPort === "55461" ? "55461" : "55460";', 'const localPort = requestedPort;'),
+      reader.replace('const localPort = requestedPort === "55461" ? "55461" : requestedPort === "55738" ? "55738" : "55460";', 'const localPort = requestedPort;'),
     ]) {
       expect(hasSafeReaderPortGuard(mutation)).toBe(false);
     }

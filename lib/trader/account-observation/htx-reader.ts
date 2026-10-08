@@ -20,6 +20,10 @@ export type HtxObservationReaderOptions = Readonly<{
   readTimeoutMs: number; pageSize: number; maxPages: number; maxRecords: number;
   maxResponseBytes: number; tradeWindowMs: number;
 }>;
+// Spot balances are one unpaginated venue-wide currency list. The order/history
+// page cap must not truncate this response or reject ordinary HTX accounts.
+const BALANCE_MAX_ROWS = 10_000;
+const BALANCE_MAX_RESPONSE_BYTES = 1_048_576;
 const bindingKeys = ["organizationId", "credentialId", "exchangeAccountId", "credentialRevision",
   "configurationRevision"] as const;
 function fail(code: "INVALID_RESPONSE" | "IDENTITY_MISMATCH" | "READ_FAILED" | "TIMEOUT" |
@@ -133,17 +137,19 @@ export function createHtxAccountObservationReader(deps: Readonly<{
     }
   }
   async function get(path: ReadPath, query: Record<string, string>, signal: AbortSignal): Promise<unknown> {
+    const maxResponseBytes = path === `/v1/account/accounts/${binding.exchangeAccountId}/balance`
+      ? BALANCE_MAX_RESPONSE_BYTES : options.maxResponseBytes;
     if (disposed || signal.aborted) fail("READ_FAILED");
     if (!sameBinding(binding, deps.transport.binding)) fail("IDENTITY_MISMATCH");
     const response = await deps.transport.signedGet({ method: "GET", path,
-      query: Object.freeze({ ...query }), signal, maxResponseBytes: options.maxResponseBytes });
+      query: Object.freeze({ ...query }), signal, maxResponseBytes });
     if (disposed || signal.aborted) fail("READ_FAILED");
     if (!response || !sameBinding(binding, response.binding)) fail("IDENTITY_MISMATCH");
     if (response.httpStatus === 429) fail("RATE_LIMITED");
     if (response.httpStatus === 401 || response.httpStatus === 403) fail("PERMISSION_DENIED");
     if (response.httpStatus !== 200) fail("READ_FAILED");
-    if (typeof response.body !== "string" || response.body.length > options.maxResponseBytes ||
-      new TextEncoder().encode(response.body).byteLength > options.maxResponseBytes) fail();
+    if (typeof response.body !== "string" || response.body.length > maxResponseBytes ||
+      new TextEncoder().encode(response.body).byteLength > maxResponseBytes) fail();
     let raw: Record<string, unknown>;
     try { raw = record(JSON.parse(response.body)); } catch { return fail(); }
     if (raw.status !== "ok") {
@@ -177,8 +183,8 @@ export function createHtxAccountObservationReader(deps: Readonly<{
       if (data.type !== "spot") fail("IDENTITY_MISMATCH");
       if (data.state !== "working") fail("PERMISSION_DENIED");
       const balances = new Map<string, { free: string; locked: string }>(); const seen = new Set<string>();
-      for (const row of array(data.list, options.maxRecords)) {
-        const currency = text(row.currency); if (!/^[a-z0-9]{1,32}$/.test(currency)) fail();
+      for (const row of array(data.list, BALANCE_MAX_ROWS)) {
+        const currency = text(row.currency); if (!/^[a-z0-9\p{Script=Han}]{1,32}$/u.test(currency)) fail();
         if (row.type !== "trade" && row.type !== "frozen") fail();
         const key = `${currency}:${row.type}`; if (seen.has(key)) fail(); seen.add(key);
         const value = decimal(row.balance); const amount = balances.get(currency) ?? { free: "0", locked: "0" };

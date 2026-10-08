@@ -43,9 +43,55 @@ describe("HTX observation reader (injected transport; no real venue)", () => {
     expect(read).toEqual({ binding, complete: true, sourceAsOfMs: null, values: [
       { asset: "BTC", free: "0.100000000000000001", locked: "0.200000000000000002", total: "0.300000000000000003" }] });
     expect(f.signedGet.mock.calls[0][0]).toMatchObject({ method: "GET", path: "/v1/account/accounts/123/balance",
-      query: {}, maxResponseBytes: 8192 });
+      query: {}, maxResponseBytes: 1_048_576 });
     f.signedGet.mockResolvedValueOnce(response({ ...balance(), list: [] }));
     expect((await f.reader.readBalances(signal())).values).toEqual([]);
+  });
+  it("reads all 1693 assets independently of the order page cap without rounding", async () => {
+    const f = setup({ maxRecords: 200, maxResponseBytes: 262144 });
+    const list = Array.from({ length: 1693 }, (_, i) => [
+      { currency: `syntheticasset${i}`, type: "trade", balance: "0.100000000000000001" },
+      { currency: `syntheticasset${i}`, type: "frozen", balance: "0.200000000000000002" },
+    ]).flat();
+    const result = response({ ...balance(), list });
+    expect(Buffer.byteLength(result.body)).toBeGreaterThan(262144);
+    f.signedGet.mockResolvedValueOnce(result);
+    const read = await f.reader.readBalances(signal());
+    expect(read.complete).toBe(true);
+    expect(read.values).toHaveLength(1693);
+    expect(read.values.every(item => item.total === "0.300000000000000003")).toBe(true);
+    expect(f.signedGet.mock.calls[0][0].maxResponseBytes).toBe(1_048_576);
+    await f.reader.readOpenOrders(signal());
+    expect(f.signedGet.mock.calls[1][0]).toMatchObject({ maxResponseBytes: 262144, query: { size: "2" } });
+  });
+  it("preserves HTX Han currency identifiers without dropping assets", async () => {
+    const f = setup();
+    f.signedGet.mockResolvedValueOnce(response({ ...balance(), list: [
+      { currency: "人生k线", type: "trade", balance: "0.000000000000000001" },
+      { currency: "人生k线", type: "frozen", balance: "0" },
+      { currency: "币安人生", type: "trade", balance: "2.5" },
+    ] }));
+    const result = await f.reader.readBalances(signal());
+    expect(result.complete).toBe(true);
+    expect(result.values).toHaveLength(2);
+    expect(result.values).toEqual(expect.arrayContaining([
+      { asset: "人生K线", free: "0.000000000000000001", locked: "0", total: "0.000000000000000001" },
+      { asset: "币安人生", free: "2.5", locked: "0", total: "2.5" },
+    ]));
+  });
+  it.each(["btc ", "<script>", "btc\\usdt", "btc/", "\u202ebtc", "A".repeat(33)])(
+    "rejects malformed currency identifier %j instead of silently omitting it", async currency => {
+      const f = setup();
+      f.signedGet.mockResolvedValueOnce(response({ ...balance(), list: [{ currency, type: "trade", balance: "1" }] }));
+      await expect(f.reader.readBalances(signal())).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+    });
+  it("rejects the whole balance snapshot above the independent row or byte cap", async () => {
+    const f = setup();
+    f.signedGet.mockResolvedValueOnce(response({ ...balance(), list: Array.from({ length: 10001 }, (_, i) =>
+      ({ currency: `a${i}`, type: "trade", balance: "0" })) }));
+    await expect(f.reader.readBalances(signal())).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+    f.signedGet.mockResolvedValueOnce(response(balance(), { body: " ".repeat(1_048_577) }));
+    await expect(f.reader.readBalances(signal())).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
   });
   it.each([null, undefined, {}, "", [{ currency: "btc", type: "loan", balance: "1" }],
     [{ currency: "btc", type: "trade", balance: "NaN" }],

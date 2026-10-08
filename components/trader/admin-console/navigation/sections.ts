@@ -121,6 +121,12 @@ export const ADMIN_SECTIONS = [
 export const ConsoleBrandIcon = ChartNoAxesCombined;
 export type AdminSection = (typeof ADMIN_SECTIONS)[number];
 export function sectionForPath(pathname: string): AdminSection {
+  if (
+    pathname === "/admin/account-observation" ||
+    pathname.startsWith("/admin/account-observation/")
+  ) {
+    return ADMIN_SECTIONS.find((s) => s.id === "accounts")!;
+  }
   if (pathname === "/admin/strategy-promotions")
     return ADMIN_SECTIONS.find((s) => s.id === "strategies")!;
   return (

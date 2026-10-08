@@ -40,8 +40,9 @@ export function createObservationCredentialStore(
   const authorize = input.authorizeOpen.bind(input);
   let disposed = false;
   let active: AbortController | null = null;
+  const pending = new Set<Promise<unknown>>();
   const handles = new Set<HtxObservationCredentialHandle>();
-  return Object.freeze({
+  const owner = {
     async openCredential(
       requested: ObservationBinding,
       signal: AbortSignal,
@@ -160,9 +161,12 @@ export function createObservationCredentialStore(
           if (active === controller) active = null;
         }
       };
+      const opening = work();
+      pending.add(opening);
+      void opening.then(() => pending.delete(opening), () => pending.delete(opening));
       try {
         return await Promise.race([
-          work(),
+          opening,
           cancelled,
           clock.sleep(timeoutMs, timer.signal).then(() => fail("TIMEOUT")),
         ]);
@@ -185,5 +189,11 @@ export function createObservationCredentialStore(
       active?.abort();
       for (const handle of handles) handle.dispose();
     },
-  });
+    async settled() {
+      active?.abort();
+      while (pending.size) await Promise.allSettled([...pending]);
+    },
+  };
+  Object.defineProperty(owner, "settled", { enumerable: false });
+  return Object.freeze(owner);
 }

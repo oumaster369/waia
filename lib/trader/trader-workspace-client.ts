@@ -55,6 +55,7 @@ export type HtxConnectInput = {
   apiKey: string;
   apiSecret: string;
   accountLabel?: string;
+  replacementCredentialId?: string;
 };
 
 export const HTX_CONNECT_CLIENT_TIMEOUT_MS = 25_000;
@@ -75,6 +76,7 @@ export async function connectHtxClient(
         apiKey: input.apiKey,
         apiSecret: input.apiSecret,
         accountLabel: input.accountLabel,
+        replacementCredentialId: input.replacementCredentialId,
       }),
       credentials: "same-origin",
       signal: AbortSignal.timeout(HTX_CONNECT_CLIENT_TIMEOUT_MS),
@@ -92,12 +94,39 @@ export async function connectHtxClient(
   return { kind: "ok", data: raw as CredentialMetadataDto };
 }
 
+export async function revokeExchangeCredentialClient(
+  credentialId: string,
+): Promise<TraderClientOk<CredentialMetadataDto> | TraderClientErr> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/trader/exchange-credentials/${encodeURIComponent(credentialId)}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+      signal: AbortSignal.timeout(HTX_CONNECT_CLIENT_TIMEOUT_MS),
+    });
+  } catch {
+    return { kind: "err", status: 0, displayMessage: "Disconnect did not complete. Refresh and retry." };
+  }
+  const raw = await readJson(response);
+  if (!response.ok) return errFromResponse(response.status, raw);
+  if (!isRecord(raw) || typeof raw.id !== "string") {
+    return { kind: "err", status: 502, displayMessage: "Unexpected disconnect response." };
+  }
+  return { kind: "ok", data: raw as CredentialMetadataDto };
+}
+
 export async function listExchangeCredentialsClient(): Promise<
   TraderClientOk<CredentialMetadataDto[]> | TraderClientErr
 > {
-  const response = await fetch("/api/trader/exchange-credentials", {
-    credentials: "same-origin",
-  });
+  let response: Response;
+  try {
+    response = await fetch("/api/trader/exchange-credentials", {
+      credentials: "same-origin",
+      signal: AbortSignal.timeout(HTX_CONNECT_CLIENT_TIMEOUT_MS),
+    });
+  } catch {
+    return { kind: "err", status: 0, displayMessage: "Could not load connected accounts." };
+  }
   const raw = await readJson(response);
   if (!response.ok) {
     return errFromResponse(response.status, raw);

@@ -37,7 +37,8 @@ export function createPostgresObservationAssignmentSource(
     approved.set(key(binding), Object.freeze({ binding, config }));
   }
   // Only a spot envelope can admit self-service inventory, regardless of manifest order.
-  const envelope = [...approved.values()].find(item => !item.config.htxDerivativesFamilies?.length);
+  const envelope = [...approved.values()].find(item =>
+    !item.config.existingKeyReadConsentId && !item.config.htxDerivativesFamilies?.length);
   const reader = createPostgresObservationReader(sql);
   let loading = false;
   let live = new Map<string, ObservationAssignment>();
@@ -53,7 +54,9 @@ export function createPostgresObservationAssignmentSource(
   async function inventory(signal: AbortSignal): Promise<readonly ObservationAssignment[]> {
     // A spot self-service configuration match cannot grant derivatives family
     // access or displace exact manifest-listed assignments from the bounded list.
-    if (!collectorSql || !envelope || envelope.config.htxDerivativesFamilies?.length) return [];
+    if (!collectorSql || !envelope || envelope.config.existingKeyReadConsentId ||
+        envelope.config.htxDerivativesFamilies?.length ||
+        envelope.config.htxV5?.expectedHtxUid) return [];
     cancelled(signal);
     try {
       const rows = await collectorSql.begin(async (tx) => {
@@ -101,6 +104,7 @@ export function createPostgresObservationAssignmentSource(
           credentialRevision: row.credential_revision,
           configurationRevision: row.configuration_revision,
         });
+        if (binding.configurationRevision !== envelope.config.revision) continue;
         const account = accountKey(binding);
         if (seen.has(account)) continue;
         seen.add(account);

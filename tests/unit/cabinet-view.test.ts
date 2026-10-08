@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACCOUNT_OBSERVATION_STALE_AFTER_MS,
   cabinetLiveLabel,
   nonUsdtInventory,
   secondsUntilNextPoll,
+  summarizeFuturesBalance,
   summarizeCabinetObservation,
   usdtSpot,
 } from "@/lib/trader/account-observation/cabinet-view";
@@ -114,6 +116,86 @@ describe("cabinet observation view", () => {
       openOrdersCount: null,
       lastTickMs: null,
       observationStatus: null,
+    });
+  });
+
+  it("does not infer a futures balance from an older observation version", () => {
+    expect(summarizeFuturesBalance(observation, now)).toMatchObject({
+      equityUsd: null,
+      availableMarginUsd: null,
+      profitUnrealUsd: null,
+      readCompletedAtMs: null,
+      hasLegacyDerivatives: false,
+      hasFuturesProjection: false,
+    });
+    const legacyDerivatives = {
+      ...observation,
+      schemaVersion: "account-observation/v2",
+      derivatives: {} as never,
+    } as AccountObservation;
+    expect(summarizeFuturesBalance(legacyDerivatives, now)).toMatchObject({
+      equityUsd: null,
+      hasLegacyDerivatives: true,
+      hasFuturesProjection: false,
+    });
+  });
+
+  it("keeps V5 futures USD fields separate and preserves observed zero strings", () => {
+    const v3 = {
+      ...observation,
+      schemaVersion: "account-observation/v3",
+      htxV5: {
+        balance: {
+          status: "COMPLETE",
+          value: {
+            account: {
+              equityUsd: "0",
+              availableMarginUsd: "0.00",
+              profitUnrealUsd: "-0.000",
+            },
+          },
+          readCompletedAtMs: now - 1_000,
+        },
+      },
+    } as unknown as AccountObservation;
+
+    expect(summarizeFuturesBalance(v3, now)).toMatchObject({
+      equityUsd: "0",
+      availableMarginUsd: "0.00",
+      profitUnrealUsd: "-0.000",
+      readCompletedAtMs: now - 1_000,
+      stale: false,
+    });
+  });
+
+  it("uses the V5 balance read time for stale status and treats errors as unavailable", () => {
+    const staleAt = now - ACCOUNT_OBSERVATION_STALE_AFTER_MS - 1;
+    const stale = {
+      ...observation,
+      schemaVersion: "account-observation/v3",
+      htxV5: {
+        balance: {
+          status: "COMPLETE",
+          value: {
+            account: { equityUsd: "8", availableMarginUsd: "7", profitUnrealUsd: "1" },
+          },
+          readCompletedAtMs: staleAt,
+        },
+      },
+    } as unknown as AccountObservation;
+    expect(summarizeFuturesBalance(stale, now).stale).toBe(true);
+
+    const error = {
+      ...stale,
+      htxV5: {
+        balance: { status: "ERROR", value: null, readCompletedAtMs: now, error: "READ_FAILED" },
+      },
+    } as unknown as AccountObservation;
+    expect(summarizeFuturesBalance(error, now)).toMatchObject({
+      equityUsd: null,
+      availableMarginUsd: null,
+      profitUnrealUsd: null,
+      stale: false,
     });
   });
 });

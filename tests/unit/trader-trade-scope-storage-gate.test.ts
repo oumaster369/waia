@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { CredentialPayloadInvalidError } from "@/lib/trader/credentials/errors";
+import { buildHtxObservationPermissionMetadata, parseHtxPermissionMetadata } from "@/lib/trader/security/htx-credential-types";
+import { requireHtxStoredPermissionMetadata } from "@/lib/trader/security/htx-secure-credential-resolver";
 import {
   assertTradeScopeStoredOnlyWhenLiveEnabledV1,
   permissionMetadataIncludesTradeScopeV1,
@@ -46,6 +48,45 @@ describe("trade scope storage gate", () => {
       .map((path) => readFileSync(path, "utf8"))
       .join("\n");
     expect(source).not.toMatch(/orgLiveEnabled:\s*true/);
-    expect(source).toContain('liveState?.state === "ENABLED"');
+    expect(source).toContain('input.orgLiveEnabled === true');
+  });
+
+  it("stores exact observation-purpose Read+Trade without live and preserves the actual scopes", () => {
+    const permissionMetadata = buildHtxObservationPermissionMetadata({
+      exchangeAccountId: "10001", scopes: ["read", "trade"],
+    });
+    expect(permissionMetadata).toMatchObject({ version: 2, purpose: "observation", scopes: ["read", "trade"] });
+    expect(parseHtxPermissionMetadata(permissionMetadata)).toEqual(permissionMetadata);
+    expect(() => assertTradeScopeStoredOnlyWhenLiveEnabledV1({
+      permissionMetadata, venue: "htx", exchangeAccountId: "10001", orgLiveEnabled: false,
+    })).not.toThrow();
+    expect(requireHtxStoredPermissionMetadata({
+      permissionMetadata, venue: "htx", exchangeAccountId: "10001", purpose: "read",
+    })).toEqual(permissionMetadata);
+    expect(() => requireHtxStoredPermissionMetadata({
+      permissionMetadata, venue: "htx", exchangeAccountId: "10001", purpose: "trade",
+    })).toThrow("Observation credentials cannot authorize execution");
+  });
+
+  it.each([
+    { version: 1, purpose: "observation" },
+    { version: 2, purpose: "trade" },
+    { version: 2, purpose: null },
+    { scopes: ["read", "trade", "withdraw"] },
+    { scopes: ["read", "trade", "transfer"] },
+    { scopes: ["read", "read", "trade"] },
+    { scopes: ["trade"] },
+    { exchangeAccountId: "10002" },
+    { withdrawForbidden: false },
+  ])("does not accept an observation claim with invalid policy or account: %j", (change) => {
+    const permissionMetadata = {
+      ...buildHtxObservationPermissionMetadata({ exchangeAccountId: "10001", scopes: ["read", "trade"] }),
+      ...change,
+    };
+    for (const orgLiveEnabled of [false, true]) {
+      expect(() => assertTradeScopeStoredOnlyWhenLiveEnabledV1({
+        permissionMetadata, venue: "htx", exchangeAccountId: "10001", orgLiveEnabled,
+      })).toThrow(CredentialPayloadInvalidError);
+    }
   });
 });

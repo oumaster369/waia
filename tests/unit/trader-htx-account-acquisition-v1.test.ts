@@ -302,7 +302,7 @@ async function protectedAcquisitionFixture() {
   const state = { current: true, revision: "1", supported: true, rowStatus: "active", permission: "readOnly" };
   const statements: string[] = [], paths: string[] = [];
   const sql = (credential: boolean): Sql => {
-    const query = async (strings: TemplateStringsArray | string) => {
+    const runQuery = async (strings: TemplateStringsArray | string) => {
       const text = typeof strings === "string" ? strings : strings.join("?"); statements.push(text);
       if (text.includes("AS supported")) return [{
         login: credential ? "waia_account_observation_credential_login" : "synthetic-reader",
@@ -316,9 +316,14 @@ async function protectedAcquisitionFixture() {
         credential_revision: state.revision, configuration_revision: config.revision }] : [];
       if (text.includes("encrypted_payload") && !text.includes("AS supported")) return [{
         id: binding.credentialId, organization_id: binding.organizationId, exchange_account_id: binding.exchangeAccountId,
-        status: state.rowStatus, observation_read_only: true, encrypted_payload: encrypted.encryptedPayload, payload_key_version: encrypted.payloadKeyVersion,
+        status: state.rowStatus, observation_read_permitted: true, encrypted_payload: encrypted.encryptedPayload, payload_key_version: encrypted.payloadKeyVersion,
         wrapped_dek_key_version: encrypted.wrappedDekKeyVersion, wrapped_dek_key: encrypted.wrappedDekKey }];
       return [];
+    };
+    const query = (strings: TemplateStringsArray | string) => {
+      const result = runQuery(strings);
+      // Model the driver's explicit dispatch surface as well as its thenable result.
+      return Object.assign(result, { execute: () => result });
     };
     const tx = Object.assign(query, { unsafe: query });
     return Object.assign(query, { begin: (body: (value: unknown) => Promise<unknown>) => body(tx),
@@ -354,7 +359,9 @@ describe("DEE-1135 fixed protected acquisition composition", () => {
         "/v1/account/accounts", "/v2/user/uid", "/v2/user/api-key", "/v1/account/accounts/135/balance",
         "/v1/account/accounts", "/v2/user/uid", "/v2/user/api-key"]);
       expect(f.statements).toContain("SET LOCAL ROLE waia_account_observation_credential");
-      expect(f.statements).toContain("SET LOCAL ROLE waia_account_observation_reader");
+      expect(f.statements.map(statement => statement.replace(/\s+/g, " ").trim())).toContain(
+        "SET TRANSACTION READ ONLY; SET LOCAL ROLE waia_account_observation_reader; SET LOCAL statement_timeout = '3000ms'; SET LOCAL lock_timeout = '1000ms'; SET LOCAL transaction_timeout = '5000ms'",
+      );
       expect(f.statements).toContain("SET LOCAL transaction_timeout = '5000ms'");
       expect(f.statements.some(text => /SELECT \*/.test(text))).toBe(false);
     } finally { await owner.dispose(); }

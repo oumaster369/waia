@@ -1,7 +1,9 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import type { Sql } from "postgres";
 import { observationPoolLimits, probeObservationCredentialPool } from "@/lib/trader/account-observation/host-role-probe";
+import { createAccountObservationDatabaseTlsOptions } from "@/lib/trader/account-observation/database-node-tls";
 import { runAccountObservationCollector } from "@/scripts/trader/account-observation-collector-host";
 import { MANIFEST_RELEASE_SHA, sealManifest } from "./account-observation-manifest-fixtures";
 
@@ -33,7 +35,7 @@ function pool(overrides: Record<string, unknown> = {}) {
   const sql = Object.assign(vi.fn(), { options: { ...observationPoolLimits }, begin, end }) as unknown as Sql;
   return { sql, begin, end, row, statements };
 }
-function entry() {
+function entry(databaseCertificateAuthority?: string) {
   const manifest = sealManifest();
   const collector = pool({ login: "waia_account_observer_login" });
   const reader = pool({ login: "waia_account_observation_reader_login" });
@@ -53,7 +55,7 @@ function entry() {
     WAIA_OBSERVATION_MASTER_KEY: Buffer.alloc(32, 7).toString("base64"),
   };
   return { pools, credential, controller, report, fetchImpl,
-    run: () => runAccountObservationCollector({ env, signal: controller.signal,
+    run: () => runAccountObservationCollector({ env, signal: controller.signal, databaseCertificateAuthority,
       readManifest: () => manifest.text, fetchImpl, report }) };
 }
 beforeEach(() => {
@@ -101,6 +103,14 @@ describe("credential pool catalog admission (synthetic executor; native SQL prov
 describe("actual registered CLI private factory and host startup", () => {
   it("attests before provider/reader/runtime, then closes all three resources", async () => {
     const f = entry(); const run = f.run(); await vi.advanceTimersByTimeAsync(0);
+    const tlsOptions = ports.open.mock.calls.map(([, options]) => (options as { ssl: unknown }).ssl);
+    expect(tlsOptions).toHaveLength(3);
+    expect(tlsOptions[0]).toBe(tlsOptions[1]); expect(tlsOptions[1]).toBe(tlsOptions[2]);
+    const ssl = tlsOptions[0] as { ca: string; rejectUnauthorized: boolean; checkServerIdentity?: unknown };
+    expect(ssl.rejectUnauthorized).toBe(true);
+    expect(ssl.checkServerIdentity).toBeUndefined();
+    expect(createHash("sha256").update(ssl.ca).digest("hex"))
+      .toBe("700723581420dd1ac98fd7e9ac529f0ef210eadcaf87fc868a3ad7d114c2f3b7");
     expect(f.report).toHaveBeenCalledWith("HOST_STARTED");
     expect(f.credential.begin.mock.invocationCallOrder[0]).toBeLessThan(ports.provider.mock.invocationCallOrder[0]);
     expect(ports.provider.mock.invocationCallOrder[0]).toBeLessThan(ports.reader.mock.invocationCallOrder[0]);
@@ -108,6 +118,21 @@ describe("actual registered CLI private factory and host startup", () => {
     f.controller.abort(); await run;
     for (const p of f.pools) expect(p.end).toHaveBeenCalledTimes(1);
     expect(f.fetchImpl).not.toHaveBeenCalled(); expect(vi.getTimerCount()).toBe(0);
+  });
+  it("accepts an explicit validated in-process CA and shares it across all real factories", async () => {
+    const explicitCa = createAccountObservationDatabaseTlsOptions().ca;
+    const f = entry(explicitCa); const run = f.run(); await vi.advanceTimersByTimeAsync(0);
+    const tlsOptions = ports.open.mock.calls.map(([, options]) => (options as { ssl: { ca: string } }).ssl);
+    expect(tlsOptions).toHaveLength(3);
+    expect(tlsOptions.map(ssl => ssl.ca)).toEqual([explicitCa, explicitCa, explicitCa]);
+    f.controller.abort(); await run;
+  });
+  it("rejects malformed or mixed-key CA input before opening pools or providers", async () => {
+    const f = entry("-----BEGIN CERTIFICATE-----\ninvalid\n-----END CERTIFICATE-----\n-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----");
+    await expect(f.run()).rejects.toThrow(/^ACCOUNT_OBSERVATION_DATABASE_TLS_REFUSED$/);
+    expect(ports.open).not.toHaveBeenCalled(); expect(ports.provider).not.toHaveBeenCalled();
+    expect(ports.reader).not.toHaveBeenCalled(); expect(ports.runtime).not.toHaveBeenCalled();
+    expect(f.fetchImpl).not.toHaveBeenCalled();
   });
   it("refuses unsafe third-pool evidence before provider initialization or HOST_STARTED", async () => {
     const f = entry(); f.credential.row.safe_login = false;

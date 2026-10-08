@@ -24,6 +24,11 @@ const deps = (): ObservationReadDependencies => ({
   resolveActiveBinding: vi.fn(async () => binding),
   readLatest: vi.fn(async () => null),
 });
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
 describe("shared account observation HTTP boundary (injected auth, no production calls)", () => {
   it("requires session and never opens the store on denial", async () => {
     const d = deps();
@@ -212,6 +217,50 @@ describe("shared account observation HTTP boundary (injected auth, no production
       await vi.advanceTimersByTimeAsync(5001);
       expect((await result).status).toBe(503);
       expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it.each(["tenant", "admin"] as const)("does not start later %s authorization or storage work when entitlement resolves after the deadline", async (surface) => {
+    vi.useFakeTimers();
+    try {
+      const d = deps();
+      const entitlement = deferred<boolean>();
+      vi.mocked(d.hasTraderAccess).mockReturnValue(entitlement.promise);
+      const pending = handleAccountObservationGet(request(), surface, d);
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+      expect(d.hasTraderAccess).toHaveBeenCalledOnce();
+
+      await vi.advanceTimersByTimeAsync(5001);
+      expect((await pending).status).toBe(503);
+      entitlement.resolve(true);
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+
+      expect(d.hasOrgMembership).not.toHaveBeenCalled();
+      expect(d.hasOperatorAccess).not.toHaveBeenCalled();
+      expect(d.isAdminListedOrganization).not.toHaveBeenCalled();
+      expect(d.resolveActiveBinding).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("does not start the admin-list query when operator access resolves after the deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const d = deps();
+      const operator = deferred<boolean>();
+      vi.mocked(d.hasOperatorAccess).mockReturnValue(operator.promise);
+      const pending = handleAccountObservationGet(request(), "admin", d);
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+      expect(d.hasOperatorAccess).toHaveBeenCalledOnce();
+
+      await vi.advanceTimersByTimeAsync(5001);
+      expect((await pending).status).toBe(503);
+      operator.resolve(true);
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+
+      expect(d.isAdminListedOrganization).not.toHaveBeenCalled();
+      expect(d.resolveActiveBinding).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }

@@ -101,6 +101,25 @@ describe.skipIf(!enabled)("DEE-960 full migration chain and additive upgrade on 
     expect(roles.every(r => !r.rolcanlogin && !r.rolsuper && !r.rolbypassrls)).toBe(true);
     expect((await sql`SELECT count(*) FROM drizzle.__drizzle_migrations`)[0].count)
       .toBe(String(journal.entries.filter(e => e.idx <= appliedThrough).length));
+    const expectedEntries = journal.entries.filter(e => e.idx <= appliedThrough);
+    expect(await sql`SELECT hash, created_at::text FROM drizzle.__drizzle_migrations ORDER BY created_at`)
+      .toEqual(expectedEntries.map(entry => ({
+        hash: createHash("sha256").update(readFileSync(`${folder}/${entry.tag}.sql`)).digest("hex"),
+        created_at: String(entry.when),
+      })));
+    if (appliedThrough >= 229) {
+      expect((await sql`SELECT
+        has_column_privilege('waia_account_observation_credential',
+          'public.exchange_credentials','observation_revision','SELECT') AS credential_revision,
+        has_column_privilege('waia_account_observation_credential',
+          'public.trader_account_collection_state','configuration_revision','SELECT') AS configuration_revision,
+        has_column_privilege('waia_account_observation_credential',
+          'public.exchange_credentials','permission_metadata','SELECT') AS raw_permission,
+        has_table_privilege('waia_account_observation_credential',
+          'public.exchange_credentials','UPDATE') AS credential_write`)[0])
+        .toEqual({ credential_revision: appliedThrough >= 230,
+          configuration_revision: appliedThrough >= 230, raw_permission: false, credential_write: false });
+    }
     expect((await sql`SELECT has_column_privilege('waia_account_observation_reader',
       'public.exchange_credentials','encrypted_payload','SELECT') AS secret,
       has_table_privilege('waia_account_observation_reader','public.trader_account_observations','INSERT') AS write`)[0])
