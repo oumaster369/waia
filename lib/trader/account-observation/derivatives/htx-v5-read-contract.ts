@@ -760,3 +760,60 @@ export function parseHtxV5Fills(payload: string, expectedContract: string): HtxV
   });
   return page(rows, env.ts, (row) => row.id);
 }
+
+/** Documented bill labels only; neither amount sign nor a net-PnL formula is specified. */
+const HTX_V5_BILL_CATEGORIES = Object.freeze({
+  "3": "CLOSE_LONG", "4": "CLOSE_SHORT",
+  "5": "OPEN_FEE_TAKER", "6": "OPEN_FEE_MAKER",
+  "7": "CLOSE_FEE_TAKER", "8": "CLOSE_FEE_MAKER",
+  "9": "DELIVERY_CLOSE_LONG", "10": "DELIVERY_CLOSE_SHORT", "11": "DELIVERY_FEE",
+  "12": "LIQUIDATION_CLOSE_LONG", "13": "LIQUIDATION_CLOSE_SHORT",
+  "14": "SPOT_TO_CONTRACT_TRANSFER", "15": "CONTRACT_TO_SPOT_TRANSFER",
+  "16": "UNREALIZED_SETTLEMENT_LONG", "17": "UNREALIZED_SETTLEMENT_SHORT",
+  "19": "CLAWBACK", "26": "SYSTEM", "28": "ACTIVITY_REWARD", "29": "REBATE",
+  "30": "FUNDING_INCOME", "31": "FUNDING_EXPENDITURE",
+  "34": "TRANSFER_TO_SUB", "35": "TRANSFER_FROM_SUB",
+  "36": "TRANSFER_TO_MASTER", "37": "TRANSFER_FROM_MASTER",
+  "38": "TRANSFER_FROM_MARGIN_ACCOUNT", "39": "TRANSFER_TO_MARGIN_ACCOUNT",
+  "46": "ADL_CLOSE_LONG", "47": "ADL_CLOSE_SHORT",
+  "66": "SYSTEM_ADVANCE_TRANSFER_OUT", "67": "SYSTEM_ADVANCE_TRANSFER_IN",
+  "141": "LIQUIDATION_FEE",
+} as const);
+
+export type HtxV5BillCategory = (typeof HTX_V5_BILL_CATEGORIES)[keyof typeof HTX_V5_BILL_CATEGORIES] | "UNKNOWN";
+export type HtxV5Bill = Readonly<{
+  id: string;
+  /** Empty is valid in the official transfer example; never infer a contract. */
+  contractCode: string;
+  marginMode: HtxV5MarginMode;
+  currency: string;
+  /** Exact received numeric code, including unsupported future codes. */
+  type: string;
+  category: HtxV5BillCategory;
+  /** Raw signed decimal. A fee label does not authorize sign conversion. */
+  amount: string;
+  createdTimeMs: number;
+}>;
+
+/** UNWIRED parser only. Does not add bills to the live route allowlist or establish
+ * account identity, page ordering, exhaustion, or a financial reporting period. */
+export function parseHtxV5Bills(payload: string): HtxV5Page<HtxV5Bill> {
+  const env = rowsEnvelope(payload);
+  const rows = env.rows.map((row): HtxV5Bill => {
+    const contractCode = row.contract_code === "" ? "" : contract(row.contract_code);
+    const currency = text(row.currency);
+    if (!/^[A-Z0-9]{2,16}$/.test(currency)) return fail();
+    const type = text(row.type);
+    if (!/^\d+$/.test(type)) return fail();
+    const category = Object.hasOwn(HTX_V5_BILL_CATEGORIES, type)
+      ? HTX_V5_BILL_CATEGORIES[type as keyof typeof HTX_V5_BILL_CATEGORIES] : "UNKNOWN";
+    const createdTimeMs = timestamp(row.created_time);
+    if (createdTimeMs === null) return fail();
+    return Object.freeze({
+      id: cursorId(row.id), contractCode,
+      marginMode: enumValue(row.margin_mode, ["cross", "isolated"] as const),
+      currency, type, category, amount: decimal(row.amount), createdTimeMs,
+    });
+  });
+  return page(rows, env.ts, row => row.id);
+}

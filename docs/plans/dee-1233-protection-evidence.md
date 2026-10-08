@@ -9,15 +9,15 @@ requiredValidation: [targeted-unit, mounted-e2e, lint, typecheck, build]
 approvalGates: [independent-review]
 state:
   status: in-progress
-  currentWorkPackage: WP-COMPLETE-PROTECTION
-  completedWorkPackages: [WP-STOP-EVIDENCE]
+  currentWorkPackage: WP-DAY-RESULT
+  completedWorkPackages: [WP-STOP-EVIDENCE, WP-DAY-LEDGER-CONTRACT]
   remainingWorkPackages: [WP-COMPLETE-PROTECTION, WP-DAY-RESULT]
   prNumber: null
   prUrl: null
   lastValidatedGitSha: null
-  lastValidationAt: "2026-10-08T00:34:13Z"
+  lastValidationAt: "2026-10-08T00:44:45Z"
   blockedReason: "V5 selection completeness and remaining closing-quantity semantics are not yet qualified; full-day ledger remains incomplete."
-  nextAction: "Qualify the missing primary source contracts before adding confirmed protection; keep this verified local display slice for coherent issue integration."
+  nextAction: "Bind financial-history collection and persisted coverage before wiring the qualified local parser into a day-result display; keep protection unconfirmed while its completeness and closing semantics remain unqualified."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -91,3 +91,57 @@ exact source and test deltas. Root inspected desktop/mobile crops.
 Local fixture SQLite and temporary browser configuration were removed after evidence
 capture; the owned server stopped. No production/venue/Grok/credential change or
 complete-protection/UI-production acceptance is claimed by these local checks.
+
+## Public V5 contract qualification — 8 October 2026
+
+The official [HTX API documentation](https://www.huobi.com/en-us/opend/newApiPages)
+loads its content from a same-origin public documentation service. The category
+`5531` identifies USDT-Margined Futures Multi-Assets Collateral. Public GETs of the
+documentation required no credentials and made no account or trading API calls.
+
+- [Algo pending orders](https://www.huobi.com/oplt/api/open_api/interface/detail?interface_id=8cb89359-77b5-11ed-9966-19b9754d736)
+  and [positions](https://www.huobi.com/oplt/api/open_api/interface/detail?interface_id=8cb89359-77b5-11ed-9966-19594266bd8)
+  document quantities in contracts. The pending-order query is per type and has
+  `from`, `direct`, and a maximum page size of 100. The descriptions do not establish
+  page exhaustion, a stable atomic snapshot, remaining executable quantity, automatic
+  resizing or OCO semantics. Equal received quantities still do not prove protection.
+- [Financial records](https://www.huobi.com/oplt/api/open_api/interface/detail?interface_id=8cb89359-77b5-11ed-9966-19b930b8bee)
+  document separate IDs, type, currency, signed amount and creation time. The transfer
+  example has an empty contract code despite the field being marked required.
+  Missing amount-sign and complete-history guarantees prevent a canonical day result.
+- [Execution details](https://www.huobi.com/oplt/api/open_api/interface/detail?interface_id=8cb89359-77b5-11ed-9966-195898804f0)
+  have inconsistent history-window descriptions. Fill closing PnL must not be added
+  to financial-record settlement/closing entries without a proven reconciliation rule.
+
+Contradictions in the official examples are retained in the audit evidence: pending
+orders show a canceled example despite an active schema; positions disagree on
+`last_price` and `mark_price`; algo placement and reading differ on `tp_sl`/`tpsl`.
+None authorizes relaxing existing fail-closed readers or completeness labels.
+
+## WP-DAY-LEDGER-CONTRACT
+
+Add a pure financial-record parser using the existing bounded lossless JSON reader,
+and an exact observed breakdown grouped by currency and financial type within an
+explicit half-open time window. Preserve unknown numeric type codes and raw signed
+amounts. An empty input has no money groups; actual offsetting rows may yield an
+observed zero. Duplicate identities, malformed amounts and invalid timestamps must
+be refused. Do not infer fee signs, convert currencies, sum overlapping financial
+types, combine fills and bills, or expose a total/day-PnL result.
+
+This prerequisite remains unwired: no live route allowlist, transport, collector,
+snapshot, UI, schema, cadence, credential or production change. It does not establish
+source authorization, account identity, ingestion, completeness or day-start equity.
+Focused parser/arithmetic tests, type/lint checks and independent review are required;
+the previously completed display/browser/build campaign is not repeated for this
+unreachable pure helper.
+
+### Local validation
+
+The parser and breakdown are implemented. The final focused campaign passed 54 tests
+(34 parser, 20 breakdown); scoped lint and full typecheck passed. The original
+25,742 bytes of the live read-contract module are an exact prefix, and the live
+route allowlist, builders, transport, reader, snapshot and UI remain unchanged.
+An initial test-table fixture expanded empty arrays into arguments; those two test
+fixtures were corrected and the failed result retained. Independent review approved
+all four code/test paths and this work-package plan. No production or account API
+calls, new build, existing-test campaign or authority expansion occurred.
