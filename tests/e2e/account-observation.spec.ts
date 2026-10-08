@@ -19,6 +19,15 @@ test("mounted Admin and tenant update the same observation automatically and cle
   context,
 }, testInfo) => {
   test.setTimeout(90_000);
+  const traderWrites: string[] = [];
+  context.on("request", request => {
+    const path = new URL(request.url()).pathname;
+    // The existing console records its last visit; this is not an account action.
+    if (request.method() === "POST" && path === "/api/trader/admin/console/visit-marker") return;
+    if (path.startsWith("/api/trader/") && !["GET", "HEAD", "OPTIONS"].includes(request.method())) {
+      traderWrites.push(`${request.method()} ${path}`);
+    }
+  });
   const email = `e2e-account-observation-${Date.now()}@example.com`;
   await signUpAndOpenDashboard(page, email);
   grantTraderEntitlementByUserEmail(email);
@@ -494,6 +503,13 @@ test("mounted Admin and tenant update the same observation automatically and cle
     await expect(v5.getByText("Стоп: цена 59000; объём 1 контр.")).toBeVisible();
     await expect(v5.getByText("Цель: цена 62000; объём 1 контр.")).toBeVisible();
     await expect(v5.getByText("Полнота покрытия позиции неизвестна; защита не подтверждена.")).toBeVisible();
+    await expect(v5.getByRole("list", { name: "Почему защита не подтверждена" })).toContainText(
+      "Получена неполная выборка: в ней могут отсутствовать стоп-заявки.",
+    );
+    await expect(v5.getByText(
+      "Полученный объём одной SL-заявки (1 контр.) меньше объёма позиции (2 контр.). Это сравнение полученных чисел, не подтверждение защиты.",
+    )).toBeVisible();
+    await expect(v5.getByText(/Позиции прочитаны: .*Условные заявки прочитаны:/)).toBeVisible();
     await expect(
       v5.getByText("История исполнений недоступна; число исполнений неизвестно."),
     ).toBeVisible();
@@ -525,6 +541,8 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(adminPanel.getByText("BTC · BTC-USDT", { exact: true })).toHaveCount(0);
   await expect(tenantPanel.getByRole("region", { name: "HTX futures snapshot" })).toHaveCount(0);
   await expect(adminPanel.getByRole("region", { name: "HTX futures snapshot" })).toHaveCount(0);
+  await expect(tenantPanel.getByText(/Полученный объём одной SL-заявки/)).toHaveCount(0);
+  await expect(adminPanel.getByText(/Полученный объём одной SL-заявки/)).toHaveCount(0);
 
   await expect(tenantPanel.getByText("HTX · счёт account-a · UID 9988776655")).toHaveCount(0);
   await expect(adminPanel.getByText("HTX · счёт account-a · UID 9988776655")).toHaveCount(0);
@@ -544,6 +562,8 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(restoredTenantPanel.getByText("Капитал счёта (USD)")).toBeVisible();
   await expect(restoredTenantPanel.getByText("Стоп: цена 59000; объём 1 контр.")).toBeVisible();
   await expect(restoredTenantPanel.getByText("Цель: цена 62000; объём 1 контр.")).toBeVisible();
+  await restoredTenantPanel.getByRole("heading", { name: "Полученные стоп-заявки и цели", exact: true })
+    .locator("..").screenshot({ path: testInfo.outputPath("stop-evidence-desktop.png") });
   await restoredTenantPanel.getByRole("region", { name: "HTX futures snapshot" }).screenshot({
     path: testInfo.outputPath("htx-v5-desktop.png"),
   });
@@ -556,6 +576,8 @@ test("mounted Admin and tenant update the same observation automatically and cle
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
+  await restoredTenantPanel.getByRole("heading", { name: "Полученные стоп-заявки и цели", exact: true })
+    .locator("..").screenshot({ path: testInfo.outputPath("stop-evidence-mobile.png") });
   await restoredTenantPanel
     .getByRole("heading", { name: "Фьючерсы · маржа, позиции и заявки", exact: true })
     .scrollIntoViewIfNeeded();
@@ -640,6 +662,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(admin.getByText("9988776655", { exact: true })).toBeVisible();
   await expect(admin.getByText("Доступ отозван. Данные счетов очищены.")).toHaveCount(0);
   await admin.close();
+  expect(traderWrites).toEqual([]);
 });
 
 test("account observation admin page does not expose the form anonymously", async ({ page }) => {

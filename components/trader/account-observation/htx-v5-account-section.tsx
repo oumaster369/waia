@@ -16,10 +16,27 @@ import type {
   HtxV5OpenOrder,
   HtxV5Position,
 } from "@/lib/trader/account-observation/derivatives/htx-v5-read-contract";
-import { htxV5PositionOrderDisplay } from "@/lib/trader/account-observation/htx-v5-position-order-display";
+import { htxV5PositionOrderDisplay, type StopEvidenceReason } from "@/lib/trader/account-observation/htx-v5-position-order-display";
 
 const MAX_VISIBLE_ROWS = 100;
 const MAX_VISIBLE_POSITION_ORDERS = 10;
+
+const STOP_EVIDENCE_REASON: Record<StopEvidenceReason, string> = {
+  READ_FAILED: "Чтение позиций или условных заявок не завершилось успешно.",
+  INVALID_READ_TIME: "Время чтения позиций или заявок не прошло проверку.",
+  STALE_DATA: "Срок актуальности позиций или заявок истёк.",
+  POSITION_UNBOUND: "Позиция не связана с этим снимком счёта.",
+  POSITION_AMBIGUOUS: "В снимке несколько строк одной позиции; сопоставление неоднозначно.",
+  SOURCE_INCOMPLETE: "Получена неполная выборка: в ней могут отсутствовать стоп-заявки.",
+  NO_MATCHING_SL: "Совпавшая стоп-заявка SL не получена; это не доказывает её отсутствие. Цель TP не заменяет стоп.",
+  DUPLICATE_ORDER_IDENTITY: "Идентификатор заявки повторяется в полученных данных; объёмы не сравниваются.",
+  MULTIPLE_SL_CANDIDATES: "Получено несколько совпавших стоп-заявок; их объёмы не складываются.",
+  UNSUPPORTED_QUANTITY: "Полученный объём нельзя точно сравнить в поддерживаемых пределах.",
+  UNQUALIFIED_CLOSING_SEMANTICS: "По этим данным не подтверждено, какой объём позиции будет закрыт.",
+};
+
+const QUANTITY_RELATION = { LESS: "меньше объёма", EQUAL: "равен объёму", GREATER: "больше объёма" } as const;
+
 
 function hasPositiveContractVolume(volume: string): boolean {
   const significand = volume.split(/[eE]/, 1)[0] ?? "";
@@ -263,6 +280,21 @@ function Position({
             <p>Полнота покрытия позиции неизвестна; защита не подтверждена.</p>
           </>
         )}
+        <ul aria-label="Почему защита не подтверждена" className="text-muted-foreground space-y-1 text-xs">
+          {orders.reasons.map(reason => <li key={reason}>{STOP_EVIDENCE_REASON[reason]}</li>)}
+        </ul>
+        {orders.receivedQuantityComparison ? (
+          <p>
+            Полученный объём одной SL-заявки ({orders.receivedQuantityComparison.stopVolume} контр.){" "}
+            {QUANTITY_RELATION[orders.receivedQuantityComparison.relation]} позиции{" "}
+            ({orders.receivedQuantityComparison.positionVolume} контр.). Это сравнение полученных чисел, не подтверждение защиты.
+          </p>
+        ) : null}
+        <p className="text-muted-foreground text-xs">
+          Позиции прочитаны: {time(projection.positions.readCompletedAtMs)}.
+          Условные заявки прочитаны: {time(projection.algoOrders.readCompletedAtMs)}.
+          Эти чтения не являются одновременным снимком.
+        </p>
         <p className="text-muted-foreground text-xs">
           Это только полученные условные заявки; полнота покрытия позиции неизвестна.
         </p>

@@ -438,3 +438,48 @@ describe("HTX futures snapshot UI", () => {
   });
 
 });
+
+describe("received stop evidence explanations", () => {
+  it("shows the exact comparison and independent read times without confirming protection", () => {
+    const base = projection();
+    render(<HtxV5AccountSection projection={{ ...base, algoOrders: { ...base.algoOrders, readCompletedAtMs: now - 5 } }} stale={false} nowMs={now} />);
+    const positions = within(screen.getByRole("region", { name: "HTX positions" }));
+    expect(positions.getByText("Полученный объём одной SL-заявки (3 контр.) меньше объёма позиции (7 контр.). Это сравнение полученных чисел, не подтверждение защиты.")).toBeInTheDocument();
+    expect(positions.getByText(/Позиции прочитаны:/)).toHaveTextContent(new Date(now).toISOString());
+    expect(positions.getByText(/Позиции прочитаны:/)).toHaveTextContent(new Date(now - 5).toISOString());
+    expect(positions.getByText(/Эти чтения не являются одновременным снимком/)).toBeInTheDocument();
+    expect(positions.getByText("По этим данным не подтверждено, какой объём позиции будет закрыт.")).toBeInTheDocument();
+    expect(positions.getByText("Получена неполная выборка: в ней могут отсутствовать стоп-заявки.")).toBeInTheDocument();
+    expect(positions.queryByText(/защищена|полностью защищена/i)).not.toBeInTheDocument();
+  });
+
+  it.each(["stale", "error", "scope"] as const)("clears a displayed quantity comparison on %s update", change => {
+    const base = projection();
+    const { rerender } = render(<HtxV5AccountSection projection={base} stale={false} nowMs={now} />);
+    expect(screen.getByText(/Полученный объём одной SL-заявки/)).toBeInTheDocument();
+    const changed = change === "error"
+      ? { ...base, algoOrders: { ...base.algoOrders, status: "ERROR" as const, error: "READ_FAILED" as const } }
+      : change === "scope"
+        ? { ...base, positions: { ...base.positions, values: [{ ...base.positions.values![0]!, contractCode: "ETH-USDT" }] } }
+        : base;
+    rerender(<HtxV5AccountSection projection={changed} stale={change === "stale"} nowMs={now} />);
+    expect(screen.queryByText(/Полученный объём одной SL-заявки/)).not.toBeInTheDocument();
+    const positions = within(screen.getByRole("region", { name: "HTX positions" }));
+    expect(positions.queryByText(/защищена|полностью защищена/i)).not.toBeInTheDocument();
+  });
+
+  it.each(["duplicate", "multiple", "tp-only"] as const)("explains %s evidence without aggregating quantities", kind => {
+    const base = projection();
+    const sl = base.algoOrders.values![0]!;
+    const second = { ...sl, id: "different-id", algoId: kind === "duplicate" ? sl.algoId : "different-algo", type: "tp" as const, slTriggerPrice: null, tpTriggerPrice: "62000" };
+    const values = kind === "tp-only" ? [second] : [sl, kind === "multiple" ? { ...sl, id: "second-sl", algoId: "second-sl" } : second];
+    render(<HtxV5AccountSection projection={{ ...base, algoOrders: { ...base.algoOrders, values } }} stale={false} nowMs={now} />);
+    const positions = within(screen.getByRole("region", { name: "HTX positions" }));
+    expect(positions.queryByText(/Полученный объём одной SL-заявки/)).not.toBeInTheDocument();
+    expect(positions.getByText(kind === "duplicate"
+      ? "Идентификатор заявки повторяется в полученных данных; объёмы не сравниваются."
+      : kind === "multiple"
+        ? "Получено несколько совпавших стоп-заявок; их объёмы не складываются."
+        : "Совпавшая стоп-заявка SL не получена; это не доказывает её отсутствие. Цель TP не заменяет стоп.")).toBeInTheDocument();
+  });
+});
