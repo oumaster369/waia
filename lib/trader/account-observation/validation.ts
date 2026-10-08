@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { htxV5FinancialHistoryScopeSchema } from "./coverage";
+import { htxV5BillGroups, htxV5FinancialScopeAt } from "./derivatives/htx-v5-bill-groups";
 import { HTX_DERIVATIVES_ACCOUNT_FAMILIES } from "./derivatives/types";
 import type {
   AccountObservation,
@@ -173,7 +175,36 @@ const htxV5 = z.object({
             (c.windowStartMs !== null && c.windowEndMs !== null && c.windowStartMs < c.windowEndMs)) :
           c.status === "PARTIAL" && c.values !== null && c.error === null && c.pageScope !== null &&
             c.windowStartMs !== null && c.windowEndMs !== null && c.windowStartMs < c.windowEndMs)),
-}).strict().refine(v => v.htxUid === null || v.htxUid.length > 0);
+}).strict();
+const v5Bill = z.object({ id: z.string().regex(/^(?:0|[1-9]\d{0,18})$/).refine(id => BigInt(id) <= 9223372036854775807n),
+  contractCode: z.union([v5Contract, z.literal("")]), marginMode: v5MarginMode,
+  currency: z.string().regex(/^[A-Z0-9]{2,16}$/), type: z.string().min(1).max(256).regex(/^\d+$/),
+  category: z.string().min(1).max(256), amount: v5Decimal, createdTimeMs: time }).strict();
+const v5Bills = z.object({ status: z.enum(["PARTIAL", "ERROR", "UNAVAILABLE"]),
+  unavailableReason: z.enum(["SCOPE_EXPIRED", "SCOPE_NOT_YET_VALID"]).nullable(),
+  scopeId: z.string().uuid(), windowStartMs: time, windowEndMs: time, validFromMs: time, validUntilMs: time,
+  windowConvention: z.literal("START_INCLUSIVE_END_EXCLUSIVE"), values: z.array(v5Bill).max(100).nullable(),
+  groups: z.array(z.object({ currency: z.string().regex(/^[A-Z0-9]{2,16}$/), type: z.string().min(1).max(256).regex(/^\d+$/),
+    category: z.string().min(1).max(256), observedAmountSum: z.string().min(1).max(512).regex(/^-?\d+(?:\.\d+)?$/),
+    recordCount: z.number().int().min(1).max(100) }).strict()).max(100).nullable(),
+  ...v5ReadTimes, responseReceivedAtMs: time.nullable(),
+  pageScope: z.object({ pageSize: z.literal(100), maxPages: z.literal(1), pagesRead: z.literal(1),
+    nextFrom: z.string().regex(/^(?:0|[1-9]\d{0,18})$/).nullable(), completeness: z.literal("UNKNOWN") }).strict().nullable(),
+  completeness: z.literal("UNKNOWN"), amountSemantics: z.literal("RAW_SIGNED_AMOUNTS_NO_SIGN_CONVERSION"),
+  accountBinding: z.literal("NOT_ESTABLISHED_BY_BILLS_RESPONSE"), netPnl: z.null(), dailyPnl: z.null(),
+}).strict().refine(c => htxV5FinancialHistoryScopeSchema.safeParse({ enabled: true, scopeId: c.scopeId,
+  windowStartMs: c.windowStartMs, windowEndMs: c.windowEndMs, validFromMs: c.validFromMs, validUntilMs: c.validUntilMs }).success)
+  .refine(c => c.status === "UNAVAILABLE" ? c.unavailableReason !== null && c.error === null && c.values === null &&
+    c.groups === null && c.pageScope === null && c.readStartedAtMs === null && c.readCompletedAtMs === null &&
+    c.responseReceivedAtMs === null && c.responseGeneratedAtMs === null : c.unavailableReason === null &&
+    c.readStartedAtMs !== null && c.readCompletedAtMs !== null && c.readStartedAtMs <= c.readCompletedAtMs &&
+    c.readStartedAtMs >= c.validFromMs && c.readCompletedAtMs < c.validUntilMs &&
+    (c.responseGeneratedAtMs === null || c.responseGeneratedAtMs <= c.readCompletedAtMs) &&
+    (c.status === "ERROR" ? c.error !== null && c.values === null && c.groups === null && c.pageScope === null &&
+      c.responseReceivedAtMs === null : c.error === null && c.values !== null && c.groups !== null && c.pageScope !== null &&
+      c.responseReceivedAtMs !== null && c.readStartedAtMs <= c.responseReceivedAtMs && c.responseReceivedAtMs <= c.readCompletedAtMs));
+const htxV5Financial = htxV5.extend({ schemaVersion: z.literal("htx-v5-observation/v2"), bills: v5Bills }).strict();
+
 function component<T extends z.ZodTypeAny>(item: T) {
   return z
     .object({
@@ -431,6 +462,7 @@ const observation = z.discriminatedUnion("schemaVersion", [
   observationFields
     .extend({ schemaVersion: z.literal("account-observation/v3"), htxV5: htxV5, derivatives: derivatives.optional() })
     .strict(),
+  observationFields.extend({ schemaVersion: z.literal("account-observation/v4"), htxV5: htxV5Financial }).strict(),
 ]);
 export function sameObservationBinding(a: ObservationBinding, b: ObservationBinding) {
   return (
@@ -473,9 +505,10 @@ export function parseAccountObservation(value: unknown): AccountObservation {
               ],
         )
       : [];
-  const v5Statuses = result.schemaVersion === "account-observation/v3"
+  const v5Statuses = result.schemaVersion === "account-observation/v3" || result.schemaVersion === "account-observation/v4"
     ? [result.htxV5.assetMode.status, result.htxV5.balance.status, result.htxV5.positions.status,
-      result.htxV5.openOrders.status, result.htxV5.algoOrders.status, result.htxV5.fills.status]
+      result.htxV5.openOrders.status, result.htxV5.algoOrders.status, result.htxV5.fills.status,
+      ...(result.schemaVersion === "account-observation/v4" && result.htxV5.bills.status !== "UNAVAILABLE" ? [result.htxV5.bills.status] : [])]
       .filter((status): status is Exclude<typeof status, "NOT_CONFIGURED"> => status !== "NOT_CONFIGURED")
     : [];
   const status = deriveAccountObservationStatus([
@@ -504,9 +537,9 @@ export function parseAccountObservation(value: unknown): AccountObservation {
       result.collectionStartedAtMs,
       result.collectionCompletedAtMs,
     );
-  if (result.schemaVersion === "account-observation/v3")
-    validateHtxV5Projection(result.htxV5, result.collectionStartedAtMs, result.collectionCompletedAtMs);
-  return result as AccountObservation;
+  if (result.schemaVersion === "account-observation/v3" || result.schemaVersion === "account-observation/v4")
+    validateHtxV5Projection(result.htxV5 as HtxV5AccountObservation, result.collectionStartedAtMs, result.collectionCompletedAtMs);
+  return result as unknown as AccountObservation;
 }
 
 function validateHtxV5Projection(
@@ -516,7 +549,8 @@ function validateHtxV5Projection(
 ): void {
   const components = [projection.assetMode, projection.balance, projection.positions,
     projection.openOrders, projection.algoOrders,
-    ...(projection.fills.status === "NOT_CONFIGURED" ? [] : [projection.fills])];
+    ...(projection.fills.status === "NOT_CONFIGURED" ? [] : [projection.fills]),
+    ...(projection.schemaVersion === "htx-v5-observation/v2" && projection.bills.status !== "UNAVAILABLE" ? [projection.bills] : [])];
   let successful = false;
   for (const component of components) {
     if (component.status === "ERROR") {
@@ -549,6 +583,20 @@ function validateHtxV5Projection(
     projection.algoOrders.pageScope.queries.some(query => (projection.algoOrders.values ?? [])
       .filter(row => row.type === query.type).length > projection.algoOrders.pageScope!.pageSize * query.pagesRead)))
     throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
+  if (projection.schemaVersion === "htx-v5-observation/v2") {
+    const bills = projection.bills;
+    if (projection.fills.status !== "NOT_CONFIGURED") throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
+    if (bills.status === "PARTIAL") {
+      try {
+        const rows = bills.values!;
+        if (new Set(rows.map(row => row.id)).size !== rows.length || rows.some(row =>
+          row.createdTimeMs < bills.windowStartMs || row.createdTimeMs >= bills.windowEndMs) ||
+          bills.pageScope?.nextFrom !== (rows.at(-1)?.id ?? null) ||
+          JSON.stringify(htxV5BillGroups(rows)) !== JSON.stringify(bills.groups))
+          throw new Error("INVALID_BILLS");
+      } catch { throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD"); }
+    }
+  }
   const fill = projection.fills;
   if (fill.status === "NOT_CONFIGURED") return;
   const fillPageScope = fill.pageScope;
@@ -733,4 +781,18 @@ function validateDerivativesProjection(
     )
       throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
   }
+}
+
+/** Time-limited financial data can expire independently of the authorized base observation.
+ * Call with database time for storage; never replace the original immutable row on a retry. */
+export function accountObservationFinancialScopeAt(observation: AccountObservation, nowMs: number): AccountObservation {
+  if (observation.schemaVersion !== "account-observation/v4" || !observation.htxV5) return observation;
+  const htxV5 = htxV5FinancialScopeAt(observation.htxV5, nowMs);
+  if (htxV5 === observation.htxV5) return observation;
+  const status = deriveAccountObservationStatus([
+    observation.balances.status, observation.openOrders.status, ...observation.trades.map(row => row.component.status),
+    htxV5.assetMode.status, htxV5.balance.status, htxV5.positions.status, htxV5.openOrders.status, htxV5.algoOrders.status,
+    ...(htxV5.fills.status === "NOT_CONFIGURED" ? [] : [htxV5.fills.status]),
+  ]);
+  return parseAccountObservation({ ...observation, htxV5, status });
 }

@@ -1,6 +1,8 @@
 /** Static, read-only contract for documented HTX USDT-M V5 observation routes.
  * Mode and route capability remain separate. This module performs no I/O. */
 import { types } from "node:util";
+import { HTX_V5_BILL_CATEGORIES, type HtxV5BillCategory } from "./htx-v5-bill-groups";
+export type { HtxV5BillCategory } from "./htx-v5-bill-groups";
 
 export const HTX_V5_READ_ONLY_ROUTES = Object.freeze({
   assetMode: "/v5/account/asset_mode",
@@ -9,6 +11,7 @@ export const HTX_V5_READ_ONLY_ROUTES = Object.freeze({
   openOrders: "/v5/trade/order/opens",
   algoOrders: "/v5/algo/order/opens",
   fills: "/v5/trade/order/details",
+  bills: "/v5/account/bills",
 } as const);
 
 export type HtxV5ReadRoute = (typeof HTX_V5_READ_ONLY_ROUTES)[keyof typeof HTX_V5_READ_ONLY_ROUTES];
@@ -244,6 +247,17 @@ export function buildHtxV5FillsRequest(
   const from = boundedCursor(safeInput.from);
   if (from !== undefined) query.from = from;
   return request(HTX_V5_READ_ONLY_ROUTES.fills, query);
+}
+
+/** One explicitly scoped page. This local window policy does not establish venue coverage. */
+export function buildHtxV5BillsRequest(input: Readonly<{ windowStartMs: number; windowEndMs: number }>): HtxV5ReadRequest {
+  const value = snapshotBuilderInput(input, ["windowStartMs", "windowEndMs"]);
+  const start = value.windowStartMs, end = value.windowEndMs;
+  if (typeof start !== "number" || typeof end !== "number" || !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(end) || start < 0 || end <= start || end > 8.64e15 || end - start > MAX_FILL_WINDOW_MS)
+    return badRequest();
+  return request(HTX_V5_READ_ONLY_ROUTES.bills, { start_time: String(start), end_time: String(end - 1),
+    from: "0", limit: "100", direct: "next" });
 }
 
 /** Raw HTX account setting only. This enum does not prove which API family is enabled. */
@@ -759,4 +773,42 @@ export function parseHtxV5Fills(payload: string, expectedContract: string): HtxV
     });
   });
   return page(rows, env.ts, (row) => row.id);
+}
+
+/** Documented bill labels only; neither amount sign nor a net-PnL formula is specified. */
+export type HtxV5Bill = Readonly<{
+  id: string;
+  /** Empty is valid in the official transfer example; never infer a contract. */
+  contractCode: string;
+  marginMode: HtxV5MarginMode;
+  currency: string;
+  /** Exact received numeric code, including unsupported future codes. */
+  type: string;
+  category: HtxV5BillCategory;
+  /** Raw signed decimal. A fee label does not authorize sign conversion. */
+  amount: string;
+  createdTimeMs: number;
+}>;
+
+/** Normalizes received bills only; the separately scoped reader establishes account association.
+ * This parser never establishes page ordering, exhaustion, or a financial reporting period. */
+export function parseHtxV5Bills(payload: string): HtxV5Page<HtxV5Bill> {
+  const env = rowsEnvelope(payload);
+  const rows = env.rows.map((row): HtxV5Bill => {
+    const contractCode = row.contract_code === "" ? "" : contract(row.contract_code);
+    const currency = text(row.currency);
+    if (!/^[A-Z0-9]{2,16}$/.test(currency)) return fail();
+    const type = text(row.type);
+    if (!/^\d+$/.test(type)) return fail();
+    const category = Object.hasOwn(HTX_V5_BILL_CATEGORIES, type)
+      ? HTX_V5_BILL_CATEGORIES[type as keyof typeof HTX_V5_BILL_CATEGORIES] : "UNKNOWN";
+    const createdTimeMs = timestamp(row.created_time);
+    if (createdTimeMs === null) return fail();
+    return Object.freeze({
+      id: cursorId(row.id), contractCode,
+      marginMode: enumValue(row.margin_mode, ["cross", "isolated"] as const),
+      currency, type, category, amount: decimal(row.amount), createdTimeMs,
+    });
+  });
+  return page(rows, env.ts, row => row.id);
 }
