@@ -41,6 +41,14 @@ valid optional scope still reaches the collector: financial unavailability must 
 stop ordinary base observation. No enrollment, lease, request budget, pool, TLS,
 secret, role, database, provider or production changes are part of this correction.
 
+## Acceptance
+
+Accept the source correction when v1 base observations and correctly sealed v2
+financial manifests reach the strict collector, while malformed scope, digest,
+release, configuration and forbidden-key cases fail closed. Complete the focused
+validation and independent review before publication. Financial production
+acceptance remains separate and keeps DEE-1233 open.
+
 ## Validation and release boundary
 
 The focused regression invokes the real supervisor configuration parser and actual
