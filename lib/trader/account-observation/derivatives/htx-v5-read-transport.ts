@@ -10,7 +10,7 @@ import { financialScopeUnavailable } from "./htx-v5-bill-groups";
 import { htxV5FinancialHistoryScopeSchema } from "../coverage";
 import { observationBindingSchema, sameObservationBinding } from "../validation";
 import {
-  isHtxV5BillsDiagnosticSink, recordHtxV5BillsDiagnostic, type HtxV5BillsDiagnosticSink,
+  isHtxV5BillsDiagnosticSink, recordHtxV5BillsDiagnostic, recordHtxV5BillsHttpStatus, type HtxV5BillsDiagnosticSink,
   type HtxV5BillsDiagnosticReason,
   buildHtxV5BillsRequest,
   buildHtxV5AlgoOrdersRequest,
@@ -453,6 +453,7 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
           await checkAfter();
           fail("READ_FAILED");
         }
+        if (diagnosticSink) recordHtxV5BillsHttpStatus(diagnosticSink, 200);
         const length = response.headers.get("content-length");
         if (length !== null && !/^\d+$/.test(length)) {
           cancelBody();

@@ -42,27 +42,76 @@ export type HtxV5BillsDiagnosticReason = (typeof HTX_V5_BILLS_DIAGNOSTIC_REASONS
 declare const billsDiagnosticBrand: unique symbol;
 export type HtxV5BillsDiagnosticSink = Readonly<{ [billsDiagnosticBrand]: true }>;
 const billsDiagnostics = new WeakMap<HtxV5BillsDiagnosticSink, HtxV5BillsDiagnosticReason | null>();
+export type HtxV5BillsCodeDiagnostic = Readonly<{
+  httpStatus: 200 | null;
+  codeType: "MISSING" | "STRING" | "NUMBER" | "BOOLEAN" | "NULL" | "OBJECT" | "ARRAY";
+  decimalToken?: string;
+}>;
+type BillsDiagnosticState = { reason: HtxV5BillsDiagnosticReason | null; httpStatus: 200 | null; codeDiagnostic?: HtxV5BillsCodeDiagnostic };
+const billsDiagnosticStates = new WeakMap<HtxV5BillsDiagnosticSink, BillsDiagnosticState>();
+const BILLS_CODE_TYPES: readonly HtxV5BillsCodeDiagnostic["codeType"][] = Object.freeze([
+  "MISSING", "STRING", "NUMBER", "BOOLEAN", "NULL", "OBJECT", "ARRAY",
+]);
+function snapshotBillsCodeDiagnostic(value: unknown): Omit<HtxV5BillsCodeDiagnostic, "httpStatus"> | undefined {
+  if (value === null || typeof value !== "object" || types.isProxy(value) || Array.isArray(value)) return undefined;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return undefined;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const keys = Reflect.ownKeys(descriptors);
+  if (keys.some(key => key !== "codeType" && key !== "decimalToken")) return undefined;
+  const typeDescriptor = descriptors.codeType;
+  const tokenDescriptor = descriptors.decimalToken;
+  if (!typeDescriptor || !("value" in typeDescriptor) || !typeDescriptor.enumerable ||
+      typeof typeDescriptor.value !== "string" || !BILLS_CODE_TYPES.includes(typeDescriptor.value as HtxV5BillsCodeDiagnostic["codeType"])) return undefined;
+  if (tokenDescriptor && (!("value" in tokenDescriptor) || !tokenDescriptor.enumerable ||
+      typeof tokenDescriptor.value !== "string" || !/^\d{1,6}$/.test(tokenDescriptor.value) ||
+      (typeDescriptor.value !== "STRING" && typeDescriptor.value !== "NUMBER"))) return undefined;
+  return Object.freeze({ codeType: typeDescriptor.value as HtxV5BillsCodeDiagnostic["codeType"],
+    ...(tokenDescriptor ? { decimalToken: tokenDescriptor.value as string } : {}) });
+}
 export function createHtxV5BillsDiagnostics(): Readonly<{
-  sink: HtxV5BillsDiagnosticSink; read(): HtxV5BillsDiagnosticReason | null;
+  sink: HtxV5BillsDiagnosticSink;
+  read(): HtxV5BillsDiagnosticReason | null;
+  readCodeDiagnostic(): HtxV5BillsCodeDiagnostic | null;
 }> {
   const sink = Object.freeze(Object.create(null)) as HtxV5BillsDiagnosticSink;
   billsDiagnostics.set(sink, null);
-  return Object.freeze({ sink, read: () => billsDiagnostics.get(sink) ?? null });
+  billsDiagnosticStates.set(sink, { reason: null, httpStatus: null });
+  return Object.freeze({
+    sink,
+    read: () => billsDiagnosticStates.get(sink)?.reason ?? null,
+    readCodeDiagnostic: () => billsDiagnosticStates.get(sink)?.codeDiagnostic ?? null,
+  });
 }
 export function isHtxV5BillsDiagnosticSink(value: unknown): value is HtxV5BillsDiagnosticSink {
   return typeof value === "object" && value !== null && billsDiagnostics.has(value as HtxV5BillsDiagnosticSink);
 }
 export function recordHtxV5BillsDiagnostic(
   sink: HtxV5BillsDiagnosticSink | undefined, reason: HtxV5BillsDiagnosticReason,
+  codeDiagnostic?: Omit<HtxV5BillsCodeDiagnostic, "httpStatus">,
 ): void {
   // Never read sink properties, invoke user code, await, or retain an error/body.
-  if (sink && billsDiagnostics.has(sink) && billsDiagnostics.get(sink) === null &&
-      HTX_V5_BILLS_DIAGNOSTIC_REASONS.includes(reason)) billsDiagnostics.set(sink, reason);
+  const state = sink ? billsDiagnosticStates.get(sink) : undefined;
+  if (state && state.reason === null && HTX_V5_BILLS_DIAGNOSTIC_REASONS.includes(reason)) {
+    state.reason = reason;
+    billsDiagnostics.set(sink!, reason);
+    if (reason === "BILLS_CODE_INVALID" && codeDiagnostic) {
+      const safeCodeDiagnostic = snapshotBillsCodeDiagnostic(codeDiagnostic);
+      if (safeCodeDiagnostic) state.codeDiagnostic = Object.freeze({ ...safeCodeDiagnostic, httpStatus: state.httpStatus });
+    }
+  }
+}
+export function recordHtxV5BillsHttpStatus(sink: HtxV5BillsDiagnosticSink | undefined, status: 200): void {
+  const state = sink ? billsDiagnosticStates.get(sink) : undefined;
+  if (state && state.reason === null && status === 200) state.httpStatus = 200;
 }
 export function discardHtxV5BillsDiagnostic(sink: HtxV5BillsDiagnosticSink | undefined): void {
-  if (sink && billsDiagnostics.has(sink)) billsDiagnostics.set(sink, null);
+  if (sink && billsDiagnostics.has(sink)) {
+    billsDiagnostics.set(sink, null);
+    billsDiagnosticStates.set(sink, { reason: null, httpStatus: null });
+  }
 }
-type BillsDiagnosticStage = { reason: HtxV5BillsDiagnosticReason };
+type BillsDiagnosticStage = { reason: HtxV5BillsDiagnosticReason; codeDiagnostic?: Omit<HtxV5BillsCodeDiagnostic, "httpStatus"> };
 
 const MAX_PAGE_SIZE = 100;
 const MAX_QUERY_ID_DIGITS = 19;
@@ -426,7 +475,7 @@ export type HtxV5Fill = Readonly<{
 }>;
 
 /** Bounded JSON reader: preserve numeric lexemes and reject duplicate keys before projection. */
-function parseJson(input: string): unknown {
+function parseJson(input: string, observeRootCode?: (kind: HtxV5BillsCodeDiagnostic["codeType"], value?: unknown) => void): unknown {
   if (typeof input !== "string" || input.length > 1_048_576) return fail();
   let i = 0;
   let nodes = 0;
@@ -468,7 +517,16 @@ function parseJson(input: string): unknown {
         if (Object.hasOwn(out, key)) return fail();
         ws();
         if (input[i++] !== ":") return fail();
-        out[key] = value(depth + 1);
+        const tokenStart = (ws(), i);
+        const parsedValue = value(depth + 1);
+        out[key] = parsedValue;
+        if (depth === 0 && key === "code" && observeRootCode) {
+          const token = input[tokenStart];
+          const kind: HtxV5BillsCodeDiagnostic["codeType"] = token === '"' ? "STRING"
+            : token === "{" ? "OBJECT" : token === "[" ? "ARRAY"
+              : token === "n" ? "NULL" : token === "t" || token === "f" ? "BOOLEAN" : "NUMBER";
+          observeRootCode(kind, parsedValue);
+        }
         ws();
         const sep = input[i++];
         if (sep === "}") return out;
@@ -545,10 +603,16 @@ function timestamp(value: unknown): number | null {
 }
 function envelope(payload: string, diagnostic?: BillsDiagnosticStage): Readonly<{ data: unknown; ts: number | null }> {
   if (diagnostic) diagnostic.reason = "BILLS_JSON_INVALID";
-  const parsed = parseJson(payload);
+  const parsed = parseJson(payload, diagnostic ? (codeType, codeValue) => {
+    const detail: { codeType: HtxV5BillsCodeDiagnostic["codeType"]; decimalToken?: string } = { codeType };
+    if ((codeType === "STRING" || codeType === "NUMBER") && typeof codeValue === "string" && /^\d{1,6}$/.test(codeValue))
+      detail.decimalToken = codeValue;
+    diagnostic.codeDiagnostic = Object.freeze(detail);
+  } : undefined);
   if (diagnostic) diagnostic.reason = "BILLS_ENVELOPE_INVALID";
   const value = object(parsed);
   if (diagnostic) diagnostic.reason = "BILLS_CODE_INVALID";
+  if (diagnostic && !Object.hasOwn(value, "code")) diagnostic.codeDiagnostic = Object.freeze({ codeType: "MISSING" });
   if (value.code !== "200") return fail();
   if (diagnostic) diagnostic.reason = "BILLS_ENVELOPE_TIMESTAMP_INVALID";
   const ts = timestamp(value.ts);
@@ -867,7 +931,7 @@ export function parseHtxV5Bills(payload: string, sink?: HtxV5BillsDiagnosticSink
     if (diagnostic) diagnostic.reason = "BILLS_DUPLICATE_ID";
     return page(rows, env.ts, row => row.id);
   } catch (error) {
-    if (diagnostic) recordHtxV5BillsDiagnostic(sink, diagnostic.reason);
+    if (diagnostic) recordHtxV5BillsDiagnostic(sink, diagnostic.reason, diagnostic.codeDiagnostic);
     throw error;
   }
 }
