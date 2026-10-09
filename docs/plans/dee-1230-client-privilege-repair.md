@@ -17,7 +17,7 @@ state:
   lastValidatedGitSha: null
   lastValidationAt: null
   blockedReason: null
-  nextAction: "Persist and review the source SQL representation; whole-Trader readiness and any further production action remain separately gated."
+  nextAction: "Review the historical applied-SQL record; a future managed migration, remaining security notices and whole-Trader readiness remain separate."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -79,7 +79,7 @@ Root reports that the targeted database work was subsequently applied and verifi
 
 Four pure validators received fixed `search_path` settings in migration `20261009113150`. The historical pre-admission recording failure remains part of the record; the actual SQL guards and postcondition passed. Migration `20261009140350` for one function and migration `20261009151948` for exact JSONB keys have durable pre-admission and postcondition PASS evidence limited to those configurations; they made no function-body, ACL, owner, or dependency changes. The 15:19:58 advisor report recorded zero errors, zero RLS-disabled relations, zero leaked-password findings, 152 search-path warnings, and 39 no-policy informational findings. Existing leaked-password mode remains enabled.
 
-The 22-case native fixture result above remains the historical PASS; it was not rerun for this follow-up. No new numbered migration or Drizzle journal entry was added: the journal remains at 232, and PR759's future `0232` remains reserved/HOLD. Persistence of the source SQL is still pending. The whole Trader remains NOT READY. These security changes performed no trading or Grok activity and left account data and credentials unchanged.
+The 22-case native fixture result above remains the historical PASS; it was not rerun for this follow-up. No new numbered migration or Drizzle journal entry was added: the journal remains at 232, and PR759's future `0232` remains reserved/HOLD. The [historical applied-SQL record](../security/applied-sql/DEE-1230-2026-10-09.md) preserves the public-safe forward statements and evidence identities outside the migration path. A managed migration for other environments remains pending; this record must not be replayed. The whole Trader remains NOT READY. These security changes performed no trading or Grok activity and left account data and credentials unchanged.
 
 ## Operational holds and limits
 
