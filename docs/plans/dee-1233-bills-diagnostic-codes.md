@@ -1,3 +1,29 @@
+---
+integrationIssue: DEE-1233
+integrationTitle: "Diagnose rejected account financial-history reads"
+branch: dee-1233-bills-diagnostic-codes
+riskTier: T2
+prPolicy: one-integration-pr
+executionSurfaces: [local]
+requiredValidation: [targeted-unit, lint, typecheck, build, ci]
+approvalGates: [independent-review, exact-runtime-admission]
+state:
+  status: in-progress
+  currentWorkPackage: WP-BILLS-DIAGNOSTICS
+  completedWorkPackages: []
+  remainingWorkPackages: [WP-BILLS-DIAGNOSTICS]
+  prNumber: 775
+  prUrl: https://github.com/oumaster369/waia/pull/775
+  lastValidatedGitSha: db6bf813cebd505aa4a3764f8c78835d66c4142c
+  lastValidationAt: "2026-10-09"
+  blockedReason: null
+  nextAction: "Complete exact-head CI; native diagnostic artifact and finite admission remain separate."
+provenance:
+  createdFrom: chat
+  gapRegistry: null
+  supersedes: null
+---
+
 # DEE-1233 — bounded bills failure diagnostics
 
 The financial-history reader currently collapses transport, payload validation,
@@ -23,7 +49,7 @@ identity, permission, cancellation or scope-expiry failure discards an earlier
 body diagnostic. The reader exposes a reason only for a returned bills
 `INVALID_RESPONSE`; it discards diagnostics on any terminal rejection.
 
-## Validation
+## Acceptance
 
 - Synthetic tests distinguish the existing failure stages and fields, retain the
   first failure, reject forged tokens safely, and never expose a secret canary.
