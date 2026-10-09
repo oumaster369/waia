@@ -23,6 +23,8 @@ const allowedRepositoryInputs = new Set([
   "lib/trader/account-observation/projection-service-config.ts",
   "lib/trader/account-observation/projection-service.ts",
   "lib/trader/account-observation/types.ts",
+  "lib/trader/account-observation/coverage.ts",
+  "lib/trader/account-observation/derivatives/htx-v5-bill-groups.ts",
   "lib/trader/account-observation/validation.ts",
 ]);
 

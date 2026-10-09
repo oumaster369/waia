@@ -140,10 +140,10 @@ describe("cabinet observation view", () => {
     });
   });
 
-  it("keeps V5 futures USD fields separate and preserves observed zero strings", () => {
+  it.each(["account-observation/v3", "account-observation/v4"] as const)("keeps %s futures USD fields separate and preserves observed zero strings", schemaVersion => {
     const v3 = {
       ...observation,
-      schemaVersion: "account-observation/v3",
+      schemaVersion,
       htxV5: {
         balance: {
           status: "COMPLETE",

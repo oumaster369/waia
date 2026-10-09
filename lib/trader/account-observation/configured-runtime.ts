@@ -175,14 +175,14 @@ export function createConfiguredHtxObservationRuntime(
   };
   // Consent is per exact operator assignment and must never flow through the
   // self-service template path, even when that assignment is first in the list.
-  const template = fixed.find((item) => !item.config.existingKeyReadConsentId);
+  const template = fixed.find((item) => !item.config.existingKeyReadConsentId && !item.config.htxV5?.financialHistory);
   const ensureStore = (binding: ObservationBinding) => {
     const id = key(binding);
     const assignment =
       fixed.find((item) => key(item.binding) === id) ??
       (template &&
       !template.config.htxDerivativesFamilies?.length &&
-      !template.config.htxV5?.expectedHtxUid &&
+      !template.config.htxV5?.expectedHtxUid && !template.config.htxV5?.financialHistory &&
       binding.configurationRevision === template.config.revision
         ? template
         : undefined);
@@ -387,6 +387,7 @@ export function createConfiguredHtxObservationRuntime(
                     ...(config.htxV5.expectedHtxUid ? { expectedHtxUid: config.htxV5.expectedHtxUid } : {}),
                     expectedPermission: config.existingKeyReadConsentId ? "readOnly,trade" : "readOnly",
                     ...(config.htxV5.fillContracts ? { contracts: config.htxV5.fillContracts } : {}),
+                    ...(config.htxV5.financialHistory ? { financialHistory: config.htxV5.financialHistory } : {}),
                     authorizeCurrent: source.authorizeOpen,
                   });
                   htxV5Readers.set(htxV5Reader, accountKey);

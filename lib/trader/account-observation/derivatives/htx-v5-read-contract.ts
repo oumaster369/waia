@@ -1,6 +1,8 @@
 /** Static, read-only contract for documented HTX USDT-M V5 observation routes.
  * Mode and route capability remain separate. This module performs no I/O. */
 import { types } from "node:util";
+import { HTX_V5_BILL_CATEGORIES, type HtxV5BillCategory } from "./htx-v5-bill-groups";
+export type { HtxV5BillCategory } from "./htx-v5-bill-groups";
 
 export const HTX_V5_READ_ONLY_ROUTES = Object.freeze({
   assetMode: "/v5/account/asset_mode",
@@ -9,6 +11,7 @@ export const HTX_V5_READ_ONLY_ROUTES = Object.freeze({
   openOrders: "/v5/trade/order/opens",
   algoOrders: "/v5/algo/order/opens",
   fills: "/v5/trade/order/details",
+  bills: "/v5/account/bills",
 } as const);
 
 export type HtxV5ReadRoute = (typeof HTX_V5_READ_ONLY_ROUTES)[keyof typeof HTX_V5_READ_ONLY_ROUTES];
@@ -22,6 +25,44 @@ export type HtxV5ReadRequest = Readonly<{
   path: HtxV5ReadRoute;
   query: Readonly<Record<string, string>>;
 }>;
+
+/** Opaque, module-owned, first-failure diagnostics. No callbacks or response data. */
+export const HTX_V5_BILLS_DIAGNOSTIC_REASONS = Object.freeze([
+  "BILLS_JSON_INVALID", "BILLS_ENVELOPE_INVALID", "BILLS_CODE_INVALID", "BILLS_ENVELOPE_TIMESTAMP_INVALID", "BILLS_DATA_INVALID",
+  "BILLS_ROW_SHAPE_INVALID", "BILLS_DUPLICATE_ID", "BILLS_TRANSPORT_INVALID",
+  "BILLS_CONTRACT_INVALID", "BILLS_CURRENCY_INVALID", "BILLS_TYPE_INVALID",
+  "BILLS_CREATED_TIME_INVALID", "BILLS_ID_INVALID", "BILLS_MARGIN_MODE_INVALID", "BILLS_AMOUNT_INVALID",
+  "BILLS_IDENTITY_CLOCK_INVALID", "BILLS_IDENTITY_MATCH_CLOCK_INVALID", "BILLS_REQUEST_CLOCK_INVALID",
+  "BILLS_CONTENT_LENGTH_INVALID", "BILLS_CONTENT_LENGTH_EXCEEDS_LIMIT", "BILLS_BODY_MISSING",
+  "BILLS_CHUNK_TYPE_INVALID", "BILLS_BODY_EXCEEDS_LIMIT", "BILLS_UTF8_CHUNK_INVALID",
+  "BILLS_UTF8_FINAL_INVALID", "BILLS_CREDENTIAL_ECHO", "BILLS_RESPONSE_CLOCK_INVALID",
+  "BILLS_RESPONSE_TIMING_INVALID", "BILLS_WINDOW_INVALID", "BILLS_GROUP_INVALID",
+] as const);
+export type HtxV5BillsDiagnosticReason = (typeof HTX_V5_BILLS_DIAGNOSTIC_REASONS)[number];
+declare const billsDiagnosticBrand: unique symbol;
+export type HtxV5BillsDiagnosticSink = Readonly<{ [billsDiagnosticBrand]: true }>;
+const billsDiagnostics = new WeakMap<HtxV5BillsDiagnosticSink, HtxV5BillsDiagnosticReason | null>();
+export function createHtxV5BillsDiagnostics(): Readonly<{
+  sink: HtxV5BillsDiagnosticSink; read(): HtxV5BillsDiagnosticReason | null;
+}> {
+  const sink = Object.freeze(Object.create(null)) as HtxV5BillsDiagnosticSink;
+  billsDiagnostics.set(sink, null);
+  return Object.freeze({ sink, read: () => billsDiagnostics.get(sink) ?? null });
+}
+export function isHtxV5BillsDiagnosticSink(value: unknown): value is HtxV5BillsDiagnosticSink {
+  return typeof value === "object" && value !== null && billsDiagnostics.has(value as HtxV5BillsDiagnosticSink);
+}
+export function recordHtxV5BillsDiagnostic(
+  sink: HtxV5BillsDiagnosticSink | undefined, reason: HtxV5BillsDiagnosticReason,
+): void {
+  // Never read sink properties, invoke user code, await, or retain an error/body.
+  if (sink && billsDiagnostics.has(sink) && billsDiagnostics.get(sink) === null &&
+      HTX_V5_BILLS_DIAGNOSTIC_REASONS.includes(reason)) billsDiagnostics.set(sink, reason);
+}
+export function discardHtxV5BillsDiagnostic(sink: HtxV5BillsDiagnosticSink | undefined): void {
+  if (sink && billsDiagnostics.has(sink)) billsDiagnostics.set(sink, null);
+}
+type BillsDiagnosticStage = { reason: HtxV5BillsDiagnosticReason };
 
 const MAX_PAGE_SIZE = 100;
 const MAX_QUERY_ID_DIGITS = 19;
@@ -244,6 +285,17 @@ export function buildHtxV5FillsRequest(
   const from = boundedCursor(safeInput.from);
   if (from !== undefined) query.from = from;
   return request(HTX_V5_READ_ONLY_ROUTES.fills, query);
+}
+
+/** One explicitly scoped page. This local window policy does not establish venue coverage. */
+export function buildHtxV5BillsRequest(input: Readonly<{ windowStartMs: number; windowEndMs: number }>): HtxV5ReadRequest {
+  const value = snapshotBuilderInput(input, ["windowStartMs", "windowEndMs"]);
+  const start = value.windowStartMs, end = value.windowEndMs;
+  if (typeof start !== "number" || typeof end !== "number" || !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(end) || start < 0 || end <= start || end > 8.64e15 || end - start > MAX_FILL_WINDOW_MS)
+    return badRequest();
+  return request(HTX_V5_READ_ONLY_ROUTES.bills, { start_time: String(start), end_time: String(end - 1),
+    from: "0", limit: "100", direct: "next" });
 }
 
 /** Raw HTX account setting only. This enum does not prove which API family is enabled. */
@@ -491,15 +543,22 @@ function timestamp(value: unknown): number | null {
   const parsed = Number(raw);
   return Number.isSafeInteger(parsed) ? parsed : fail();
 }
-function envelope(payload: string): Readonly<{ data: unknown; ts: number | null }> {
-  const value = object(parseJson(payload));
+function envelope(payload: string, diagnostic?: BillsDiagnosticStage): Readonly<{ data: unknown; ts: number | null }> {
+  if (diagnostic) diagnostic.reason = "BILLS_JSON_INVALID";
+  const parsed = parseJson(payload);
+  if (diagnostic) diagnostic.reason = "BILLS_ENVELOPE_INVALID";
+  const value = object(parsed);
+  if (diagnostic) diagnostic.reason = "BILLS_CODE_INVALID";
   if (value.code !== "200") return fail();
+  if (diagnostic) diagnostic.reason = "BILLS_ENVELOPE_TIMESTAMP_INVALID";
   const ts = timestamp(value.ts);
   return Object.freeze({ data: value.data, ts });
 }
-function rowsEnvelope(payload: string): Readonly<{ rows: readonly Dict[]; ts: number | null }> {
-  const env = envelope(payload);
+function rowsEnvelope(payload: string, diagnostic?: BillsDiagnosticStage): Readonly<{ rows: readonly Dict[]; ts: number | null }> {
+  const env = envelope(payload, diagnostic);
+  if (diagnostic) diagnostic.reason = "BILLS_DATA_INVALID";
   if (!Array.isArray(env.data) || env.data.length > MAX_PAGE_SIZE) return fail();
+  if (diagnostic) diagnostic.reason = "BILLS_ROW_SHAPE_INVALID";
   return Object.freeze({ rows: env.data.map(object), ts: env.ts });
 }
 function enumValue<T extends string>(value: unknown, values: readonly T[]): T {
@@ -759,4 +818,56 @@ export function parseHtxV5Fills(payload: string, expectedContract: string): HtxV
     });
   });
   return page(rows, env.ts, (row) => row.id);
+}
+
+/** Documented bill labels only; neither amount sign nor a net-PnL formula is specified. */
+export type HtxV5Bill = Readonly<{
+  id: string;
+  /** Empty is valid in the official transfer example; never infer a contract. */
+  contractCode: string;
+  marginMode: HtxV5MarginMode;
+  currency: string;
+  /** Exact received numeric code, including unsupported future codes. */
+  type: string;
+  category: HtxV5BillCategory;
+  /** Raw signed decimal. A fee label does not authorize sign conversion. */
+  amount: string;
+  createdTimeMs: number;
+}>;
+
+/** Normalizes received bills only; the separately scoped reader establishes account association.
+ * This parser never establishes page ordering, exhaustion, or a financial reporting period. */
+export function parseHtxV5Bills(payload: string, sink?: HtxV5BillsDiagnosticSink): HtxV5Page<HtxV5Bill> {
+  if (sink !== undefined && !isHtxV5BillsDiagnosticSink(sink)) return fail();
+  const diagnostic: BillsDiagnosticStage | undefined = sink ? { reason: "BILLS_JSON_INVALID" } : undefined;
+  try {
+    const env = rowsEnvelope(payload, diagnostic);
+    const rows = env.rows.map((row): HtxV5Bill => {
+      if (diagnostic) diagnostic.reason = "BILLS_CONTRACT_INVALID";
+      const contractCode = row.contract_code === "" ? "" : contract(row.contract_code);
+      if (diagnostic) diagnostic.reason = "BILLS_CURRENCY_INVALID";
+      const currency = text(row.currency);
+      if (!/^[A-Z0-9]{2,16}$/.test(currency)) return fail();
+      if (diagnostic) diagnostic.reason = "BILLS_TYPE_INVALID";
+      const type = text(row.type);
+      if (!/^\d+$/.test(type)) return fail();
+      const category = Object.hasOwn(HTX_V5_BILL_CATEGORIES, type)
+        ? HTX_V5_BILL_CATEGORIES[type as keyof typeof HTX_V5_BILL_CATEGORIES] : "UNKNOWN";
+      if (diagnostic) diagnostic.reason = "BILLS_CREATED_TIME_INVALID";
+      const createdTimeMs = timestamp(row.created_time);
+      if (createdTimeMs === null) return fail();
+      if (diagnostic) diagnostic.reason = "BILLS_ID_INVALID";
+      const id = cursorId(row.id);
+      if (diagnostic) diagnostic.reason = "BILLS_MARGIN_MODE_INVALID";
+      const marginMode = enumValue(row.margin_mode, ["cross", "isolated"] as const);
+      if (diagnostic) diagnostic.reason = "BILLS_AMOUNT_INVALID";
+      const amount = decimal(row.amount);
+      return Object.freeze({ id, contractCode, marginMode, currency, type, category, amount, createdTimeMs });
+    });
+    if (diagnostic) diagnostic.reason = "BILLS_DUPLICATE_ID";
+    return page(rows, env.ts, row => row.id);
+  } catch (error) {
+    if (diagnostic) recordHtxV5BillsDiagnostic(sink, diagnostic.reason);
+    throw error;
+  }
 }

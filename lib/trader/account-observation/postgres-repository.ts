@@ -1,8 +1,9 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import type { Sql, TransactionSql } from "postgres";
-import { observationBindingSchema, parseAccountObservation, sameObservationBinding } from "./validation";
-import type { AccountObservation, ObservationBinding, ObservationLease, ObservationRepository } from "./types";
+import { observationBindingSchema, parseAccountObservation, accountObservationFinancialScopeAt, sameObservationBinding } from "./validation";
+import { financialScopeUnavailable } from "./derivatives/htx-v5-bill-groups";
+import type { AccountObservation, HtxV5FinancialUnavailableReason, ObservationBinding, ObservationLease, ObservationRepository } from "./types";
 
 type Collection = {
   configuration_revision: string; symbols: string[];
@@ -10,6 +11,9 @@ type Collection = {
   lease_expires_ms: number | null; consecutive_failures: number;
   next_due_ms: number; now_ms: number; last_observation_id: string | null;
 };
+class FinancialPublicationUnavailable extends Error {
+  constructor(readonly reason: HtxV5FinancialUnavailableReason) { super("FINANCIAL_PUBLICATION_UNAVAILABLE"); }
+}
 export class ObservationStorageFailure extends Error {
   constructor() { super("ACCOUNT_OBSERVATION_STORAGE_FAILED"); }
 }
@@ -34,7 +38,10 @@ export function createPostgresObservationRepository(sql: Sql): ObservationReposi
           set_config('waia.observation_account', ${b.exchangeAccountId}, true)`;
         return fn(tx, b);
       }) as T;
-    } catch { throw new ObservationStorageFailure(); }
+    } catch (error) {
+      if (error instanceof FinancialPublicationUnavailable) throw error;
+      throw new ObservationStorageFailure();
+    }
   }
   async function lock(tx: TransactionSql, b: ObservationBinding): Promise<Collection | null> {
     // Same lock order as credential lifecycle: credential first, then collection state.
@@ -78,42 +85,112 @@ export function createPostgresObservationRepository(sql: Sql): ObservationReposi
     isCurrent: lease => scoped(lease.binding, async (tx, b) => {
       const s = await lock(tx, b); return !!s && owns(s, lease);
     }),
-    commitIfCurrent: input => scoped(input.lease.binding, async (tx, b) => {
-      const o = parseAccountObservation(input.observation);
+    commitIfCurrent: async input => {
+      // Own every caller-provided value before the first await. Parsing copies the DTO;
+      // neither an in-flight caller mutation nor the downgrade may replace its identity.
+      const { initialObservation, lease, delay, consecutiveFailures } = (() => {
+        try {
+          const suppliedLease = input.lease;
+          const snapshot = {
+            initialObservation: parseAccountObservation(input.observation),
+            lease: Object.freeze({
+              binding: Object.freeze(observationBindingSchema.parse(suppliedLease.binding)),
+              token: suppliedLease.token, ownerId: suppliedLease.ownerId,
+            }),
+            delay: input.nextDueAtMs - input.nowMs,
+            consecutiveFailures: input.consecutiveFailures,
+          };
+          if (!Number.isSafeInteger(snapshot.delay) || snapshot.delay < 1 || snapshot.delay > 86400000 ||
+            !Number.isInteger(snapshot.consecutiveFailures) || snapshot.consecutiveFailures < 0 || snapshot.consecutiveFailures > 30)
+            throw new Error("INVALID_CADENCE");
+          return snapshot;
+        } catch { throw new ObservationStorageFailure(); }
+      })();
+      let downgrade: HtxV5FinancialUnavailableReason | undefined;
+      // One optional-field downgrade only. Same lease/id/binding, no new reads or authority.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try { return await scoped(lease.binding, async (tx, b) => {
+      let o = initialObservation;
+      if (downgrade && o.htxV5?.schemaVersion === "htx-v5-observation/v2")
+        o = accountObservationFinancialScopeAt(o, downgrade === "SCOPE_EXPIRED" ? o.htxV5.bills.validUntilMs : o.htxV5.bills.validFromMs - 1);
       if (!sameObservationBinding(b, o.binding)) return false;
       const payload = JSON.stringify(o);
       if (Buffer.byteLength(payload, "utf8") > 1000000) throw new Error("PAYLOAD_TOO_LARGE");
-      const delay = input.nextDueAtMs - input.nowMs;
-      if (!Number.isSafeInteger(delay) || delay < 1 || delay > 86400000 ||
-        !Number.isInteger(input.consecutiveFailures) || input.consecutiveFailures < 0 || input.consecutiveFailures > 30)
-        throw new Error("INVALID_CADENCE");
       const s = await lock(tx, b);
       if (!s) return false;
       // Retry after an ambiguous acknowledgement only recognizes the EXACT previously committed record.
-      const old = await tx`SELECT payload, lease_token FROM public.trader_account_observations
+      const old = await tx`SELECT payload, lease_token, floor(extract(epoch from clock_timestamp()) * 1000)::text AS now_ms
+        FROM public.trader_account_observations
         WHERE organization_id = ${b.organizationId} AND credential_id = ${b.credentialId}
           AND exchange_account_id = ${b.exchangeAccountId} AND observation_id = ${o.observationId}`;
-      if (old.length) return old[0].lease_token === input.lease.token &&
-        sameObservationBinding(parseAccountObservation(old[0].payload).binding, b) &&
-        JSON.stringify(parseAccountObservation(old[0].payload)) === JSON.stringify(o);
-      if (!owns(s, input.lease) || JSON.stringify(s.symbols) !== JSON.stringify(o.trades.map(t => t.symbol))) return false;
+      if (old.length) {
+        const expected = o.schemaVersion === "account-observation/v4"
+          ? accountObservationFinancialScopeAt(o, Number(old[0].now_ms)) : o;
+        const previous = parseAccountObservation(old[0].payload);
+        const matches = old[0].lease_token === lease.token && sameObservationBinding(previous.binding, b) &&
+          JSON.stringify(previous) === JSON.stringify(expected);
+        return matches && o.schemaVersion === "account-observation/v4" ? { observation: previous } : matches;
+      }
+      if (!owns(s, lease) || JSON.stringify(s.symbols) !== JSON.stringify(o.trades.map(t => t.symbol))) return false;
+      let actual = o;
+      if (o.schemaVersion === "account-observation/v4" && o.htxV5?.schemaVersion === "htx-v5-observation/v2") {
+        const scope = o.htxV5.bills;
+        const expired = accountObservationFinancialScopeAt(o, scope.validUntilMs);
+        const future = accountObservationFinancialScopeAt(o, scope.validFromMs - 1);
+        // Select the immutable payload AT append with database time. Never update an appended
+        // row, nor fail the authorized base collection merely because optional history expired.
+        const inserted = await tx`WITH append_clock AS MATERIALIZED (
+            SELECT floor(extract(epoch from clock_timestamp()) * 1000)::bigint AS now_ms)
+          INSERT INTO public.trader_account_observations
+            (organization_id, credential_id, exchange_account_id, observation_id,
+              credential_revision, configuration_revision, lease_token, payload)
+          SELECT ${b.organizationId}, ${b.credentialId}, ${b.exchangeAccountId}, ${o.observationId},
+            ${b.credentialRevision}, ${b.configurationRevision}, ${lease.token},
+            CASE WHEN append_clock.now_ms < ${scope.validFromMs} THEN ${tx.json(JSON.parse(JSON.stringify(future)))}::jsonb
+              WHEN append_clock.now_ms >= ${scope.validUntilMs} THEN ${tx.json(JSON.parse(JSON.stringify(expired)))}::jsonb
+              ELSE ${tx.json(JSON.parse(payload))}::jsonb END
+          FROM append_clock RETURNING payload`;
+        if (inserted.length !== 1) throw new Error("FINANCIAL_APPEND_FAILED");
+        actual = parseAccountObservation(inserted[0].payload);
+        if (!sameObservationBinding(actual.binding, b) || actual.observationId !== o.observationId)
+          throw new Error("FINANCIAL_APPEND_MISMATCH");
+      } else {
       await tx`INSERT INTO public.trader_account_observations
         (organization_id, credential_id, exchange_account_id, observation_id,
           credential_revision, configuration_revision, lease_token, payload)
         VALUES (${b.organizationId}, ${b.credentialId}, ${b.exchangeAccountId}, ${o.observationId},
-          ${b.credentialRevision}, ${b.configurationRevision}, ${input.lease.token}, ${tx.json(JSON.parse(payload))})`;
+          ${b.credentialRevision}, ${b.configurationRevision}, ${lease.token}, ${tx.json(JSON.parse(payload))})`;
+      }
+      const financial = actual.htxV5?.schemaVersion === "htx-v5-observation/v2" && actual.htxV5.bills.status === "PARTIAL"
+        ? actual.htxV5.bills : null;
       const committed = await tx`UPDATE public.trader_account_collection_state
         SET next_due_at = clock_timestamp() + ${delay} * interval '1 millisecond',
-          consecutive_failures = ${input.consecutiveFailures}, last_observation_id = ${o.observationId},
+          consecutive_failures = ${consecutiveFailures}, last_observation_id = ${o.observationId},
           lease_token = NULL, lease_owner = NULL, lease_expires_at = NULL
         WHERE organization_id = ${b.organizationId} AND credential_id = ${b.credentialId}
           AND exchange_account_id = ${b.exchangeAccountId}
-          AND lease_token = ${input.lease.token} AND lease_owner = ${input.lease.ownerId}
+          AND lease_token = ${lease.token} AND lease_owner = ${lease.ownerId}
           AND lease_expires_at > clock_timestamp()
+          AND (${financial === null} OR
+            (clock_timestamp() >= to_timestamp(${financial?.validFromMs ?? 0}::double precision / 1000)
+              AND clock_timestamp() < to_timestamp(${financial?.validUntilMs ?? 0}::double precision / 1000)))
         RETURNING last_observation_id`;
+      if (financial) {
+        // After INSERT/CAS trigger work, validate the final pointer-publication gate with
+        // DB time. A private marker rolls back the whole transaction before one downgrade.
+        const clock = await tx`SELECT floor(extract(epoch from clock_timestamp()) * 1000)::text AS now_ms`;
+        const reason = financialScopeUnavailable(financial, Number(clock[0].now_ms));
+        if (reason) throw new FinancialPublicationUnavailable(reason);
+      }
       if (committed.length !== 1) throw new Error("LEASE_EXPIRED_DURING_COMMIT");
-      return true;
-    }),
+      return o.schemaVersion === "account-observation/v4" ? { observation: actual } : true;
+        }); } catch (error) {
+          if (attempt === 0 && error instanceof FinancialPublicationUnavailable) { downgrade = error.reason; continue; }
+          throw new ObservationStorageFailure();
+        }
+      }
+      throw new ObservationStorageFailure();
+    },
     release: lease => scoped(lease.binding, async (tx, b) => {
       // Failed/abandoned attempt persists a bounded backoff even across worker restarts.
       // No credential mutation, and cleanup after revocation must remain possible.

@@ -13,6 +13,7 @@ import type {
   AccountObservation,
   AccountObservationReader,
   HtxV5AccountObservation,
+  HtxV5FinancialHistoryScope,
   ObservationBinding,
   ObservationClock,
   DerivativesAccountFamilyObservation,
@@ -31,6 +32,7 @@ import type {
 } from "./types";
 import { HTX_V5_READ_BUDGET_MS } from "./types";
 import { htxV5ObservationConfigurationSchema } from "./coverage";
+import { financialScopeUnavailable, unavailableHtxV5Bills, htxV5FinancialScopeAt } from "./derivatives/htx-v5-bill-groups";
 import {
   deriveAccountObservationStatus,
   parseAccountObservation,
@@ -257,6 +259,7 @@ function htxV5FailureProjection(
   startedAtMs: number,
   completedAtMs: number,
   contracts: readonly string[],
+  financialHistory?: HtxV5FinancialHistoryScope,
 ): HtxV5AccountObservation {
   const valueFailure = (value: null) => Object.freeze({ status: "ERROR" as const, value,
     readStartedAtMs: startedAtMs, readCompletedAtMs: completedAtMs,
@@ -264,7 +267,12 @@ function htxV5FailureProjection(
   const rowsFailure = Object.freeze({ status: "ERROR" as const, values: null,
     readStartedAtMs: startedAtMs, readCompletedAtMs: completedAtMs,
     responseGeneratedAtMs: null, error: code, pageScope: null });
-  return Object.freeze({ schemaVersion: "htx-v5-observation/v1", htxUid: null,
+  const reason = financialHistory ? financialScopeUnavailable(financialHistory, completedAtMs) : null;
+  const bills = financialHistory ? reason ? unavailableHtxV5Bills(financialHistory, reason) :
+    Object.freeze({ ...unavailableHtxV5Bills(financialHistory, "SCOPE_EXPIRED"), status: "ERROR" as const,
+      unavailableReason: null, readStartedAtMs: completedAtMs, readCompletedAtMs: completedAtMs, error: code }) : undefined;
+  return Object.freeze({
+    ...(bills ? { schemaVersion: "htx-v5-observation/v2" as const, bills } : { schemaVersion: "htx-v5-observation/v1" as const }), htxUid: null,
     assetMode: valueFailure(null),
     balance: valueFailure(null),
     positions: rowsFailure,
@@ -325,9 +333,13 @@ export function createAccountObservationService(
   const htxV5 = inputConfig.htxV5 === undefined
     ? undefined
     : Object.freeze({ ...htxV5ObservationConfigurationSchema.parse(inputConfig.htxV5),
+        ...(inputConfig.htxV5.financialHistory ? { financialHistory: Object.freeze({ ...inputConfig.htxV5.financialHistory }) } : {}),
         ...(inputConfig.htxV5.fillContracts
           ? { fillContracts: Object.freeze([...inputConfig.htxV5.fillContracts].sort()) }
           : {}) });
+  if (inputConfig.htxV5?.financialHistory &&
+    (inputConfig.htxDerivativesFamilies?.length || inputConfig.existingKeyReadConsentId === inputConfig.htxV5.financialHistory.scopeId))
+    throw new Error("ACCOUNT_OBSERVATION_INVALID_FINANCIAL_SCOPE");
   const config = Object.freeze({
     ...inputConfig,
     symbols: Object.freeze([...inputConfig.symbols]),
@@ -708,7 +720,7 @@ export function createAccountObservationService(
     const cancel = () => abort.abort();
     signal?.addEventListener("abort", cancel, { once: true });
     const failed = (code: ObservationReadError) => htxV5FailureProjection(code, started,
-      Math.max(started, now()), contracts);
+      Math.max(started, now()), contracts, config.htxV5?.financialHistory);
     try {
       if (signal?.aborted) return null;
       const read = reader.readHtxV5;
@@ -724,14 +736,21 @@ export function createAccountObservationService(
       if (!response || !response.binding || !sameObservationBinding(lease.binding, response.binding))
         return null;
       const projection = response.projection;
-      if (!projection || projection.schemaVersion !== "htx-v5-observation/v1")
+      if (!projection || projection.schemaVersion !== (config.htxV5?.financialHistory ? "htx-v5-observation/v2" : "htx-v5-observation/v1"))
         return failed("INVALID_RESPONSE");
       const components = [projection.assetMode, projection.balance, projection.positions,
-        projection.openOrders, projection.algoOrders, projection.fills];
+        projection.openOrders, projection.algoOrders, projection.fills,
+        ...(projection.schemaVersion === "htx-v5-observation/v2" && projection.bills.status !== "UNAVAILABLE" ? [projection.bills] : [])];
       const onlyUnavailableWithoutUid = projection.htxUid === null && components.every(component =>
         component.status === "ERROR" || component.status === "NOT_CONFIGURED");
       if (config.htxV5?.expectedHtxUid && projection.htxUid !== config.htxV5.expectedHtxUid &&
         !onlyUnavailableWithoutUid) return null;
+      if (config.htxV5?.financialHistory) {
+        if (projection.schemaVersion !== "htx-v5-observation/v2" || !projection.bills) return failed("INVALID_RESPONSE");
+        const scope = config.htxV5.financialHistory;
+        if ((["scopeId", "windowStartMs", "windowEndMs", "validFromMs", "validUntilMs"] as const).some(key =>
+          projection.bills[key] !== scope[key])) return failed("INVALID_RESPONSE");
+      }
       const fills = projection.fills;
       const configuredContracts = [...contracts].sort();
       if (configuredContracts.length > 0
@@ -743,7 +762,7 @@ export function createAccountObservationService(
       }
       if (components.some(component => component.error === "IDENTITY_MISMATCH" ||
         component.error === "PERMISSION_DENIED")) return null;
-      return projection;
+      return htxV5FinancialScopeAt(projection, ended);
     } catch (error) {
       if (signal?.aborted) return null;
       const code = error instanceof AccountObservationReadFailure && errors.includes(error.code)
@@ -882,7 +901,8 @@ export function createAccountObservationService(
                 ],
             ),
             ...(htxV5 ? [htxV5.assetMode.status, htxV5.balance.status, htxV5.positions.status,
-              htxV5.openOrders.status, htxV5.algoOrders.status, htxV5.fills.status]
+              htxV5.openOrders.status, htxV5.algoOrders.status, htxV5.fills.status,
+              ...(htxV5.schemaVersion === "htx-v5-observation/v2" && htxV5.bills.status !== "UNAVAILABLE" ? [htxV5.bills.status] : [])]
               .filter((status): status is Exclude<typeof status, "NOT_CONFIGURED"> => status !== "NOT_CONFIGURED") : []),
           ]),
           balances,
@@ -948,10 +968,11 @@ export function createAccountObservationService(
         if (!(await active())) return { status: "FENCED" };
         const ended = now();
         if (ended < started) invalid();
+        if (htxV5) htxV5 = htxV5FinancialScopeAt(htxV5, ended);
         const candidate = Object.freeze(
           htxV5
             ? {
-                schemaVersion: "account-observation/v3" as const,
+                schemaVersion: htxV5.schemaVersion === "htx-v5-observation/v2" ? "account-observation/v4" as const : "account-observation/v3" as const,
                 ...common(ended, derivatives?.families ?? [], htxV5),
                 ...(derivatives ? { derivatives } : {}),
                 htxV5,
@@ -979,6 +1000,7 @@ export function createAccountObservationService(
         const htxV5Failed = htxV5 ? [htxV5.assetMode, htxV5.balance, htxV5.positions,
           htxV5.openOrders, htxV5.algoOrders, htxV5.fills].some(component =>
           component.status === "ERROR" || component.error !== null) : false;
+        // Optional financial history never changes the base account collection cadence.
         const collectionFailed = failed || htxV5Failed;
         const failures = collectionFailed ? Math.min(lease.consecutiveFailures + 1, 30) : 0;
         const delay = !collectionFailed
@@ -986,14 +1008,18 @@ export function createAccountObservationService(
           : Math.min(config.maxBackoffMs, config.pollIntervalMs * 2 ** failures);
         const nextDueAtMs = timestamp(ended + delay);
         if (signal?.aborted) return { status: "FENCED" };
-        committed = await deps.repository.commitIfCurrent({
+        const commitResult = await deps.repository.commitIfCurrent({
           lease,
           observation,
           nowMs: ended,
           nextDueAtMs,
           consecutiveFailures: failures,
         });
-        return committed ? { status: "COMMITTED", observation, nextDueAtMs } : { status: "FENCED" };
+        committed = commitResult !== false;
+        const actualObservation = typeof commitResult === "object" ? parseAccountObservation(commitResult.observation) : observation;
+        if (committed && (!sameObservationBinding(actualObservation.binding, binding) || actualObservation.observationId !== observation.observationId))
+          invalid();
+        return committed ? { status: "COMMITTED", observation: actualObservation, nextDueAtMs } : { status: "FENCED" };
       } catch (error) {
         primary =
           error instanceof AccountObservationFailure

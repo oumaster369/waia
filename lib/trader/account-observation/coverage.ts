@@ -13,10 +13,20 @@ export const htxObservationCoverageSchema = htxObservationReaderLimitsSchema.ext
   host: z.enum(["api.huobi.pro", "api-aws.huobi.pro"]),
 }).strict();
 
+export const htxV5FinancialHistoryScopeSchema = z.object({
+  enabled: z.literal(true), scopeId: z.string().uuid(),
+  windowStartMs: z.number().int().nonnegative().max(8.64e15),
+  windowEndMs: z.number().int().positive().max(8.64e15),
+  validFromMs: z.number().int().nonnegative().max(8.64e15),
+  validUntilMs: z.number().int().positive().max(8.64e15),
+}).strict().refine(s => s.windowStartMs < s.windowEndMs && s.windowEndMs - s.windowStartMs <= 172800000 &&
+  s.windowEndMs <= s.validFromMs && s.validFromMs < s.validUntilMs && s.validUntilMs - s.validFromMs <= 600000);
+
 export const htxV5ObservationConfigurationSchema = z.object({
   enabled: z.boolean(),
   fillContracts: z.array(z.string().regex(/^[A-Z0-9]+-USDT(?:-\d{6})?$/)).min(1).max(8).optional(),
   expectedHtxUid: z.string().regex(/^[1-9]\d{0,38}$/).optional(),
-}).strict();
+  financialHistory: htxV5FinancialHistoryScopeSchema.optional(),
+}).strict().refine(c => !c.financialHistory || c.enabled && !!c.expectedHtxUid && c.fillContracts === undefined);
 
 export type HtxObservationCoverage = Readonly<z.infer<typeof htxObservationCoverageSchema>>;

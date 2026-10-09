@@ -171,7 +171,8 @@ export function summarizeFuturesBalance(
     hasLegacyDerivatives: Boolean(observation?.derivatives),
     hasFuturesProjection: false,
   };
-  if (observation?.schemaVersion !== "account-observation/v3" || !observation.htxV5) {
+  if ((observation?.schemaVersion !== "account-observation/v3" &&
+       observation?.schemaVersion !== "account-observation/v4") || !observation.htxV5) {
     return empty;
   }
 

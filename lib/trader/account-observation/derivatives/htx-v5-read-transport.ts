@@ -5,9 +5,14 @@ import { buildSignedQueryString, formatHtxTimestamp } from "@/lib/trader/connect
 import { AccountObservationReadFailure } from "../service";
 import { createHtxReadAdmission, type HtxExpectedPermission, type HtxReadIdentityEvidence } from "../htx-read-admission";
 import type { HtxObservationCredentialHandle } from "../htx-reader-opener";
-import type { ObservationBinding, ObservationClock } from "../types";
+import type { ObservationBinding, ObservationClock, HtxV5FinancialHistoryScope, HtxV5FinancialUnavailableReason } from "../types";
+import { financialScopeUnavailable } from "./htx-v5-bill-groups";
+import { htxV5FinancialHistoryScopeSchema } from "../coverage";
 import { observationBindingSchema, sameObservationBinding } from "../validation";
 import {
+  isHtxV5BillsDiagnosticSink, recordHtxV5BillsDiagnostic, type HtxV5BillsDiagnosticSink,
+  type HtxV5BillsDiagnosticReason,
+  buildHtxV5BillsRequest,
   buildHtxV5AlgoOrdersRequest,
   buildHtxV5AssetModeRequest,
   buildHtxV5BalanceRequest,
@@ -39,7 +44,12 @@ export type HtxV5ReadResponse = Readonly<{
   receivedAt: number;
 }>;
 
+export class HtxV5FinancialScopeUnavailable extends Error {
+  constructor(readonly reason: HtxV5FinancialUnavailableReason) { super(reason); }
+}
+
 export type HtxV5ReadTransport = Readonly<{
+  readBills(scope: HtxV5FinancialHistoryScope, signal: AbortSignal): Promise<HtxV5ReadResponse>;
   readAssetMode(signal: AbortSignal): Promise<HtxV5ReadResponse>;
   readBalance(signal: AbortSignal): Promise<HtxV5ReadResponse>;
   readPositions(
@@ -70,9 +80,15 @@ type TransportInput = Readonly<{
   maxResponseBytes: number;
   expectedHtxUid?: string;
   expectedPermission?: HtxExpectedPermission;
+  billsDiagnosticSink?: HtxV5BillsDiagnosticSink;
   /** Database/revision currentness only. Venue identity comes from the private admission owner. */
   authorizeCurrent(binding: ObservationBinding, signal: AbortSignal): Promise<boolean>;
 }>;
+
+type PendingBillsDiagnostic = { reason: HtxV5BillsDiagnosticReason | null };
+function pendingBillsDiagnostic(pending: PendingBillsDiagnostic | undefined, reason: HtxV5BillsDiagnosticReason): void {
+  if (pending && pending.reason === null) pending.reason = reason;
+}
 
 function snapshotConfig(value: unknown): Record<string, unknown> {
   const keys = [
@@ -84,6 +100,7 @@ function snapshotConfig(value: unknown): Record<string, unknown> {
     "expectedHtxUid",
     "expectedPermission",
     "authorizeCurrent",
+    "billsDiagnosticSink",
   ];
   if (value === null || typeof value !== "object" || types.isProxy(value) || Array.isArray(value))
     fail("INVALID_RESPONSE");
@@ -105,8 +122,9 @@ function snapshotConfig(value: unknown): Record<string, unknown> {
   return result;
 }
 
-function safeReadError(error: unknown): AccountObservationReadFailure {
+function safeReadError(error: unknown): AccountObservationReadFailure | HtxV5FinancialScopeUnavailable {
   try {
+    if (error instanceof HtxV5FinancialScopeUnavailable) return error;
     if (error instanceof AccountObservationReadFailure) {
       const code = error.code;
       if (
@@ -155,6 +173,9 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
   const timeoutMs = config.timeoutMs as number;
   const maxResponseBytes = config.maxResponseBytes as number;
   const authorizeCurrent = config.authorizeCurrent as TransportInput["authorizeCurrent"];
+  const diagnosticInput = config.billsDiagnosticSink;
+  if (diagnosticInput !== undefined && !isHtxV5BillsDiagnosticSink(diagnosticInput)) return fail("INVALID_RESPONSE");
+  const billsDiagnosticSink = diagnosticInput as HtxV5BillsDiagnosticSink | undefined;
   let expectedHtxUid: string | undefined;
   if (config.expectedHtxUid !== undefined) {
     if (typeof config.expectedHtxUid !== "string" || !/^[1-9]\d{0,38}$/.test(config.expectedHtxUid))
@@ -266,7 +287,8 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
       throw safeReadError(error);
     }
   }
-  function identityMatches(before: HtxReadIdentityEvidence, after: HtxReadIdentityEvidence): void {
+  function identityMatches(before: HtxReadIdentityEvidence, after: HtxReadIdentityEvidence,
+    diagnostic?: PendingBillsDiagnostic): void {
     if (
       !sameObservationBinding(before.binding, binding) ||
       !sameObservationBinding(after.binding, binding) ||
@@ -290,10 +312,13 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
           : "PERMISSION_DENIED",
       );
     const now = clock.now();
-    if (!Number.isSafeInteger(now) || now < after.checkedAt) fail("INVALID_RESPONSE");
+    if (!Number.isSafeInteger(now) || now < after.checkedAt) {
+      pendingBillsDiagnostic(diagnostic, "BILLS_IDENTITY_MATCH_CLOCK_INVALID");
+      fail("INVALID_RESPONSE");
+    }
     lastCheckedAt = after.checkedAt;
   }
-  async function freshIdentity(signal: AbortSignal): Promise<HtxReadIdentityEvidence> {
+  async function freshIdentity(signal: AbortSignal, diagnostic?: PendingBillsDiagnostic): Promise<HtxReadIdentityEvidence> {
     if (disposed || signal.aborted) fail("READ_FAILED");
     assertCurrent();
     const evidence = await admission.verifyReadIdentity(binding, accessKeySha256, signal);
@@ -315,14 +340,31 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
           : "PERMISSION_DENIED",
       );
     const now = clock.now();
-    if (!Number.isSafeInteger(now) || now < evidence.checkedAt) fail("INVALID_RESPONSE");
+    if (!Number.isSafeInteger(now) || now < evidence.checkedAt) {
+      pendingBillsDiagnostic(diagnostic, "BILLS_IDENTITY_CLOCK_INVALID");
+      fail("INVALID_RESPONSE");
+    }
     lastCheckedAt = evidence.checkedAt;
     return evidence;
   }
   async function perform(
     request: HtxV5ReadRequest,
     parentSignal: AbortSignal,
+    financialScope?: HtxV5FinancialHistoryScope,
   ): Promise<HtxV5ReadResponse> {
+    const diagnosticSink = financialScope ? billsDiagnosticSink : undefined;
+    const diagnostic: PendingBillsDiagnostic | undefined = diagnosticSink ? { reason: null } : undefined;
+    const invalidResponse = (reason: HtxV5BillsDiagnosticReason): never => {
+      pendingBillsDiagnostic(diagnostic, reason);
+      return fail("INVALID_RESPONSE");
+    };
+    const checkScope = () => {
+      if (financialScope) {
+        const reason = financialScopeUnavailable(financialScope, clock.now());
+        if (reason) throw new HtxV5FinancialScopeUnavailable(reason);
+      }
+    };
+    checkScope();
     if (
       disposed ||
       active ||
@@ -357,15 +399,19 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
     const checkAfter = async (): Promise<HtxReadIdentityEvidence> => {
       if (!before || afterCheckStarted) return fail("READ_FAILED");
       afterCheckStarted = true;
-      const after = await freshIdentity(controller.signal);
-      identityMatches(before, after);
+      checkScope();
+      const after = await freshIdentity(controller.signal, diagnostic);
+      checkScope();
+      identityMatches(before, after, diagnostic);
       return after;
     };
     const work = async (): Promise<HtxV5ReadResponse> => {
       try {
-        before = await freshIdentity(controller.signal);
+        checkScope();
+        before = await freshIdentity(controller.signal, diagnostic);
+        checkScope();
         const now = clock.now();
-        if (!Number.isSafeInteger(now) || now < before.checkedAt) fail("INVALID_RESPONSE");
+        if (!Number.isSafeInteger(now) || now < before.checkedAt) invalidResponse("BILLS_REQUEST_CLOCK_INVALID");
         const signedQuery = buildSignedQueryString({
           accessKeyId: accessKey,
           secret,
@@ -408,15 +454,20 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
           fail("READ_FAILED");
         }
         const length = response.headers.get("content-length");
-        if (length !== null && (!/^\d+$/.test(length) || Number(length) > maxResponseBytes)) {
+        if (length !== null && !/^\d+$/.test(length)) {
           cancelBody();
           await checkAfter();
-          fail("INVALID_RESPONSE");
+          invalidResponse("BILLS_CONTENT_LENGTH_INVALID");
+        }
+        if (length !== null && Number(length) > maxResponseBytes) {
+          cancelBody();
+          await checkAfter();
+          invalidResponse("BILLS_CONTENT_LENGTH_EXCEEDS_LIMIT");
         }
         const responseBody = response.body;
         if (!responseBody) {
           await checkAfter();
-          return fail("INVALID_RESPONSE");
+          return invalidResponse("BILLS_BODY_MISSING");
         }
         reader = responseBody.getReader();
         const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -429,26 +480,24 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
             bodyConsumed = true;
             break;
           }
-          if (
-            !(chunk.value instanceof Uint8Array) ||
-            (byteCount += chunk.value.byteLength) > maxResponseBytes
-          )
-            fail("INVALID_RESPONSE");
+          if (!(chunk.value instanceof Uint8Array)) invalidResponse("BILLS_CHUNK_TYPE_INVALID");
+          if ((byteCount += chunk.value.byteLength) > maxResponseBytes) invalidResponse("BILLS_BODY_EXCEEDS_LIMIT");
           try {
             body += decoder.decode(chunk.value, { stream: true });
           } catch {
-            fail("INVALID_RESPONSE");
+            invalidResponse("BILLS_UTF8_CHUNK_INVALID");
           }
         }
         try {
           body += decoder.decode();
         } catch {
-          fail("INVALID_RESPONSE");
+          invalidResponse("BILLS_UTF8_FINAL_INVALID");
         }
-        if (hasCredentialEcho(body, accessKey, secret)) fail("INVALID_RESPONSE");
+        if (hasCredentialEcho(body, accessKey, secret)) invalidResponse("BILLS_CREDENTIAL_ECHO");
         const receivedAt = clock.now();
-        if (!Number.isSafeInteger(receivedAt) || receivedAt < now) fail("INVALID_RESPONSE");
+        if (!Number.isSafeInteger(receivedAt) || receivedAt < now) invalidResponse("BILLS_RESPONSE_CLOCK_INVALID");
         const finalIdentity = await checkAfter();
+        checkScope();
         if (disposed || controller.signal.aborted) fail("READ_FAILED");
         return Object.freeze({ body, identity: finalIdentity, receivedAt });
       } catch (error) {
@@ -468,11 +517,17 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
       return await Promise.race([
         track(work()),
         aborted,
-        clock.sleep(timeoutMs, timer.signal).then(() => fail("TIMEOUT")),
+        clock.sleep(financialScope ? Math.min(timeoutMs, financialScope.validUntilMs - clock.now()) : timeoutMs, timer.signal)
+          .then(() => { checkScope(); return fail("TIMEOUT"); }),
       ]);
     } catch (error) {
+      const failure = safeReadError(error);
+      // Commit only after post-response admission and the timed race select the
+      // terminal failure. Permission, identity, expiry and cancellation win.
+      if (failure instanceof AccountObservationReadFailure && failure.code === "INVALID_RESPONSE" && diagnostic?.reason)
+        recordHtxV5BillsDiagnostic(diagnosticSink, diagnostic.reason);
       dispose();
-      throw safeReadError(error);
+      throw failure;
     } finally {
       cancelBody();
       parentSignal.removeEventListener("abort", cancel);
@@ -484,6 +539,10 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
   }
 
   return Object.freeze({
+    readBills: (scope: HtxV5FinancialHistoryScope, signal: AbortSignal) => {
+      const safeScope = Object.freeze(htxV5FinancialHistoryScopeSchema.parse(scope));
+      return perform(buildHtxV5BillsRequest({ windowStartMs: safeScope.windowStartMs, windowEndMs: safeScope.windowEndMs }), signal, safeScope);
+    },
     readAssetMode: (signal: AbortSignal) => perform(buildHtxV5AssetModeRequest(), signal),
     readBalance: (signal: AbortSignal) => perform(buildHtxV5BalanceRequest(), signal),
     readPositions: (

@@ -4,16 +4,22 @@ import { types } from "node:util";
 import { AccountObservationReadFailure } from "../service";
 import type { HtxObservationCredentialHandle } from "../htx-reader-opener";
 import type { ObservationBinding, ObservationClock, ObservationReadError, HtxV5AccountObservation,
-  HtxV5RowsObservation, HtxV5ValueObservation } from "../types";
+  HtxV5RowsObservation, HtxV5ValueObservation, HtxV5FinancialHistoryScope, HtxV5BillsObservation, HtxV5FinancialUnavailableReason } from "../types";
 import { HTX_V5_READ_BUDGET_MS } from "../types";
 import { observationBindingSchema, sameObservationBinding } from "../validation";
 import type { HtxExpectedPermission } from "../htx-read-admission";
-import { createHtxV5ReadTransport, type HtxV5ReadResponse, type HtxV5ReadTransport } from "./htx-v5-read-transport";
+import { htxV5FinancialHistoryScopeSchema } from "../coverage";
+import { financialScopeUnavailable, unavailableHtxV5Bills, htxV5FinancialScopeAt, htxV5BillGroups } from "./htx-v5-bill-groups";
+import { createHtxV5ReadTransport, HtxV5FinancialScopeUnavailable, type HtxV5ReadResponse, type HtxV5ReadTransport } from "./htx-v5-read-transport";
 import {
-  parseHtxV5AlgoOrders, parseHtxV5AssetMode, parseHtxV5Balance, parseHtxV5Fills,
+  isHtxV5BillsDiagnosticSink, recordHtxV5BillsDiagnostic, discardHtxV5BillsDiagnostic, type HtxV5BillsDiagnosticSink, type HtxV5BillsDiagnosticReason,
+  parseHtxV5Bills, parseHtxV5AlgoOrders, parseHtxV5AssetMode, parseHtxV5Balance, parseHtxV5Fills,
   parseHtxV5OpenOrders, parseHtxV5Positions, type HtxV5AlgoOrder, type HtxV5AlgoType,
   type HtxV5Fill, type HtxV5OpenOrder,
 } from "./htx-v5-read-contract";
+
+// Use this factory from the same reader module instance, including bundled native callers.
+export { createHtxV5BillsDiagnostics } from "./htx-v5-read-contract";
 
 export const HTX_V5_READ_PAGE_SIZE = 100;
 export const HTX_V5_READ_MAX_PAGES = 2;
@@ -39,6 +45,8 @@ type ReaderInput = Readonly<{
   expectedHtxUid?: string;
   expectedPermission?: HtxExpectedPermission;
   contracts?: readonly string[];
+  financialHistory?: HtxV5FinancialHistoryScope;
+  billsDiagnosticSink?: HtxV5BillsDiagnosticSink;
   authorizeCurrent(binding: ObservationBinding, signal: AbortSignal): Promise<boolean>;
 }>;
 export type HtxV5ObservationReader = Readonly<{
@@ -64,7 +72,7 @@ function ownConfig(value: unknown): Record<string, unknown> {
     if (typeof rawKey !== "string") fail("INVALID_RESPONSE");
     const key = rawKey as string;
     if (!["credential", "clock", "fetchImpl", "timeoutMs", "maxResponseBytes",
-      "expectedHtxUid", "expectedPermission", "contracts", "authorizeCurrent"].includes(key)) fail("INVALID_RESPONSE");
+      "expectedHtxUid", "expectedPermission", "contracts", "financialHistory", "authorizeCurrent", "billsDiagnosticSink"].includes(key)) fail("INVALID_RESPONSE");
     const descriptor = (descriptors as Record<string, PropertyDescriptor>)[key];
     if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) fail("INVALID_RESPONSE");
     result[key] = descriptor.value;
@@ -120,6 +128,9 @@ export function createHtxV5ObservationReader(input: ReaderInput): HtxV5Observati
   const timeoutMs = config.timeoutMs as number;
   const maxResponseBytes = config.maxResponseBytes as number;
   const authorizeCurrent = config.authorizeCurrent as ReaderInput["authorizeCurrent"];
+  const diagnosticInput = config.billsDiagnosticSink;
+  if (diagnosticInput !== undefined && !isHtxV5BillsDiagnosticSink(diagnosticInput)) return fail("INVALID_RESPONSE");
+  const billsDiagnosticSink = diagnosticInput as HtxV5BillsDiagnosticSink | undefined;
   const rawExpectedPermission = config.expectedPermission;
   if (rawExpectedPermission !== undefined && rawExpectedPermission !== "readOnly" &&
       rawExpectedPermission !== "readOnly,trade") return fail("INVALID_RESPONSE");
@@ -131,6 +142,9 @@ export function createHtxV5ObservationReader(input: ReaderInput): HtxV5Observati
     expectedHtxUid = config.expectedHtxUid;
   }
   const contracts = snapshotContracts(config.contracts);
+  const financialHistory = config.financialHistory === undefined ? undefined :
+    Object.freeze(htxV5FinancialHistoryScopeSchema.parse(config.financialHistory));
+  if (financialHistory && (!expectedHtxUid || contracts.length)) fail("INVALID_RESPONSE");
   if (!credential || typeof credential !== "object" || typeof fetchImpl !== "function" ||
       typeof authorizeCurrent !== "function" || !Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 120_000 ||
       !Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1 || maxResponseBytes > 1_048_576 ||
@@ -190,28 +204,36 @@ export function createHtxV5ObservationReader(input: ReaderInput): HtxV5Observati
       return value;
     };
     const overallDeadline = now() + HTX_V5_READ_MAX_DURATION_MS;
-    type Unit<T> = Readonly<{ value: T; sourceAt: number | null; started: number; completed: number }>;
-    type Attempt<T> = Readonly<{ unit: Unit<T> | null; error: ObservationReadError | null; started: number; completed: number }>;
+    type Unit<T> = Readonly<{ value: T; sourceAt: number | null; received: number; started: number; completed: number }>;
+    type Attempt<T> = Readonly<{ unit: Unit<T> | null; error: ObservationReadError | null; started: number; completed: number; unavailableReason?: HtxV5FinancialUnavailableReason }>;
     const request = async <T>(run: (transport: HtxV5ReadTransport, signal: AbortSignal) => Promise<HtxV5ReadResponse>,
-      parse: (body: string) => Readonly<{ value: T; sourceAt: number | null }>): Promise<Attempt<T>> => {
+      parse: (body: string) => Readonly<{ value: T; sourceAt: number | null }>,
+      financialScope?: HtxV5FinancialHistoryScope): Promise<Attempt<T>> => {
       current();
       verifyCredential();
       if (++callCount > HTX_V5_READ_MAX_REQUESTS) fail("INVALID_RESPONSE");
       const started = now();
-      const remainingMs = overallDeadline - started;
-      if (remainingMs < 100) fail("TIMEOUT");
+      const remainingMs = overallDeadline - started - (financialScope ? 100 : 0);
+      if (remainingMs < 100) {
+        if (financialScope) return { unit: null, error: "TIMEOUT", started, completed: started };
+        fail("TIMEOUT");
+      }
       const requestExpectedUid = expectedHtxUid ?? firstIdentity?.htxUid;
       const transport = createHtxV5ReadTransport({ credential, clock, fetchImpl, timeoutMs: Math.min(timeoutMs, remainingMs),
-        maxResponseBytes, ...(requestExpectedUid ? { expectedHtxUid: requestExpectedUid } : {}), expectedPermission, authorizeCurrent });
+        maxResponseBytes, ...(requestExpectedUid ? { expectedHtxUid: requestExpectedUid } : {}), expectedPermission, authorizeCurrent,
+        ...(financialScope && billsDiagnosticSink ? { billsDiagnosticSink } : {}) });
       transports.add(transport);
       let completed = started;
       let returnPromptly = false;
+      let billsFailureStage: HtxV5BillsDiagnosticReason | undefined = financialScope && billsDiagnosticSink ? "BILLS_TRANSPORT_INVALID" : undefined;
       try {
         const response = await run(transport, controller.signal);
         current();
         verifyCredential();
+        if (financialScope && billsDiagnosticSink) billsFailureStage = "BILLS_RESPONSE_TIMING_INVALID";
         completed = now();
         responseTime(response, started, completed, lastIdentityCheck);
+        billsFailureStage = undefined;
         const identity = response.identity;
         if (!sameObservationBinding(identity.binding, binding) || identity.permission !== expectedPermission ||
           !/^[0-9a-f]{64}$/.test(identity.accessKeySha256) || identity.accessKeySha256 !== expectedKeyDigest ||
@@ -226,14 +248,24 @@ export function createHtxV5ObservationReader(input: ReaderInput): HtxV5Observati
         lastIdentityCheck = identity.checkedAt;
         const parsed = parse(response.body);
         return Object.freeze({ unit: Object.freeze({ value: parsed.value, sourceAt: parsed.sourceAt,
-          started, completed }), error: null, started, completed });
+          received: response.receivedAt, started, completed }), error: null, started, completed });
       } catch (caught) {
         if (controller.signal.aborted || disposed) {
           terminal = true;
           returnPromptly = true;
           throw new AccountObservationReadFailure("READ_FAILED");
         }
+        if (financialScope && caught instanceof HtxV5FinancialScopeUnavailable) {
+          returnPromptly = true;
+          return { unit: null, error: null, started, completed: now(), unavailableReason: caught.reason };
+        }
         const error = safeError(caught);
+        if (financialScope && error === "INVALID_RESPONSE" && billsFailureStage)
+          recordHtxV5BillsDiagnostic(billsDiagnosticSink, billsFailureStage);
+        if (financialScope && error === "TIMEOUT") {
+          returnPromptly = true;
+          return { unit: null, error, started, completed: now() };
+        }
         if (error === "TIMEOUT") {
           terminal = true;
           returnPromptly = true;
@@ -422,13 +454,46 @@ export function createHtxV5ObservationReader(input: ReaderInput): HtxV5Observati
             windowStartMs, windowEndMs, pageScope: fillScope };
         }
       }
+      let bills: HtxV5BillsObservation | undefined;
+      if (financialHistory) {
+        const unavailable = financialScopeUnavailable(financialHistory, now());
+        if (unavailable) bills = unavailableHtxV5Bills(financialHistory, unavailable);
+        else {
+          const attempt = await request((transport, requestSignal) => transport.readBills(financialHistory, requestSignal), body => {
+            const parsed = parseHtxV5Bills(body, billsDiagnosticSink);
+            if (parsed.rows.length > 100 || parsed.rows.some(row => row.createdTimeMs < financialHistory.windowStartMs ||
+              row.createdTimeMs >= financialHistory.windowEndMs)) {
+              recordHtxV5BillsDiagnostic(billsDiagnosticSink, "BILLS_WINDOW_INVALID");
+              fail("INVALID_RESPONSE");
+            }
+            let groups: ReturnType<typeof htxV5BillGroups>;
+            try { groups = htxV5BillGroups(parsed.rows); } catch {
+              recordHtxV5BillsDiagnostic(billsDiagnosticSink, "BILLS_GROUP_INVALID");
+              return fail("INVALID_RESPONSE");
+            }
+            return { value: { rows: parsed.rows, groups, nextFrom: parsed.nextFrom }, sourceAt: parsed.responseGeneratedAtMs };
+          }, financialHistory);
+          const reason = attempt.unavailableReason ?? financialScopeUnavailable(financialHistory, now());
+          if (reason) bills = unavailableHtxV5Bills(financialHistory, reason);
+          else {
+            const empty = unavailableHtxV5Bills(financialHistory, "SCOPE_EXPIRED");
+            bills = attempt.unit ? Object.freeze({ ...empty, status: "PARTIAL", unavailableReason: null,
+              values: attempt.unit.value.rows, groups: attempt.unit.value.groups, ...foldTimes([attempt.unit]),
+              responseReceivedAtMs: attempt.unit.received,
+              pageScope: { pageSize: 100, maxPages: 1, pagesRead: 1, nextFrom: attempt.unit.value.nextFrom,
+                completeness: "UNKNOWN" } as const }) : Object.freeze({ ...empty, status: "ERROR", unavailableReason: null,
+              readStartedAtMs: attempt.started, readCompletedAtMs: attempt.completed, error: attempt.error ?? "READ_FAILED" });
+          }
+        }
+      }
       current();
       if (cancellationFailed) fail("READ_FAILED");
       const anySuccessfulComponent = [valueParts.assetMode, valueParts.balance, valueParts.positions,
-        valueParts.openOrders, valueParts.algoOrders, valueParts.fills].some(value =>
+        valueParts.openOrders, valueParts.algoOrders, valueParts.fills, bills].some(value =>
           value !== undefined && typeof value === "object" && value !== null &&
           "status" in value && (value.status === "COMPLETE" || value.status === "PARTIAL"));
-      const htxV5: HtxV5AccountObservation = Object.freeze({ schemaVersion: "htx-v5-observation/v1",
+      const htxV5: HtxV5AccountObservation = Object.freeze({
+        ...(bills ? { schemaVersion: "htx-v5-observation/v2" as const, bills } : { schemaVersion: "htx-v5-observation/v1" as const }),
         htxUid: anySuccessfulComponent ? firstIdentity?.htxUid ?? null : null,
         assetMode: valueParts.assetMode as HtxV5AccountObservation["assetMode"],
         balance: valueParts.balance as HtxV5AccountObservation["balance"],
@@ -437,7 +502,7 @@ export function createHtxV5ObservationReader(input: ReaderInput): HtxV5Observati
         algoOrders: valueParts.algoOrders as HtxV5AccountObservation["algoOrders"],
         fills: valueParts.fills as HtxV5AccountObservation["fills"],
       });
-      return htxV5;
+      return htxV5FinancialScopeAt(htxV5, now());
     } catch (caught) {
       const error = controller.signal.aborted || disposed ? "READ_FAILED" : safeError(caught);
       if (error === "TIMEOUT" || error === "READ_FAILED" && (controller.signal.aborted || disposed)) terminal = true;
@@ -460,7 +525,12 @@ export function createHtxV5ObservationReader(input: ReaderInput): HtxV5Observati
       }, HTX_V5_READ_MAX_DURATION_MS);
     });
     try {
-      return await Promise.race([readOnce(signal), deadline]);
+      const result = await Promise.race([readOnce(signal), deadline]);
+      if (!("bills" in result) || result.bills.error !== "INVALID_RESPONSE") discardHtxV5BillsDiagnostic(billsDiagnosticSink);
+      return result;
+    } catch (error) {
+      discardHtxV5BillsDiagnostic(billsDiagnosticSink);
+      throw error;
     } finally {
       if (timer !== undefined) clearTimeout(timer);
     }
