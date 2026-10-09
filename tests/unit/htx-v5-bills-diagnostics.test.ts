@@ -4,7 +4,7 @@ import { createHtxV5ObservationReader, createHtxV5BillsDiagnostics as createRead
 import * as admissionModule from "@/lib/trader/account-observation/htx-read-admission";
 import * as transportModule from "@/lib/trader/account-observation/derivatives/htx-v5-read-transport";
 import { createHtxV5BillsDiagnostics, parseHtxV5Bills, HTX_V5_BILLS_DIAGNOSTIC_REASONS,
-  type HtxV5BillsDiagnosticSink } from "@/lib/trader/account-observation/derivatives/htx-v5-read-contract";
+  recordHtxV5BillsDiagnostic, type HtxV5BillsDiagnosticSink } from "@/lib/trader/account-observation/derivatives/htx-v5-read-contract";
 import type { HtxV5FinancialHistoryScope } from "@/lib/trader/account-observation/types";
 import { accountObservationClock } from "@/lib/trader/account-observation/clock";
 
@@ -75,6 +75,83 @@ describe("optional owned bills diagnostics", () => {
     expect(failure(() => parseHtxV5Bills(payload([bill, bill]), diagnostic.sink))).toEqual(original);
     expect(diagnostic.read()).toBe(reason); // bounded first failure, no event list
   });
+  it.each([
+    ["numeric", '{"code":200,"data":[],"ts":1791028800000}'],
+    ["string", '{"code":"200","data":[],"ts":1791028800000}'],
+  ] as const)("keeps %s success free of diagnostic details", (_kind, raw) => {
+    const diagnostic = createHtxV5BillsDiagnostics();
+    expect(parseHtxV5Bills(raw, diagnostic.sink).rows).toEqual([]);
+    expect(diagnostic.read()).toBeNull();
+    expect(diagnostic.readCodeDiagnostic()).toBeNull();
+  });
+  it.each([
+    ["missing", '{"data":[],"ts":1791028800000}', { httpStatus: null, codeType: "MISSING" }],
+    ["wrong-type", '{"code":true,"data":[],"ts":1791028800000}', { httpStatus: null, codeType: "BOOLEAN" }],
+    ["null-type", '{"code":null,"data":[],"ts":1791028800000}', { httpStatus: null, codeType: "NULL" }],
+    ["object-type", '{"code":{"value":403},"data":[],"ts":1791028800000}', { httpStatus: null, codeType: "OBJECT" }],
+    ["array-type", '{"code":[403],"data":[],"ts":1791028800000}', { httpStatus: null, codeType: "ARRAY" }],
+    ["nondecimal", '{"code":"bad-code-secret","data":[],"ts":1791028800000}', { httpStatus: null, codeType: "STRING" }],
+    ["oversized", '{"code":1234567,"data":[],"ts":1791028800000}', { httpStatus: null, codeType: "NUMBER" }],
+    ["bounded-decimal", '{"code":"403","data":[],"ts":1791028800000}', { httpStatus: null, codeType: "STRING", decimalToken: "403" }],
+    ["bounded-numeric-decimal", '{"code":403,"data":[],"ts":1791028800000}', { httpStatus: null, codeType: "NUMBER", decimalToken: "403" }],
+  ] as const)("retains only bounded code metadata for %s", (_kind, raw, expected) => {
+    const diagnostic = createHtxV5BillsDiagnostics();
+    const ordinary = failure(() => parseHtxV5Bills(raw));
+    expect(failure(() => parseHtxV5Bills(raw, diagnostic.sink))).toEqual(ordinary);
+    expect(diagnostic.read()).toBe("BILLS_CODE_INVALID");
+    expect(diagnostic.readCodeDiagnostic()).toEqual(expected);
+    expect(JSON.stringify(diagnostic.readCodeDiagnostic())).not.toContain("bad-code-secret");
+  });
+  it("refuses to retain caller-supplied unbounded or accessor-backed code details", () => {
+    const diagnostic = createHtxV5BillsDiagnostics();
+    const trap = vi.fn(() => { throw new Error("diagnostic-secret-canary"); });
+    const accessor = Object.defineProperty({ codeType: "STRING" }, "decimalToken", { enumerable: true, get: trap });
+    recordHtxV5BillsDiagnostic(diagnostic.sink, "BILLS_CODE_INVALID", { codeType: "STRING", decimalToken: "diagnostic-secret-canary" });
+    expect(diagnostic.read()).toBe("BILLS_CODE_INVALID");
+    expect(diagnostic.readCodeDiagnostic()).toBeNull();
+    const second = createHtxV5BillsDiagnostics();
+    recordHtxV5BillsDiagnostic(second.sink, "BILLS_CODE_INVALID", accessor as never);
+    expect(second.readCodeDiagnostic()).toBeNull();
+    expect(trap).not.toHaveBeenCalled();
+  });
+  it("adds HTTP 200 only for a selected bills-code rejection and preserves non-200 behavior", async () => {
+    const invalid200 = (url: URL) => url.pathname === "/v5/account/bills"
+      ? json({ code: "403", data: [], ts }) : undefined;
+    const plain = await observed({ intercept: invalid200 });
+    const diagnostic = createHtxV5BillsDiagnostics();
+    expect(await observed({ intercept: invalid200, billsDiagnosticSink: diagnostic.sink })).toEqual(plain);
+    expect(plain.result).toMatchObject({ bills: { status: "ERROR", error: "INVALID_RESPONSE" } });
+    expect(diagnostic.read()).toBe("BILLS_CODE_INVALID");
+    expect(diagnostic.readCodeDiagnostic()).toEqual({ httpStatus: 200, codeType: "STRING", decimalToken: "403" });
+
+    const non200 = (url: URL) => url.pathname === "/v5/account/bills"
+      ? json({ code: "403", data: [], ts }, 503) : undefined;
+    const non200Plain = await observed({ intercept: non200 });
+    const non200Diagnostic = createHtxV5BillsDiagnostics();
+    expect(await observed({ intercept: non200, billsDiagnosticSink: non200Diagnostic.sink })).toEqual(non200Plain);
+    expect(non200Diagnostic.read()).toBeNull();
+    expect(non200Diagnostic.readCodeDiagnostic()).toBeNull();
+  });
+  it("suppresses code details for malformed or duplicate-key JSON", () => {
+    for (const raw of ['{"code":403,', '{"code":403,"code":500,"data":[],"ts":1791028800000}']) {
+      const diagnostic = createHtxV5BillsDiagnostics();
+      expect(failure(() => parseHtxV5Bills(raw, diagnostic.sink))).toEqual(failure(() => parseHtxV5Bills(raw)));
+      expect(diagnostic.read()).toBe("BILLS_JSON_INVALID");
+      expect(diagnostic.readCodeDiagnostic()).toBeNull();
+    }
+  });
+  it("does not retain code metadata when the existing financial scope expires before parsing", async () => {
+    const diagnostic = createHtxV5BillsDiagnostics();
+    const intercept = (url: URL) => {
+      if (url.pathname !== "/v5/account/bills") return undefined;
+      vi.setSystemTime(ts + 2_000);
+      return json({ code: 403, data: [], ts });
+    };
+    const result = await observed({ intercept, billsDiagnosticSink: diagnostic.sink });
+    expect(result.result).toMatchObject({ bills: { status: "UNAVAILABLE", unavailableReason: "SCOPE_EXPIRED" } });
+    expect(diagnostic.read()).toBeNull();
+    expect(diagnostic.readCodeDiagnostic()).toBeNull();
+  });
   it("keeps successful parsing, results and requests identical with no event", async () => {
     const diagnostic = createHtxV5BillsDiagnostics();
     expect(parseHtxV5Bills(payload(), diagnostic.sink)).toEqual(parseHtxV5Bills(payload()));
@@ -83,6 +160,7 @@ describe("optional owned bills diagnostics", () => {
     expect(enabled).toEqual(original);
     expect(enabled.routes.filter(path => path === "/v5/account/bills")).toHaveLength(1);
     expect(diagnostic.read()).toBeNull();
+    expect(diagnostic.readCodeDiagnostic()).toBeNull();
     expect(Object.isFrozen(diagnostic)).toBe(true);
     expect(Object.isFrozen(diagnostic.sink)).toBe(true);
     expect(Object.keys(diagnostic.sink)).toEqual([]);
