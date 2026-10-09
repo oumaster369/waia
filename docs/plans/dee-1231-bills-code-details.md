@@ -12,8 +12,8 @@ state:
   currentWorkPackage: WP-BILLS-CODE-DETAILS
   completedWorkPackages: []
   remainingWorkPackages: [WP-BILLS-CODE-DETAILS]
-  prNumber: null
-  prUrl: null
+  prNumber: 776
+  prUrl: https://github.com/oumaster369/waia/pull/776
   lastValidatedGitSha: null
   lastValidationAt: "2026-10-09"
   blockedReason: null
@@ -90,3 +90,11 @@ approved the runtime and test bytes. Exact-head CI and final merge admission are
 still required. The preceding diagnostic campaign failed, was fully inverted,
 and the original readers recovered. That campaign is spent; a new diagnostic
 consumer and runtime admission remain separate work.
+
+## CI content-pin repair
+
+The first PR776 CI run found one stale Reality V2 consumer-content hash for the
+reviewed transport file. Update only that hash to the exact reviewed file bytes;
+keep discovery paths, rules, guard logic and tests unchanged. Run the affected
+graph tests and graph validators before publishing the repair. The previous CI
+failure is retained; runtime, SQL, workflows and migrations do not change.
