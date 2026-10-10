@@ -1,0 +1,22 @@
+[Unit]
+Description=OB-HEATMAP API and heatmap page (:8790)
+After=network-online.target obheat-collect.service
+
+[Service]
+Type=simple
+User=obheat
+Group=obheat
+EnvironmentFile=-/etc/obheat.env
+Environment=PYTHONPATH=/opt/obheat/app
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=/srv/obheat
+ExecStart=/opt/obheat/venv/bin/python -m obheat.serve
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/srv/obheat
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
