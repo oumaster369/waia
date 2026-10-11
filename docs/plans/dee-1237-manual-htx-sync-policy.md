@@ -21,12 +21,12 @@ state:
   currentWorkPackage: WP-1
   completedWorkPackages: [WP-1]
   remainingWorkPackages: []
-  prNumber: null
-  prUrl: null
+  prNumber: 779
+  prUrl: "https://github.com/oumaster369/waia/pull/779"
   lastValidatedGitSha: null
   lastValidationAt: "2026-10-11T21:09:31Z"
   blockedReason: null
-  nextAction: "Root verifies the complete 12-path package and publishes; exact-head CI and Human merge remain pending."
+  nextAction: "Publish the reviewed documentation and content-pin repairs once prior CI is terminal; qualify the final PR head before Human merge."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -51,4 +51,4 @@ No generic credential-service policy change, real venue calls, trade/execution a
 
 ## Validation
 
-Local validation ran against an uncommitted worktree diff based on `b4e629a10425474e20de0ac57d5a775fe69cb5a6`; `lastValidatedGitSha` remains null because no commit represents the reviewed worktree. Targeted Vitest passed (4 files, 62 tests); scoped ESLint passed; typecheck passed; full lint passed with 0 errors and 337 warnings; a fresh `next build` passed; `validate:pr-governance`, rendered-body preflight, and `git diff --check` passed. Independent reviewer approved all 11 code/test paths in review receipt `c250e5f54ccfbb22b5deb696c4852bb550399ca9da114c55c3cd264a3b5a96cc`. Root's final review of all 12 paths including this plan, commit, push, exact-head CI, and Human merge remain pending. Full unit suite was not run locally because PR CI is authoritative.
+Local validation ran against an uncommitted worktree diff based on `b4e629a10425474e20de0ac57d5a775fe69cb5a6`; `lastValidatedGitSha` remains null because no commit represents the reviewed worktree. Targeted Vitest passed (4 files, 62 tests); scoped ESLint passed; typecheck passed; full lint passed with 0 errors and 337 warnings; a fresh `next build` passed; `validate:pr-governance`, rendered-body preflight, and `git diff --check` passed. Independent reviewer approved all 11 code/test paths in review receipt `c250e5f54ccfbb22b5deb696c4852bb550399ca9da114c55c3cd264a3b5a96cc`. Root reviewed and published the original 12-path package as PR779 at `d1554e9b25b324c457abf9ecc373229ac93d42dc`. Subsequent CI found an exact plan-heading requirement and stale per-file content pins for the three intentionally changed handlers. The heading now uses `Acceptance`; the Reality source/consumer inventory changes only six SHA values, preserving path sets, counts, rules, and dispositions. Its focused graph suite passes all 24 tests; independent review `a4aa3c0b5704400d3fb9bb7102a9b3bc682a2cd53ebaff033ee60634500b1b43` accepts that minimal pin update. The final package has 13 changed paths, with runtime/test bytes unchanged from the original reviewed commit. Exact-head CI and Human merge remain pending. Full unit suite was not run locally because PR CI is authoritative.
