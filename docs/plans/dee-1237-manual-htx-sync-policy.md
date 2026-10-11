@@ -39,7 +39,7 @@ provenance:
 
 The three authenticated manual HTX sync handlers load tenant-scoped active credential metadata, then decrypt before checking the stored HTX permission policy. The existing metadata-only resolver already validates exact venue, row-account binding, purpose, scopes, and forbidden permissions. This plan closes only the manual-read ordering gap.
 
-## Scope and acceptance
+## Acceptance
 
 Use one shared HTX-specific read-policy check after the active metadata lookup and before credential decryption for balances, positions, and trade history. Missing, malformed, unsafe, contradictory, or row-account-mismatched policy returns a generic client error before decrypt, connector construction, or venue calls. Preserve v1 spot Read+Trade and v2 observation policies for reads. Keep tenant/membership checks, active-row checks, exact account binding, fresh venue credential validation, data acquisition, and snapshot behavior.
 
