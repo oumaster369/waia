@@ -36,6 +36,7 @@ import {
 } from "@/lib/trader/credentials/credential-service";
 import { CredentialDecryptError, CredentialNotFoundError } from "@/lib/trader/credentials/errors";
 import type { CredentialService } from "@/lib/trader/credentials/types";
+import { hasValidHtxManualSyncReadPolicy } from "@/lib/trader/security/htx-manual-sync-policy";
 import {
   HtxExchangeConnector,
   type HtxExchangeConnectorConfig,
@@ -195,6 +196,14 @@ export async function handlePositionSyncPost(
         404,
         HTX_POSITION_SYNC_ERROR_CODES.CREDENTIAL_NOT_FOUND,
         "Active exchange credential not found.",
+      );
+    }
+
+    if (!hasValidHtxManualSyncReadPolicy(metadata)) {
+      return clientError(
+        409,
+        HTX_POSITION_SYNC_ERROR_CODES.STORED_POLICY_INVALID,
+        "Stored exchange credential policy is invalid.",
       );
     }
 
