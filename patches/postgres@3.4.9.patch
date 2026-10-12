@@ -1,0 +1,162 @@
+diff --git a/src/index.js b/src/index.js
+--- a/src/index.js
++++ b/src/index.js
+@@ -236,13 +236,19 @@
+     const queries = Queue()
+     let savepoints = 0
+       , connection
++      , closedError
+       , prepare = null
+ 
+     try {
+       await sql.unsafe('begin ' + options.replace(/[^a-z ]/ig, ''), [], { onexecute }).execute()
+       return await Promise.race([
+         scope(connection, fn),
+-        new Promise((_, reject) => connection.onclose = reject)
++        new Promise((_, reject) => connection.onclose = error => {
++          closedError = error
++          while (queries.length)
++            queries.shift().reject(error)
++          reject(error)
++        })
+       ])
+     } catch (error) {
+       throw error
+@@ -290,6 +296,8 @@
+ 
+       function handler(q) {
+         q.catch(e => uncaughtError || (uncaughtError = e))
++        if (closedError)
++          return q.reject(closedError)
+         c.queue === full
+           ? queries.push(q)
+           : c.execute(q) || move(c, full)
+diff --git a/cf/src/index.js b/cf/src/index.js
+--- a/cf/src/index.js
++++ b/cf/src/index.js
+@@ -237,13 +237,19 @@
+     const queries = Queue()
+     let savepoints = 0
+       , connection
++      , closedError
+       , prepare = null
+ 
+     try {
+       await sql.unsafe('begin ' + options.replace(/[^a-z ]/ig, ''), [], { onexecute }).execute()
+       return await Promise.race([
+         scope(connection, fn),
+-        new Promise((_, reject) => connection.onclose = reject)
++        new Promise((_, reject) => connection.onclose = error => {
++          closedError = error
++          while (queries.length)
++            queries.shift().reject(error)
++          reject(error)
++        })
+       ])
+     } catch (error) {
+       throw error
+@@ -291,6 +297,8 @@
+ 
+       function handler(q) {
+         q.catch(e => uncaughtError || (uncaughtError = e))
++        if (closedError)
++          return q.reject(closedError)
+         c.queue === full
+           ? queries.push(q)
+           : c.execute(q) || move(c, full)
+diff --git a/cjs/src/index.js b/cjs/src/index.js
+--- a/cjs/src/index.js
++++ b/cjs/src/index.js
+@@ -236,13 +236,19 @@
+     const queries = Queue()
+     let savepoints = 0
+       , connection
++      , closedError
+       , prepare = null
+ 
+     try {
+       await sql.unsafe('begin ' + options.replace(/[^a-z ]/ig, ''), [], { onexecute }).execute()
+       return await Promise.race([
+         scope(connection, fn),
+-        new Promise((_, reject) => connection.onclose = reject)
++        new Promise((_, reject) => connection.onclose = error => {
++          closedError = error
++          while (queries.length)
++            queries.shift().reject(error)
++          reject(error)
++        })
+       ])
+     } catch (error) {
+       throw error
+@@ -290,6 +296,8 @@
+ 
+       function handler(q) {
+         q.catch(e => uncaughtError || (uncaughtError = e))
++        if (closedError)
++          return q.reject(closedError)
+         c.queue === full
+           ? queries.push(q)
+           : c.execute(q) || move(c, full)
+diff --git a/src/connection.js b/src/connection.js
+--- a/src/connection.js
++++ b/src/connection.js
+@@ -438,6 +438,7 @@
+     remaining = 0
+     incomings = null
+     clearImmediate(nextWriteTimer)
++    chunk = nextWriteTimer = null
+     socket.removeListener('data', data)
+     socket.removeListener('connect', connected)
+     idleTimer.cancel()
+@@ -451,6 +452,9 @@
+       return reconnect()
+ 
+     !hadError && (query || sent.length) && error(Errors.connection('CONNECTION_CLOSED', options, socket))
++    query = results = errorResponse = null
++    result = new Result()
++    rows = 0
+     closedTime = performance.now()
+     hadError && options.shared.retries++
+     delay = (typeof backoff === 'function' ? backoff(options.shared.retries) : backoff) * 1000
+diff --git a/cf/src/connection.js b/cf/src/connection.js
+--- a/cf/src/connection.js
++++ b/cf/src/connection.js
+@@ -440,6 +440,7 @@
+     remaining = 0
+     incomings = null
+     clearImmediate(nextWriteTimer)
++    chunk = nextWriteTimer = null
+     socket.removeListener('data', data)
+     socket.removeListener('connect', connected)
+     idleTimer.cancel()
+@@ -453,6 +454,9 @@
+       return reconnect()
+ 
+     !hadError && (query || sent.length) && error(Errors.connection('CONNECTION_CLOSED', options, socket))
++    query = results = errorResponse = null
++    result = new Result()
++    rows = 0
+     closedTime = performance.now()
+     hadError && options.shared.retries++
+     delay = (typeof backoff === 'function' ? backoff(options.shared.retries) : backoff) * 1000
+diff --git a/cjs/src/connection.js b/cjs/src/connection.js
+--- a/cjs/src/connection.js
++++ b/cjs/src/connection.js
+@@ -438,6 +438,7 @@
+     remaining = 0
+     incomings = null
+     clearImmediate(nextWriteTimer)
++    chunk = nextWriteTimer = null
+     socket.removeListener('data', data)
+     socket.removeListener('connect', connected)
+     idleTimer.cancel()
+@@ -451,6 +452,9 @@
+       return reconnect()
+ 
+     !hadError && (query || sent.length) && error(Errors.connection('CONNECTION_CLOSED', options, socket))
++    query = results = errorResponse = null
++    result = new Result()
++    rows = 0
+     closedTime = performance.now()
+     hadError && options.shared.retries++
+     delay = (typeof backoff === 'function' ? backoff(options.shared.retries) : backoff) * 1000
