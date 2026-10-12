@@ -100,7 +100,31 @@ diff --git a/cjs/src/index.js b/cjs/src/index.js
 diff --git a/src/connection.js b/src/connection.js
 --- a/src/connection.js
 +++ b/src/connection.js
-@@ -438,6 +438,7 @@
+@@ -79,6 +79,7 @@
+   let socket = null
+     , cancelMessage
+     , errorResponse = null
++    , socketError = null
+     , result = new Result()
+     , incoming = Buffer.alloc(0)
+     , needsTypes = options.fetch_types
+@@ -364,6 +365,7 @@
+ 
+   function connected() {
+     try {
++      socketError = null
+       statements = {}
+       needsTypes = options.fetch_types
+       statementId = Math.random().toString(36).slice(2)
+@@ -382,6 +384,7 @@
+     if (connection.queue === queues.connecting && options.host[retries + 1])
+       return
+ 
++    socketError = err
+     errored(err)
+     while (sent.length)
+       queryError(sent.shift(), err)
+@@ -438,6 +441,7 @@
      remaining = 0
      incomings = null
      clearImmediate(nextWriteTimer)
@@ -108,20 +132,57 @@ diff --git a/src/connection.js b/src/connection.js
      socket.removeListener('data', data)
      socket.removeListener('connect', connected)
      idleTimer.cancel()
-@@ -451,6 +452,9 @@
-       return reconnect()
+@@ -447,14 +451,20 @@
+     socket.removeAllListeners()
+     socket = null
  
-     !hadError && (query || sent.length) && error(Errors.connection('CONNECTION_CLOSED', options, socket))
++    const closeError = socketError || Errors.connection('CONNECTION_CLOSED', options, socket)
++    !initial && (query || sent.length) && error(closeError)
 +    query = results = errorResponse = null
 +    result = new Result()
 +    rows = 0
++    socketError = null
++
+     if (initial)
+       return reconnect()
+ 
+-    !hadError && (query || sent.length) && error(Errors.connection('CONNECTION_CLOSED', options, socket))
      closedTime = performance.now()
      hadError && options.shared.retries++
      delay = (typeof backoff === 'function' ? backoff(options.shared.retries) : backoff) * 1000
+-    onclose(connection, Errors.connection('CONNECTION_CLOSED', options, socket))
++    onclose(connection, closeError)
+   }
+ 
+   /* Handlers */
 diff --git a/cf/src/connection.js b/cf/src/connection.js
 --- a/cf/src/connection.js
 +++ b/cf/src/connection.js
-@@ -440,6 +440,7 @@
+@@ -81,6 +81,7 @@
+   let socket = null
+     , cancelMessage
+     , errorResponse = null
++    , socketError = null
+     , result = new Result()
+     , incoming = Buffer.alloc(0)
+     , needsTypes = options.fetch_types
+@@ -366,6 +367,7 @@
+ 
+   function connected() {
+     try {
++      socketError = null
+       statements = {}
+       needsTypes = options.fetch_types
+       statementId = Math.random().toString(36).slice(2)
+@@ -384,6 +386,7 @@
+     if (connection.queue === queues.connecting && options.host[retries + 1])
+       return
+ 
++    socketError = err
+     errored(err)
+     while (sent.length)
+       queryError(sent.shift(), err)
+@@ -440,6 +443,7 @@
      remaining = 0
      incomings = null
      clearImmediate(nextWriteTimer)
@@ -129,20 +190,57 @@ diff --git a/cf/src/connection.js b/cf/src/connection.js
      socket.removeListener('data', data)
      socket.removeListener('connect', connected)
      idleTimer.cancel()
-@@ -453,6 +454,9 @@
-       return reconnect()
+@@ -449,14 +453,20 @@
+     socket.removeAllListeners()
+     socket = null
  
-     !hadError && (query || sent.length) && error(Errors.connection('CONNECTION_CLOSED', options, socket))
++    const closeError = socketError || Errors.connection('CONNECTION_CLOSED', options, socket)
++    !initial && (query || sent.length) && error(closeError)
 +    query = results = errorResponse = null
 +    result = new Result()
 +    rows = 0
++    socketError = null
++
+     if (initial)
+       return reconnect()
+ 
+-    !hadError && (query || sent.length) && error(Errors.connection('CONNECTION_CLOSED', options, socket))
      closedTime = performance.now()
      hadError && options.shared.retries++
      delay = (typeof backoff === 'function' ? backoff(options.shared.retries) : backoff) * 1000
+-    onclose(connection, Errors.connection('CONNECTION_CLOSED', options, socket))
++    onclose(connection, closeError)
+   }
+ 
+   /* Handlers */
 diff --git a/cjs/src/connection.js b/cjs/src/connection.js
 --- a/cjs/src/connection.js
 +++ b/cjs/src/connection.js
-@@ -438,6 +438,7 @@
+@@ -79,6 +79,7 @@
+   let socket = null
+     , cancelMessage
+     , errorResponse = null
++    , socketError = null
+     , result = new Result()
+     , incoming = Buffer.alloc(0)
+     , needsTypes = options.fetch_types
+@@ -364,6 +365,7 @@
+ 
+   function connected() {
+     try {
++      socketError = null
+       statements = {}
+       needsTypes = options.fetch_types
+       statementId = Math.random().toString(36).slice(2)
+@@ -382,6 +384,7 @@
+     if (connection.queue === queues.connecting && options.host[retries + 1])
+       return
+ 
++    socketError = err
+     errored(err)
+     while (sent.length)
+       queryError(sent.shift(), err)
+@@ -438,6 +441,7 @@
      remaining = 0
      incomings = null
      clearImmediate(nextWriteTimer)
@@ -150,13 +248,26 @@ diff --git a/cjs/src/connection.js b/cjs/src/connection.js
      socket.removeListener('data', data)
      socket.removeListener('connect', connected)
      idleTimer.cancel()
-@@ -451,6 +452,9 @@
-       return reconnect()
+@@ -447,14 +451,20 @@
+     socket.removeAllListeners()
+     socket = null
  
-     !hadError && (query || sent.length) && error(Errors.connection('CONNECTION_CLOSED', options, socket))
++    const closeError = socketError || Errors.connection('CONNECTION_CLOSED', options, socket)
++    !initial && (query || sent.length) && error(closeError)
 +    query = results = errorResponse = null
 +    result = new Result()
 +    rows = 0
++    socketError = null
++
+     if (initial)
+       return reconnect()
+ 
+-    !hadError && (query || sent.length) && error(Errors.connection('CONNECTION_CLOSED', options, socket))
      closedTime = performance.now()
      hadError && options.shared.retries++
      delay = (typeof backoff === 'function' ? backoff(options.shared.retries) : backoff) * 1000
+-    onclose(connection, Errors.connection('CONNECTION_CLOSED', options, socket))
++    onclose(connection, closeError)
+   }
+ 
+   /* Handlers */

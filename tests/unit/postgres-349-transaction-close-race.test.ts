@@ -32,10 +32,10 @@ function startupFrames() {
   ]);
 }
 
-function simpleQueryFrames(command: string) {
+function simpleQueryFrames(command: string, transactionStatus: "I" | "T") {
   return Buffer.concat([
     backendFrame("C", Buffer.from(`${command}\0`)),
-    backendFrame("Z", Buffer.from("I")),
+    backendFrame("Z", Buffer.from(transactionStatus)),
   ]);
 }
 
@@ -43,6 +43,7 @@ class FakeSocket extends EventEmitter {
   readyState: "open" | "closed" = "open";
   destroyed = false;
   readonly writes: string[] = [];
+  private transactionStatus: "I" | "T" = "I";
 
   constructor(
     private readonly hold: Set<string>,
@@ -68,9 +69,15 @@ class FakeSocket extends EventEmitter {
       return true;
     }
 
-    const query = ["select 1", "select 2", "select 3", "select 4", "select 5", "select 99"].find(
-      (candidate) => text.includes(candidate),
-    );
+    const query = [
+      "select 1",
+      "select 2",
+      "select 3",
+      "select 4",
+      "select 5",
+      "select 99",
+      "pg_catalog.pg_type",
+    ].find((candidate) => text.includes(candidate));
     if (query && this.hold.has(query)) {
       this.onHeld(this);
       callback?.();
@@ -87,7 +94,9 @@ class FakeSocket extends EventEmitter {
             ? "SELECT"
             : null;
     if (!command) throw new Error("Unexpected fake-protocol write; refusing to guess");
-    setImmediate(() => this.emit("data", simpleQueryFrames(command)));
+    if (command === "BEGIN") this.transactionStatus = "T";
+    if (command === "ROLLBACK" || command === "COMMIT") this.transactionStatus = "I";
+    setImmediate(() => this.emit("data", simpleQueryFrames(command, this.transactionStatus)));
     callback?.();
     return true;
   }
@@ -98,11 +107,11 @@ class FakeSocket extends EventEmitter {
   destroy() {
     this.close();
   }
-  close() {
+  close(hadError = false) {
     if (this.readyState === "closed") return;
     this.readyState = "closed";
     this.destroyed = true;
-    this.emit("close", false);
+    this.emit("close", hadError);
   }
 }
 
@@ -111,6 +120,7 @@ type PoolOptions = {
   max_pipeline?: number;
   heldQueries?: string[];
   onHeld?: HeldWrite;
+  fetch_types?: boolean;
 };
 
 function poolWithFakeSockets(options: PoolOptions = {}) {
@@ -128,7 +138,7 @@ function poolWithFakeSockets(options: PoolOptions = {}) {
     max: options.max ?? 1,
     max_pipeline: options.max_pipeline ?? 1,
     prepare: false,
-    fetch_types: false,
+    fetch_types: options.fetch_types ?? false,
     no_subscribe: true,
     idle_timeout: 0,
     max_lifetime: 0,
@@ -139,7 +149,7 @@ function poolWithFakeSockets(options: PoolOptions = {}) {
       return socket;
     },
   } as unknown as Parameters<typeof postgres>[0]);
-  return { sql, sockets };
+  return { sql, sockets, held };
 }
 
 async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
@@ -172,6 +182,92 @@ async function closePool(pool: ReturnType<typeof poolWithFakeSockets>) {
 }
 
 describe("postgres 3.4.9 transaction behavior after socket close", () => {
+  it("models ReadyForQuery as transactional until COMMIT or ROLLBACK", async () => {
+    const socket = new FakeSocket(new Set(), () => {});
+    const statuses: string[] = [];
+    socket.on("data", (frame: Buffer) => statuses.push(String.fromCharCode(frame.at(-1)!)));
+    for (const command of ["BEGIN", "SELECT 1", "ROLLBACK", "BEGIN", "COMMIT"]) {
+      socket.write(Buffer.from(command));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    expect(statuses).toEqual(["T", "T", "I", "T", "I"]);
+  });
+
+  it("rejects work sent between a socket error and close(true) with the original error", async () => {
+    const selected = deferred();
+    const submitted = deferred();
+    const original = new Error("fake socket transport failure");
+    const pool = poolWithFakeSockets({
+      heldQueries: ["select 1", "select 2"],
+      onHeld: () => selected.resolve(),
+    });
+    let firstError: unknown;
+    let secondOutcome: Awaited<ReturnType<typeof settle>> | undefined;
+    try {
+      const transaction = pool.sql.begin(async (tx) => {
+        await tx`select 1`.simple().catch((error) => {
+          firstError = error;
+        });
+        const second = settle(tx`select 2`.simple());
+        submitted.resolve();
+        secondOutcome = await second;
+      });
+      await withTimeout(selected.promise, "first held query");
+      pool.sockets[0]!.emit("error", original);
+      await withTimeout(submitted.promise, "query submitted after socket error");
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      pool.sockets[0]!.close(true);
+      const begin = await settle(transaction);
+      expect(firstError).toBe(original);
+      expect(secondOutcome?.status).toBe("rejected");
+      if (secondOutcome?.status === "rejected") expect(secondOutcome.error).toBe(original);
+      expect(begin.status).toBe("rejected");
+      if (begin.status === "rejected") expect(begin.error).toBe(original);
+    } finally {
+      await closePool(pool);
+    }
+  });
+
+  it("clears startup query state before retrying array-type discovery", async () => {
+    const selected = deferred();
+    const selectedQuery = deferred();
+    const pool = poolWithFakeSockets({
+      fetch_types: true,
+      heldQueries: ["pg_catalog.pg_type", "select 99"],
+      onHeld: (socket) => {
+        if (socket.writes.at(-1)?.includes("pg_catalog.pg_type")) selected.resolve();
+        if (socket.writes.at(-1)?.includes("select 99")) selectedQuery.resolve();
+      },
+    });
+    try {
+      let querySettled = false;
+      const query = settle(pool.sql`select 99`.simple()).then((result) => {
+        querySettled = true;
+        return result;
+      });
+      await withTimeout(selected.promise, "array-type discovery");
+      const first = pool.sockets[0]!;
+      // A command result without ReadyForQuery leaves partial per-query state
+      // on the socket that is about to close.
+      first.emit("data", backendFrame("C", Buffer.from("SELECT 1\0")));
+      pool.held.delete("pg_catalog.pg_type");
+      first.close();
+      await withTimeout(selectedQuery.promise, "query after startup reconnect");
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(querySettled).toBe(false);
+      pool.sockets[1]!.emit("data", simpleQueryFrames("SELECT", "I"));
+      const outcome = await query;
+      expect(outcome.status).toBe("fulfilled");
+      expect(pool.sockets.length).toBe(2);
+      expect(pool.sockets[1]!.writes.some((write) => write.includes("pg_catalog.pg_type"))).toBe(
+        true,
+      );
+      expect(pool.sockets[1]!.writes.some((write) => write.includes("select 99"))).toBe(true);
+    } finally {
+      await closePool(pool);
+    }
+  });
+
   it("settles callback and begin, and skips rollback writes after close", async () => {
     const selected = deferred();
     const pool = poolWithFakeSockets({

@@ -17,12 +17,12 @@ state:
   currentWorkPackage: WP-2
   completedWorkPackages: [WP-1]
   remainingWorkPackages: [WP-2]
-  prNumber: null
-  prUrl: null
+  prNumber: 780
+  prUrl: "https://github.com/oumaster369/waia/pull/780"
   lastValidatedGitSha: null
-  lastValidationAt: "2026-10-12T07:28:13Z"
+  lastValidationAt: "2026-10-12T08:16:43Z"
   blockedReason: null
-  nextAction: "Publish the reviewed change and qualify exact-head PR CI."
+  nextAction: "Root independently reviews these uncommitted bytes, then commits and pushes the correction to PR 780 and qualifies CI on the new exact head."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -44,8 +44,8 @@ Retain the lockfile resolution `postgres@3.4.9` and make close handling settle i
 ## Scope
 
 - Add a pnpm patched dependency for only `postgres@3.4.9`; update the lockfile patch hash.
-- Apply the closed-error and transaction queue settlement fix to the package's Node, CJS, and Cloudflare source surfaces, with closed connection result/query state cleanup.
-- Add deterministic fake-socket regression cases for close settlement, queue rejection, late callback behavior, fresh-socket reuse, and ordinary query/rollback behavior.
+- Apply the closed-error and transaction queue settlement fix to the package's Node, CJS, and Cloudflare source surfaces. Preserve the socket error for work submitted between `error` and `close(true)`, and clear query/result state before startup reconnects.
+- Add deterministic fake-socket regression cases for close settlement, queue rejection, late callback behavior, the error-to-close gap, startup array-type reconnects, transaction `ReadyForQuery` status, fresh-socket reuse, and ordinary query/rollback behavior.
 - Validate the repository change with targeted tests, native scheduled-owner PostgreSQL integration, lint, typecheck, build, PR governance checks, and independent source review.
 
 ## Do NOT
@@ -62,19 +62,19 @@ Retain the lockfile resolution `postgres@3.4.9` and make close handling settle i
 - Connection close settles the transaction and callback; active, pipelined, queued, and later transaction work reject using the captured close error.
 - No COMMIT or rollback is written to a closed socket; pool shutdown settles; a later ordinary query can use a fresh socket.
 - A successful query followed by a callback error preserves that original error and performs rollback while the connection is open.
-- Focused fake-protocol tests and scheduled-owner/pool-lifetime unit coverage pass; the native scheduled-owner file completes all 15 cases with no skips, including rollback, acknowledged commit, and abort settlement coverage.
+- Focused fake-protocol tests and scheduled-owner/pool-lifetime unit coverage pass; the native scheduled-owner file completes all 15 cases with no skips, including rollback, acknowledged commit, and abort settlement coverage. The post-review fake-protocol changes must also pass their focused tests and CI.
 - Typecheck, build, full repository lint, governance checks, and independent source review pass. Full unit CI remains a separate required gate.
 
 ## Work packages
 
 ### WP-1 — Scoped driver fix and regression
 
-Completed in the working tree. The local patch applies to postgres 3.4.9 and covers Node, CJS, and Cloudflare package source. Four fake-protocol tests passed; scheduled-owner unit tests passed 8/8 and pool-lifetime tests passed 11/11. Typecheck, build, changed-TypeScript ESLint, formatting, and frozen offline install passed.
+Completed in the working tree. The local patch applies to postgres 3.4.9 and covers Node, CJS, and Cloudflare package source. Seven focused fake-protocol tests, scheduled-owner unit 8/8, pool-lifetime unit 11/11, typecheck, build, and frozen offline lockfile install pass on the current uncommitted bytes. The original four-case result belongs to prior bytes; exact-head PR CI remains required after publication.
 
 ### WP-2 — Review and PR readiness
 
-Native PostgreSQL 16 scheduled-owner integration passed 15/15 with zero failed/pending/todo cases; DEE-1213 abort/rollback passed. The fixture was isolated to a private container network and cleaned up. PR preflight and `pnpm validate:pr-governance` passed. Full repository lint passed with zero errors and 337 existing warnings. Independent source review approved all four code/dependency paths with no blockers. GitHub PR CI remains the full unit-suite gate; publication is the next step.
+Native PostgreSQL 16 scheduled-owner integration passed 15/15 with zero failed/pending/todo cases; DEE-1213 abort/rollback passed on prior bytes. The fixture was isolated to a private container network and cleaned up. Prior PR preflight and `pnpm validate:pr-governance` passed. Full repository lint passed with zero errors and 337 existing warnings on prior bytes. The three PR 780 inline findings are corrected in the current uncommitted change; root review and exact-head CI remain pending.
 
 ## Validation record
 
-Local validation: fake-protocol regression 4/4, scheduled-owner unit 8/8, pool-lifetime unit 11/11, native scheduled-owner integration 15/15 with zero skips, typecheck, build, full lint, and PR governance. The native run's parsed assertion output and source-bound independent review are retained in the private task evidence; the temporary standalone reporter file was unavailable after container exit. No full local unit suite or UI E2E run was performed. The native result is limited to that exact scheduled-owner test file and disposable local fixture.
+Current uncommitted-byte validation: focused fake-protocol regression 7/7, scheduled-owner unit 8/8, pool-lifetime unit 11/11, changed-file ESLint, typecheck, and build pass. A pre-fix check confirmed that the new error-to-close case fails on the prior driver bytes. The earlier native scheduled-owner integration 15/15 with zero skips, full lint, and PR governance checks remain prior-byte evidence only. The exact former runner image is unavailable locally, so the native fixture was not recreated for these uncommitted bytes. No full local unit suite or UI E2E run was performed. Exact-head PR review and CI remain pending after publication.
