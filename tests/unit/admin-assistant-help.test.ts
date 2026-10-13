@@ -10,7 +10,10 @@ describe("admin assistant help", () => {
     expect(entries.length).toBeGreaterThan(0);
     for (const entry of entries) {
       expect(ADMIN_TOOLS).toContain(entry.tool);
-      expect(entry.title).toMatch(/\p{Script=Cyrillic}/u);
+      expect(entry.title).toMatch(/\p{Script=Latin}/u);
+      expect(entry.title).not.toMatch(/\p{Script=Cyrillic}/u);
+      expect(entry.example).toMatch(/\p{Script=Latin}/u);
+      expect(entry.example).not.toMatch(/\p{Script=Cyrillic}/u);
       expect(entry.example.length).toBeGreaterThan(0);
     }
     const names = entries.map((entry) => entry.tool);

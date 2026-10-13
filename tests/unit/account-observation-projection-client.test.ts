@@ -155,6 +155,43 @@ describe("DEE-1243 shared projection deadline classification", () => {
 });
 
 describe("account observation projection client", () => {
+  it("uses workerd-supported Request construction for both signed operations", async () => {
+    // Installed workerd rejects the error redirect mode before any subrequest.
+    const fetcher: typeof fetch = vi.fn(async (request, init) => {
+      if (init?.redirect !== "manual" && init?.redirect !== "follow") {
+        throw new TypeError("SYNTHETIC_WORKER_REDIRECT_REJECTION");
+      }
+      expect(new Request(request, init).redirect).toBe("manual");
+      return responseFor(request, init,
+        new URL(String(request)).pathname === PROJECTION_PATHS.readLatest ? OBSERVATION : BINDING);
+    });
+    const client = createProjectionClient(options(fetcher));
+    try {
+      await expect(client.resolveActiveBinding(SCOPE)).resolves.toEqual(BINDING);
+      await expect(client.readLatest(BINDING)).resolves.toEqual(OBSERVATION);
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    } finally { client.dispose(); }
+  });
+
+  it.each([301, 302, 303, 307, 308])("refuses redirect %s, cancels its body and never follows for either operation", async status => {
+    for (const operation of ["resolveBinding", "readLatest"] as const) {
+      const cancel = vi.fn();
+      const fetcher: typeof fetch = vi.fn(async (_request, init) => {
+        expect(init?.redirect).toBe("manual");
+        return new Response(new ReadableStream<Uint8Array>({ cancel }), {
+          status, headers: { location: "https://redirect-canary.invalid/private" },
+        });
+      });
+      const client = createProjectionClient(options(fetcher));
+      try {
+        await expect(operation === "resolveBinding" ? client.resolveActiveBinding(SCOPE) : client.readLatest(BINDING))
+          .rejects.toThrow("PROJECTION_UNAVAILABLE");
+        expect(fetcher).toHaveBeenCalledTimes(1);
+        expect(cancel).toHaveBeenCalledTimes(1);
+      } finally { client.dispose(); }
+    }
+  });
+
   it("uses only the fixed POST paths with no-store, redirect refusal, HMAC and Access service headers", async () => {
     expect(parseAccountObservation(OBSERVATION)).toEqual(OBSERVATION);
     const calls: Array<{ url: string; init: RequestInit }> = [];
@@ -173,7 +210,7 @@ describe("account observation projection client", () => {
     ]);
     for (const { init } of calls) {
       expect(init.method).toBe("POST");
-      expect(init.redirect).toBe("error");
+      expect(init.redirect).toBe("manual");
       expect(init.cache).toBe("no-store");
       expect(init.signal).toBeInstanceOf(AbortSignal);
       expect(init.headers).toMatchObject({

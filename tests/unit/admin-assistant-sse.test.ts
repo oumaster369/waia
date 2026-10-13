@@ -8,9 +8,9 @@ import {
 
 describe("admin assistant stream", () => {
   it("names the brief stages and writes them before the tool result", () => {
-    expect(assistantStageLabel("list_accounts")).toBe("Получаю счета…");
-    expect(assistantStageLabel("list_invoices")).toBe("Проверяю платежи…");
-    expect(assistantStageLabel("list_research_runs")).toBe("Сравниваю запуски…");
+    expect(assistantStageLabel("list_accounts")).toBe("Retrieving accounts…");
+    expect(assistantStageLabel("list_invoices")).toBe("Checking payments…");
+    expect(assistantStageLabel("list_research_runs")).toBe("Comparing runs…");
     const encoded = new TextDecoder().decode(
       encodeAssistantSse([
         ...assistantToolEvents(["list_accounts"]),
@@ -24,7 +24,7 @@ describe("admin assistant stream", () => {
     expect(stageAt).toBeGreaterThanOrEqual(0);
     expect(stageAt).toBeLessThan(readyAt);
     expect(readyAt).toBeLessThan(answerAt);
-    expect(encoded).toContain("Получаю счета…");
+    expect(encoded).toContain("Retrieving accounts…");
     expect(encoded).toContain("ASSISTANT_DISABLED");
   });
 });

@@ -78,7 +78,7 @@ test("Admin drill-down remains separately authorized and renders HALT read-only"
   const authority = page.getByRole("table", { name: "Runtime Authority", exact: true });
   await expect(authority.getByRole("button", { includeHidden: true })).toHaveCount(0);
   await expect(authority.getByText("HALT", { exact: true })).toBeVisible();
-  for (const name of ["Выйти", "Свернуть меню", "Поиск по консоли", "Аварийная остановка"]) {
+  for (const name of ["Sign out", "Collapse menu", "Search console", "Emergency stop"]) {
     await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
   }
 });
