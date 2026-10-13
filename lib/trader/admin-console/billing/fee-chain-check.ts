@@ -37,14 +37,14 @@ export function checkFeeChain(
   if (
     compareDecimal(input.cumulative, addDecimal(input.previousCumulative, input.periodProfit)) !== 0
   ) {
-    return { ok: false, link: "кумулятивный результат" };
+    return { ok: false, link: "cumulative result" };
   }
   const profit =
     compareDecimal(input.cumulative, input.previousHwm) > 0
       ? subtractDecimal(input.cumulative, input.previousHwm)
       : "0";
   if (compareDecimal(input.newProfitAboveHwm, profit) !== 0) {
-    return { ok: false, link: "прибыль над HWM" };
+    return { ok: false, link: "profit above HWM" };
   }
   if (
     compareDecimal(
@@ -52,10 +52,10 @@ export function checkFeeChain(
       multiplyDecimal(input.newProfitAboveHwm, input.feeRate),
     ) !== 0
   ) {
-    return { ok: false, link: "комиссия" };
+    return { ok: false, link: "fee" };
   }
   const billable = compareDecimal(input.performanceFee, input.minFeeThreshold) >= 0;
-  if (input.billable !== billable) return { ok: false, link: "порог" };
+  if (input.billable !== billable) return { ok: false, link: "threshold" };
   if (compareDecimal(input.previousHwm, input.ledgerPreviousHwm) !== 0) {
     return { ok: false, link: "HWM" };
   }

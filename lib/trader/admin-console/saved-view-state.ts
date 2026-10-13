@@ -38,12 +38,12 @@ export function savedViewHref(section: string, state: unknown): string | null {
   return `${paths[section]}${out.size ? `?${out}` : ""}`;
 }
 export const BUILTIN_VIEWS = [
-  { id: "attention", name: "Проблемные счета", path: "/admin/accounts?tab=attention" },
-  { id: "unpaid", name: "Неоплаченные", path: "/admin/clients?tab=invoices&status=ISSUED" },
-  { id: "rejected", name: "Отклонённые ордера", path: "/admin/orders?tab=all&status=REJECTED" },
+  { id: "attention", name: "Problem accounts", path: "/admin/accounts?tab=attention" },
+  { id: "unpaid", name: "Unpaid", path: "/admin/clients?tab=invoices&status=ISSUED" },
+  { id: "rejected", name: "Rejected orders", path: "/admin/orders?tab=all&status=REJECTED" },
   {
     id: "inactive",
-    name: "Исследования без активности",
+    name: "Inactive research",
     path: "/admin/research?tab=campaigns&status=inactive",
   },
 ] as const;

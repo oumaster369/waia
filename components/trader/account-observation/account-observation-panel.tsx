@@ -152,7 +152,7 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [observation]);
-  const live = Boolean(observation) && !view.stale && view.status !== "REVOKED";
+  const live = Boolean(observation) && !view.stale && view.status !== "REVOKED" && view.status !== "ERROR";
   const usdt = observation ? usdtSpot(observation.balances.values) : null;
   const inventory = observation ? nonUsdtInventory(observation.balances.values) : [];
   const nextIn = observation ? secondsUntilNextPoll(observation.collectionCompletedAtMs, nowMs) : 0;
@@ -164,9 +164,9 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Счёт HTX</h2>
+          <h2 className="text-lg font-semibold">HTX account</h2>
           <p className="text-muted-foreground mt-1 text-sm">
-            Только просмотр. Данные спота и фьючерсов показаны отдельно; заявки отсюда не отправляются.
+            Read only. Spot and Futures data are shown separately; orders cannot be submitted here.
           </p>
         </div>
         <p
@@ -192,58 +192,60 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
             ? "Access revoked; account data cleared."
             : view.status === "DISCONNECTED"
               ? "No observation available."
-              : ACCOUNT_OBSERVATION_FIRST_TICK_COPY}
+              : view.status === "ERROR"
+                ? "Account data could not be read."
+                : ACCOUNT_OBSERVATION_FIRST_TICK_COPY}
         </p>
       ) : (
         <>
           <WaiaSurface variant="raised" className="space-y-2 p-4" data-testid="account-identity-summary">
             <h3 className="font-semibold">
-              HTX · счёт {observation.binding.exchangeAccountId} · UID{" "}
-              {observation.htxV5?.htxUid ?? "не указан в снимке"}
+              HTX · account {observation.binding.exchangeAccountId} · UID{" "}
+              {observation.htxV5?.htxUid ?? "not included in the snapshot"}
             </h3>
             <p className="text-muted-foreground text-sm">
-              Спот и фьючерсы ниже приведены отдельно. Общая стоимость активов не рассчитывается.
+              Spot and Futures are shown separately below. Total asset value is not calculated.
             </p>
             <p className="text-sm">
-              Результат за день: недоступен. Для него нет подтверждённой дневной базы и полного учёта переводов,
-              финансирования и комиссий.
+              Daily result: unavailable. A verified daily baseline and complete accounting of transfers,
+              funding and fees are missing.
             </p>
             <p className="text-muted-foreground text-xs">
-              Обновлено {ageLabel(observation.collectionCompletedAtMs, nowMs)} ·{" "}
-              {nextIn > 0 ? `следующее обновление через ${nextIn} с` : "ожидается следующий сбор"}
+              Updated {ageLabel(observation.collectionCompletedAtMs, nowMs)} ·{" "}
+              {nextIn > 0 ? `next update in ${nextIn} s` : "waiting for the next collection"}
             </p>
           </WaiaSurface>
           <p className="text-muted-foreground text-xs">
             Last received observation — do not treat it as a current complete account snapshot.
           </p>
-          <section aria-label="Спот" className="border-border space-y-3 rounded-xl border p-4">
-            <h3 className="text-base font-semibold">Спот · баланс и заявки</h3>
+          <section aria-label="Spot" className="border-border space-y-3 rounded-xl border p-4">
+            <h3 className="text-base font-semibold">Spot · balances and orders</h3>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <Metric
-                label="USDT доступно"
+                label="Available USDT"
                 value={usdt ? usdt.free : "—"}
-                hint={usdt ? "Свободный остаток" : "Нет в этом снимке"}
+                hint={usdt ? "Free balance" : "Not in this snapshot"}
                 testId="cabinet-usdt-free"
               />
               <Metric
-                label="USDT в открытых заявках"
+                label="USDT in open orders"
                 value={usdt ? usdt.locked : "—"}
-                hint={usdt ? "Зарезервировано на HTX" : "Нет в этом снимке"}
+                hint={usdt ? "Reserved on HTX" : "Not in this snapshot"}
                 testId="cabinet-usdt-locked"
               />
               <Metric
-                label="Открытые заявки"
+                label="Open orders"
                 value={
                   observation.openOrders.values === null
                     ? "—"
                     : observation.openOrders.status === "COMPLETE" && observation.openOrders.error === null
                       ? String(observation.openOrders.values.length)
-                      : `${observation.openOrders.values.length} получено`
+                      : `${observation.openOrders.values.length} received`
                 }
                 hint={
                   observation.openOrders.status === "COMPLETE" && observation.openOrders.error === null
-                    ? "Активные заявки, отдельно от позиций"
-                    : "Полученные заявки; полный охват не подтверждён"
+                    ? "Active orders, separate from positions"
+                    : "Received orders; full coverage is not confirmed"
                 }
                 testId="cabinet-open-orders"
               />
@@ -288,8 +290,8 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
               </Rows>
             ))}
           </section>
-          <section aria-label="Фьючерсы" className="border-border space-y-3 rounded-xl border p-4">
-            <h3 className="text-base font-semibold">Фьючерсы · маржа, позиции и заявки</h3>
+          <section aria-label="Futures" className="border-border space-y-3 rounded-xl border p-4">
+            <h3 className="text-base font-semibold">Futures · margin, positions and orders</h3>
             <DerivativesAccountSection
               projection={
                 observation.schemaVersion === "account-observation/v2" ||
@@ -309,7 +311,7 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
             ) : null}
           </section>
           <p className="text-muted-foreground text-sm">
-            Месячная выписка здесь не публикуется. Недостающие значения не выводятся из предположений.
+            A monthly statement is not published here. Missing values are not inferred.
           </p>
           <dl className="text-muted-foreground grid gap-1 text-xs">
             <dt>Observation ID</dt>

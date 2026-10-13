@@ -56,22 +56,22 @@ test("financial slice refreshes a saved account balance and a fill without reloa
     const query = `organization_id=${binding.organizationId}&exchange_account_id=${binding.exchangeAccountId}&mode=live`;
     await page.goto(`/admin/accounts?${query}`);
     await expect(page.locator("main")).toContainText("271,12345678");
-    await expect(page.locator("main")).toContainText("Есть ограничения");
+    await expect(page.locator("main")).toContainText("Restrictions apply");
     await observe("281.12345679");
     await expect(page.locator("main")).toContainText("281,12345679", { timeout: 25000 });
     await expect(page.locator("main")).not.toContainText("271,12345678");
     await page.goto(`/admin/orders?${query}&tab=fills`);
-    await expect(page.locator("main")).toContainText("Записей пока нет");
+    await expect(page.locator("main")).toContainText("No records yet");
     await sql`INSERT INTO trader_fills(id,organization_id,order_id,exchange_trade_id,price,quantity,fee,fee_asset,executed_at) VALUES (${fill}::uuid,${binding.organizationId}::uuid,${order}::uuid,${fill},'99.12345678','0.12345678','0.00000001','USDT',now())`;
-    await expect(page.getByRole("table", { name: "Исполнения ордеров" })).toContainText(
+    await expect(page.getByRole("table", { name: "Order fills" })).toContainText(
       "SLICEBTCUSDT",
       { timeout: 25000 },
     );
-    await expect(page.getByRole("table", { name: "Исполнения ордеров" })).toContainText(
+    await expect(page.getByRole("table", { name: "Order fills" })).toContainText(
       "99.12345678",
     );
     await expect(
-      page.getByRole("table", { name: "Исполнения ордеров" }).getByRole("row"),
+      page.getByRole("table", { name: "Order fills" }).getByRole("row"),
     ).toHaveCount(2);
   } finally {
     // Retain this isolated fixture's append-only observations as acceptance evidence.
@@ -115,10 +115,10 @@ test("slice gate shows a live order transition and an incident", async ({
     await expect(
       page.locator(`[data-order-id="${orderId}"]`).getByText("SLICEBTC", { exact: true }),
     ).toBeVisible({ timeout: 20_000 });
-    await expect(page.locator(`[data-order-id="${orderId}"]`).getByText("Создан")).toBeVisible();
+    await expect(page.locator(`[data-order-id="${orderId}"]`).getByText("Created")).toBeVisible();
     await sql`UPDATE trader_orders SET state = 'RISK_APPROVED', state_version = 2 WHERE id = ${orderId}::uuid`;
     await expect(
-      page.locator(`[data-order-id="${orderId}"]`).getByText("Риск одобрил"),
+      page.locator(`[data-order-id="${orderId}"]`).getByText("Risk approved"),
     ).toBeVisible({ timeout: 20_000 });
     await sql`
       INSERT INTO trader_admin_incident (

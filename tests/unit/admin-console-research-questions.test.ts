@@ -36,11 +36,11 @@ describe("admin console research and required questions", () => {
   it("maps every known reason and keeps a justified no-trade out of the incident queue", () => {
     for (const code of knownNoTradeCodes()) {
       const category = noTradeCategory(code);
-      if (category != null) expect(category.startsWith("Прочее:")).toBe(false);
+      if (category != null) expect(category.startsWith("Other:")).toBe(false);
       expect(noTradeEntersIncidentQueue(code)).toBe(false);
     }
-    expect(noTradeCategory("NO_TRADE")).toBe("нет экономического преимущества");
-    expect(noTradeCategory("UNMAPPED_CODE")).toBe("Прочее: UNMAPPED_CODE");
+    expect(noTradeCategory("NO_TRADE")).toBe("no economic edge");
+    expect(noTradeCategory("UNMAPPED_CODE")).toBe("Other: UNMAPPED_CODE");
     expect(noTradeEntersIncidentQueue("NO_TRADE")).toBe(false);
   });
 

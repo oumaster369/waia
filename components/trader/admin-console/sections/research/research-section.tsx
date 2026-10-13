@@ -29,30 +29,30 @@ type Runs = {
   total: number;
 };
 const labels: Record<string, string> = {
-  QUEUED: "В очереди",
-  RUNNING: "Выполняется",
-  COMPLETED: "Завершён",
-  FAILED: "Ошибка",
-  STOPPED: "Остановлен",
-  PROPOSED: "Предложена",
-  VALIDATING: "Проверяется",
-  VALIDATED: "Подтверждена",
-  DECAYING: "Ослабевает",
-  RETIRED: "В архиве",
-  QUARANTINED: "Карантин",
-  VERIFIED: "Подтверждена",
-  UNVERIFIED: "Не подтверждена",
-  SEALED: "Запечатан",
-  DRAFT: "Черновик",
-  ACTIVE: "Активна",
-  PAUSED: "Приостановлена",
-  ARCHIVED: "В архиве",
-  draft: "Черновик",
-  registered: "Зарегистрирована",
-  backtested: "Тест завершён",
-  walk_forward_validated: "Walk-forward пройден",
-  blind_validated: "Проверка завершена",
-  rejected: "Отклонена",
+  QUEUED: "Queued",
+  RUNNING: "Running",
+  COMPLETED: "Completed",
+  FAILED: "Error",
+  STOPPED: "Stopped",
+  PROPOSED: "Proposed",
+  VALIDATING: "Under review",
+  VALIDATED: "Confirmed",
+  DECAYING: "Weakening",
+  RETIRED: "Archived",
+  QUARANTINED: "Quarantined",
+  VERIFIED: "Confirmed",
+  UNVERIFIED: "Unconfirmed",
+  SEALED: "Sealed",
+  DRAFT: "Draft",
+  ACTIVE: "Active",
+  PAUSED: "Paused",
+  ARCHIVED: "Archived",
+  draft: "Draft",
+  registered: "Registered",
+  backtested: "Test completed",
+  walk_forward_validated: "Walk-forward passed",
+  blind_validated: "Review completed",
+  rejected: "Rejected",
 };
 export function ResearchSection() {
   const context = useAdminReadContext();
@@ -84,7 +84,7 @@ export function ResearchSection() {
               className={`${controlClass} mt-3`}
               onClick={() => context.update({ mode: "history" })}
             >
-              Показать исторические запуски
+              Show historical runs
             </button>
           ) : null}
           {read.reason === "RESEARCH_EXCHANGE_ACCOUNT_BINDING_NOT_PERSISTED" ? (
@@ -92,7 +92,7 @@ export function ResearchSection() {
               className={`${controlClass} mt-3`}
               onClick={() => context.update({ exchange_account_id: null })}
             >
-              Исследования клиента
+              Client research
             </button>
           ) : null}
         </div>
@@ -106,22 +106,22 @@ export function ResearchSection() {
               disabled={compared.length < 2}
               onClick={() => context.update({ compare_open: "1", run: null })}
             >
-              Сравнить {compared.length ? `(${compared.length})` : "2–4 запуска"}
+              Compare {compared.length ? `(${compared.length})` : "2–4 runs"}
             </button>
           }
-          note="Исторический контур. Завершение теста не означает рекомендацию или допуск к торговле."
+          note="Historical mode. Test completion does not mean a recommendation or trading admission."
         >
           <ConsoleTable
             rows={runs.envelope.data.items ?? []}
             rowKey={(row) => row.id}
-            caption="Исторические запуски"
+            caption="Historical runs"
             columns={[
               {
-                title: "Сравнить",
+                title: "Compare",
                 render: (row) => (
                   <input
                     type="checkbox"
-                    aria-label={`Сравнить запуск ${row.runId}`}
+                    aria-label={`Compare run ${row.runId}`}
                     checked={compared.includes(row.id)}
                     disabled={!compared.includes(row.id) && compared.length >= 4}
                     onChange={(e) =>
@@ -137,7 +137,7 @@ export function ResearchSection() {
                 ),
               },
               {
-                title: "Запуск",
+                title: "Run",
                 render: (row) => (
                   <button
                     className="text-waia-accent-cool text-left text-xs break-all hover:underline"
@@ -145,13 +145,13 @@ export function ResearchSection() {
                   >
                     {row.runId}
                     <span className="text-waia-fg-muted mt-1 block">
-                      {row.kind === "backtest" ? "Тест стратегии" : "Историческое воспроизведение"}
+                      {row.kind === "backtest" ? "Strategy test" : "Historical replay"}
                     </span>
                   </button>
                 ),
               },
               {
-                title: "Рынок / выборка",
+                title: "Market / sample",
                 render: (row) => (
                   <>
                     <p className="font-medium">{row.symbol}</p>
@@ -160,7 +160,7 @@ export function ResearchSection() {
                 ),
               },
               {
-                title: "Состояние",
+                title: "State",
                 render: (row) => (
                   <>
                     <ConsoleBadge
@@ -172,14 +172,14 @@ export function ResearchSection() {
                     </ConsoleBadge>
                     {row.inactive ? (
                       <p className="text-waia-warning mt-2 text-xs">
-                        Нет активности более 10 минут
+                        No activity for over 10 minutes
                       </p>
                     ) : null}
                   </>
                 ),
               },
               {
-                title: "Подтверждённые циклы",
+                title: "Confirmed cycles",
                 align: "right",
                 render: (row) =>
                   row.qualifiedTotalCycles !== null && row.qualifiedTotalCycles > 0 ? (
@@ -194,14 +194,14 @@ export function ResearchSection() {
                   ),
               },
               {
-                title: "Последнее наблюдение",
+                title: "Last observation",
                 render: (row) => <EvidenceTime at={row.observedAt} label="" />,
               },
             ]}
           />
           {runs.envelope.data.total > runs.envelope.data.items.length ? (
             <p className="text-waia-warning p-4 text-xs">
-              Показано {runs.envelope.data.items.length} из {runs.envelope.data.total}
+              Showing {runs.envelope.data.items.length} of {runs.envelope.data.total}
             </p>
           ) : null}
         </ConsolePanel>
@@ -211,8 +211,8 @@ export function ResearchSection() {
           title={title}
           note={
             tab === "qualification"
-              ? "Статус квалификации и факт запечатывания. Содержимое holdout закрыто."
-              : "Сохранённые сведения исследовательского контура; Live и Paper здесь не суммируются."
+              ? "Qualification status and sealing fact. Holdout contents are inaccessible."
+              : "Saved research-mode information; Live and Paper are not summed here."
           }
         >
           <ConsoleTable
@@ -221,27 +221,27 @@ export function ResearchSection() {
             caption={title}
             columns={[
               {
-                title: "Название",
+                title: "Name",
                 render: (row) => (
                   <>
                     <p className="font-medium">{row.title}</p>
                     <p className="text-waia-fg-muted mt-1 text-xs">
                       {
                         {
-                          campaign: "Кампания",
-                          hypothesis: "Гипотеза",
-                          edge: "Связь знаний",
-                          dataset: "Набор данных",
-                          qualification: "Квалификация стратегии",
+                          campaign: "Campaign",
+                          hypothesis: "Hypothesis",
+                          edge: "Knowledge link",
+                          dataset: "Dataset",
+                          qualification: "Strategy qualification",
                         }[row.kind]
                       }
-                      {row.version ? ` · версия ${row.version}` : ""}
+                      {row.version ? ` · version ${row.version}` : ""}
                     </p>
                   </>
                 ),
               },
               {
-                title: "Состояние",
+                title: "State",
                 render: (row) =>
                   row.state ? (
                     <ConsoleBadge>
@@ -251,36 +251,35 @@ export function ResearchSection() {
                     <DataState state="unavailable" reason="RESEARCH_STATE_NOT_PERSISTED" />
                   ),
               },
-              { title: "Рынок / режим", render: (row) => row.symbol ?? "Не задан для этой записи" },
+              { title: "Market / regime", render: (row) => row.symbol ?? "Not specified for this record" },
               {
-                title: "Доказательство",
+                title: "Evidence",
                 render: (row) =>
                   row.evidenceRef ? (
                     <span title={row.evidenceRef} className="font-mono text-xs break-all">
                       {row.evidenceRef}
                     </span>
                   ) : row.kind === "dataset" ? (
-                    "Только факт запечатывания"
+                    "Sealing fact only"
                   ) : (
-                    "Ссылка не сохранена"
+                    "Link not saved"
                   ),
               },
               {
-                title: "Дата записи",
+                title: "Record date",
                 render: (row) => <EvidenceTime at={row.observedAt} label="" />,
               },
             ]}
           />
           {catalogue.envelope.data.state === "partial" ? (
             <p className="text-waia-warning p-4 text-xs">
-              Показано {catalogue.envelope.data.items.length} из {catalogue.envelope.data.total}
+              Showing {catalogue.envelope.data.items.length} of {catalogue.envelope.data.total}
             </p>
           ) : null}
         </ConsolePanel>
       ) : null}
       <p className="text-waia-fg-muted mt-5 text-xs leading-6">
-        Shadow-журнал и исследовательские рассуждения из файлов здесь недоступны. Прогнозы и
-        торговая прибыль оцениваются раздельно; запечатанный holdout не раскрывается.
+        Shadow logs and research reasoning from files are unavailable here. Forecasts and trading profit are assessed separately; sealed holdout is not disclosed.
       </p>
     </section>
   );

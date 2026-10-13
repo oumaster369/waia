@@ -522,49 +522,49 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(adminPanel.getByText(observation().observationId)).toBeVisible({ timeout: 12_000 });
   for (const panel of [tenantPanel, adminPanel]) {
     const v5 = panel.getByRole("region", { name: "HTX futures snapshot" });
-    await expect(v5.getByText("Снимок фьючерсного счёта HTX")).toBeVisible();
-    await expect(v5.getByText("Капитал счёта (USD)")).toBeVisible();
-    await expect(v5.getByText("В этой выборке могут отсутствовать некоторые записи.").first()).toBeVisible();
-    await expect(panel.getByText("HTX · счёт account-a · UID 9988776655")).toBeVisible();
-    await expect(panel.getByText(/Результат за день: недоступен/)).toBeVisible();
-    await expect(v5.getByText("Стоп: цена 59000; объём 1 контр.")).toBeVisible();
-    await expect(v5.getByText("Цель: цена 62000; объём 1 контр.")).toBeVisible();
-    await expect(v5.getByText("Полнота покрытия позиции неизвестна; защита не подтверждена.")).toBeVisible();
-    await expect(v5.getByRole("list", { name: "Почему защита не подтверждена" })).toContainText(
-      "Получена неполная выборка: в ней могут отсутствовать стоп-заявки.",
+    await expect(v5.getByText("HTX Futures account snapshot")).toBeVisible();
+    await expect(v5.getByText("Account equity (USD)")).toBeVisible();
+    await expect(v5.getByText("Some records may be missing from this sample.").first()).toBeVisible();
+    await expect(panel.getByText("HTX · account account-a · UID 9988776655")).toBeVisible();
+    await expect(panel.getByText(/Daily result: unavailable/)).toBeVisible();
+    await expect(v5.getByText("Stop: price 59000; quantity 1 contracts")).toBeVisible();
+    await expect(v5.getByText("Target: price 62000; quantity 1 contracts")).toBeVisible();
+    await expect(v5.getByText("Position coverage is unknown; protection is not confirmed.")).toBeVisible();
+    await expect(v5.getByRole("list", { name: "Why protection is unconfirmed" })).toContainText(
+      "The received sample is incomplete; stop orders may be missing.",
     );
     await expect(v5.getByText(
-      "Полученный объём одной SL-заявки (1 контр.) меньше объёма позиции (2 контр.). Это сравнение полученных чисел, не подтверждение защиты.",
+      "Received quantity of one SL order (1 contracts) less than the quantity of the position (2 contracts). This compares received numbers; it does not confirm protection.",
     )).toBeVisible();
-    await expect(v5.getByText(/Позиции прочитаны: .*Условные заявки прочитаны:/)).toBeVisible();
+    await expect(v5.getByText(/Positions read at: .*Conditional orders read at:/)).toBeVisible();
     await expect(
-      v5.getByText("История исполнений недоступна; число исполнений неизвестно."),
+      v5.getByText("Fill history unavailable; the fill count is unknown."),
     ).toBeVisible();
     await expect(panel.getByText("BTC · BTC-USDT", { exact: true })).toBeVisible();
     await expect(v5.getByRole("alert")).toHaveCount(1);
-    await expect(v5.getByRole("alert")).toHaveText("Наличие защиты открытой позиции не подтверждено этим снимком.");
+    await expect(v5.getByRole("alert")).toHaveText("This snapshot does not confirm protection of the open position.");
     await expect(v5.getByRole("button")).toHaveCount(0);
   }
   financialState = "PARTIAL";
   version = 3;
   for (const panel of [tenantPanel, adminPanel]) {
-    const bills = panel.getByRole("region", { name: "Финансовые записи HTX", exact: true });
+    const bills = panel.getByRole("region", { name: "HTX financial records", exact: true });
     await expect(bills.getByText("-0.750000000000000001 USDT", { exact: true })).toBeVisible({ timeout: 12_000 });
     await expect(bills.getByText("1.125 USD", { exact: true })).toBeVisible();
-    await expect(bills.getByText("Частичное; полнота неизвестна", { exact: true })).toBeVisible();
-    await expect(panel.getByText("Капитал счёта (USD)")).toBeVisible();
-    await expect(panel.getByText(/Результат за день: недоступен/)).toBeVisible();
+    await expect(bills.getByText("Partial; completeness unknown", { exact: true })).toBeVisible();
+    await expect(panel.getByText("Account equity (USD)")).toBeVisible();
+    await expect(panel.getByText(/Daily result: unavailable/)).toBeVisible();
   }
-  await tenantPanel.getByRole("region", { name: "Финансовые записи HTX", exact: true }).screenshot({
+  await tenantPanel.getByRole("region", { name: "HTX financial records", exact: true }).screenshot({
     path: testInfo.outputPath("bills-desktop.png"),
   });
   financialState = "UNAVAILABLE";
   version = 4;
   for (const panel of [tenantPanel, adminPanel]) {
-    const bills = panel.getByRole("region", { name: "Финансовые записи HTX", exact: true });
-    await expect(bills.getByText(/Срок разрешённого периода чтения финансовых записей истёк/)).toBeVisible({ timeout: 12_000 });
+    const bills = panel.getByRole("region", { name: "HTX financial records", exact: true });
+    await expect(bills.getByText(/The authorized financial records read window has expired/)).toBeVisible({ timeout: 12_000 });
     await expect(bills.getByRole("table")).toHaveCount(0);
-    await expect(panel.getByText("Капитал счёта (USD)")).toBeVisible();
+    await expect(panel.getByText("Account equity (USD)")).toBeVisible();
   }
   streamFailed = true;
   await expect(
@@ -589,11 +589,11 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await expect(adminPanel.getByText("BTC · BTC-USDT", { exact: true })).toHaveCount(0);
   await expect(tenantPanel.getByRole("region", { name: "HTX futures snapshot" })).toHaveCount(0);
   await expect(adminPanel.getByRole("region", { name: "HTX futures snapshot" })).toHaveCount(0);
-  await expect(tenantPanel.getByText(/Полученный объём одной SL-заявки/)).toHaveCount(0);
-  await expect(adminPanel.getByText(/Полученный объём одной SL-заявки/)).toHaveCount(0);
+  await expect(tenantPanel.getByText(/Received quantity of one SL order/)).toHaveCount(0);
+  await expect(adminPanel.getByText(/Received quantity of one SL order/)).toHaveCount(0);
 
-  await expect(tenantPanel.getByText("HTX · счёт account-a · UID 9988776655")).toHaveCount(0);
-  await expect(adminPanel.getByText("HTX · счёт account-a · UID 9988776655")).toHaveCount(0);
+  await expect(tenantPanel.getByText("HTX · account account-a · UID 9988776655")).toHaveCount(0);
+  await expect(adminPanel.getByText("HTX · account account-a · UID 9988776655")).toHaveCount(0);
 
   // Restore the local fixture after the revocation case, then capture the mounted
   // Spot/Futures cabinet and Admin index at desktop and mobile widths.
@@ -607,12 +607,12 @@ test("mounted Admin and tenant update the same observation automatically and cle
     exact: true,
   });
   await expect(restoredTenantPanel.getByText(observation().observationId)).toBeVisible();
-  await expect(restoredTenantPanel.getByRole("region", { name: "Спот" })).toBeVisible();
-  await expect(restoredTenantPanel.getByRole("region", { name: "Фьючерсы" })).toBeVisible();
-  await expect(restoredTenantPanel.getByText("Капитал счёта (USD)")).toBeVisible();
-  await expect(restoredTenantPanel.getByText("Стоп: цена 59000; объём 1 контр.")).toBeVisible();
-  await expect(restoredTenantPanel.getByText("Цель: цена 62000; объём 1 контр.")).toBeVisible();
-  await restoredTenantPanel.getByRole("heading", { name: "Полученные стоп-заявки и цели", exact: true })
+  await expect(restoredTenantPanel.getByRole("region", { name: "Spot" })).toBeVisible();
+  await expect(restoredTenantPanel.getByRole("region", { name: "Futures" })).toBeVisible();
+  await expect(restoredTenantPanel.getByText("Account equity (USD)")).toBeVisible();
+  await expect(restoredTenantPanel.getByText("Stop: price 59000; quantity 1 contracts")).toBeVisible();
+  await expect(restoredTenantPanel.getByText("Target: price 62000; quantity 1 contracts")).toBeVisible();
+  await restoredTenantPanel.getByRole("heading", { name: "Received stop orders and targets", exact: true })
     .locator("..").screenshot({ path: testInfo.outputPath("stop-evidence-desktop.png") });
   await restoredTenantPanel.getByRole("region", { name: "HTX futures snapshot" }).screenshot({
     path: testInfo.outputPath("htx-v5-desktop.png"),
@@ -626,11 +626,11 @@ test("mounted Admin and tenant update the same observation automatically and cle
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await restoredTenantPanel.getByRole("region", { name: "Финансовые записи HTX", exact: true }).screenshot({ path: testInfo.outputPath("bills-mobile.png") });
-  await restoredTenantPanel.getByRole("heading", { name: "Полученные стоп-заявки и цели", exact: true })
+  await restoredTenantPanel.getByRole("region", { name: "HTX financial records", exact: true }).screenshot({ path: testInfo.outputPath("bills-mobile.png") });
+  await restoredTenantPanel.getByRole("heading", { name: "Received stop orders and targets", exact: true })
     .locator("..").screenshot({ path: testInfo.outputPath("stop-evidence-mobile.png") });
   await restoredTenantPanel
-    .getByRole("heading", { name: "Фьючерсы · маржа, позиции и заявки", exact: true })
+    .getByRole("heading", { name: "Futures · margin, positions and orders", exact: true })
     .scrollIntoViewIfNeeded();
   await page.screenshot({
     path: "test-results/account-observation-cabinet-mobile.png",
@@ -660,14 +660,14 @@ test("mounted Admin and tenant update the same observation automatically and cle
   await admin.goto("/admin/account-observation");
   const adminIndex = admin.getByTestId("admin-connected-accounts");
   await expect(
-    adminIndex.getByRole("columnheader", { name: "Спот USDT · доступно" }),
+    adminIndex.getByRole("columnheader", { name: "Spot USDT · available" }),
   ).toBeVisible();
   await expect(adminIndex.getByRole("columnheader", { name: "UID HTX" })).toBeVisible();
   await expect(adminIndex.getByText("9988776655", { exact: true })).toBeVisible();
-  await expect(adminIndex.getByRole("columnheader", { name: "Фьючерсы · USD" })).toBeVisible();
-  await expect(adminIndex.getByText("Капитал HTX: 1000.25 USD")).toBeVisible();
-  await expect(adminIndex.getByText("Доступная маржа: 997.25 USD")).toBeVisible();
-  await expect(adminIndex.getByText("Нереализованный результат HTX: -0.25 USD")).toBeVisible();
+  await expect(adminIndex.getByRole("columnheader", { name: "Futures · USD" })).toBeVisible();
+  await expect(adminIndex.getByText("HTX equity: 1000.25 USD")).toBeVisible();
+  await expect(adminIndex.getByText("Available margin: 997.25 USD")).toBeVisible();
+  await expect(adminIndex.getByText("HTX unrealized result: -0.25 USD")).toBeVisible();
   await admin.screenshot({
     path: "test-results/account-observation-admin-desktop.png",
     fullPage: true,
@@ -678,47 +678,47 @@ test("mounted Admin and tenant update the same observation automatically and cle
     const scroller = table.parentElement;
     if (scroller) scroller.scrollLeft = scroller.scrollWidth;
   });
-  await expect(adminIndex.getByText("Капитал HTX: 1000.25 USD")).toBeVisible();
+  await expect(adminIndex.getByText("HTX equity: 1000.25 USD")).toBeVisible();
   await admin.screenshot({
     path: "test-results/account-observation-admin-mobile.png",
   });
   await admin.goto("/admin/accounts");
   const accountsObservationLink = admin.getByRole("link", {
-    name: "Спот и фьючерсы подключённых счетов",
+    name: "Spot and futures for connected accounts",
   });
   await expect(accountsObservationLink).toBeVisible();
   await accountsObservationLink.click();
   await expect(admin.getByTestId("admin-connected-accounts")).toBeVisible();
-  const adminNav = admin.getByRole("navigation", { name: "Консоль администратора AI-TRADER" });
-  await expect(adminNav.getByRole("link", { name: "Счета", exact: true })).toHaveAttribute(
+  const adminNav = admin.getByRole("navigation", { name: "AI-TRADER admin console" });
+  await expect(adminNav.getByRole("link", { name: "Accounts", exact: true })).toHaveAttribute(
     "aria-current",
     "page",
   );
-  await expect(adminNav.getByRole("link", { name: "Обзор", exact: true })).not.toHaveAttribute(
+  await expect(adminNav.getByRole("link", { name: "Overview", exact: true })).not.toHaveAttribute(
     "aria-current",
     "page",
   );
-  await expect(admin.getByText("Капитал HTX: 1000.25 USD")).toBeVisible();
+  await expect(admin.getByText("HTX equity: 1000.25 USD")).toBeVisible();
   directoryDenied = true;
   await admin.clock.fastForward(60_000);
-  await expect(admin.getByText("Доступ отозван. Данные счетов очищены.")).toBeVisible();
+  await expect(admin.getByText("Access revoked. Account data cleared.")).toBeVisible();
   await expect(admin.getByTestId("admin-connected-accounts")).toHaveCount(0);
   await expect(admin.getByText("Local demo cabinet", { exact: true })).toHaveCount(0);
-  await expect(admin.getByText("Капитал HTX: 1000.25 USD")).toHaveCount(0);
+  await expect(admin.getByText("HTX equity: 1000.25 USD")).toHaveCount(0);
   await expect(admin.getByText("9988776655", { exact: true })).toHaveCount(0);
   directoryDenied = false;
   await admin.clock.fastForward(60_000);
   await expect(admin.getByTestId("admin-connected-accounts")).toBeVisible();
-  await expect(admin.getByText("Капитал HTX: 1000.25 USD")).toBeVisible();
+  await expect(admin.getByText("HTX equity: 1000.25 USD")).toBeVisible();
   await expect(admin.getByText("9988776655", { exact: true })).toBeVisible();
-  await expect(admin.getByText("Доступ отозван. Данные счетов очищены.")).toHaveCount(0);
+  await expect(admin.getByText("Access revoked. Account data cleared.")).toHaveCount(0);
   await admin.close();
   expect(traderWrites).toEqual([]);
 });
 
 test("account observation admin page does not expose the form anonymously", async ({ page }) => {
   await page.goto("/admin/account-observation");
-  await expect(page.getByRole("heading", { name: "Счёт HTX" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "HTX account" })).toHaveCount(0);
   await expect(page.getByLabel("Credential record ID (not an API key)")).toHaveCount(0);
 });
 

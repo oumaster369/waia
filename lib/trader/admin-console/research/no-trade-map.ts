@@ -9,11 +9,11 @@ import { miCoreReasonCodes } from "@/lib/trader/intelligence/mi-core.types";
 import { universalTerminalReasonCodes } from "@/lib/trader/intelligence/terminal-reason/universal-terminal-reason";
 
 export const NO_TRADE_CATEGORIES = [
-  "нет экономического преимущества",
-  "не хватает evidence",
-  "вето Risk",
-  "ограничения runtime",
-  "конфликт или неизвестность предыдущего исполнения",
+  "no economic edge",
+  "insufficient evidence",
+  "Risk veto",
+  "runtime restrictions",
+  "conflict or unknown prior execution",
 ] as const;
 
 export type NoTradeCategory = (typeof NO_TRADE_CATEGORIES)[number];
@@ -101,20 +101,20 @@ export function knownNoTradeCodes(): readonly string[] {
   ];
 }
 
-export function noTradeCategory(code: string): NoTradeCategory | `Прочее: ${string}` | null {
+export function noTradeCategory(code: string): NoTradeCategory | `Other: ${string}` | null {
   if (NOT_A_REFUSAL.has(code)) return null;
-  if (EVIDENCE.has(code)) return "не хватает evidence";
-  if (ECONOMIC.has(code)) return "нет экономического преимущества";
-  if (RISK.has(code)) return "вето Risk";
-  if (RUNTIME.has(code)) return "ограничения runtime";
-  if (CONFLICT.has(code)) return "конфликт или неизвестность предыдущего исполнения";
-  return `Прочее: ${code}`;
+  if (EVIDENCE.has(code)) return "insufficient evidence";
+  if (ECONOMIC.has(code)) return "no economic edge";
+  if (RISK.has(code)) return "Risk veto";
+  if (RUNTIME.has(code)) return "runtime restrictions";
+  if (CONFLICT.has(code)) return "conflict or unknown prior execution";
+  return `Other: ${code}`;
 }
 
 /** A justified no-trade outcome is not an incident. */
 export function noTradeEntersIncidentQueue(code: string): boolean {
   const category = noTradeCategory(code);
   if (category == null) return false;
-  if (category.startsWith("Прочее:")) return false;
+  if (category.startsWith("Other:")) return false;
   return false;
 }

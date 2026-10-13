@@ -12,7 +12,7 @@ afterEach(() => {
 describe("admin console chrome", () => {
   it("does not call a USDT quote BTC/USD", () => {
     render(<MarketStrip />);
-    expect(screen.getByText(/Рынок сейчас/)).toBeInTheDocument();
+    expect(screen.getByText(/Market now/)).toBeInTheDocument();
     expect(screen.queryByText(/BTC\/USD(?!T)/)).not.toBeInTheDocument();
     render(<MarketStrip quote={{ symbol: "BTC", currency: "USDT", price: "1" }} />);
     expect(screen.getByText(/BTC\/USDT/)).toBeInTheDocument();
@@ -25,11 +25,11 @@ describe("admin console chrome", () => {
       vi.fn(() => new Promise(() => undefined)),
     );
     render(<StatusBar />);
-    expect(screen.getByText(/p95: нет измерения/)).toBeInTheDocument();
+    expect(screen.getByText(/p95: no measurement/)).toBeInTheDocument();
     render(
       <AssistantPanel enabled={false} answers={[{ id: "orders", title: "Рабочие ордера" }]} />,
     );
-    expect(screen.getByText(/Быстрые ответы работают/)).toBeInTheDocument();
+    expect(screen.getByText(/Quick answers work/)).toBeInTheDocument();
     expect(screen.getByText("Рабочие ордера")).toBeInTheDocument();
   });
 });

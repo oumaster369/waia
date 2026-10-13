@@ -43,8 +43,8 @@ export function mergeStrategyCatalog(
       displayName: trade.strategyId,
       source: "trades",
       reason: knownId
-        ? "версия есть в сделках и отсутствует в реестре"
-        : "стратегия есть в сделках и отсутствует в реестре",
+        ? "version present in trades but absent from the registry"
+        : "strategy present in trades but absent from the registry",
       returnPct: { state: "unavailable", reason: "RETURN_METHOD_NOT_RATIFIED" },
     });
   }

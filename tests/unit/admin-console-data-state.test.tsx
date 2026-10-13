@@ -12,11 +12,11 @@ describe("admin console data state", () => {
       unmount();
     }
     render(<DataState state="unavailable" reason="POSTGRES_REQUIRED" />);
-    expect(screen.getByText(/Нужен Postgres/)).toBeInTheDocument();
+    expect(screen.getByText(/Postgres is required/)).toBeInTheDocument();
     const { unmount } = render(
       <DataState state="unavailable" reason="ADMIN_CONSOLE_SCHEMA_NOT_APPLIED" />,
     );
-    expect(screen.getByText(/Появится после применения схемы консоли/)).toBeInTheDocument();
+    expect(screen.getByText(/Available after the console schema is applied/)).toBeInTheDocument();
     unmount();
   });
 });

@@ -25,15 +25,15 @@ describe("saved views use explicit collection revisions", () => {
     vi.stubGlobal("fetch", fetcher);
     render(<SavedViews />);
     expect(fetcher).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Представления" }));
-    fireEvent.change(screen.getByLabelText("Название представления"), {
+    fireEvent.click(screen.getByRole("button", { name: "Views" }));
+    fireEvent.change(screen.getByLabelText("View name"), {
       target: { value: "Деньги А" },
     });
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Сохранить текущий вид" })).toBeEnabled(),
+      expect(screen.getByRole("button", { name: "Save current view" })).toBeEnabled(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Сохранить текущий вид" }));
-    await screen.findByText(/Список изменился/);
+    fireEvent.click(screen.getByRole("button", { name: "Save current view" }));
+    await screen.findByText(/The list changed/);
     expect(fetcher).toHaveBeenCalledTimes(3);
     const first = JSON.parse(fetcher.mock.calls[1][1].body);
     expect(first).toMatchObject({
@@ -41,8 +41,8 @@ describe("saved views use explicit collection revisions", () => {
       section: "accounts",
       state: { query: "organization_id=org-a&currency=USD&mode=live&tab=attention" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Сохранить текущий вид" }));
-    await screen.findByText("Представление сохранено.");
+    fireEvent.click(screen.getByRole("button", { name: "Save current view" }));
+    await screen.findByText("View saved.");
     expect(JSON.parse(fetcher.mock.calls[3][1].body).expectedRevision).toBe("r2");
   });
 });

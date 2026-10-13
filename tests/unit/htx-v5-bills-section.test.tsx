@@ -62,7 +62,7 @@ describe("HtxV5BillsSection", () => {
       ],
     });
 
-    expect(screen.getByText(/частичные данные · полнота неизвестна/i)).toBeInTheDocument();
+    expect(screen.getByText(/partial data · completeness unknown/i)).toBeInTheDocument();
     expect(screen.getByText(/\[.* UTC, .* UTC\)/)).toBeInTheDocument();
     expect(screen.getByText(/2027-01-15 08:00:00\.000 UTC/i)).toBeInTheDocument();
     const table = screen.getByRole("table");
@@ -72,29 +72,29 @@ describe("HtxV5BillsSection", () => {
     expect(within(table).getByText("USD")).toBeInTheDocument();
     expect(within(table).getByText("-0.000000000000000007 USDT")).toBeInTheDocument();
     expect(within(table).getByText("1.25 USD")).toBeInTheDocument();
-    expect(screen.getByText(/не полная история, не итог за день/i)).toBeInTheDocument();
-    expect(screen.queryByText(/дневная прибыль|итог PnL|чистый результат/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/not complete history, a daily result/i)).toBeInTheDocument();
+    expect(screen.queryByText(/daily profit|total PnL|net result/i)).not.toBeInTheDocument();
   });
 
   it("explains that an empty successful bounded query is not zero fees or PnL", () => {
     renderSection(base);
-    expect(screen.getByText(/В этом ограниченном запросе записи не получены/i)).toBeInTheDocument();
-    expect(screen.getByText(/не означает нулевые комиссии, выплаты или прибыль/i)).toBeInTheDocument();
-    expect(screen.getByText(/получено записей \/ страниц/i)).toBeInTheDocument();
+    expect(screen.getByText(/No records were received in this bounded request/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not mean zero fees, payments or profit/i)).toBeInTheDocument();
+    expect(screen.getByText(/Received records \/ pages/i)).toBeInTheDocument();
     expect(screen.getByText("0 / 1")).toBeInTheDocument();
   });
 
   it("shows an error without substituting numeric values", () => {
     renderSection({ ...base, status: "ERROR", error: "READ_FAILED", values: null, groups: null, pageScope: null });
-    expect(screen.getByRole("alert")).toHaveTextContent("Не удалось прочитать финансовые записи.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Financial records could not be read.");
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.queryByText(/0 ₽|0 USD|0 USDT|0\.00/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/записей \/ страниц/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/records \/ pages/i)).not.toBeInTheDocument();
   });
 
   it.each([
-    ["SCOPE_EXPIRED", /Срок разрешённого периода чтения.*истёк/i],
-    ["SCOPE_NOT_YET_VALID", /ещё не начался/i],
+    ["SCOPE_EXPIRED", /authorized financial records read window.*expired/i],
+    ["SCOPE_NOT_YET_VALID", /not started yet/i],
   ] as const)("explains optional-scope unavailability: %s", (reason, copy) => {
     renderSection({
       ...base,
@@ -110,22 +110,22 @@ describe("HtxV5BillsSection", () => {
       pageScope: null,
     });
     expect(screen.getByRole("status")).toHaveTextContent(copy);
-    expect(screen.getByText(/Обновление баланса продолжается/i)).toBeInTheDocument();
+    expect(screen.getByText(/Balance updates continue/i)).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
-    expect(screen.queryByText(/записей \/ страниц/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/records \/ pages/i)).not.toBeInTheDocument();
   });
 
   it("labels inherited and age-based observations stale without claiming currentness", () => {
     const staleAt = now - 700_000;
     renderSection({ ...base, readCompletedAtMs: staleAt }, false, now);
-    expect(screen.getByRole("status")).toHaveTextContent(/устарели, их актуальность не подтверждена/i);
-    expect(screen.queryByText(/^актуально$/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/stale and its freshness is not confirmed/i);
+    expect(screen.queryByText(/^current$/i)).not.toBeInTheDocument();
   });
 
   it("marks absent configuration as not enabled", () => {
     renderSection(null);
-    expect(screen.getByText("не настроено")).toBeInTheDocument();
-    expect(screen.getByText("Чтение финансовых записей не настроено.")).toBeInTheDocument();
+    expect(screen.getByText("not configured")).toBeInTheDocument();
+    expect(screen.getByText("Financial records reading is not configured.")).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 });

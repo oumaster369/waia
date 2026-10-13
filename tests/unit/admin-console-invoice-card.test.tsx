@@ -7,7 +7,7 @@ describe("admin console invoice card", () => {
   it("starts with every attestation clear and enables approval only after all six", () => {
     const onApprove = vi.fn();
     render(<InvoiceAttestations onApprove={onApprove} />);
-    const button = screen.getByRole("button", { name: "Подтвердить выпуск" });
+    const button = screen.getByRole("button", { name: "Confirm issuance" });
     expect(button).toBeDisabled();
     for (const box of screen.getAllByRole("checkbox")) fireEvent.click(box);
     expect(button).toBeEnabled();

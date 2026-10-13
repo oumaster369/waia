@@ -98,7 +98,8 @@ describe("admin read lifecycle", () => {
         payload: {},
       }),
     );
-    expect(screen.getByRole("alert").textContent).toContain("Доступ к консоли отозван");
+    expect(screen.getByRole("alert").textContent).toContain("Console access revoked");
+    expect(screen.getByRole("alert")).toHaveAttribute("lang", "en");
     expect(screen.queryByText("private controls")).toBeNull();
     expect(queryClient!.getQueryCache().getAll()).toHaveLength(0);
     expect(FakeSource.instances[0].closed).toBe(true);

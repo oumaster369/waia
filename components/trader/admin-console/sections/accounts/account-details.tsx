@@ -38,12 +38,12 @@ type Detail = {
   liveEnable: string | null;
 };
 const TABS = [
-  ["portfolio", "Портфель"],
-  ["orders", "Ордера и сделки"],
-  ["strategies", "Стратегии"],
-  ["risk", "Риск и Guardian"],
-  ["billing", "Биллинг"],
-  ["events", "События"],
+  ["portfolio", "Portfolio"],
+  ["orders", "Orders and trades"],
+  ["strategies", "Strategies"],
+  ["risk", "Risk and Guardian"],
+  ["billing", "Billing"],
+  ["events", "Events"],
 ] as const;
 export function AccountDetails({ financeRevision }: { financeRevision?: string }) {
   const context = useAdminReadContext(),
@@ -60,9 +60,9 @@ export function AccountDetails({ financeRevision }: { financeRevision?: string }
       open={!!id}
       onClose={() => context.update({ sel: null, detail: null, nested: null, order: null })}
       title={
-        finance ? `${finance.venue.toUpperCase()} · ${finance.exchangeAccountId}` : "Биржевой счёт"
+        finance ? `${finance.venue.toUpperCase()} · ${finance.exchangeAccountId}` : "Exchange account"
       }
-      description="Доказательства портфеля и его ограничений. Состояние потока не является разрешением торговли."
+      description="Evidence of the portfolio and its limitations. Stream state is not trading permission."
       wide
     >
       {read.loading ? (
@@ -71,7 +71,7 @@ export function AccountDetails({ financeRevision }: { financeRevision?: string }
         <DataState state="unavailable" reason={read.reason} />
       ) : data && finance ? (
         <div className="space-y-5">
-          <div className="flex flex-wrap gap-2" aria-label="Разделы карточки счёта">
+          <div className="flex flex-wrap gap-2" aria-label="Account detail sections">
             {TABS.map(([key, label]) => (
               <button
                 type="button"
@@ -91,7 +91,7 @@ export function AccountDetails({ financeRevision }: { financeRevision?: string }
             {data.facets.map((facet) => (
               <div key={facet.id} className="border-waia-divider rounded-lg border p-3">
                 <p className="text-waia-fg-muted text-[11px]">{facet.label}</p>
-                <p className="mt-2 text-xs font-medium">{facet.value ?? "Не установлено"}</p>
+                <p className="mt-2 text-xs font-medium">{facet.value ?? "Not established"}</p>
                 {facet.reason ? <DataState state="unavailable" reason={facet.reason} /> : null}
               </div>
             ))}
@@ -118,32 +118,32 @@ export function AccountDetails({ financeRevision }: { financeRevision?: string }
               ) : tab === "risk" ? (
                 <div className="space-y-5">
                   <ConsolePanel
-                    title="Сохранённое состояние Risk"
-                    note="Внутренний резерв показан для проверки лимитов и не вычитается второй раз из свободного остатка."
+                    title="Saved Risk state"
+                    note="The internal reserve is shown for limit checks and is not deducted from the available balance a second time."
                   >
                     {data.risk.length ? (
                       <ConsoleTable
                         rows={data.risk}
                         rowKey={(r) => r.account_id!}
-                        caption="Risk счёта"
+                        caption="Account Risk"
                         columns={[
                           {
-                            title: "Положение",
+                            title: "Posture",
                             render: (r) => <ConsoleBadge>{r.posture}</ConsoleBadge>,
                           },
-                          { title: "Сверка", render: (r) => r.reconciliation_status },
+                          { title: "Reconciliation", render: (r) => r.reconciliation_status },
                           {
-                            title: "Резерв Risk",
+                            title: "Risk reserve",
                             render: (r) =>
                               formatAdminMoney(r.outstanding_reservation_notional!, r.quote_asset!),
                           },
                           {
-                            title: "Предел",
+                            title: "Cap",
                             render: (r) =>
                               formatAdminMoney(r.exposure_limit_notional!, r.quote_asset!),
                           },
                           {
-                            title: "Дата",
+                            title: "Date",
                             render: (r) => <EvidenceTime at={r.updated_at} label="" />,
                           },
                         ]}
@@ -187,10 +187,10 @@ function AccountPortfolio({
     <div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-2">
         {[
-          ["Общий капитал", finance.equity],
-          ["Свободно", finance.freeQuote],
-          ["В активах", finance.holdingsValue],
-          ["Резерв в ордерах", finance.lockedQuote],
+          ["Total equity", finance.equity],
+          ["Available", finance.freeQuote],
+          ["In assets", finance.holdingsValue],
+          ["Reserved in orders", finance.lockedQuote],
         ].map(([label, amount]) => (
           <div key={label} className="border-waia-divider rounded-xl border p-4">
             <p className="text-waia-fg-muted text-xs">{label}</p>
@@ -199,13 +199,13 @@ function AccountPortfolio({
         ))}
       </div>
       <div className="flex flex-wrap gap-3 text-xs">
-        <ConsoleBadge>Портфель: Live</ConsoleBadge>
+        <ConsoleBadge>Portfolio: Live</ConsoleBadge>
         <ConsoleBadge>
-          Активность периода:{" "}
-          {identity?.activity === "live" ? "есть ордера Live" : "нет ордеров Live"}
+          Period activity:{" "}
+          {identity?.activity === "live" ? "Live orders present" : "no Live orders"}
         </ConsoleBadge>
         <ConsoleBadge>
-          Deployment: {identity?.deployment === "live" ? "подтверждён" : "не подтверждён"}
+          Deployment: {identity?.deployment === "live" ? "confirmed" : "unconfirmed"}
         </ConsoleBadge>
       </div>
       <DataState state="unavailable" reason="STRATEGY_ACCOUNT_DEPLOYMENT_NOT_PERSISTED" />
@@ -224,41 +224,41 @@ function AccountEvents({ data }: { data: Detail }) {
   return (
     <div className="space-y-5">
       <ConsolePanel
-        title="Ключи подключения"
-        note="История добавления и отзыва подключений к одному биржевому счёту."
+        title="Connection keys"
+        note="History of adding and revoking connections to one exchange account."
       >
         <ConsoleTable
           rows={data.credentials}
           rowKey={(r) => r.id!}
-          caption="История ключей счёта"
+          caption="Account key history"
           columns={[
-            { title: "Состояние", render: (r) => (r.status === "active" ? "Активен" : "Отозван") },
-            { title: "Добавлен", render: (r) => <EvidenceTime at={r.created_at} label="" /> },
+            { title: "State", render: (r) => (r.status === "active" ? "Active" : "Revoked") },
+            { title: "Added", render: (r) => <EvidenceTime at={r.created_at} label="" /> },
             {
-              title: "Отозван",
+              title: "Revoked",
               render: (r) =>
-                r.revoked_at ? <EvidenceTime at={r.revoked_at} label="" /> : "Не отозван",
+                r.revoked_at ? <EvidenceTime at={r.revoked_at} label="" /> : "Not revoked",
             },
           ]}
         />
       </ConsolePanel>
-      <ConsolePanel title="События счёта">
+      <ConsolePanel title="Account events">
         <ConsoleTable
           rows={data.events}
           rowKey={(r) => r.id!}
-          caption="События счёта"
+          caption="Account events"
           columns={[
             {
-              title: "Источник",
+              title: "Source",
               render: (r) =>
                 r.kind === "observation"
-                  ? "Наблюдение биржи"
+                  ? "Exchange observation"
                   : r.kind === "credential"
-                    ? "Подключение"
-                    : "Состояние счёта",
+                    ? "Connecting"
+                    : "Account state",
             },
-            { title: "Факт", render: (r) => r.state },
-            { title: "Дата", render: (r) => <EvidenceTime at={r.at} label="" /> },
+            { title: "Fact", render: (r) => r.state },
+            { title: "Date", render: (r) => <EvidenceTime at={r.at} label="" /> },
           ]}
         />
       </ConsolePanel>
@@ -275,15 +275,15 @@ function AccountStrategies() {
         <DataState state="not_applicable" reason={read.envelope.data.scopeReason} />
       ) : null}
       {read.envelope?.data.items ? (
-        <ConsolePanel title="Стратегии и версии">
+        <ConsolePanel title="Strategies and versions">
           <ConsoleTable
             rows={read.envelope.data.items}
             rowKey={(r) => `${r.strategyId}:${r.version}`}
-            caption="Стратегии счёта"
+            caption="Account strategies"
             columns={[
-              { title: "Стратегия", render: (r) => r.displayName },
-              { title: "Версия", render: (r) => r.version },
-              { title: "Факт", render: (r) => r.activityLabel },
+              { title: "Strategy", render: (r) => r.displayName },
+              { title: "Version", render: (r) => r.version },
+              { title: "Fact", render: (r) => r.activityLabel },
             ]}
           />
         </ConsolePanel>

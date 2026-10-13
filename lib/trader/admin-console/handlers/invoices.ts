@@ -60,7 +60,7 @@ export async function handleAdminConsoleInvoicesGet(
         adminEnvelope({
           data: {
             ...result,
-            partialPayment: "частичная оплата не поддерживается (DEE-ADR-A)",
+            partialPayment: "partial payment unsupported (DEE-ADR-A)",
           },
           financeRevision: result.financeRevision,
           scope: adminScopeFromQuery(parsed.query),
@@ -180,7 +180,7 @@ export async function readConsoleInvoiceDetail(
         chain,
         evidence,
         ...displayOf(row, now, graceMs),
-        tradesNote: "оперативная выборка, не база комиссии",
+        tradesNote: "operational selection, not the fee basis",
       },
       scope: adminScopeFromQuery(query),
       mode: query.mode,

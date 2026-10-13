@@ -48,12 +48,12 @@ type DiagnosticItem = {
   route: string | null;
 };
 const LABELS: Record<IncidentStatus, string> = {
-  new: "Новый",
-  investigating: "Разбираемся",
-  fix_prepared: "Исправление подготовлено",
-  deployed_verifying: "Проверяем на проде",
-  resolved: "Исправлен",
-  regressed: "Возник повторно",
+  new: "New",
+  investigating: "Investigating",
+  fix_prepared: "Fix prepared",
+  deployed_verifying: "Verifying in production",
+  resolved: "Resolved",
+  regressed: "Regressed",
 };
 export default function AdminErrorsPage() {
   const context = useAdminReadContext();
@@ -76,17 +76,17 @@ function DiagnosticEvents() {
       {!items && !reason ? <ConsoleLoading /> : null}
       {items ? (
         <ConsolePanel
-          title="Поток ошибок"
-          note="Сохранённые диагностические события за выбранный период. Секреты и содержимое внутренней памяти не выводятся."
+          title="Error stream"
+          note="Saved diagnostic events for the selected period. Secrets and internal memory contents are not displayed."
         >
           <ConsoleTable
             rows={items}
-            caption="Диагностические события"
+            caption="Diagnostic events"
             rowKey={(row) => row.id}
             columns={[
-              { title: "Когда", render: (row) => <EvidenceTime at={row.occurredAt} label="" /> },
+              { title: "When", render: (row) => <EvidenceTime at={row.occurredAt} label="" /> },
               {
-                title: "Источник",
+                title: "Source",
                 render: (row) => (
                   <div>
                     <p>{row.service}</p>
@@ -95,7 +95,7 @@ function DiagnosticEvents() {
                 ),
               },
               {
-                title: "Уровень",
+                title: "Level",
                 render: (row) => (
                   <ConsoleBadge tone={row.severity === "warning" ? "warning" : "danger"}>
                     {row.severity}
@@ -103,7 +103,7 @@ function DiagnosticEvents() {
                 ),
               },
               {
-                title: "Сообщение",
+                title: "Message",
                 render: (row) => <p className="max-w-xl leading-6 break-words">{row.message}</p>,
               },
             ]}
@@ -192,13 +192,13 @@ function Incidents({ tab }: { tab: string }) {
       }
       setMessage(
         response.status === 409
-          ? "Инцидент изменился. Проверьте свежий статус перед повтором."
+          ? "The incident changed. Check the latest status before retrying."
           : response.ok
-            ? "Изменение записано. Обновляем подтверждённое состояние."
-            : "Изменение не подтверждено. Проверьте состояние перед повтором.",
+            ? "Change recorded. Refreshing the confirmed state."
+            : "Change is unconfirmed. Check the state before retrying.",
       );
     } catch {
-      setMessage("Связь прервалась. Проверьте актуальное состояние перед повтором.");
+      setMessage("Connection interrupted. Check the current state before retrying.");
     } finally {
       setPending(false);
       inFlight.current = false;
@@ -219,16 +219,16 @@ function Incidents({ tab }: { tab: string }) {
       {!items && !reason ? <ConsoleLoading /> : null}
       {items ? (
         <ConsolePanel
-          title={tab === "resolved" ? "Подтверждённые исправления" : "Активные инциденты"}
-          note="Обоснованный NO_TRADE не является инцидентом. Скрытие уведомлений не меняет статус исправления."
+          title={tab === "resolved" ? "Confirmed fixes" : "Active incidents"}
+          note="A justified NO_TRADE is not an incident. Muting notifications does not change the fix status."
         >
           {items.length ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <caption className="sr-only">Инциденты</caption>
+                <caption className="sr-only">Incidents</caption>
                 <thead className="border-waia-divider text-waia-fg-muted border-b text-xs">
                   <tr>
-                    {["Инцидент", "Статус", "Повторений", "Последнее событие"].map((title) => (
+                    {["Incident", "Status", "Occurrences", "Last event"].map((title) => (
                       <th key={title} scope="col" className="px-5 py-3 font-medium">
                         {title}
                       </th>
@@ -280,7 +280,7 @@ function Incidents({ tab }: { tab: string }) {
                         </ConsoleBadge>
                         {item.mutedUntil ? (
                           <p className="text-waia-fg-muted mt-2 text-[10px]">
-                            Срок скрытия уведомлений: <EvidenceTime at={item.mutedUntil} label="" />
+                            Notifications muted until: <EvidenceTime at={item.mutedUntil} label="" />
                           </p>
                         ) : null}
                       </td>
@@ -297,8 +297,8 @@ function Incidents({ tab }: { tab: string }) {
             <ConsoleEmpty
               title={
                 tab === "resolved"
-                  ? "Подтверждённых исправлений пока нет"
-                  : "Активных инцидентов в этом охвате нет"
+                  ? "No confirmed fixes yet"
+                  : "No active incidents in this scope"
               }
             />
           )}
@@ -308,8 +308,8 @@ function Incidents({ tab }: { tab: string }) {
         open={Boolean(selectedId)}
         onClose={() => context.update({ sel: null })}
         dismissible={!pending}
-        title={selected?.title ?? "Инцидент"}
-        description="Каждое изменение статуса требует причины и доказательства и сохраняется в истории."
+        title={selected?.title ?? "Incident"}
+        description="Every status change requires a reason and evidence and is recorded in history."
       >
         {detail.loading ? <ConsoleLoading /> : null}
         {detail.reason ? <DataState state="unavailable" reason={detail.reason} /> : null}
@@ -317,10 +317,10 @@ function Incidents({ tab }: { tab: string }) {
           <div className="space-y-5">
             <div className="flex items-center justify-between">
               <ConsoleBadge>{LABELS[selected.status]}</ConsoleBadge>
-              <span className="text-waia-fg-muted text-xs">Версия {selected.stateVersion}</span>
+              <span className="text-waia-fg-muted text-xs">Version {selected.stateVersion}</span>
             </div>
             <p className="text-xs">
-              <EvidenceTime at={selected.lastSeenAt} label="Последнее событие" />
+              <EvidenceTime at={selected.lastSeenAt} label="Last event" />
             </p>
             {selected ? (
               <form
@@ -331,10 +331,10 @@ function Incidents({ tab }: { tab: string }) {
                 }}
               >
                 <p className="text-sm">
-                  Следующий статус: <strong>{next ? LABELS[next] : "Переход не требуется"}</strong>
+                  Next status: <strong>{next ? LABELS[next] : "No transition needed"}</strong>
                 </p>
                 <label className="grid gap-2 text-sm">
-                  Причина
+                  Reason
                   <textarea
                     required
                     disabled={pending}
@@ -348,7 +348,7 @@ function Incidents({ tab }: { tab: string }) {
                   />
                 </label>
                 <label className="grid gap-2 text-sm">
-                  Доказательство или ссылка
+                  Evidence or link
                   <textarea
                     required
                     disabled={pending}
@@ -369,14 +369,14 @@ function Incidents({ tab }: { tab: string }) {
                   className={controlClass}
                 >
                   {pending
-                    ? "Сохраняем…"
+                    ? "Saving…"
                     : next
-                      ? `Перевести: ${LABELS[next]}`
-                      : "Статус подтверждён"}
+                      ? `Set status: ${LABELS[next]}`
+                      : "Status confirmed"}
                 </button>
                 <div className="border-waia-divider grid gap-2 border-t pt-4">
                   <p className="text-waia-fg-muted text-xs">
-                    Уведомления можно скрыть отдельно. Статус и история инцидента сохраняются.
+                    Notifications can be muted separately. Incident status and history are preserved.
                   </p>
                   <button
                     type="button"
@@ -384,21 +384,21 @@ function Incidents({ tab }: { tab: string }) {
                     disabled={pending || draftFor !== identity || !note.trim() || !evidence.trim()}
                     onClick={() => void changeStatus(!notificationsMuted)}
                   >
-                    {notificationsMuted ? "Вернуть уведомления" : "Скрыть уведомления на час"}
+                    {notificationsMuted ? "Restore notifications" : "Mute notifications for one hour"}
                   </button>
                 </div>
               </form>
             ) : null}
-            <ConsolePanel title="История изменений">
+            <ConsolePanel title="Change history">
               <ConsoleTable
                 rows={detail.envelope?.data.history ?? []}
                 rowKey={(r) => r.id}
-                caption="История инцидента"
+                caption="Incident history"
                 columns={[
-                  { title: "Когда", render: (r) => <EvidenceTime at={r.at} label="" /> },
-                  { title: "Статус", render: (r) => LABELS[r.to as IncidentStatus] ?? r.to },
+                  { title: "When", render: (r) => <EvidenceTime at={r.at} label="" /> },
+                  { title: "Status", render: (r) => LABELS[r.to as IncidentStatus] ?? r.to },
                   {
-                    title: "Причина и доказательство",
+                    title: "Reason and evidence",
                     render: (r) => (
                       <div>
                         <p>{r.reason}</p>
@@ -409,15 +409,15 @@ function Incidents({ tab }: { tab: string }) {
                 ]}
               />
             </ConsolePanel>
-            <ConsolePanel title="Последние события">
+            <ConsolePanel title="Recent events">
               <ConsoleTable
                 rows={detail.envelope?.data.events ?? []}
                 rowKey={(r) => r.id}
-                caption="События инцидента"
+                caption="Incident events"
                 columns={[
-                  { title: "Когда", render: (r) => <EvidenceTime at={r.at} label="" /> },
+                  { title: "When", render: (r) => <EvidenceTime at={r.at} label="" /> },
                   {
-                    title: "Сообщение",
+                    title: "Message",
                     render: (r) => <p className="max-w-md break-words">{r.message}</p>,
                   },
                 ]}

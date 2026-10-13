@@ -20,6 +20,7 @@ describe("admin console shell", () => {
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
     }
     expect(screen.getByRole("navigation", { name: RU.navLabel })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: RU.navLabel }).closest("[lang]")).toHaveAttribute("lang", "en");
   });
 
   it("collapses the navigation and keeps the right slot", () => {
@@ -28,9 +29,9 @@ describe("admin console shell", () => {
         <p>content</p>
       </AdminConsoleShell>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Свернуть меню" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse menu" }));
     expect(screen.getByRole("navigation")).toHaveAttribute("data-collapsed", "true");
-    fireEvent.click(screen.getByRole("button", { name: "Помощник" }));
-    expect(screen.getByRole("complementary", { name: "Помощник" })).toHaveTextContent("помощник");
+    fireEvent.click(screen.getByRole("button", { name: "Assistant" }));
+    expect(screen.getByRole("complementary", { name: "Assistant" })).toHaveTextContent("помощник");
   });
 });

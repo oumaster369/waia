@@ -30,13 +30,13 @@ import {
 } from "@/components/trader/admin-console/sections/overview/overview-content";
 import type { AccountFinance } from "@/lib/trader/admin-console/read-models/account-finance";
 const TABS = [
-  ["summary", "Сводка"],
-  ["accounts", "Биржевые счета"],
-  ["results", "Результаты"],
-  ["invoices", "Счета на оплату"],
-  ["payments", "Платежи"],
-  ["periods", "Отчётные периоды"],
-  ["history", "История"],
+  ["summary", "Summary"],
+  ["accounts", "Exchange accounts"],
+  ["results", "Results"],
+  ["invoices", "Invoices"],
+  ["payments", "Payments"],
+  ["periods", "Reporting periods"],
+  ["history", "History"],
 ];
 export function ClientDetailsContent({ client }: { client: Client }) {
   const context = useAdminReadContext();
@@ -44,7 +44,7 @@ export function ClientDetailsContent({ client }: { client: Client }) {
     tab = TABS.some(([key]) => key === requested) ? requested! : "summary";
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap gap-2" aria-label="Разделы карточки клиента">
+      <div className="flex flex-wrap gap-2" aria-label="Client detail sections">
         {TABS.map(([key, label]) => (
           <button
             type="button"
@@ -62,21 +62,21 @@ export function ClientDetailsContent({ client }: { client: Client }) {
           <>
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
-                <p className="text-waia-fg-muted text-xs">Доступ</p>
+                <p className="text-waia-fg-muted text-xs">Access</p>
                 <p className="mt-2 text-sm">{client.access}</p>
               </div>
               <div>
-                <p className="text-waia-fg-muted text-xs">Подключён с</p>
+                <p className="text-waia-fg-muted text-xs">Connected since</p>
                 <p className="mt-2 text-sm">
                   {client.connectedSinceValue ? (
                     <EvidenceTime at={client.connectedSinceValue} label="" />
                   ) : (
-                    "Не установлена"
+                    "Not established"
                   )}
                 </p>
               </div>
               <div>
-                <p className="text-waia-fg-muted text-xs">Владелец</p>
+                <p className="text-waia-fg-muted text-xs">Owner</p>
                 <p className="mt-2 text-sm break-words">{client.ownerEmail}</p>
               </div>
             </div>
@@ -120,14 +120,14 @@ function ClientAccounts() {
     <div className="space-y-4">
       {read.reason ? <DataState state="unavailable" reason={read.reason} /> : null}
       {read.envelope?.data.items ? (
-        <ConsolePanel title="Биржевые счета клиента">
+        <ConsolePanel title="Client exchange accounts">
           <ConsoleTable
             rows={read.envelope.data.items}
             rowKey={(r) => r.id}
-            caption="Биржевые счета клиента"
+            caption="Client exchange accounts"
             columns={[
               {
-                title: "Счёт",
+                title: "Account",
                 render: (r) => (
                   <Link
                     className="underline underline-offset-4"
@@ -138,7 +138,7 @@ function ClientAccounts() {
                 ),
               },
               {
-                title: "Капитал",
+                title: "Equity",
                 align: "right",
                 render: (r) =>
                   r.equity === null ? (
@@ -147,8 +147,8 @@ function ClientAccounts() {
                     formatAdminMoney(r.equity, r.currency)
                   ),
               },
-              { title: "Ключей", render: (r) => String(r.credentialsCount) },
-              { title: "Наблюдение", render: (r) => <EvidenceTime at={r.observedAt} label="" /> },
+              { title: "Keys", render: (r) => String(r.credentialsCount) },
+              { title: "Observation", render: (r) => <EvidenceTime at={r.observedAt} label="" /> },
             ]}
           />
         </ConsolePanel>
@@ -157,12 +157,12 @@ function ClientAccounts() {
   );
 }
 const HISTORY_LABELS: Record<string, string> = {
-  CREDENTIAL_CREATED: "Добавлен ключ подключения",
-  CREDENTIAL_REVOKED: "Ключ отозван",
-  INVOICE_DRAFT: "Черновик счёта создан",
-  INVOICE_ISSUED: "Счёт создан · сейчас выпущен",
-  INVOICE_PAID: "Счёт создан · сейчас оплачен",
-  INVOICE_CANCELLED: "Счёт создан · сейчас отменён",
+  CREDENTIAL_CREATED: "Connection key added",
+  CREDENTIAL_REVOKED: "Key revoked",
+  INVOICE_DRAFT: "Invoice draft created",
+  INVOICE_ISSUED: "Invoice created · currently issued",
+  INVOICE_PAID: "Invoice created · currently paid",
+  INVOICE_CANCELLED: "Invoice created · currently cancelled",
 };
 function ClientHistory({ id }: { id: string }) {
   const read = useAdminRead<{
@@ -175,20 +175,20 @@ function ClientHistory({ id }: { id: string }) {
       {read.reason ? <DataState state="unavailable" reason={read.reason} /> : null}
       {read.envelope?.data.items ? (
         <ConsolePanel
-          title="Сохранённая история клиента"
-          note="События подключения и состояния. Для счетов показана дата создания и текущий сохранённый статус."
+          title="Saved client history"
+          note="Connection and state events. Invoices show the creation date and current saved status."
         >
           <ConsoleTable
             rows={read.envelope.data.items}
             rowKey={(r) => r.id}
-            caption="История клиента"
+            caption="Client history"
             columns={[
               {
-                title: "Факт",
+                title: "Fact",
                 render: (r) => <ConsoleBadge>{HISTORY_LABELS[r.type] ?? r.type}</ConsoleBadge>,
               },
-              { title: "Счёт", render: (r) => r.exchangeAccountId },
-              { title: "Дата", render: (r) => <EvidenceTime at={r.at} label="" /> },
+              { title: "Account", render: (r) => r.exchangeAccountId },
+              { title: "Date", render: (r) => <EvidenceTime at={r.at} label="" /> },
             ]}
           />
         </ConsolePanel>

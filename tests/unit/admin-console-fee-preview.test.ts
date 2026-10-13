@@ -19,7 +19,7 @@ describe("admin console fee preview", () => {
     });
     expect(compareDecimal(preview.artifact.performanceFee, "30")).toBe(0);
     expect(preview.artifact.billable).toBe(true);
-    expect(preview.label).toContain("предварительный расчёт, не счёт");
+    expect(preview.label).toContain("preliminary calculation, not an invoice");
   });
 
   it("says the invoice was not created when the fee is under the threshold", () => {
@@ -30,6 +30,6 @@ describe("admin console fee preview", () => {
       previousHighWaterMark: "1000",
     });
     expect(preview.artifact.billable).toBe(false);
-    expect(preview.label).toContain("ниже порога");
+    expect(preview.label).toContain("below threshold");
   });
 });

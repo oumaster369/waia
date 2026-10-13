@@ -25,27 +25,27 @@ export function PaperPortfolios() {
   if (read.loading) return <ConsoleLoading />;
   return (
     <ConsolePanel
-      title="Виртуальные портфели Paper"
-      note="Сохранённые paper-ордера и позиции. Реальные средства биржевых счетов сюда не входят; mock и исторические запуски исключены."
+      title="Virtual Paper portfolios"
+      note="Saved paper orders and positions. Real exchange account funds are excluded; mock and historical runs are excluded."
     >
       {read.reason ? <DataState state="unavailable" reason={read.reason} /> : null}
       {read.envelope?.data.items ? (
         <ConsoleTable
           rows={read.envelope.data.items}
           rowKey={(r) => r.id}
-          caption="Виртуальные портфели"
+          caption="Virtual portfolios"
           columns={[
             {
-              title: "Портфель",
+              title: "Portfolio",
               render: (r) => (
                 <div>
-                  <p>{r.accountKey ?? "Привязка счёта не сохранена"}</p>
+                  <p>{r.accountKey ?? "Account binding not saved"}</p>
                   <span className="text-waia-fg-muted text-xs break-all">{r.organizationId}</span>
                 </div>
               ),
             },
             {
-              title: "Позиции",
+              title: "Positions",
               render: (r) =>
                 r.positions === null ? (
                   <DataState
@@ -61,17 +61,17 @@ export function PaperPortfolios() {
                     ))}
                   </ul>
                 ) : (
-                  "Открытых позиций нет"
+                  "No open positions"
                 ),
             },
             {
-              title: "Капитал / свободно",
+              title: "Equity / available",
               render: () => (
                 <DataState state="unavailable" reason="PAPER_INITIAL_CASH_NOT_PERSISTED" />
               ),
             },
             {
-              title: "Ордера",
+              title: "Orders",
               render: (r) => (
                 <Link
                   className="text-waia-accent-cool underline"
@@ -79,11 +79,11 @@ export function PaperPortfolios() {
                     `/admin/orders?organization_id=${r.organizationId}&mode=paper&tab=all`,
                   )}
                 >
-                  {r.orderCount} · открыть
+                  {r.orderCount} · open
                 </Link>
               ),
             },
-            { title: "Обновлено", render: (r) => <EvidenceTime at={r.observedAt} label="" /> },
+            { title: "Updated", render: (r) => <EvidenceTime at={r.observedAt} label="" /> },
           ]}
         />
       ) : null}

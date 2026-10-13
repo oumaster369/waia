@@ -34,14 +34,14 @@ export function OrdersPanel({
   rows: readonly OrderRowView[];
   onSelect?: (id: string) => void;
 }) {
-  if (!rows.length) return <ConsoleEmpty title="Ордеров в выбранном охвате нет" />;
+  if (!rows.length) return <ConsoleEmpty title="No orders in the selected scope" />;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
-        <caption className="sr-only">Ордера</caption>
+        <caption className="sr-only">Orders</caption>
         <thead className="border-waia-divider text-waia-fg-muted border-b text-[11px]">
           <tr>
-            {["Инструмент", "Направление", "Количество / исполнено", "Статус", "Создан"].map(
+            {["Instrument", "Side", "Quantity / filled", "Status", "Created"].map(
               (title) => (
                 <th key={title} scope="col" className="px-5 py-3 font-medium">
                   {title}
@@ -78,10 +78,10 @@ export function OrdersPanel({
               </td>
               <td className="px-5 py-4">
                 {row.side === "buy"
-                  ? "Покупка"
+                  ? "Buy"
                   : row.side === "sell"
-                    ? "Продажа"
-                    : "Не установлено"}
+                    ? "Sell"
+                    : "Not established"}
               </td>
               <td className="px-5 py-4 tabular-nums">
                 {row.quantity ?? "—"} / {row.filledQuantity ?? "—"}

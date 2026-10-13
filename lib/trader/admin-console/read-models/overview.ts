@@ -157,7 +157,7 @@ export function buildOverview(
         times,
       }),
     },
-    coverageLabel: `По ${included.length} актуальным счетам из ${accounts.length}`,
+    coverageLabel: `Across ${included.length} current accounts out of ${accounts.length}`,
     included: included.length,
     total: accounts.length,
     lastKnownEstimate: stale.length === 0 ? null : sum(stale.map((account) => account.equity!)),

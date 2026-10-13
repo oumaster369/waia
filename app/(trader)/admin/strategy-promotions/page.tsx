@@ -28,26 +28,26 @@ type RecordView = {
 };
 type ReadView = { effective: RecordView | null; pending: RecordView | null };
 const labels: Record<string, string> = {
-  PENDING_CONFIRM: "Ожидает подтверждения",
-  COOLING_OFF: "Подтверждено, период ожидания",
-  EFFECTIVE: "Действует",
-  CANCELLED: "Отменено",
-  REVOKED: "Отозвано",
+  PENDING_CONFIRM: "Awaiting confirmation",
+  COOLING_OFF: "Confirmed, cooling-off period",
+  EFFECTIVE: "Effective",
+  CANCELLED: "Cancelled",
+  REVOKED: "Revoked",
 };
 const actions: Record<string, { label: string; effect: string }> = {
   confirm: {
-    label: "Подтвердить",
-    effect: "Подтвердить проверку доказательств и начать предусмотренный шлюзом период ожидания.",
+    label: "Confirm",
+    effect: "Confirm the evidence review and begin the cooling-off period required by the gate.",
   },
   "mark-effective": {
-    label: "Ввести в действие",
+    label: "Make effective",
     effect:
-      "Сделать это продвижение действующим после всех проверок и периода ожидания. Это отдельный шаг от разрешения Live.",
+      "Make this promotion effective after all checks and the cooling-off period. This is separate from Live permission.",
   },
-  cancel: { label: "Отменить запрос", effect: "Отменить выбранное незавершённое продвижение." },
+  cancel: { label: "Cancel request", effect: "Cancel the selected pending promotion." },
   demote: {
-    label: "Отозвать продвижение",
-    effect: "Отозвать действующее продвижение стратегии. Это не команда закрытия позиции.",
+    label: "Revoke promotion",
+    effect: "Revoke the effective strategy promotion. This is not a command to close a position.",
   },
 };
 export default function AdminStrategyPromotionsPage() {
@@ -63,15 +63,15 @@ export default function AdminStrategyPromotionsPage() {
         className="text-waia-accent-cool text-sm hover:underline"
         href={context.href("/admin/strategies")}
       >
-        ← Стратегии
+        ← Strategies
       </Link>
       <ConsolePanel
-        title="Управляемое продвижение"
-        note="Проверка доказательств → подтверждение → период ожидания → введение в действие. Квалификация и разрешение Live проверяются отдельно."
+        title="Governed promotion"
+        note="Evidence review → confirmation → cooling-off period → activation. Qualification and Live permission are checked separately."
       >
         <div className="space-y-4 p-5">
           <label className="block text-sm">
-            Стратегия
+            Strategy
             <select
               className={`${controlClass} ml-3 max-w-full`}
               value={strategy}
@@ -87,14 +87,14 @@ export default function AdminStrategyPromotionsPage() {
           {catalogue.reason ? <DataState state="unavailable" reason={catalogue.reason} /> : null}
           {!org ? (
             <p className="text-waia-fg-muted text-sm">
-              Выберите клиента в шапке, чтобы прочитать его состояние продвижения.
+              Select a client in the header to read its promotion state.
             </p>
           ) : context.params.get("exchange_account_id") ? (
             <button
               className={controlClass}
               onClick={() => context.update({ exchange_account_id: null })}
             >
-              Показать продвижения на уровне клиента
+              Show client-level promotions
             </button>
           ) : strategy && !catalogue.reason && catalogue.envelope ? (
             <PromotionWorkspace
@@ -104,7 +104,7 @@ export default function AdminStrategyPromotionsPage() {
               versions={items.filter((r) => r.strategyId === strategy).map((r) => r.version)}
             />
           ) : (
-            <p>Нет стратегий в каталоге.</p>
+            <p>No strategies in the catalog.</p>
           )}
         </div>
       </ConsolePanel>
@@ -208,17 +208,17 @@ function PromotionWorkspace({
       if (!alive.current) return;
       setMessage(
         res.ok
-          ? "Команда принята. Показано повторно прочитанное состояние."
+          ? "Command accepted. The reread state is shown."
           : res.status === 409
-            ? "Состояние изменилось. Проверьте свежую запись и подтвердите действие заново."
-            : `Команда отклонена: ${value.error?.code ?? "REQUEST_FAILED"}. ${value.error?.message ?? ""}`,
+            ? "State changed. Check the latest record and confirm the action again."
+            : `Command rejected: ${value.error?.code ?? "REQUEST_FAILED"}. ${value.error?.message ?? ""}`,
       );
     } catch {
       if (alive.current) {
         setRead(null);
         setAction(null);
         setError("COMMAND_RESULT_UNCONFIRMED");
-        setMessage("Ответ не получен. Повторно прочитайте состояние перед следующей командой.");
+        setMessage("No response received. Reread the state before the next command.");
       }
     } finally {
       if (alive.current) setBusy(false);
@@ -230,7 +230,7 @@ function PromotionWorkspace({
     try {
       reasons = JSON.parse(distribution);
     } catch {
-      setMessage("Распределение причин должно быть корректным JSON-объектом.");
+      setMessage("The reason distribution must be a valid JSON object.");
       return;
     }
     const inputs = {
@@ -263,12 +263,12 @@ function PromotionWorkspace({
     });
     if (!body.ok) {
       setMessage(
-        "Загрузите два корректных документа доказательств и заполните основания оператора.",
+        "Upload two valid evidence documents and complete the operator rationale.",
       );
       return;
     }
     if (!readRevision) {
-      setMessage("Прочитайте состояние продвижения перед отправкой запроса.");
+      setMessage("Read the promotion state before submitting a request.");
       return;
     }
     void post({ ...body.body, expectedRevision: readRevision });
@@ -276,7 +276,7 @@ function PromotionWorkspace({
   async function upload(file: File | undefined, set: (v: string) => void) {
     if (!file) return;
     if (file.size > 2_000_000) {
-      setMessage("Документ превышает 2 МБ.");
+      setMessage("Document exceeds 2 MB.");
       return;
     }
     try {
@@ -288,7 +288,7 @@ function PromotionWorkspace({
         idempotency.current = null;
       }
     } catch {
-      if (alive.current) setMessage("Файл не является корректным JSON-документом.");
+      if (alive.current) setMessage("File is not a valid JSON document.");
     }
   }
   const field = (label: string, value: string, set: (v: string) => void, multiline = false) => (
@@ -325,7 +325,7 @@ function PromotionWorkspace({
         <>
           <DataState state="unavailable" reason={error} />
           <button className={controlClass} onClick={() => void load()}>
-            Прочитать заново
+            Reread
           </button>
         </>
       ) : read ? (
@@ -347,17 +347,17 @@ function PromotionWorkspace({
                     {record.strategyId} · {record.strategyVersion}
                   </p>
                   <p className="text-waia-fg-muted mt-1 text-xs">
-                    Версия состояния {record.stateVersion}
+                    State version {record.stateVersion}
                   </p>
-                  <EvidenceTime at={record.requestedAt} label="Запрошено" />
+                  <EvidenceTime at={record.requestedAt} label="Requested" />
                   {record.coolingOffEndsAt ? (
-                    <EvidenceTime at={record.coolingOffEndsAt} label="Ожидание до" />
+                    <EvidenceTime at={record.coolingOffEndsAt} label="Cooling-off until" />
                   ) : null}
                 </button>
               ))
             ) : (
               <p className="text-waia-fg-muted text-sm">
-                Незавершённого и действующего продвижения нет.
+                No pending or effective promotion.
               </p>
             )}
           </div>
@@ -388,52 +388,51 @@ function PromotionWorkspace({
           ) : null}
           <details className="border-waia-divider rounded-lg border p-4">
             <summary className="cursor-pointer text-sm font-medium">
-              Новый запрос продвижения
+              New promotion request
             </summary>
             <div className="mt-5 space-y-5">
               <p className="text-waia-fg-muted text-sm">
-                Доказательства проверяются существующим Strategy Validation Gate. Поля подтверждения
-                заполняет оператор на основании проверенных документов.
+                Evidence is checked by the existing Strategy Validation Gate. The operator completes attestations based on reviewed documents.
               </p>
               {read.pending ? (
                 <p className="text-waia-warning text-sm">
-                  Сначала завершите или отмените текущий запрос.
+                  Complete or cancel the current request first.
                 </p>
               ) : null}
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="text-sm">
-                  Доказательства Paper
+                  Paper evidence
                   <input
-                    aria-label="Доказательства Paper"
+                    aria-label="Paper evidence"
                     className="mt-2 block max-w-full text-xs"
                     type="file"
                     accept=".json,application/json"
                     onChange={(e) => void upload(e.target.files?.[0], setEvidence)}
                   />
-                  {evidence ? <span className="text-waia-success">Документ загружен</span> : null}
+                  {evidence ? <span className="text-waia-success">Document uploaded</span> : null}
                 </label>
                 <label className="text-sm">
-                  Доказательства исследования
+                  Research evidence
                   <input
-                    aria-label="Доказательства исследования"
+                    aria-label="Research evidence"
                     className="mt-2 block max-w-full text-xs"
                     type="file"
                     accept=".json,application/json"
                     onChange={(e) => void upload(e.target.files?.[0], setResearch)}
                   />
-                  {research ? <span className="text-waia-success">Документ загружен</span> : null}
+                  {research ? <span className="text-waia-success">Document uploaded</span> : null}
                 </label>
-                {field("Версия стратегии", version, setVersion)}
-                {field("SHA проверенной реализации", git, setGit)}
-                {field("Гипотеза", hypothesis, setHypothesis, true)}
-                {field("Предполагаемый режим рынка", regime, setRegime)}
-                {field("Комиссии, базисные пункты", fees, setFees)}
-                {field("Проскальзывание, базисные пункты", slippage, setSlippage)}
-                {field("Сценарии отказа, каждый с новой строки", failures, setFailures, true)}
-                {field("Распределение кодов причин (JSON)", distribution, setDistribution, true)}
-                {field("Подтверждение преимущества после издержек", edge, setEdge, true)}
-                {field("Подтверждение соответствия Live и Paper", paper, setPaper, true)}
-                {field("Подтверждение ограниченного риска потерь", downside, setDownside, true)}
+                {field("Strategy version", version, setVersion)}
+                {field("Reviewed implementation SHA", git, setGit)}
+                {field("Hypothesis", hypothesis, setHypothesis, true)}
+                {field("Expected market regime", regime, setRegime)}
+                {field("Fees, basis points", fees, setFees)}
+                {field("Slippage, basis points", slippage, setSlippage)}
+                {field("Failure scenarios, one per line", failures, setFailures, true)}
+                {field("Reason-code distribution (JSON)", distribution, setDistribution, true)}
+                {field("Confirmation of an edge after costs", edge, setEdge, true)}
+                {field("Confirmation of Live and Paper alignment", paper, setPaper, true)}
+                {field("Confirmation of bounded loss risk", downside, setDownside, true)}
               </div>
               <label className="flex items-start gap-3 text-sm">
                 <input
@@ -442,7 +441,7 @@ function PromotionWorkspace({
                   checked={reviewed}
                   onChange={(e) => setReviewed(e.target.checked)}
                 />
-                Я проверил документы, выбранную версию и заполненные основания.
+                I reviewed the documents, selected version and completed rationale.
               </label>
               <button
                 className={controlClass}
@@ -451,36 +450,36 @@ function PromotionWorkspace({
                 }
                 onClick={requestPromotion}
               >
-                Передать запрос в шлюз проверки
+                Submit request to the validation gate
               </button>
             </div>
           </details>
         </>
       ) : null}
       <button className={controlClass} disabled={busy || loading} onClick={() => void load()}>
-        Обновить состояние
+        Refresh state
       </button>
       {message ? (
         <p role="status" className="border-waia-divider rounded-lg border p-4 text-sm break-words">
           {message}
         </p>
       ) : null}
-      {busy ? <ConsoleLoading label="Ожидаем результат и повторное чтение состояния…" /> : null}
+      {busy ? <ConsoleLoading label="Waiting for the result and state reread…" /> : null}
       <ConsoleDialog
         open={!!action && !!selected}
         onClose={() => {
           if (!busy) setAction(null);
         }}
-        title={action ? actions[action].label : "Подтверждение"}
+        title={action ? actions[action].label : "Confirmation"}
       >
         {action && selected ? (
           <div className="space-y-4">
             <p className="text-sm">{actions[action].effect}</p>
             <p className="text-waia-fg-muted text-xs">
-              {selected.strategyId} · {selected.strategyVersion} · версия состояния{" "}
+              {selected.strategyId} · {selected.strategyVersion} · state version{" "}
               {selected.stateVersion}
             </p>
-            {field("Причина действия", reason, setReason, true)}
+            {field("Action reason", reason, setReason, true)}
             {action === "mark-effective" ? (
               <label className="flex items-start gap-3 text-sm">
                 <input
@@ -489,15 +488,13 @@ function PromotionWorkspace({
                   checked={ack}
                   onChange={(e) => setAck(e.target.checked)}
                 />
-                Подтверждаю, что Paper-доказательства достаточны сверх одной лишь проверки
-                инфраструктуры исторического воспроизведения.
+                I confirm that the Paper evidence is sufficient beyond verification of historical replay infrastructure alone.
               </label>
             ) : null}
             {action === "mark-effective" &&
             (!selected.coolingOffEndsAt || Date.parse(selected.coolingOffEndsAt) > readAt) ? (
               <p className="text-waia-warning text-sm">
-                Период ожидания ещё не завершён или его окончание не подтверждено. Обновите
-                состояние после указанного срока.
+                The cooling-off period has not ended or its end is unconfirmed. Refresh the state after the indicated time.
               </p>
             ) : null}
             <button
@@ -524,7 +521,7 @@ function PromotionWorkspace({
                 })
               }
             >
-              Подтвердить действие
+              Confirm action
             </button>
           </div>
         ) : null}

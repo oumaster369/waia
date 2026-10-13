@@ -64,22 +64,22 @@ const PATHS: Record<string, string> = {
   list_cycles: "/admin",
 };
 const TITLES: Record<string, string> = {
-  get_overview: "Сводка",
-  list_accounts: "Счета",
-  list_orders: "Ордера",
-  list_clients: "Клиенты",
-  list_invoices: "Счета на оплату",
-  strategy_performance: "Стратегии",
-  list_research_runs: "Исследования",
-  list_incidents: "Инциденты",
-  system_status: "Система",
-  list_jobs: "Задания",
-  release_info: "Релиз",
-  list_payments: "Платежи",
-  list_fills: "Исполнения",
-  list_positions: "Позиции",
-  no_trade_reasons: "Причины решений",
-  list_cycles: "Циклы",
+  get_overview: "Summary",
+  list_accounts: "Accounts",
+  list_orders: "Orders",
+  list_clients: "Clients",
+  list_invoices: "Invoices",
+  strategy_performance: "Strategies",
+  list_research_runs: "Research",
+  list_incidents: "Incidents",
+  system_status: "System",
+  list_jobs: "Jobs",
+  release_info: "Release",
+  list_payments: "Payments",
+  list_fills: "Fills",
+  list_positions: "Positions",
+  no_trade_reasons: "Decision reasons",
+  list_cycles: "Cycles",
 };
 
 /** Only this explicit projection can authorize a model fact. Never recursively scrape arbitrary payloads or numbers. */
@@ -144,14 +144,14 @@ export function factsFromTool(
   };
   const missing = reasons(data.reasons).concat(reasons(envelope.missingSources));
   if (data.state === "unavailable" || data.state === "not_applicable" || !envelope.data) {
-    add("availability", TITLES[tool] ?? "Источник", null, {
+    add("availability", TITLES[tool] ?? "Source", null, {
       state: str(data.state) ?? "unavailable",
       reasons: missing.length ? missing : ["SOURCE_UNAVAILABLE"],
     });
     return result;
   }
   if (JSON.stringify(envelope.scope) !== JSON.stringify(context.scope)) {
-    add("scope", TITLES[tool] ?? "Источник", null, { reasons: ["ADMIN_SCOPE_MISMATCH"] });
+    add("scope", TITLES[tool] ?? "Source", null, { reasons: ["ADMIN_SCOPE_MISMATCH"] });
     return result;
   }
   if (tool === "get_client" || tool === "get_incident") {
@@ -159,24 +159,24 @@ export function factsFromTool(
     const id = str(row.id);
     const href = assistantHref(PATHS[tool]!, query, { sel: id ?? "" });
     if (tool === "get_client") {
-      add("client.access", "Доступ клиента", row.access, { entityId: id, href });
-      add("client.connectedSince", "Подключён с", row.connectedSinceValue, {
+      add("client.access", "Client access", row.access, { entityId: id, href });
+      add("client.connectedSince", "Connected since", row.connectedSinceValue, {
         entityId: id,
         href,
         reasons: row.connectedSinceValue ? [] : ["CONNECTED_SINCE_NOT_OBSERVED"],
       });
     } else {
-      add("incident.status", "Статус инцидента", row.status, { entityId: id, href });
-      add("incident.occurrences", "Повторений", row.occurrences, { entityId: id, href });
+      add("incident.status", "Incident status", row.status, { entityId: id, href });
+      add("incident.occurrences", "Occurrences", row.occurrences, { entityId: id, href });
     }
     return result;
   }
   if (tool === "changes_since") {
-    add("aggregate.total", "Изменений с предыдущего визита", record(data.aggregate).total, {
+    add("aggregate.total", "Changes since the previous visit", record(data.aggregate).total, {
       state: str(data.state) ?? "unavailable",
       reasons: reasons(data.reasons),
     });
-    add("since", "Начало наблюдаемого интервала", data.effectiveSince);
+    add("since", "Observed interval start", data.effectiveSince);
     return result;
   }
   if (tool === "strategy_performance" && Array.isArray(data.performance)) {
@@ -185,9 +185,9 @@ export function factsFromTool(
         sel: `${str(data.strategyId)}:${str(data.version)}`,
       });
       for (const [key, label] of Object.entries({
-        realized: "Реализованный результат периода",
-        tradingFees: "Торговые комиссии",
-        maxRealizedDrawdown: "Просадка реализованного результата",
+        realized: "Period realized result",
+        tradingFees: "Trading fees",
+        maxRealizedDrawdown: "Realized-result drawdown",
       }))
         add(`performance.${i}.${key}`, `${str(group.mode)} · ${label}`, group[key], {
           currency: str(group.currency),
@@ -203,9 +203,9 @@ export function factsFromTool(
       const metric = record(run.metrics),
         href = assistantHref("/admin/research", query, { tab: "runs", run: str(run.id) ?? "" });
       for (const [key, label] of Object.entries({
-        equity: "Капитал воспроизведения",
-        cash: "Свободно в воспроизведении",
-        netPnl: "Операционный результат воспроизведения",
+        equity: "Replay equity",
+        cash: "Available in replay",
+        netPnl: "Replay operational result",
       }))
         add(`items.${i}.metrics.${key}`, `${str(run.runId)} · ${label}`, metric[key], {
           currency: str(metric.currency),
@@ -215,11 +215,11 @@ export function factsFromTool(
           entityId: str(run.id),
         });
       for (const [key, label] of Object.entries({
-        dataset: "Набор данных",
-        period: "Период",
-        costs: "Издержки",
-        version: "Версия",
-        model: "Модель",
+        dataset: "Dataset",
+        period: "Period",
+        costs: "Costs",
+        version: "Version",
+        model: "Model",
       }))
         add(`items.${i}.conditions.${key}`, label, record(run.conditions)[key], {
           href,
@@ -232,11 +232,11 @@ export function factsFromTool(
   if (tool === "get_overview") {
     const finance = record(data.finance);
     for (const [key, label] of Object.entries({
-      equity: "Общий капитал",
-      free: "Свободно",
-      holdings: "В активах",
-      reserved: "Резерв в ордерах",
-      pnl: "Результат Трейдера до комиссии сервиса 30%",
+      equity: "Total equity",
+      free: "Available",
+      holdings: "In assets",
+      reserved: "Reserved in orders",
+      pnl: "Trader result before the 30% service fee",
     })) {
       const fact = record(finance[key]),
         money = record(fact.value);
@@ -250,7 +250,7 @@ export function factsFromTool(
     if (data.lastKnownEstimate != null)
       add(
         "lastKnownEstimate",
-        "Последняя известная оценка устаревших счетов",
+        "Last known valuation of stale accounts",
         data.lastKnownEstimate,
         { currency: query.currency, state: "stale", reasons: ["OBSERVATION_STALE"] },
       );
@@ -259,11 +259,11 @@ export function factsFromTool(
   if (tool === "list_invoices") {
     // Aggregate is computed over all matching invoices before LIMIT in the canonical reader.
     for (const [index, row] of list(data.aggregate).entries()) {
-      add(`aggregate.${index}.amount`, "Сохранённая сумма счетов на оплату", row.amount, {
+      add(`aggregate.${index}.amount`, "Saved invoice total", row.amount, {
         currency: str(row.currency),
         coverage: { included: count(row.count) ?? 0, total: count(row.count) },
       });
-      add(`aggregate.${index}.count`, "Количество счетов в этой валюте", row.count, {
+      add(`aggregate.${index}.count`, "Invoice count in this currency", row.count, {
         currency: null,
       });
     }
@@ -275,7 +275,7 @@ export function factsFromTool(
         count(record(data.aggregate).total) ??
         (tool === "list_accounts" ? total : null),
       cap = data.truncated === true || n === null || (n !== null && n > items.length);
-    add("list.coverage", "Записей в выборке источника", items.length, {
+    add("list.coverage", "Records in the source selection", items.length, {
       state: cap ? "partial" : items.length ? "ok" : "empty",
       reasons: cap ? ["LIST_COVERAGE_LIMITED"] : [],
       coverage: { included: items.length, total: n },
@@ -292,7 +292,7 @@ export function factsFromTool(
               row.runId,
           ) ??
           entityId ??
-          "Запись";
+          "Record";
       const href = assistantHref(PATHS[tool] ?? "/admin", query, {
         ...selection,
         ...(entityId
@@ -304,12 +304,12 @@ export function factsFromTool(
       });
       const opts = { entityId, href, coverage: null };
       if (tool === "no_trade_reasons" || tool === "list_cycles") {
-        add(`items.${index}.reason`, `${name} · сохранённая причина решения`, row.reason, {
+        add(`items.${index}.reason`, `${name} · saved decision reason`, row.reason, {
           ...opts,
           href: assistantHref("/admin", query, { tab: "algorithm", cycle: entityId ?? "" }),
         });
       } else if (tool === "list_accounts") {
-        add(`items.${index}.equity`, `${name} · капитал`, row.equity, {
+        add(`items.${index}.equity`, `${name} · equity`, row.equity, {
           ...opts,
           currency: str(row.currency),
           state: str(row.state) ?? "unavailable",
@@ -317,45 +317,45 @@ export function factsFromTool(
           reasons: reasons(row.reasons),
         });
       } else if (tool === "list_orders") {
-        add(`items.${index}.state`, `${name} · ордер`, row.label, { ...opts });
+        add(`items.${index}.state`, `${name} · order`, row.label, { ...opts });
         add(
           `items.${index}.filledQuantity`,
-          `${name} · исполненное количество`,
+          `${name} · filled quantity`,
           row.filledQuantity,
           { ...opts },
         );
       } else if (tool === "list_clients") {
-        add(`items.${index}.access`, `${name} · доступ`, row.access, opts);
+        add(`items.${index}.access`, `${name} · access`, row.access, opts);
       } else if (tool === "list_invoices") {
-        add(`items.${index}.performanceFee`, `${name} · сохранённая комиссия`, row.performanceFee, {
+        add(`items.${index}.performanceFee`, `${name} · saved fee`, row.performanceFee, {
           ...opts,
           currency: str(row.currency),
         });
         add(
           `items.${index}.status`,
-          `${name} · статус`,
+          `${name} · status`,
           record(row.display).status ?? row.status,
           opts,
         );
       } else if (tool === "list_incidents") {
         add(
           `items.${index}.status`,
-          `${name} · инцидент`,
+          `${name} · incident`,
           row.activityLabel ?? row.label ?? row.status,
           opts,
         );
       } else if (tool === "list_research_runs") {
-        add(`items.${index}.phase`, `${name} · запуск`, row.phase ?? row.status, opts);
+        add(`items.${index}.phase`, `${name} · run`, row.phase ?? row.status, opts);
         add(
           `items.${index}.committedCycles`,
-          `${name} · зафиксировано циклов`,
+          `${name} · committed cycles`,
           row.committedCycles,
           opts,
         );
       } else if (tool === "strategy_performance") {
         add(
           `items.${index}.status`,
-          `${name} · версия ${str(row.version ?? row.strategyVersion) ?? "не установлена"}`,
+          `${name} · version ${str(row.version ?? row.strategyVersion) ?? "not established"}`,
           row.activityLabel ?? row.label ?? row.status,
           opts,
         );
@@ -364,7 +364,7 @@ export function factsFromTool(
   }
   if (["system_status", "release_info", "list_jobs"].includes(tool)) {
     const release = record(data.release);
-    add("release.sha", "SHA релиза; совпадение с деплоем не подтверждено", release.sha, {
+    add("release.sha", "Release SHA; deployment match unconfirmed", release.sha, {
       state: "unavailable",
       reasons: [str(release.reason) ?? "WAIA_RELEASE_SHA_NOT_SET"],
       href: assistantHref("/admin/system", query, { tab: "releases" }),
@@ -373,7 +373,7 @@ export function factsFromTool(
       const jobs = list(data.jobs),
         shown = jobs.slice(0, 50),
         href = assistantHref("/admin/system", query, { tab: "jobs" });
-      add("jobs.coverage", "Заданий в ответе", shown.length, {
+      add("jobs.coverage", "Jobs in the response", shown.length, {
         href,
         state: shown.length < jobs.length ? "partial" : shown.length ? "ok" : "empty",
         reasons: shown.length < jobs.length ? ["LIST_COVERAGE_LIMITED"] : [],
@@ -385,7 +385,7 @@ export function factsFromTool(
           status = str(run.status);
         add(
           `jobs.${index}.state`,
-          `${(key && JOB_LABELS[key]) ?? key ?? "Задание"} · последний запуск`,
+          `${(key && JOB_LABELS[key]) ?? key ?? "Job"} · last run`,
           status === null ? null : (JOB_STATUS[status] ?? status),
           {
             entityId: key,
@@ -400,7 +400,7 @@ export function factsFromTool(
     }
   }
   if (!result.length)
-    add("availability", TITLES[tool] ?? "Источник", null, {
+    add("availability", TITLES[tool] ?? "Source", null, {
       reasons: missing.length ? missing : ["ASSISTANT_FACT_NOT_PROJECTED"],
     });
   return result;
@@ -408,19 +408,19 @@ export function factsFromTool(
 
 export function renderAssistantFact(fact: AssistantFact): string {
   const value =
-    fact.value === null ? "недоступно" : `${fact.value}${fact.currency ? ` ${fact.currency}` : ""}`;
+    fact.value === null ? "unavailable" : `${fact.value}${fact.currency ? ` ${fact.currency}` : ""}`;
   const coverage = fact.coverage
-    ? `; охват ${fact.coverage.included}/${fact.coverage.total ?? "не установлен"}`
+    ? `; coverage ${fact.coverage.included}/${fact.coverage.total ?? "not established"}`
     : "";
   const labels: Record<string, string> = {
-    partial: "неполные данные",
-    stale: "устарело",
-    unavailable: "недоступно",
-    empty: "записей нет",
-    not_applicable: "не применяется",
-    forbidden: "нет доступа",
+    partial: "partial data",
+    stale: "stale",
+    unavailable: "unavailable",
+    empty: "no records",
+    not_applicable: "not applicable",
+    forbidden: "no access",
   };
   const quality =
-    fact.state === "ok" ? "" : `; ${labels[fact.state] ?? "состояние не установлено"}`;
+    fact.state === "ok" ? "" : `; ${labels[fact.state] ?? "state not established"}`;
   return `${fact.label}: ${value}${coverage}${quality}`;
 }

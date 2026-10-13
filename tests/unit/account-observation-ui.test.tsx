@@ -425,9 +425,9 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
     render(<AccountObservationPanel view={view} />);
     expect(screen.getByText("obs-a")).toBeInTheDocument();
     expect(screen.getByText("BTC: free 1, locked 0.1, total 1.1")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Спот" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Фьючерсы" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Спот" })).toContainElement(
+    expect(screen.getByRole("region", { name: "Spot" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Futures" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Spot" })).toContainElement(
       screen.getByText("No working orders."),
     );
     expect(screen.getByText("No working orders.")).toBeInTheDocument();
@@ -577,10 +577,10 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
     render(<AccountObservationPanel view={{ status: "CURRENT", observation: o, stale: false }} />);
     expect(screen.getByTestId("cabinet-usdt-free")).toHaveTextContent("9007199254740993.00000001");
   });
-  it("treats a missing first snapshot as Connecting, not Unavailable", () => {
+  it("treats a legitimate first-snapshot LOADING state as Connecting", () => {
     render(
       <AccountObservationPanel
-        view={{ status: "ERROR", observation: null, stale: false, transport: "RECONNECTING" }}
+        view={{ status: "LOADING", observation: null, stale: false, transport: "RECONNECTING" }}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("Connecting");
@@ -588,7 +588,14 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
     expect(screen.getByText(/Waiting for the first live snapshot/)).toBeInTheDocument();
     expect(screen.queryByText("Reconnecting automatically.")).not.toBeInTheDocument();
   });
-  it("keeps Live and last tick when the stream is reconnecting", () => {
+  it("shows Data unavailable rather than Connecting for ERROR without evidence", () => {
+    render(<AccountObservationPanel view={{ status: "ERROR", observation: null, stale: false, transport: "RECONNECTING" }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Data unavailable");
+    expect(screen.getByRole("status")).not.toHaveTextContent("Connecting");
+    expect(screen.getByText("Account data could not be read.")).toBeInTheDocument();
+    expect(screen.queryByText(/Waiting for the first live snapshot/)).not.toBeInTheDocument();
+  });
+  it("shows Last tick and a non-live dot for an ERROR with retained evidence", () => {
     render(
       <AccountObservationPanel
         view={{
@@ -599,9 +606,11 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
         }}
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent("Live");
+    expect(screen.getByRole("status")).toHaveTextContent("Last tick");
+    expect(screen.getByRole("status")).not.toHaveTextContent("Live");
+    expect(screen.getByRole("status").querySelector("[aria-hidden=\"true\"]")).not.toHaveClass("bg-emerald-400");
     expect(screen.getByText("Reconnecting automatically.")).toBeVisible();
-    expect(screen.getByText(/ожидается следующий сбор|следующее обновление через/)).toBeVisible();
+    expect(screen.getByText(/waiting for the next collection|next update in/)).toBeVisible();
   });
 });
 
@@ -622,7 +631,7 @@ describe("DEE-1242 truthful Spot display", () => {
     expect(screen.queryByText("No working orders.")).not.toBeInTheDocument();
     expect(screen.queryByText("No fills in this window.")).not.toBeInTheDocument();
     expect(screen.getAllByText("No rows received; completeness is not confirmed.")).toHaveLength(2);
-    expect(within(screen.getByTestId("cabinet-open-orders")).getByText("0 получено")).toBeInTheDocument();
+    expect(within(screen.getByTestId("cabinet-open-orders")).getByText("0 received")).toBeInTheDocument();
     const coverage = status === "PARTIAL" ? "Partial read — some rows may be missing." : "Read failed — coverage unknown.";
     expect(within(screen.getByRole("region", { name: "Open orders" })).getByText(coverage)).toBeInTheDocument();
   });
@@ -643,7 +652,7 @@ describe("DEE-1242 truthful Spot display", () => {
       clientOrderId: "synthetic-client", createdAt: "2026-10-13T00:00:00Z", updatedAt: null };
     const partial = { ...component([order]), status: "PARTIAL" as const };
     render(<AccountObservationPanel view={{ status: "PARTIAL", observation: observation({ openOrders: partial }), stale: false }} />);
-    expect(within(screen.getByTestId("cabinet-open-orders")).getByText("1 получено")).toBeInTheDocument();
+    expect(within(screen.getByTestId("cabinet-open-orders")).getByText("1 received")).toBeInTheDocument();
     const orders = within(screen.getByRole("region", { name: "Open orders" }));
     expect(orders.getByText("Partial read — some rows may be missing.")).toBeInTheDocument();
     expect(orders.getByText(/order synthetic-order/)).toBeInTheDocument();

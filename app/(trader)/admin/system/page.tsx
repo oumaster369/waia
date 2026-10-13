@@ -38,37 +38,35 @@ export default function AdminSystemPage() {
         <div className="space-y-5">
           {["services", "sources", "jobs", "ai", "releases"].includes(tab) ? (
             <p className="text-waia-fg-muted text-xs leading-5">
-              Общая инфраструктура парка. Её доступность не даёт разрешения на торговлю; допуски
-              клиента показаны отдельно.
+              Shared fleet infrastructure. Its availability does not grant trading permission; client permissions are shown separately.
             </p>
           ) : null}
           {tab === "services" ? (
             <>
               <div className="grid gap-4 md:grid-cols-3">
-                <ConsolePanel title="Консоль и API">
+                <ConsolePanel title="Console and API">
                   <div className="space-y-3 p-5">
                     <Server size={20} className="text-waia-accent-cool" />
-                    <p className="text-sm">Ответ административного API получен.</p>
+                    <p className="text-sm">Administrative API response received.</p>
                     <EvidenceTime at={read.envelope?.generatedAt} />
                     <p className="text-waia-fg-muted text-xs">
-                      Это проверка чтения. Готовность исполнения и разрешение рисковать не выводятся
-                      из HTTP 200.
+                      This is a read check. Execution readiness and permission to take risk cannot be inferred from HTTP 200.
                     </p>
                   </div>
                 </ConsolePanel>
-                <ConsolePanel title="Сборщики">
+                <ConsolePanel title="Collectors">
                   <div className="space-y-3 p-5">
                     <Database size={20} className="text-waia-accent-cool" />
-                    <p className="text-sm">Сохранённые запуски и возраст источников</p>
+                    <p className="text-sm">Saved runs and source age</p>
                     <button
                       className={controlClass}
                       onClick={() => context.update({ tab: "jobs" })}
                     >
-                      Открыть задания
+                      Open jobs
                     </button>
                   </div>
                 </ConsolePanel>
-                <ConsolePanel title="Исполнение">
+                <ConsolePanel title="Execution">
                   <div className="space-y-3 p-5">
                     <Activity size={20} className="text-waia-accent-cool" />
                     <DataState
@@ -76,15 +74,14 @@ export default function AdminSystemPage() {
                       reason="EXECUTION_HOST_DIAGNOSTICS_UNAVAILABLE"
                     />
                     <p className="text-waia-fg-muted text-xs">
-                      Наличие сохранённой оценки Runtime Authority показано в допусках и не заменяет
-                      диагностику хоста.
+                      The presence of a saved Runtime Authority assessment is shown under permissions and does not replace host diagnostics.
                     </p>
                   </div>
                 </ConsolePanel>
               </div>
               <ConsolePanel
-                title="Последняя работа контуров"
-                note="Отсутствие записи не считается успешным запуском."
+                title="Recent activity by mode"
+                note="An absent record does not mean a successful run."
               >
                 <JobTable jobs={data.jobs} />
               </ConsolePanel>
@@ -92,29 +89,29 @@ export default function AdminSystemPage() {
           ) : null}
           {tab === "jobs" ? (
             <ConsolePanel
-              title="Задания"
-              note="Расписание — ожидаемый запуск; состояние берётся из сохранённого журнала. Ручной выпуск не является заданием cron."
+              title="Jobs"
+              note="A schedule is an expected run; state comes from the saved log. Manual issuance is not a cron job."
             >
               <JobTable jobs={data.jobs} />
             </ConsolePanel>
           ) : null}
           {tab === "sources" ? (
             <ConsolePanel
-              title="Источники"
-              note="Данные собраны фоновыми сборщиками. Открытие этой страницы не обращается к бирже."
+              title="Sources"
+              note="Data is gathered by background collectors. Opening this page does not contact the exchange."
             >
               <ConsoleTable
                 rows={data.sources ?? []}
                 rowKey={(row) => `${row.source}:${row.kind}`}
-                caption="Состояние источников"
+                caption="Source state"
                 columns={[
                   {
-                    title: "Источник",
+                    title: "Source",
                     render: (row) => (
                       <>
                         <p className="font-medium">{row.source}</p>
                         <p className="text-waia-fg-muted mt-1 text-xs">
-                          {{ quotes: "Котировки", news: "Новости", fear_greed: "Fear & Greed" }[
+                          {{ quotes: "Quotes", news: "News", fear_greed: "Fear & Greed" }[
                             row.kind
                           ] ?? row.kind}
                         </p>
@@ -122,30 +119,30 @@ export default function AdminSystemPage() {
                     ),
                   },
                   {
-                    title: "Состояние",
+                    title: "State",
                     render: (row) => (
                       <ConsoleBadge tone={row.state === "ok" ? "good" : "warning"}>
                         {
                           {
-                            ok: "Наблюдается",
-                            partial: "Частичный охват",
-                            stale: "Устарел",
-                            unavailable: "Нет наблюдения",
+                            ok: "Observed",
+                            partial: "Partial coverage",
+                            stale: "Stale",
+                            unavailable: "No observation",
                           }[row.state]
                         }
                       </ConsoleBadge>
                     ),
                   },
                   {
-                    title: "Охват",
+                    title: "Coverage",
                     align: "right",
                     render: (row) =>
                       row.fresh === null
-                        ? `${row.total} сохранённых записей`
-                        : `${row.fresh} / ${row.total} актуальных`,
+                        ? `${row.total} saved records`
+                        : `${row.fresh} / ${row.total} current`,
                   },
                   {
-                    title: "Последнее наблюдение",
+                    title: "Last observation",
                     render: (row) => <EvidenceTime at={row.observedAt} label="" />,
                   },
                 ]}
@@ -154,45 +151,41 @@ export default function AdminSystemPage() {
           ) : null}
           {tab === "ai" ? (
             <div className="grid gap-5 lg:grid-cols-2">
-              <ConsolePanel title="Административный помощник">
+              <ConsolePanel title="Administrative assistant">
                 <div className="space-y-4 p-5">
                   <Bot size={22} className="text-waia-accent-cool" />
                   <ConsoleBadge>
-                    {data.assistant.enabled ? "Модель включена флагом" : "Модель выключена"}
+                    {data.assistant.enabled ? "Model enabled by flag" : "Model disabled"}
                   </ConsoleBadge>
                   <p className="text-sm leading-6">
-                    Помощник читает те же данные, что и разделы консоли. Изменяющих инструментов
-                    нет. Быстрые ответы доступны без модели.
+                    The assistant reads the same data as the console sections. It has no mutating tools. Quick answers work without a model.
                   </p>
                   <p className="text-waia-fg-muted text-xs">
-                    Флаг включения не подтверждает доступность провайдера. Ошибка помощника не
-                    блокирует другие разделы.
+                    The enable flag does not confirm provider availability. An assistant error does not block other sections.
                   </p>
                   <DataState state="unavailable" reason={data.assistant.telemetryReason} />
                 </div>
               </ConsolePanel>
-              <ConsolePanel title="Границы данных">
+              <ConsolePanel title="Data boundaries">
                 <div className="space-y-4 p-5">
                   <DataState state="unavailable" reason="RESEARCH_REASONING_NOT_IN_CONSOLE" />
                   <DataState state="unavailable" reason="HOLDOUT_PROTECTED" />
                   <p className="text-waia-fg-muted text-sm leading-6">
-                    Секреты биржи, приватная память AI-TWIN и запечатанные исследовательские данные
-                    не входят в контекст помощника.
+                    Exchange secrets, private AI-TWIN memory and sealed research data are excluded from the assistant context.
                   </p>
                 </div>
               </ConsolePanel>
             </div>
           ) : null}
           {tab === "releases" ? (
-            <ConsolePanel title="Текущий релиз">
+            <ConsolePanel title="Current release">
               <div className="space-y-4 p-5">
                 {data.release.state === "value" ? (
                   <>
                     <p className="font-mono text-sm break-all">{data.release.sha}</p>
-                    <ConsoleBadge tone="warning">Совпадение с деплоем не подтверждено</ConsoleBadge>
+                    <ConsoleBadge tone="warning">Deployment match is unconfirmed</ConsoleBadge>
                     <p className="text-waia-fg-muted text-sm">
-                      Источник: WAIA_RELEASE_SHA. Переменная сообщает ревизию сборки и сама по себе
-                      не подтверждает развёрнутый код.
+                      Source: WAIA_RELEASE_SHA. The variable identifies the build revision and does not itself confirm deployed code.
                     </p>
                   </>
                 ) : (
@@ -204,31 +197,28 @@ export default function AdminSystemPage() {
           {tab === "authority" && controls ? (
             <>
               <ConsolePanel
-                title="Допуски и лимиты"
+                title="Permissions and limits"
                 action={<ShieldCheck size={19} className="text-waia-accent-cool" />}
               >
                 <div className="space-y-3 p-5">
                   <p className="text-sm leading-6">
-                    Live требует отдельного разрешения Org 0, действующего продвижения через
-                    Strategy Validation Gate и допуска runtime/Risk. Paper, продвижение стратегии и
-                    включение Live — разные шаги.
+                    Live requires separate Org 0 permission, an effective promotion through Strategy Validation Gate and runtime/Risk permission. Paper, strategy promotion and enabling Live are different steps.
                   </p>
                   <p className="text-waia-fg-muted text-sm leading-6">
-                    Risk только сужает допуск. Guardian даёт рекомендацию; исполнение сокращения
-                    подтверждается отдельно. Из этой таблицы торговые команды не отправляются.
+                    Risk can only restrict permission. Guardian provides a recommendation; execution of a reduction is confirmed separately. This table sends no trading commands.
                   </p>
                   <div className="flex flex-wrap gap-3">
                     <Link
                       className={`${controlClass} inline-flex items-center`}
                       href={context.href("/admin/live-enable")}
                     >
-                      Процедура допуска Live
+                      Live admission procedure
                     </Link>
                     <Link
                       className={`${controlClass} inline-flex items-center`}
                       href={context.href("/admin/kill-switches")}
                     >
-                      Восстановление после остановки
+                      Recovery after a stop
                     </Link>
                   </div>
                   {controls.accountBindingReason ? (
@@ -240,23 +230,23 @@ export default function AdminSystemPage() {
                 </div>
               </ConsolePanel>
               <ConsolePanel
-                title="Матрица выключателей"
-                note="Существующий runtime поддерживает платформу и организацию. Области счёта, стратегии и инструмента не подменяются более широкой командой."
+                title="Kill-switch matrix"
+                note="The existing runtime supports platform and organization scope. Account, strategy and instrument scope cannot be substituted by a broader command."
               >
                 <ConsoleTable
                   rows={controls.killSwitches}
                   rowKey={(row) => row.id}
-                  caption="Матрица выключателей"
+                  caption="Kill-switch matrix"
                   columns={[
                     {
-                      title: "Область",
+                      title: "Scope",
                       render: (row) => (
                         <>
                           <p>
                             {row.scope === "platform"
-                              ? "Весь парк"
+                              ? "Entire fleet"
                               : row.scope === "organization"
-                                ? "Организация"
+                                ? "Organization"
                                 : row.scope}
                           </p>
                           <p className="text-waia-fg-muted mt-1 font-mono text-xs">
@@ -266,7 +256,7 @@ export default function AdminSystemPage() {
                       ),
                     },
                     {
-                      title: "Тип / эффект",
+                      title: "Type / effect",
                       render: (row) => (
                         <>
                           <p>{row.type}</p>
@@ -275,7 +265,7 @@ export default function AdminSystemPage() {
                       ),
                     },
                     {
-                      title: "Состояние",
+                      title: "State",
                       render: (row) => (
                         <ConsoleBadge tone={row.state === "ACTIVE" ? "warning" : "neutral"}>
                           {row.state}
@@ -283,11 +273,11 @@ export default function AdminSystemPage() {
                       ),
                     },
                     {
-                      title: "Источник",
-                      render: (row) => (row.origin === "manual" ? "Оператор" : "Автоматический"),
+                      title: "Source",
+                      render: (row) => (row.origin === "manual" ? "Operator" : "Automatic"),
                     },
                     {
-                      title: "Ревизия / дата",
+                      title: "Revision / date",
                       render: (row) => (
                         <>
                           <p className="mb-1 tabular-nums">{row.version}</p>
@@ -298,34 +288,34 @@ export default function AdminSystemPage() {
                   ]}
                 />
               </ConsolePanel>
-              <ConsolePanel title="Разрешение Live">
+              <ConsolePanel title="Live permission">
                 <ConsoleTable
                   rows={controls.liveEnable}
                   rowKey={(row) => row.organizationId}
-                  caption="Разрешение Live"
+                  caption="Live permission"
                   columns={[
                     {
-                      title: "Клиент",
+                      title: "Client",
                       render: (row) => (
                         <span className="font-mono text-xs">{row.organizationId}</span>
                       ),
                     },
                     {
-                      title: "Состояние",
+                      title: "State",
                       render: (row) => <ConsoleBadge>{row.state}</ConsoleBadge>,
                     },
                     {
-                      title: "Сохранённый предел",
+                      title: "Saved limit",
                       align: "right",
                       render: (row) => formatAdminMoney(row.cap, row.currency),
                     },
-                    { title: "Дата", render: (row) => <EvidenceTime at={row.at} label="" /> },
+                    { title: "Date", render: (row) => <EvidenceTime at={row.at} label="" /> },
                   ]}
                 />
               </ConsolePanel>
               <ConsolePanel
                 title="Runtime Authority"
-                note="Последняя сохранённая оценка для каждого экземпляра; текущая связь с хостом проверяется отдельно."
+                note="Latest saved assessment for each instance; current host connectivity is checked separately."
               >
                 <ConsoleTable
                   rows={controls.runtimeAuthority}
@@ -333,7 +323,7 @@ export default function AdminSystemPage() {
                   caption="Runtime Authority"
                   columns={[
                     {
-                      title: "Экземпляр",
+                      title: "Instance",
                       render: (row) => (
                         <>
                           <p className="font-mono text-xs">{row.instance}</p>
@@ -344,7 +334,7 @@ export default function AdminSystemPage() {
                       ),
                     },
                     {
-                      title: "Положение",
+                      title: "Posture",
                       render: (row) => (
                         <ConsoleBadge tone={row.posture === "NORMAL" ? "neutral" : "warning"}>
                           {row.posture}
@@ -352,7 +342,7 @@ export default function AdminSystemPage() {
                       ),
                     },
                     {
-                      title: "Причины",
+                      title: "Reasons",
                       render: (row) =>
                         row.reasonCodes?.length ? (
                           <ul className="space-y-1 text-xs">
@@ -365,15 +355,15 @@ export default function AdminSystemPage() {
                         ),
                     },
                     {
-                      title: "Дата оценки",
+                      title: "Assessment date",
                       render: (row) => <EvidenceTime at={row.at} label="" />,
                     },
                   ]}
                 />
               </ConsolePanel>
               <ConsolePanel
-                title="Состояние Risk"
-                note="Резерв Risk показан отдельно. Он не вычитается повторно из свободного остатка."
+                title="Risk state"
+                note="The Risk reserve is shown separately. It is not deducted again from the available balance."
               >
                 {controls.accountBindingReason ? (
                   <div className="p-5">
@@ -382,17 +372,17 @@ export default function AdminSystemPage() {
                       className={`${controlClass} mt-3`}
                       onClick={() => context.update({ exchange_account_id: null })}
                     >
-                      Показать runtime-счета клиента
+                      Show client runtime accounts
                     </button>
                   </div>
                 ) : (
                   <ConsoleTable
                     rows={controls.risk}
                     rowKey={(row) => `${row.organizationId}:${row.accountId}`}
-                    caption="Состояние Risk"
+                    caption="Risk state"
                     columns={[
                       {
-                        title: "Runtime-счёт",
+                        title: "Runtime account",
                         render: (row) => (
                           <>
                             <p className="font-mono text-xs">{row.accountId}</p>
@@ -403,7 +393,7 @@ export default function AdminSystemPage() {
                         ),
                       },
                       {
-                        title: "Допуск / сверка",
+                        title: "Admission / reconciliation",
                         render: (row) => (
                           <>
                             <ConsoleBadge>{row.posture}</ConsoleBadge>
@@ -414,16 +404,16 @@ export default function AdminSystemPage() {
                         ),
                       },
                       {
-                        title: "Лимит",
+                        title: "Limit",
                         align: "right",
                         render: (row) => formatAdminMoney(row.limit, row.currency),
                       },
                       {
-                        title: "Внутренний резерв",
+                        title: "Internal reserve",
                         align: "right",
                         render: (row) => formatAdminMoney(row.reserved, row.currency),
                       },
-                      { title: "Дата", render: (row) => <EvidenceTime at={row.at} label="" /> },
+                      { title: "Date", render: (row) => <EvidenceTime at={row.at} label="" /> },
                     ]}
                   />
                 )}
@@ -432,8 +422,8 @@ export default function AdminSystemPage() {
           ) : null}
           {tab === "audit" && data.audit ? (
             <ConsolePanel
-              title="Аудит"
-              note="Неизменяемый журнал AI-TRADER. Доступно только чтение; содержимое секретов и произвольные payload не выводятся."
+              title="Audit"
+              note="Immutable AI-TRADER log. Read-only access; secret contents and arbitrary payloads are not displayed."
             >
               {data.audit.reason ? (
                 <div className="p-5">
@@ -442,21 +432,21 @@ export default function AdminSystemPage() {
                     className={`${controlClass} mt-3`}
                     onClick={() => context.update({ exchange_account_id: null })}
                   >
-                    Аудит клиента
+                    Client audit
                   </button>
                 </div>
               ) : (
                 <ConsoleTable
                   rows={data.audit.items}
                   rowKey={(row) => row.id}
-                  caption="Аудит AI-TRADER"
+                  caption="AI-TRADER audit"
                   columns={[
                     {
-                      title: "Действие",
+                      title: "Action",
                       render: (row) => <span className="font-mono text-xs">{row.action}</span>,
                     },
                     {
-                      title: "Объект",
+                      title: "Entity",
                       render: (row) => (
                         <>
                           <p>{row.entityType}</p>
@@ -466,8 +456,8 @@ export default function AdminSystemPage() {
                         </>
                       ),
                     },
-                    { title: "Инициатор", render: (row) => row.actorType },
-                    { title: "Дата", render: (row) => <EvidenceTime at={row.at} label="" /> },
+                    { title: "Initiator", render: (row) => row.actorType },
+                    { title: "Date", render: (row) => <EvidenceTime at={row.at} label="" /> },
                   ]}
                 />
               )}
@@ -483,10 +473,10 @@ function JobTable({ jobs }: { jobs: SystemReadModel["jobs"] }) {
     <ConsoleTable
       rows={jobs}
       rowKey={(row) => row.jobKey}
-      caption="Сохранённые запуски заданий"
+      caption="Saved job runs"
       columns={[
         {
-          title: "Задание",
+          title: "Job",
           render: (row) => (
             <>
               <p className="font-medium">{JOB_LABELS[row.jobKey] ?? row.jobKey}</p>
@@ -494,15 +484,15 @@ function JobTable({ jobs }: { jobs: SystemReadModel["jobs"] }) {
                 {row.owner === "worker"
                   ? "Cloudflare Worker"
                   : row.owner === "human"
-                    ? "Оператор"
+                    ? "Operator"
                     : "Execution host"}
               </p>
             </>
           ),
         },
-        { title: "Расписание", render: (row) => row.cron ?? row.capability ?? "Не установлено" },
+        { title: "Schedule", render: (row) => row.cron ?? row.capability ?? "Not established" },
         {
-          title: "Последний запуск",
+          title: "Last run",
           render: (row) =>
             row.lastRun ? (
               <>
@@ -527,7 +517,7 @@ function JobTable({ jobs }: { jobs: SystemReadModel["jobs"] }) {
               <DataState state="unavailable" reason={row.reason} />
             ),
         },
-        { title: "Дата", render: (row) => <EvidenceTime at={row.lastRun?.at} label="" /> },
+        { title: "Date", render: (row) => <EvidenceTime at={row.lastRun?.at} label="" /> },
       ]}
     />
   );

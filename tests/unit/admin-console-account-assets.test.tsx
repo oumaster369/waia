@@ -33,14 +33,14 @@ describe("observed account asset display", () => {
         }}
       />,
     );
-    const table = screen.getByRole("table", { name: "Активы счёта" });
+    const table = screen.getByRole("table", { name: "Account assets" });
     expect(within(table).getAllByRole("row")).toHaveLength(3);
     expect(screen.getByText("USDT")).toBeInTheDocument();
     expect(screen.getByText("0.00000001")).toBeInTheDocument();
     expect(screen.queryByText("DUST")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Показать нулевые остатки (1)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show zero balances (1)" }));
     expect(screen.getByText("DUST")).toBeInTheDocument();
-    const hide = screen.getByRole("button", { name: "Скрыть нулевые остатки" });
+    const hide = screen.getByRole("button", { name: "Hide zero balances" });
     expect(hide).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(hide);
     expect(screen.queryByText("DUST")).not.toBeInTheDocument();

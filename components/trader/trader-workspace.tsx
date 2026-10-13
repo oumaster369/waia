@@ -34,26 +34,26 @@ function PermissionExplainer() {
       data-testid="trader-permission-explainer"
       className="border-border bg-muted/20 text-muted-foreground rounded-lg border p-4 text-sm"
     >
-        <p className="text-foreground font-medium">Как создать ключ HTX</p>
+        <p className="text-foreground font-medium">How to create an HTX key</p>
         <ol className="mt-2 list-decimal space-y-1 pl-5">
-        <li>Откройте в HTX управление API и создайте ключ HMAC.</li>
+        <li>Open API management in HTX and create an HMAC key.</li>
         <li>
-          Разрешения <span className="text-foreground">Read</span> достаточно для отображения счёта;
-          ключ с Read и Trade тоже можно подключить. Не включайте Withdraw: WAIA использует ключ
-          только для наблюдения и не выполняет торговые операции.
+          The <span className="text-foreground">Read</span> permission is enough to display the account;
+          a key with Read and Trade can also be connected. Do not enable Withdraw: WAIA uses the key
+          only for observation and does not perform trades.
         </li>
         <li>
-          Оставьте список IP пустым, затем вставьте ниже Access Key и Secret Key. Секретный ключ
-          отображается только один раз.
+          Leave the IP list empty, then enter the Access Key and Secret Key below. The Secret Key
+          is shown only once.
         </li>
         <li>
-          После успешного подключения измените тот же ключ HTX и добавьте в список IP только{" "}
+          After connecting successfully, edit the same HTX key and add only this address to its IP list:{" "}
           <span className="text-foreground font-mono">84.32.9.146</span>.
         </li>
       </ol>
       <p className="mt-2 text-xs">
-        Для HTX Spot используются только API key и secret, без passphrase. Это ваш личный аккаунт
-        AI-TRADER; другие пользователи к нему не подключаются.
+        HTX Spot uses only the API key and secret, with no passphrase. This is your personal
+        AI-TRADER account; other users cannot connect to it.
       </p>
     </div>
   );
@@ -67,27 +67,27 @@ function CredentialStatus({ credential }: { credential: CredentialMetadataDto })
     <div data-testid="trader-account-status" className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium">
-          {credential.status === "active" ? "HTX подключен в WAIA" : "Подключение HTX отозвано в WAIA"}
+          {credential.status === "active" ? "HTX connected in WAIA" : "HTX connection revoked in WAIA"}
         </span>
         <span
           data-testid="trader-credential-status"
           className="bg-muted rounded-full px-2 py-0.5 text-xs capitalize"
         >
-          {credential.status === "active" ? "Активен в WAIA" : "Отозван в WAIA"}
+          {credential.status === "active" ? "Active in WAIA" : "Revoked in WAIA"}
         </span>
       </div>
       <dl className="grid gap-2 text-sm">
         <div className="flex justify-between gap-4">
-          <dt className="text-muted-foreground">Аккаунт</dt>
+          <dt className="text-muted-foreground">Account</dt>
           <dd data-testid="trader-credential-account-id">{credential.exchangeAccountId}</dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="text-muted-foreground">Ключ API</dt>
+          <dt className="text-muted-foreground">API key</dt>
           <dd data-testid="trader-credential-masked-key">{credential.apiKeyMasked ?? "—"}</dd>
         </div>
         {metadata ? (
           <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">Разрешения</dt>
+            <dt className="text-muted-foreground">Permissions</dt>
             <dd data-testid="trader-credential-scopes">{metadata.scopes.join(", ") || "—"}</dd>
           </div>
         ) : null}
@@ -126,16 +126,16 @@ function credentialAccountOptions(credentials: readonly CredentialMetadataDto[])
 }
 
 function credentialRequestError(code: string | undefined, status: number): string {
-  if (status === 0) return "Не удалось подтвердить результат запроса. Проверьте состояние подключения перед повторной отправкой ключа.";
+  if (status === 0) return "The request result could not be confirmed. Check the connection status before submitting the key again.";
   switch (code) {
-    case "CREDENTIAL_CONFLICT": return "Состояние аккаунта изменилось. Обновите список и повторите действие.";
-    case "CREDENTIAL_NOT_FOUND": return "Подключение не найдено. Обновите список аккаунтов.";
-    case "CREDENTIAL_VALIDATION_FAILED": return "HTX не подтвердил эти ключи. Проверьте их разрешения и попробуйте снова.";
-    case "UNAUTHORIZED": return "Войдите в аккаунт, чтобы управлять подключением HTX.";
-    case "FORBIDDEN": return "У этого аккаунта нет доступа к AI-TRADER.";
-    case "CSRF_INVALID": return "Запрос отклонён. Обновите страницу и повторите действие.";
-    case "MASTER_KEY_NOT_READY": return "Сохранение подключений временно недоступно. Попробуйте позже.";
-    default: return "Не удалось завершить запрос. Проверьте состояние подключения перед повторной отправкой ключа.";
+    case "CREDENTIAL_CONFLICT": return "The account state changed. Refresh the list and try again.";
+    case "CREDENTIAL_NOT_FOUND": return "Connection not found. Refresh the account list.";
+    case "CREDENTIAL_VALIDATION_FAILED": return "HTX did not validate these keys. Check their permissions and try again.";
+    case "UNAUTHORIZED": return "Sign in to manage the HTX connection.";
+    case "FORBIDDEN": return "This account has no access to AI-TRADER.";
+    case "CSRF_INVALID": return "Request rejected. Refresh the page and try again.";
+    case "MASTER_KEY_NOT_READY": return "Connection storage is temporarily unavailable. Try again later.";
+    default: return "The request could not be completed. Check the connection status before submitting the key again.";
   }
 }
 
@@ -160,7 +160,7 @@ function ExchangeTraderWorkspace({ signInHref }: { signInHref: string }) {
   const selectedAccountIdRef = React.useRef("");
   const pending = React.useRef(new Map<string, object>());
   const asyncError =
-    "Запрос не завершился. Проверьте состояние подключения перед повторной отправкой ключа.";
+    "The request did not complete. Check the connection status before submitting the key again.";
 
   const clearCredentialInputs = React.useCallback(() => {
     setApiKey("");
@@ -306,7 +306,7 @@ function ExchangeTraderWorkspace({ signInHref }: { signInHref: string }) {
     const trimmedKey = apiKey.trim();
     const trimmedSecret = apiSecret.trim();
     if (!trimmedKey || !trimmedSecret) {
-      setErrorMessage("Введите Access Key и Secret Key.");
+      setErrorMessage("Enter the Access Key and Secret Key.");
       return;
     }
     const targetAccountId = selectedCredential?.exchangeAccountId ?? null;
@@ -429,45 +429,45 @@ function ExchangeTraderWorkspace({ signInHref }: { signInHref: string }) {
 
       {access === "unauthenticated" ? (
         <WaiaSurface variant="raised" className="mx-auto w-full max-w-lg space-y-3 p-6" data-testid="trader-auth-required">
-          <h2 className="text-lg font-medium">Войдите, чтобы подключить HTX</h2>
+          <h2 className="text-lg font-medium">Sign in to connect HTX</h2>
           <p className="text-muted-foreground text-sm">
-            Подключение HTX доступно после входа в аккаунт WAIA. После входа вернитесь в AI-TRADER.
+            You can connect HTX after signing in to WAIA. Return to AI-TRADER after signing in.
           </p>
           <Link href={signInHref} className={buttonVariants({ className: "w-full" })} data-testid="trader-sign-in-link">
-            Войти или создать аккаунт
+            Sign in or create an account
           </Link>
         </WaiaSurface>
       ) : access === "forbidden" ? (
         <WaiaSurface variant="raised" className="mx-auto w-full max-w-lg space-y-3 p-6" data-testid="trader-access-required">
-          <h2 className="text-lg font-medium">Нет доступа к AI-TRADER</h2>
+          <h2 className="text-lg font-medium">No access to AI-TRADER</h2>
           <p className="text-muted-foreground text-sm">
-            Войдите в аккаунт с доступом к AI-TRADER или обратитесь в поддержку. Данные подключения здесь не загружены.
+            Sign in with an account that has AI-TRADER access or contact support. Connection data has not been loaded here.
           </p>
         </WaiaSurface>
       ) : access === "unavailable" ? (
         <WaiaSurface variant="raised" className="mx-auto w-full max-w-lg space-y-3 p-6" data-testid="trader-access-unavailable">
-          <h2 className="text-lg font-medium">Не удалось проверить доступ</h2>
+          <h2 className="text-lg font-medium">Access could not be checked</h2>
           <p className="text-muted-foreground text-sm">{errorMessage ?? asyncError}</p>
           <Button type="button" variant="outline" onClick={() => void loadWorkspace()}>
-            Повторить проверку
+            Check again
           </Button>
         </WaiaSurface>
       ) : access === "loading" || loading ? (
-        <p className="text-muted-foreground text-sm" role="status">Проверка доступа и подключений…</p>
+        <p className="text-muted-foreground text-sm" role="status">Checking access and connections…</p>
       ) : (
         <div className="space-y-6">
           {accountOptions.length > 0 ? (
             <section aria-labelledby="trader-account-heading" className="space-y-4">
               <div>
-                <p className="text-muted-foreground text-xs tracking-wide uppercase">Аккаунты</p>
+                <p className="text-muted-foreground text-xs tracking-wide uppercase">Accounts</p>
                 <h2 id="trader-account-heading" className="mt-1 text-xl font-semibold">
-                  Подключения HTX
+                  HTX connections
                 </h2>
               </div>
               <div className="flex flex-wrap items-end gap-3">
                 <div className="min-w-64 flex-1">
                   <label htmlFor="trader-account-select" className="text-sm font-medium">
-                    Выберите аккаунт
+                    Select an account
                   </label>
                   <select
                     id="trader-account-select"
@@ -477,10 +477,10 @@ function ExchangeTraderWorkspace({ signInHref }: { signInHref: string }) {
                     onChange={(event) => selectAccount(event.target.value)}
                     className="border-input bg-background mt-1 h-9 w-full rounded-md border px-3 text-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                   >
-                    <option value="">Выберите аккаунт</option>
+                    <option value="">Select an account</option>
                     {accountOptions.map(({ accountId, credential }) => (
                       <option key={accountId} value={accountId}>
-                        HTX {accountId} · {credential.status === "active" ? "Активен в WAIA" : "Отозван в WAIA"}
+                        HTX {accountId} · {credential.status === "active" ? "Active in WAIA" : "Revoked in WAIA"}
                       </option>
                     ))}
                   </select>
@@ -490,7 +490,7 @@ function ExchangeTraderWorkspace({ signInHref }: { signInHref: string }) {
                     selectAccount("");
                     setAddingNewAccount(true);
                   }}>
-                    Подключить другой аккаунт
+                    Connect another account
                   </Button>
                 ) : null}
               </div>
@@ -499,12 +499,12 @@ function ExchangeTraderWorkspace({ signInHref }: { signInHref: string }) {
 
           {accountOptions.length > 0 && !selectedCredential && !addingNewAccount ? (
             <div className="border-border bg-muted/10 rounded-lg border p-4 text-sm" data-testid="trader-account-selection-prompt">
-              Выберите аккаунт, чтобы просмотреть его статус и историю, или подключите другой.
+              Select an account to view its status and history, or connect another.
             </div>
           ) : null}
 
           {selectedCredential ? (
-            <section aria-label="Выбранный аккаунт HTX" className="space-y-4">
+            <section aria-label="Selected HTX account" className="space-y-4">
               <WaiaSurface variant="elevated" className="p-6">
                 <CredentialStatus credential={selectedCredential} />
                 {selectedCredential.status === "active" ? (
@@ -517,7 +517,7 @@ function ExchangeTraderWorkspace({ signInHref }: { signInHref: string }) {
                         setAccountLabel("");
                         setEditingReplacement(true);
                       }} data-testid="trader-replace-button">
-                        Заменить подключение
+                        Replace connection
                       </Button>
                     ) : null}
                     {!confirmDisconnect ? (
@@ -529,18 +529,18 @@ function ExchangeTraderWorkspace({ signInHref }: { signInHref: string }) {
                           setAccountLabel("");
                           setConfirmDisconnectCredentialId(selectedCredential.id);
                         }} data-testid="trader-disconnect-button">
-                        Отключить подключение
+                        Disconnect
                       </Button>
                     ) : (
-                      <div className="border-border bg-muted/10 rounded-lg border p-4" role="group" aria-label="Подтвердить отключение">
-                        <p className="text-sm">Будет отозвана только запись подключения в WAIA. Сам ключ HTX и внешний исполнитель не изменятся; история сохранится.</p>
+                      <div className="border-border bg-muted/10 rounded-lg border p-4" role="group" aria-label="Confirm disconnection">
+                        <p className="text-sm">Only the connection record in WAIA will be revoked. The HTX key and external executor will remain unchanged; history will be retained.</p>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Button type="button" variant="destructive" disabled={disconnecting}
                             onClick={handleDisconnect} data-testid="trader-disconnect-confirm">
-                            {disconnecting ? "Отключение…" : "Подтвердить отключение"}
+                            {disconnecting ? "Disconnecting…" : "Confirm disconnection"}
                           </Button>
                           <Button type="button" variant="outline" disabled={mutationBusy}
-                            onClick={() => setConfirmDisconnectCredentialId(null)}>Отмена</Button>
+                            onClick={() => setConfirmDisconnectCredentialId(null)}>Cancel</Button>
                         </div>
                       </div>
                     )}
@@ -554,15 +554,15 @@ function ExchangeTraderWorkspace({ signInHref }: { signInHref: string }) {
                 />
               ) : null}
               <p className="text-muted-foreground text-sm" data-testid="trader-unpublished-note">
-                Стратегия, прогноз, новости и месячный отчёт пока не опубликованы в этом кабинете.
-                Выводы не строятся.
+                Strategy, forecast, news and monthly reports have not been published in this cabinet yet.
+                No conclusions are inferred.
               </p>
               <aside className="border-border bg-muted/10 rounded-lg border p-4 text-sm" data-testid="trader-authority-boundary">
-                <p className="font-medium">Только наблюдение</p>
+                <p className="font-medium">Observation only</p>
                 <p className="text-muted-foreground mt-1">
-                  Кабинет предназначен только для наблюдения. Включение live-режима, аварийные
-                  переключатели, публикация стратегий, административные функции и управление
-                  капиталом здесь недоступны.
+                  This cabinet is for observation only. Live activation, emergency
+                  switches, strategy publication, administrative functions and capital
+                  management are unavailable here.
                 </p>
               </aside>
             </section>
@@ -572,17 +572,17 @@ function ExchangeTraderWorkspace({ signInHref }: { signInHref: string }) {
             <div className="mx-auto w-full max-w-lg space-y-6">
               <WaiaSurface variant="elevated" className="p-6" data-testid="trader-connect-section">
                 <h2 className="text-lg font-medium">
-                  Подключить HTX
+                  Connect HTX
                 </h2>
                 {selectedCredential?.status === "active" ? (
-                  <p className="mt-2 text-sm font-medium">Это заменит подключение в WAIA для выбранного аккаунта, а не добавит отдельный ключ наблюдения. Сам ключ HTX и внешний исполнитель не изменятся; история сохранится.</p>
+                  <p className="mt-2 text-sm font-medium">This will replace the WAIA connection for the selected account, rather than add a separate observation key. The HTX key and external executor will remain unchanged; history will be retained.</p>
                 ) : selectedCredential ? (
-                  <p className="text-muted-foreground mt-1 text-sm">Предыдущая запись подключения отозвана в WAIA. Введённый ключ может относиться к другому аккаунту HTX; после ответа будет выбран аккаунт из результата. История сохранится.</p>
+                  <p className="text-muted-foreground mt-1 text-sm">The previous connection record was revoked in WAIA. The entered key may belong to another HTX account; the account returned in the response will be selected. History will be retained.</p>
                 ) : (
                   <p className="text-muted-foreground mt-1 text-sm">
-                    Подключите ключ HTX HMAC с разрешением Read или Read и Trade. Withdraw включать
-                    нельзя: WAIA использует ключ только для наблюдения и не выставляет ордера.
-                    Вставьте ниже Access Key и Secret Key.
+                    Connect an HTX HMAC key with Read or Read and Trade permissions. Withdraw must
+                    remain disabled: WAIA uses the key only for observation and does not place orders.
+                    Enter the Access Key and Secret Key below.
                   </p>
                 )}
                 <form className="mt-6 space-y-4" onSubmit={handleConnect} data-testid="trader-connect-form">
@@ -597,19 +597,19 @@ function ExchangeTraderWorkspace({ signInHref }: { signInHref: string }) {
                       value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} autoComplete="new-password" required />
                   </div>
                   <div>
-                    <label className="text-sm font-medium" htmlFor="trader-account-label">Название аккаунта (необязательно)</label>
+                    <label className="text-sm font-medium" htmlFor="trader-account-label">Account name (optional)</label>
                     <Input id="trader-account-label" data-testid="trader-account-label" className="mt-1"
                       value={accountLabel} onChange={(e) => setAccountLabel(e.target.value)} />
                   </div>
                   <PermissionExplainer />
                   <Button type="submit" disabled={mutationBusy} data-testid="trader-connect-submit" className="w-full">
-                    {connecting ? "Подключение…" : selectedCredential?.status === "active"
-                      ? "Заменить подключение"
-                      : "Подключить HTX"}
+                    {connecting ? "Connecting…" : selectedCredential?.status === "active"
+                      ? "Replace connection"
+                      : "Connect HTX"}
                   </Button>
                   {selectedCredential?.status === "active" || addingNewAccount ? (
                     <Button type="button" variant="outline" disabled={mutationBusy} onClick={cancelConnect}>
-                      Отмена
+                      Cancel
                     </Button>
                   ) : null}
                 </form>

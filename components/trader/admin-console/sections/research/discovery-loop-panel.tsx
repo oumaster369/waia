@@ -20,7 +20,7 @@ export function DiscoveryLoopPanel() {
   return (
     <ConsolePanel
       title="Discovery"
-      note="Только чтение сохранённых запусков, испытаний и вердиктов. Без заявок и без включения торговли."
+      note="Read saved runs, trials and verdicts only. No orders and no enabling trading."
     >
       {read.loading ? <ConsoleLoading /> : null}
       {read.reason ? (
@@ -29,17 +29,17 @@ export function DiscoveryLoopPanel() {
         </div>
       ) : null}
       <ConsoleTable
-        caption="Запуски discovery"
+        caption="Discovery runs"
         rows={items}
         rowKey={(row) => row.id}
         columns={[
-          { title: "Время", render: (row) => row.createdAt },
-          { title: "Кампания", render: (row) => row.campaignId },
-          { title: "Статус", render: (row) => row.status ?? "—" },
-          { title: "Причина", render: (row) => row.reason ?? "—" },
-          { title: "Капитал", render: (row) => row.capitalAuthority ?? "—" },
+          { title: "Time", render: (row) => row.createdAt },
+          { title: "Campaign", render: (row) => row.campaignId },
+          { title: "Status", render: (row) => row.status ?? "—" },
+          { title: "Reason", render: (row) => row.reason ?? "—" },
+          { title: "Equity", render: (row) => row.capitalAuthority ?? "—" },
           {
-            title: "Вердикты",
+            title: "Verdicts",
             render: (row) =>
               row.verdicts
                 .map((verdict) => `${verdict.partition}: ${verdict.verdict}`)

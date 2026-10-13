@@ -15,24 +15,24 @@ export type InvoiceEvidence = {
   truncated: boolean;
 };
 const text = (value: unknown) =>
-  typeof value === "string" || typeof value === "number" ? String(value) : "Не сохранено";
+  typeof value === "string" || typeof value === "number" ? String(value) : "Not saved";
 const at = (value: unknown) => (typeof value === "string" ? value : null);
 const label = (value: unknown) =>
   (
     ({
-      DETECTED: "Платёж обнаружен",
-      CONFIRMED: "Подтверждён",
-      APPLIED: "Зачтён",
-      EXCEPTION: "На сверке",
-      FAILED: "Ошибка",
-      OPEN: "Открыт",
-      RESOLVED: "Решён",
-      CANCELLED: "Отменён",
-      "trader.invoice.issued": "Счёт выпущен",
-      "trader.invoice.draft_generated": "Черновик рассчитан",
-      "trader.invoice.paid": "Счёт оплачен",
-      "trader.invoice.issuance_approved": "Выпуск подтверждён",
-      "trader.invoice.issuance_cancelled": "Подтверждение отменено",
+      DETECTED: "Payment detected",
+      CONFIRMED: "Confirmed",
+      APPLIED: "Applied",
+      EXCEPTION: "Under reconciliation",
+      FAILED: "Error",
+      OPEN: "Opened",
+      RESOLVED: "Resolved",
+      CANCELLED: "Cancelled",
+      "trader.invoice.issued": "Invoice issued",
+      "trader.invoice.draft_generated": "Draft calculated",
+      "trader.invoice.paid": "Invoice paid",
+      "trader.invoice.issuance_approved": "Issuance confirmed",
+      "trader.invoice.issuance_cancelled": "Confirmation revoked",
     }) as Record<string, string>
   )[text(value)] ?? text(value);
 const money = (amount: unknown, currency: unknown) =>
@@ -45,18 +45,18 @@ export function InvoiceEvidencePanel({ evidence }: { evidence: InvoiceEvidence }
   return (
     <div className="space-y-4">
       <ConsolePanel
-        title="Платежи и подтверждения"
-        note="Обнаружение платежа не означает зачёт. Каждая строка — сохранённое событие."
+        title="Payments and attestations"
+        note="Payment detection does not mean application. Each row is a saved event."
       >
         <ConsoleTable
-          caption="События платежей счёта"
+          caption="Invoice payment events"
           rows={evidence.payments}
           rowKey={(r) => text(r.id)}
           columns={[
-            { title: "Событие", render: (r) => label(r.type) },
-            { title: "Сумма", render: (r) => money(r.amount, r.asset) },
+            { title: "Event", render: (r) => label(r.type) },
+            { title: "Amount", render: (r) => money(r.amount, r.asset) },
             {
-              title: "Сеть и транзакция",
+              title: "Network and transaction",
               render: (r) => (
                 <div className="max-w-56 break-all">
                   {text(r.network)}
@@ -66,24 +66,24 @@ export function InvoiceEvidencePanel({ evidence }: { evidence: InvoiceEvidence }
               ),
             },
             {
-              title: "Подтверждения",
+              title: "Confirmations",
               render: (r) => `${text(r.confirmationsObserved)} / ${text(r.confirmationsRequired)}`,
             },
-            { title: "Время", render: (r) => <EvidenceTime at={at(r.at)} label="" /> },
+            { title: "Time", render: (r) => <EvidenceTime at={at(r.at)} label="" /> },
           ]}
         />
       </ConsolePanel>
       <ConsolePanel
-        title="Зачёт и сверка"
-        note="Суммы и метод — из сохранённого settlement. stablecoin_par применяется только к платежу."
+        title="Application and reconciliation"
+        note="Amounts and method come from saved settlement. stablecoin_par applies only to the payment."
       >
         <ConsoleTable
-          caption="Зачёт платежей счёта"
+          caption="Invoice payment application"
           rows={evidence.settlements}
           rowKey={(r) => text(r.id)}
           columns={[
             {
-              title: "Результат",
+              title: "Result",
               render: (r) => (
                 <div>
                   {label(r.outcome)}
@@ -92,7 +92,7 @@ export function InvoiceEvidencePanel({ evidence }: { evidence: InvoiceEvidence }
               ),
             },
             {
-              title: "Оценка платежа",
+              title: "Payment valuation",
               render: (r) => (
                 <div>
                   {money(r.valuedAmount, r.currency)}
@@ -101,58 +101,58 @@ export function InvoiceEvidencePanel({ evidence }: { evidence: InvoiceEvidence }
               ),
             },
             {
-              title: "Зачтено",
-              render: (r) => (r.applicationId ? money(r.appliedAmount, r.currency) : "Не зачтено"),
+              title: "Applied",
+              render: (r) => (r.applicationId ? money(r.appliedAmount, r.currency) : "Not applied"),
             },
             {
-              title: "Сверка",
+              title: "Reconciliation",
               render: (r) =>
-                r.reconciliationStatus ? label(r.reconciliationStatus) : "Кейс не открыт",
+                r.reconciliationStatus ? label(r.reconciliationStatus) : "Case not opened",
             },
             {
-              title: "Время",
+              title: "Time",
               render: (r) => <EvidenceTime at={at(r.appliedAt ?? r.at)} label="" />,
             },
           ]}
         />
       </ConsolePanel>
       <ConsolePanel
-        title="Споры и корректировки"
-        note="Корректировки показаны отдельно и не заменяют сохранённый расчёт счёта."
+        title="Disputes and corrections"
+        note="Corrections are shown separately and do not replace the saved invoice calculation."
       >
         <ConsoleTable<Record<string, unknown> & { kind: string }>
-          caption="Споры и корректировки счёта"
+          caption="Invoice disputes and corrections"
           rows={[
-            ...evidence.disputes.map((r) => ({ ...r, kind: "Спор" })),
-            ...evidence.corrections.map((r) => ({ ...r, kind: "Корректировка" })),
+            ...evidence.disputes.map((r) => ({ ...r, kind: "Dispute" })),
+            ...evidence.corrections.map((r) => ({ ...r, kind: "Correction" })),
           ]}
           rowKey={(r) => `${r.kind}:${text(r.id)}`}
           columns={[
-            { title: "Тип", render: (r) => r.kind },
-            { title: "Состояние", render: (r) => label(r.status ?? r.type) },
-            { title: "Причина", render: (r) => text(r.reason) },
+            { title: "Type", render: (r) => r.kind },
+            { title: "State", render: (r) => label(r.status ?? r.type) },
+            { title: "Reason", render: (r) => text(r.reason) },
             {
-              title: "Сумма",
+              title: "Amount",
               render: (r) =>
-                r.kind === "Корректировка" ? money(r.amount, r.currency) : "Не применимо",
+                r.kind === "Correction" ? money(r.amount, r.currency) : "Not applicable",
             },
-            { title: "Инициатор", render: (r) => text(r.actorId ?? r.actorType) },
-            { title: "Время", render: (r) => <EvidenceTime at={at(r.at)} label="" /> },
+            { title: "Initiator", render: (r) => text(r.actorId ?? r.actorType) },
+            { title: "Time", render: (r) => <EvidenceTime at={at(r.at)} label="" /> },
           ]}
         />
       </ConsolePanel>
       <ConsolePanel
-        title="История документа"
-        note="Сохранённые записи аудита. Отмена подтверждения выпуска не является отменой счёта."
+        title="Document history"
+        note="Saved audit records. Revoking issuance confirmation does not cancel the invoice."
       >
         <ConsoleTable
-          caption="Аудит счёта"
+          caption="Invoice audit"
           rows={evidence.history}
           rowKey={(r) => text(r.id)}
           columns={[
-            { title: "Событие", render: (r) => label(r.type) },
-            { title: "Инициатор", render: (r) => text(r.actorId ?? r.actorType) },
-            { title: "Время", render: (r) => <EvidenceTime at={at(r.at)} label="" /> },
+            { title: "Event", render: (r) => label(r.type) },
+            { title: "Initiator", render: (r) => text(r.actorId ?? r.actorType) },
+            { title: "Time", render: (r) => <EvidenceTime at={at(r.at)} label="" /> },
           ]}
         />
       </ConsolePanel>

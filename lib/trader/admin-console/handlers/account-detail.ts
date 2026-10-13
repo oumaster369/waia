@@ -171,47 +171,47 @@ export async function handleAdminConsoleAccountDetailGet(
       );
       const connection = credentials.some((c) => c.status === "active")
         ? finance.observationStatus === "COMPLETE" && !finance.stale
-          ? "Наблюдается"
-          : "Ключ активен; наблюдение требует проверки"
-        : "Нет активного ключа";
+          ? "Observed"
+          : "Key active; observation needs review"
+        : "No active key";
       const reconciliation = risk.length
         ? [...new Set(risk.map((r) => String(r.reconciliation_status)))].join(", ")
         : null;
       const facets = [
-        { id: "connection", label: "Подключение", value: connection, reason: null },
+        { id: "connection", label: "Connecting", value: connection, reason: null },
         {
           id: "freshness",
-          label: "Свежесть",
-          value: finance.observedAt ? (finance.stale ? "Устарело" : "Актуально") : null,
+          label: "Freshness",
+          value: finance.observedAt ? (finance.stale ? "Stale" : "Current") : null,
           reason: finance.observedAt ? null : "OBSERVATION_MISSING",
         },
         {
           id: "completeness",
-          label: "Полнота",
+          label: "Completeness",
           value:
             finance.observationStatus === "COMPLETE"
-              ? "Полное наблюдение"
+              ? "Complete observation"
               : finance.observationStatus === "PARTIAL"
-                ? "Частичное наблюдение"
+                ? "Partial observation"
                 : finance.observationStatus === "ERROR"
-                  ? "Ошибка наблюдения"
+                  ? "Observation error"
                   : null,
           reason: finance.observationStatus ? null : "OBSERVATION_MISSING",
         },
         {
           id: "reconciliation",
-          label: "Сверка",
+          label: "Reconciliation",
           value: reconciliation,
           reason: reconciliation ? null : "RISK_ACCOUNT_BINDING_NOT_PERSISTED",
         },
         {
           id: "tradePermission",
-          label: "Разрешение торговли",
+          label: "Trading permission",
           value:
             identity.tradePermission === "halted"
-              ? "Остановлено"
+              ? "Stopped"
               : identity.tradePermission === "close_only"
-                ? "Только сокращение"
+                ? "Risk reduction only"
                 : null,
           reason: identity.tradePermissionReason,
         },

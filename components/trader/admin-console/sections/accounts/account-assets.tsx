@@ -23,8 +23,8 @@ export function AccountAssets({
   const hiddenCount = assets.length - visible.length;
   return (
     <ConsolePanel
-      title="Наблюдаемые активы"
-      note={`Оценка ${finance.currency}; метод ${finance.method}. Включает количество, заблокированное в sell-ордерах.`}
+      title="Observed assets"
+      note={`Valuation ${finance.currency}; method ${finance.method}. Includes quantity locked in sell orders.`}
     >
       {hiddenCount > 0 ? (
         <div className="border-waia-divider border-b px-5 py-3">
@@ -34,7 +34,7 @@ export function AccountAssets({
             onClick={() => setShowZero(!showZero)}
             className="text-waia-fg-muted hover:text-waia-fg rounded text-xs underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4"
           >
-            {showZero ? "Скрыть нулевые остатки" : `Показать нулевые остатки (${hiddenCount})`}
+            {showZero ? "Hide zero balances" : `Show zero balances (${hiddenCount})`}
           </button>
         </div>
       ) : null}
@@ -43,13 +43,13 @@ export function AccountAssets({
           <ConsoleTable
             rows={showZero ? assets : visible}
             rowKey={(row) => row.asset}
-            caption="Активы счёта"
+            caption="Account assets"
             columns={[
-              { title: "Актив", render: (row) => row.asset },
-              { title: "Свободно", align: "right", render: (row) => row.free },
-              { title: "В ордерах", align: "right", render: (row) => row.locked },
+              { title: "Asset", render: (row) => row.asset },
+              { title: "Available", align: "right", render: (row) => row.free },
+              { title: "In orders", align: "right", render: (row) => row.locked },
               {
-                title: "Рыночная стоимость",
+                title: "Market value",
                 align: "right",
                 render: (row) =>
                   row.value === null ? (
@@ -67,7 +67,7 @@ export function AccountAssets({
           />
         ) : (
           <p className="text-waia-fg-muted p-5 text-sm">
-            Все наблюдаемые остатки подтверждены как нулевые.
+            All observed balances are confirmed as zero.
           </p>
         )
       ) : (
