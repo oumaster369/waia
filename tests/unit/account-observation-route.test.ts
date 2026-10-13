@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/pg-proxy";
 import * as pgSchema from "@/db/schema.postgres";
+import { OrgScopeError } from "@/lib/waia-core/scope/org-context";
 const mocks = vi.hoisted(() => ({
   user: vi.fn(),
   access: vi.fn(),
@@ -20,7 +21,8 @@ vi.mock("@/db/waia-runtime-db", () => ({
   getWaiaRuntimeDb: mocks.access,
   disposeWaiaRuntimeDb: mocks.dispose,
 }));
-vi.mock("@/lib/waia-core/scope/org-context", () => ({
+vi.mock("@/lib/waia-core/scope/org-context", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/waia-core/scope/org-context")>()),
   assertOrgMembershipPostgres: mocks.membership,
 }));
 vi.mock("@/lib/waia-core/entitlements/authoritative", () => ({
@@ -123,6 +125,30 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 describe("account observation route wiring, no external requests", () => {
+  it.each([
+    new Error("private-connection-failure-canary"),
+    new Error("ORG_MEMBERSHIP_REQUIRED"),
+    new OrgScopeError("ORG_CONTEXT_REQUIRED"),
+  ])("does not classify an unverified membership read failure as revoked", async (failure) => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      mocks.membership.mockRejectedValue(failure);
+      const response = await accountObservationRoute(request(), "tenant");
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: "ACCOUNT_OBSERVATION_UNAVAILABLE" });
+      expect(mocks.projection).not.toHaveBeenCalled();
+      expect(mocks.dispose).toHaveBeenCalledOnce();
+      expect(log).toHaveBeenCalledOnce();
+      expect(JSON.parse(log.mock.calls[0][0])).toMatchObject({ stage: "MEMBERSHIP", outcome: "THREW" });
+      expect(JSON.stringify(log.mock.calls)).not.toContain("canary");
+    } finally { log.mockRestore(); }
+  });
+  it("keeps verified missing membership forbidden before opening projection", async () => {
+    mocks.membership.mockRejectedValue(new OrgScopeError("ORG_MEMBERSHIP_REQUIRED"));
+    expect((await accountObservationRoute(request(), "tenant")).status).toBe(403);
+    expect(mocks.projection).not.toHaveBeenCalled();
+    expect(mocks.dispose).toHaveBeenCalledOnce();
+  });
   it.each([tenantStream, adminStream])(
     "stream wrapper opens/disposes independent read contexts and revalidates fresh identity",
     async (get) => {

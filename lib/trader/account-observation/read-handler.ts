@@ -46,13 +46,16 @@ export async function handleAccountObservationGet(
   mode: "observation" | "binding" = "observation",
 ): Promise<Response> {
   const trace = deps.failureTrace;
+  const abort = new AbortController();
   const fail = (status: number) => {
+    // Cancellation does not establish that access was revoked. Keep it
+    // fail-closed but retryable, including dependencies settling after abort.
+    if (abort.signal.aborted && (status === 401 || status === 403)) status = 503;
     if (status === 503) trace?.report("THREW");
     else trace?.complete();
     return error(status);
   };
   if (request.method !== "GET") return fail(405);
-  const abort = new AbortController();
   const cancel = () => abort.abort();
   request.signal.addEventListener("abort", cancel, { once: true });
   if (request.signal.aborted) abort.abort();
@@ -66,6 +69,7 @@ export async function handleAccountObservationGet(
       }, 5000);
     });
     const execute = async (): Promise<Response> => {
+      if (abort.signal.aborted) return fail(503);
       trace?.enter("SESSION_INITIAL");
       const userId = await deps.getUserId(abort.signal);
       if (!userId) return fail(401);
@@ -132,7 +136,7 @@ export async function handleAccountObservationGet(
       const current = await deps.resolveActiveBinding(scope, userId, abort.signal);
       if (!(await allowed())) return fail(403);
       if (!current)
-        return mode === "binding" ? new Response(null, { status: 204, headers }) : error(403);
+        return mode === "binding" ? new Response(null, { status: 204, headers }) : fail(403);
       trace?.enter("BINDING_VALIDATION");
       const binding = observationBindingSchema.parse(current);
       if (
