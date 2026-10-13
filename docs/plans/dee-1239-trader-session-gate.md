@@ -9,15 +9,15 @@ requiredValidation: [lint, typecheck, build, targeted-unit, browser, validate-ca
 approvalGates: [independent-review, required-ci, separately-verified-production-release]
 state:
   status: in-review
-  currentWorkPackage: WP-3
-  completedWorkPackages: [WP-1]
-  remainingWorkPackages: [WP-3, WP-2]
+  currentWorkPackage: WP-4
+  completedWorkPackages: [WP-1, WP-3]
+  remainingWorkPackages: [WP-4, WP-2]
   prNumber: 781
   prUrl: https://github.com/oumaster369/waia/pull/781
-  lastValidatedGitSha: 37ca11b3b8cefb062760137b41f35f6b4105bc6c
-  lastValidationAt: "2026-10-13T08:44:00Z"
+  lastValidatedGitSha: 90dd81bc50c4ec80ddba224ac07eca69be8705a6
+  lastValidationAt: "2026-10-13T09:10:00Z"
   blockedReason: null
-  nextAction: "Validate and independently review the explicit backend projection release pin, then publish the combined candidate and require its exact-head CI before source integration; production remains separately verified."
+  nextAction: "Complete browser and independent review of the inline-review fixes, then publish one consolidated candidate and require exact-head CI before source integration; production remains separately verified."
 provenance:
   createdFrom: "User-requested live onboarding verification and DEE-1239"
   gapRegistry: null
@@ -54,3 +54,11 @@ Add `WAIA_ACCOUNT_OBSERVATION_PROJECTION_RELEASE_SHA` as an explicit pin to the 
 The operator must derive the backend pin from a fresh accepted active tuple and independently bind it to the existing backend artifact. This does not authorize arbitrary backend substitution or waive compatibility verification. The new Worker source release remains its actual merged SHA. Preserve projection1, PAPER0, all other variables, secret bindings, schedules and running containers. An exact previous Worker version is the compatible rollback while the backend remains unchanged.
 
 Root architect review selected the separate backend identity after tracing the client and server tuple comparison; independent final source/protocol review is required. Targeted tests must prove absent-only fallback, explicit valid pin with a different web SHA, refusal of empty/invalid pins before a projection connection, preserved unauthorized refusal, and real synthetic protocol matching/mismatch. No provider or exchange call belongs to these tests.
+
+## WP-4 — Review corrections and runtime sign-in
+
+A mutation response with HTTP 403 can represent `CSRF_INVALID` rather than missing entitlement. Only 401 or 403 with `FORBIDDEN` clears authorized workspace state; other errors retain the connection or revoke context and show a retry message. An authenticated user without Trader entitlement retains sign-out so they can switch accounts.
+
+The static page remains `<TraderWorkspace />`. Its relative sign-in link resolves through a tiny dynamic GET route that reads the configured Trader origin at request time. With no configured origin it redirects to the request origin root; malformed configuration fails closed. No user-supplied return destination, auth lookup, database call, or account mutation is introduced. Runtime environment lookup must avoid Next public-variable build-time substitution.
+
+Validate CSRF refusal, forbidden sign-out, redirect configuration/fallback, the unchanged static CPU boundary and the full mounted Trader browser journey. Superseded CI and review findings remain recorded; they do not qualify new source bytes.

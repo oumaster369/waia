@@ -64,10 +64,10 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
       JSON.stringify({ error: { code: "UNAUTHORIZED" } }),
       { status: 401, headers: { "Content-Type": "application/json" } },
     ));
-    render(<TraderWorkspace signInHref="https://trader.example.test/" />);
+    render(<TraderWorkspace />);
     expect(await screen.findByTestId("trader-auth-required")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Войти или создать аккаунт" })).toHaveAttribute(
-      "href", "https://trader.example.test/",
+      "href", "/trader/sign-in",
     );
     expect(screen.getByText("Not signed in")).toBeInTheDocument();
     expect(screen.queryByText("User account")).not.toBeInTheDocument();
@@ -86,6 +86,77 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     expect(screen.getByText("Access required")).toBeInTheDocument();
     expect(screen.queryByTestId("trader-connect-form")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("HTX Secret Key")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+  });
+
+  it("keeps sign-out callable from the authenticated forbidden state", async () => {
+    const fetcher = setup(false);
+    fetcher.mockImplementationOnce(async () => new Response(
+      JSON.stringify({ error: { code: "FORBIDDEN" } }),
+      { status: 403, headers: { "Content-Type": "application/json" } },
+    ));
+    fetcher.mockImplementation(async (input) =>
+      String(input) === "/api/auth/sign-out"
+        ? new Response(JSON.stringify({ error: { code: "TEMPORARY_FAILURE" } }), { status: 503 })
+        : new Response(JSON.stringify({ error: { code: "FORBIDDEN" } }), { status: 403 }),
+    );
+    render(<TraderWorkspace />);
+    expect(await screen.findByTestId("trader-access-required")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith(
+      "/api/auth/sign-out",
+      expect.objectContaining({ method: "POST" }),
+    ));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Sign out could not be confirmed");
+    expect(screen.getByTestId("trader-access-required")).toBeInTheDocument();
+  });
+
+  it("keeps an authorized workspace after a connect CSRF 403 and shows the retry message", async () => {
+    const fetcher = setup(false);
+    fetcher.mockImplementation(async (input) => {
+      if (String(input).endsWith("/connect")) {
+        return new Response(JSON.stringify({ error: { code: "CSRF_INVALID" } }), {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return json({ credentials: [] });
+    });
+    render(<TraderWorkspace />);
+    await screen.findByLabelText("HTX Access Key");
+    fireEvent.change(screen.getByLabelText("HTX Access Key"), { target: { value: "synthetic-key" } });
+    fireEvent.change(screen.getByLabelText("HTX Secret Key"), { target: { value: "synthetic-secret" } });
+    fireEvent.submit(screen.getByTestId("trader-connect-form"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Запрос отклонён. Обновите страницу и повторите действие.");
+    expect(screen.getByText("User account")).toBeInTheDocument();
+    expect(screen.getByTestId("trader-connect-form")).toBeInTheDocument();
+    expect(screen.queryByTestId("trader-access-required")).not.toBeInTheDocument();
+  });
+
+  it("keeps an authorized workspace after a revoke CSRF 403 and retains the retry context", async () => {
+    const fetcher = setup(true);
+    fetcher.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/test-credential")) {
+        return new Response(JSON.stringify({ error: { code: "CSRF_INVALID" } }), {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return json({ credentials: [credential] });
+    });
+    render(<TraderWorkspace />);
+    await screen.findByTestId("trader-account-status");
+    fireEvent.click(screen.getByTestId("trader-disconnect-button"));
+    fireEvent.click(screen.getByTestId("trader-disconnect-confirm"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Запрос отклонён. Обновите страницу и повторите действие.");
+    expect(screen.getByText("User account")).toBeInTheDocument();
+    expect(screen.getByTestId("trader-account-status")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Подтвердить отключение" })).toBeInTheDocument();
+    expect(screen.queryByTestId("trader-access-required")).not.toBeInTheDocument();
   });
 
   it("keeps HTX fields hidden after transient access failure and allows access retry", async () => {

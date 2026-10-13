@@ -320,7 +320,7 @@ function ExchangeTraderWorkspace({ signInHref }: { signInHref: string }) {
       });
       if (!isCurrent()) return;
       if (result.kind === "err") {
-        if (result.status === 401 || result.status === 403) {
+        if (result.status === 401 || (result.status === 403 && result.code === "FORBIDDEN")) {
           loseAccess(result.status === 401 ? "unauthenticated" : "forbidden");
           return;
         }
@@ -367,7 +367,7 @@ function ExchangeTraderWorkspace({ signInHref }: { signInHref: string }) {
       const result = await revokeExchangeCredentialClient(credentialId);
       if (!isCurrent()) return;
       if (result.kind === "err") {
-        if (result.status === 401 || result.status === 403) {
+        if (result.status === 401 || (result.status === 403 && result.code === "FORBIDDEN")) {
           loseAccess(result.status === 401 ? "unauthenticated" : "forbidden");
           return;
         }
@@ -404,7 +404,7 @@ function ExchangeTraderWorkspace({ signInHref }: { signInHref: string }) {
                 access === "forbidden" ? "Access required" :
                   access === "unavailable" ? "Access unavailable" : "Checking access…"}
           </span>
-          {access === "allowed" ? <TraderSignOut /> : null}
+          {access === "allowed" || access === "forbidden" ? <TraderSignOut /> : null}
         </div>
         <h1
           data-testid="trader-workspace-title"
@@ -665,7 +665,7 @@ function HistoricalTraderWorkspace(): React.ReactNode {
 }
 
 /** Historical mode is a separate component boundary so exchange effects never mount. */
-export function TraderWorkspace({ signInHref = "/" }: { signInHref?: string }): React.ReactNode {
+export function TraderWorkspace({ signInHref = "/trader/sign-in" }: { signInHref?: string }): React.ReactNode {
   const runId = useSearchParams().get("campaign_run_id")?.trim() ?? "";
   return runId ? <HistoricalTraderWorkspace key={runId} /> : <ExchangeTraderWorkspace signInHref={signInHref} />;
 }

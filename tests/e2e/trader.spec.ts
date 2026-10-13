@@ -50,8 +50,10 @@ test.describe("/trader static shell boundary (AT-E1 S1)", () => {
     await expect(page.getByText("Not signed in")).toBeVisible();
     await expect(page.getByText("User account")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
-    const traderSignInUrl = new URL(await page.getByRole("link", { name: "Войти или создать аккаунт" }).getAttribute("href") ?? "");
-    expect(traderSignInUrl.pathname).toBe("/");
+    await expect(page.getByRole("link", { name: "Войти или создать аккаунт" })).toHaveAttribute(
+      "href",
+      "/trader/sign-in",
+    );
     await expectProtectedObserverApisFailClosed(page, 401);
   });
 
