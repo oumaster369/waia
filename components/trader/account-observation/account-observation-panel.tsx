@@ -68,11 +68,17 @@ function Rows<T>({
   return (
     <section aria-label={title} className="border-border space-y-2 rounded-lg border p-3">
       <h3 className="font-medium">{title}</h3>
+      {component.status === "PARTIAL" && <p>Partial read — some rows may be missing.</p>}
+      {component.status === "ERROR" && <p>Read failed — coverage unknown.</p>}
       {component.error && <p>Read error: {component.error}</p>}
       {component.values === null ? (
         <p>Unavailable — not an observed zero.</p>
       ) : component.values.length === 0 ? (
-        <p>{emptyComplete}</p>
+        <p>
+          {component.status === "COMPLETE" && component.error === null
+            ? emptyComplete
+            : "No rows received; completeness is not confirmed."}
+        </p>
       ) : (
         <>
           <ul className="space-y-1 text-sm">
@@ -190,9 +196,15 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
                 value={
                   observation.openOrders.values === null
                     ? "—"
-                    : String(observation.openOrders.values.length)
+                    : observation.openOrders.status === "COMPLETE" && observation.openOrders.error === null
+                      ? String(observation.openOrders.values.length)
+                      : `${observation.openOrders.values.length} получено`
                 }
-                hint="Активные заявки, отдельно от позиций"
+                hint={
+                  observation.openOrders.status === "COMPLETE" && observation.openOrders.error === null
+                    ? "Активные заявки, отдельно от позиций"
+                    : "Полученные заявки; полный охват не подтверждён"
+                }
                 testId="cabinet-open-orders"
               />
             </div>

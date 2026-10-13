@@ -199,3 +199,29 @@ describe("cabinet observation view", () => {
     });
   });
 });
+
+
+describe("DEE-1242 native inventory and complete order totals", () => {
+  it("keeps nonzero USDC in its own native currency without changing USDT", () => {
+    const usdc = { asset: "USDC", free: "25.00000001", locked: "0.02", total: "25.02000001" };
+    const rows = [...observation.balances.values!, usdc];
+    expect(nonUsdtInventory(rows)).toContainEqual(usdc);
+    expect(usdtSpot(rows)).toEqual({ free: "12.50", locked: "3.00", total: "15.50" });
+    expect(nonUsdtInventory([...rows, { asset: "USDC", free: "0", locked: "0", total: "0.000" }])).toEqual([
+      { asset: "BTC", free: "0.010", locked: "0", total: "0.010" }, usdc,
+    ]);
+  });
+
+  it.each(["PARTIAL", "ERROR"] as const)("does not publish an unqualified total for %s empty orders", status => {
+    const snapshot = { ...observation, openOrders: { ...observation.openOrders, status, values: [] } };
+    expect(summarizeCabinetObservation(snapshot).openOrdersCount).toBeNull();
+  });
+
+  it("does not publish a complete order count when received rows have incomplete coverage", () => {
+    const snapshot = { ...observation, openOrders: { ...observation.openOrders, status: "PARTIAL" as const,
+      values: [{ orderId: "synthetic-order", clientOrderId: "synthetic-client", symbol: "BTCUSDT",
+        side: "buy" as const, type: "limit" as const, status: "open" as const, quantity: "2.00", filledQuantity: "0",
+        createdAt: "2026-10-13T00:00:00Z", updatedAt: null }] } };
+    expect(summarizeCabinetObservation(snapshot).openOrdersCount).toBeNull();
+  });
+});
