@@ -254,6 +254,8 @@ export function createProjectionClient(options: ProjectionClientOptions): Projec
 
       const requestHeaders: Record<string, string> = {
         "content-type": "application/json",
+        // Request the representation required by the signed response validator.
+        "Accept-Encoding": "identity",
         [PROJECTION_MAC_HEADER]: request.headers[0][1],
         "CF-Access-Client-Id": accessClientId,
         "CF-Access-Client-Secret": accessClientSecret,
