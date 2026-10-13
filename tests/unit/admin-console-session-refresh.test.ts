@@ -51,7 +51,15 @@ describe("verified admin session refresh", () => {
     );
     expect(result.headers.get("x-waia-module")).toBe("trader");
   });
-  it.each(["/", "/api/trader/orders", "/admin-other"])(
+  it.each([
+    "/",
+    "/api/trader/orders",
+    "/admin-other",
+    "/trader-other",
+    "/api/trader/account-observation-other",
+    "/api/trader/admin/account-observation-other",
+    "/api/trader/admin/console-other",
+  ])(
     "leaves unrelated route %s unchanged",
     async (path) => {
       await middleware(request(path));
@@ -65,16 +73,27 @@ describe("verified admin session refresh", () => {
     await middleware(request());
     expect(mocks.getUser).not.toHaveBeenCalled();
   });
-  it("returns unavailable for provider outage, without treating it as revoked or deleting cookies", async () => {
+  it.each([
+    "/api/trader/admin/console/accounts",
+    "/api/trader/account-observation/binding",
+    "/api/trader/admin/account-observation/binding",
+  ])("returns unavailable for provider outage on %s without revoking or deleting cookies", async (path) => {
     mocks.getUser.mockResolvedValue({ data: { user: null }, error: { status: 504 } });
-    const result = await middleware(request("/api/trader/admin/console/accounts"));
+    const result = await middleware(request(path));
     expect(result.status).toBe(503);
     expect(await result.json()).toEqual({
       error: {
         code: "AUTH_TEMPORARILY_UNAVAILABLE",
-        message: "Сервис авторизации временно недоступен. Повторите загрузку.",
+        message: "Authentication is temporarily unavailable. Reload the page.",
       },
     });
+    expect(result.headers.get("set-cookie")).toBeNull();
+  });
+  it("returns an English unavailable response for a Trader page without deleting cookies", async () => {
+    mocks.getUser.mockResolvedValue({ data: { user: null }, error: { status: 504 } });
+    const result = await middleware(request("/trader"));
+    expect(result.status).toBe(503);
+    expect(await result.text()).toBe("Authentication is temporarily unavailable. Reload the page.");
     expect(result.headers.get("set-cookie")).toBeNull();
   });
   it("keeps invalid sessions subject to the existing protected-route check", async () => {

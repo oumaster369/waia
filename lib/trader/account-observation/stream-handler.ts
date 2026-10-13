@@ -1,4 +1,5 @@
 import "server-only";
+import { AsyncLocalStorage } from "node:async_hooks";
 import {
   OBSERVATION_STREAM_INTERVAL_MS,
   OBSERVATION_STREAM_MAX_BYTES,
@@ -22,6 +23,8 @@ export async function handleAccountObservationStream(
   request: Request,
   read: (request: Request) => Promise<Response>,
 ): Promise<Response> {
+  // Preserve request context for later pulls; every callback still performs a fresh fenced read.
+  const boundRead = AsyncLocalStorage.bind(read);
   const abort = new AbortController();
   let stopped = false;
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
@@ -60,7 +63,7 @@ export async function handleAccountObservationStream(
   const load = async () => {
     if (stopped) return unavailable();
     return Promise.race([
-      read(new Request(request, { signal: abort.signal })).then(async (response) => {
+      boundRead(new Request(request, { signal: abort.signal })).then(async (response) => {
         if (stopped) {
           await response.body?.cancel();
           return unavailable();

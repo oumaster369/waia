@@ -5,16 +5,20 @@ import { isSupabaseAuthConfigured } from "@/lib/supabase/config";
 
 const UNAVAILABLE = {
   code: "AUTH_TEMPORARILY_UNAVAILABLE",
-  message: "Сервис авторизации временно недоступен. Повторите загрузку.",
+  message: "Authentication is temporarily unavailable. Reload the page.",
 };
 
 /** Refresh identity cookies only; protected routes still verify identity and permissions. */
 export async function refreshAdminSession(request: NextRequest): Promise<NextResponse> {
   const path = request.nextUrl.pathname;
-  const adminPath =
-    /^\/admin(?:\/|$)/.test(path) || /^\/api\/trader\/admin\/console(?:\/|$)/.test(path);
+  const protectedTraderPath =
+    /^\/admin(?:\/|$)/.test(path) ||
+    /^\/api\/trader\/admin\/console(?:\/|$)/.test(path) ||
+    /^\/trader(?:\/|$)/.test(path) ||
+    /^\/api\/trader\/account-observation(?:\/|$)/.test(path) ||
+    /^\/api\/trader\/admin\/account-observation(?:\/|$)/.test(path);
   if (
-    !adminPath ||
+    !protectedTraderPath ||
     !isSupabaseAuthConfigured() ||
     !request.cookies.getAll().some(({ name }) => /^sb-.+-auth-token(?:\.\d+)?$/.test(name))
   ) {
@@ -44,10 +48,10 @@ export async function refreshAdminSession(request: NextRequest): Promise<NextRes
         error.status === 429 ||
         error.status >= 500)
     ) {
-      return unavailable(path);
+      return unavailable(path, pending);
     }
   } catch {
-    return unavailable(path);
+    return unavailable(path, pending);
   }
   const response = NextResponse.next({ request: { headers: new Headers(request.headers) } });
   applySupabaseCookiePatches(response, pending);
@@ -55,12 +59,19 @@ export async function refreshAdminSession(request: NextRequest): Promise<NextRes
   return response;
 }
 
-function unavailable(path: string): NextResponse {
+function unavailable(
+  path: string,
+  pending: { name: string; value: string; options: CookieOptions }[],
+): NextResponse {
   const headers = { "Cache-Control": "private, no-store", "Retry-After": "5" };
-  return path.startsWith("/api/")
+  const response = path.startsWith("/api/")
     ? NextResponse.json({ error: UNAVAILABLE }, { status: 503, headers })
     : new NextResponse(UNAVAILABLE.message, {
         status: 503,
         headers: { ...headers, "Content-Type": "text/plain; charset=utf-8" },
       });
+  // A completed SDK rotation must reach the browser even if user verification failed.
+  // This remains a terminal 503 and forwards no authenticated request to the route.
+  applySupabaseCookiePatches(response, pending);
+  return response;
 }

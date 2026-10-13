@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { getFreshOptionalAdminSessionUserId } from "@/lib/auth/session-user";
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb, type WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import * as pgSchema from "@/db/schema.postgres";
-import { assertOrgMembershipPostgres } from "@/lib/waia-core/scope/org-context";
+import { assertOrgMembershipPostgres, OrgScopeError } from "@/lib/waia-core/scope/org-context";
 import { hasModuleEntitlementPostgres } from "@/lib/waia-core/entitlements/authoritative";
 import { assertAdminPermission } from "@/lib/waia-core/permissions/admin-http";
 import {
@@ -94,7 +94,13 @@ export function createAccountObservationRouteDependencies() {
       const db = await runtime(signal);
       failureTrace.enter("MEMBERSHIP");
       try { await assertOrgMembershipPostgres(db.db, { userId, organizationId }); return true; }
-      catch { return false; }
+      catch (error) {
+        // Only an authoritative missing-membership result is a denial. A failed
+        // read must stay unavailable, so the browser can recover without treating
+        // a transient database error as permanent credential revocation.
+        if (error instanceof OrgScopeError && error.message === "ORG_MEMBERSHIP_REQUIRED") return false;
+        throw error;
+      }
     },
     async hasOperatorAccess(userId, organizationId, signal) {
       const db = await runtime(signal);
