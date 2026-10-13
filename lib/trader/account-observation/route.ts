@@ -40,14 +40,30 @@ export function createAccountObservationRouteDependencies() {
     assertOpen(signal);
     if (!projection) {
       const keyHex = process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_HMAC_KEY_HEX;
+      const workerReleaseSha = process.env.WAIA_RELEASE_SHA ?? "";
+      // The Worker release describes this web artifact. The projection tuple's
+      // release must remain pinned to the independently deployed reader until
+      // that reader's expected tuple is deliberately rotated. An unset pin
+      // retains the historical coupling for deployments that haven't adopted
+      // the separate setting; an explicitly empty or malformed pin is refused.
+      const configuredProjectionReleaseSha =
+        process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_RELEASE_SHA;
+      const projectionReleaseSha =
+        configuredProjectionReleaseSha === undefined
+          ? workerReleaseSha
+          : configuredProjectionReleaseSha;
       if (process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_ENABLED !== "1" ||
-          !keyHex || !/^[0-9a-f]{64}$/.test(keyHex)) throw new Error("ACCOUNT_OBSERVATION_NOT_CONFIGURED");
+          !keyHex || !/^[0-9a-f]{64}$/.test(keyHex) ||
+          !/^[0-9a-f]{40}$/.test(workerReleaseSha) ||
+          !/^[0-9a-f]{40}$/.test(projectionReleaseSha)) {
+        throw new Error("ACCOUNT_OBSERVATION_NOT_CONFIGURED");
+      }
       const keyBytes = Uint8Array.from(keyHex.match(/../g)!, x => Number.parseInt(x, 16));
       try {
         projection = createProjectionClient({
           fetch: globalThis.fetch.bind(globalThis), clock: Date.now, deadlineMs,
           tuple: { audience: "https://observation-reader.waia.life",
-            releaseSha: process.env.WAIA_RELEASE_SHA ?? "",
+            releaseSha: projectionReleaseSha,
             epochId: process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_EPOCH ?? "",
             keyId: process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_KEY_ID ?? "" },
           keyBytes,
