@@ -21,7 +21,7 @@ export function presentStrategyWorkspace(evidence: readonly StrategyEvidence[], 
       version: row.version,
       displayName: row.strategyId,
       source: "registry",
-      reason: "Version from saved evidence",
+      reason: "Version based on saved evidence",
       returnPct: { state: "unavailable", reason: "RETURN_METHOD_NOT_RATIFIED" },
     });
   }
