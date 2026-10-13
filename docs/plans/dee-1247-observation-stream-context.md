@@ -1,3 +1,34 @@
+---
+integrationIssue: DEE-1247
+integrationTitle: "Preserve authenticated cabinet updates"
+branch: dee-1247-observation-stream-context
+riskTier: T3
+prPolicy: one-integration-pr
+executionSurfaces: [local]
+requiredValidation: [lint, typecheck, unit, build, e2e]
+approvalGates: [plan-approved, integration-ready, human-merge]
+includedIssues: []
+linearStatusFlow:
+  onPlanApproved: In Progress
+  onPrOpened: In Review
+  onMerge: Done
+state:
+  status: in-review
+  currentWorkPackage: WP-2
+  completedWorkPackages: [WP-1]
+  remainingWorkPackages: [WP-2, WP-3]
+  prNumber: 787
+  prUrl: https://github.com/oumaster369/waia/pull/787
+  lastValidatedGitSha: b71991cd4136aa3e63c824794571e896884f02e6
+  lastValidationAt: "2026-10-13T21:47:17Z"
+  blockedReason: null
+  nextAction: "Qualify the document correction and exact new PR head; then bind the controlled release and perform actual signed-in acceptance."
+provenance:
+  createdFrom: chat
+  gapRegistry: null
+  supersedes: null
+---
+
 # DEE-1247 — preserve authenticated cabinet stream updates
 
 ## Problem and outcome
@@ -14,6 +45,12 @@ Preserve request context for deferred reads and distinguish temporary unavailabi
 - Extend the existing session-refresh route guard to `/trader` and tenant/admin account-observation routes; retain Trader-host, configured-provider, existing-cookie, verified-user and transient-error rules. Persist refreshed cookies to both the forwarded request and browser response. If token rotation succeeds before user verification fails transiently, preserve the staged replacement cookies on the unavailable response without granting access. Keep the auth-unavailable response in English.
 - Keep genuine denial and rotation terminal; preserve five-second read and bounded stream limits, cancellation, disposal, fixed projection origin, signature and current-binding checks.
 - No schema, migrations, secrets, exchange calls, trading actions or execution infrastructure changes.
+
+## Acceptance
+
+- WP-1: independent source review, synthetic Worker and SSR regressions, affected units, local build/type/lint and mounted cabinet checks pass. Genuine denial remains terminal; no authority is cached.
+- WP-2: canonical plan and PR governance validate; exact-current-head GitHub CI and review qualify before merge. Historical checks do not qualify a changed head.
+- WP-3: the exact merged release passes configuration-preservation checks and actual signed-in repeated updates plus Connect/cancel/reselection. Source qualification alone does not close production acceptance.
 
 ## Validation and rollout
 
