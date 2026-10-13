@@ -165,6 +165,7 @@ describe("account observation route wiring, no external requests", () => {
   });
   it("uses the fixed projection and disposes it after every poll", async () => {
     configureProjection();
+    vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_RELEASE_SHA", undefined);
     expect((await accountObservationRoute(request(), "tenant")).status).toBe(204);
     expect(mocks.projection).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -175,6 +176,38 @@ describe("account observation route wiring, no external requests", () => {
     expect(mocks.end).toHaveBeenCalledOnce();
     expect(mocks.dispose).toHaveBeenCalledOnce();
   });
+  it("keeps an explicit backend tuple release pin when the Worker release advances", async () => {
+    configureProjection();
+    vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_RELEASE_SHA", "b".repeat(40));
+    expect((await accountObservationRoute(request(), "tenant")).status).toBe(204);
+    expect(mocks.projection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tuple: expect.objectContaining({ releaseSha: "b".repeat(40) }),
+      }),
+    );
+    expect(process.env.WAIA_RELEASE_SHA).toBe("a".repeat(40));
+  });
+  it.each(["", " ".repeat(1) + "b".repeat(39), "b".repeat(39), "A".repeat(40)])(
+    "fails closed for an explicit invalid backend tuple release pin (%s)",
+    async (releaseSha) => {
+      configureProjection();
+      vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_RELEASE_SHA", releaseSha);
+      expect((await accountObservationRoute(request(), "tenant")).status).toBe(503);
+      expect(mocks.projection).not.toHaveBeenCalled();
+      expect(mocks.resolve).not.toHaveBeenCalled();
+    },
+  );
+  it.each([undefined, "", "a".repeat(39), "A".repeat(40)])(
+    "still requires a valid Worker release SHA with an explicit backend pin (%s)",
+    async (workerReleaseSha) => {
+      configureProjection();
+      vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_RELEASE_SHA", "b".repeat(40));
+      vi.stubEnv("WAIA_RELEASE_SHA", workerReleaseSha);
+      expect((await accountObservationRoute(request(), "tenant")).status).toBe(503);
+      expect(mocks.projection).not.toHaveBeenCalled();
+      expect(mocks.resolve).not.toHaveBeenCalled();
+    },
+  );
   it.each([
     ["personal active htx", "personal", "htx", "active", true],
     ["business active htx", "business", "htx", "active", false],

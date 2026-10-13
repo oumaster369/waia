@@ -55,6 +55,22 @@ async function verifyRequest(request: SignedProjectionRequest, verificationConfi
 const tupleWith = (delta: Partial<ProjectionTuple>): ProjectionTuple => ({ ...tuple, ...delta });
 
 describe("DEE-1234 fixed projection protocol", () => {
+  it("accepts the pinned backend tuple across a distinct Worker release and rejects drift", async () => {
+    const workerReleaseSha = "b".repeat(40);
+    const backendTupleReleaseSha = tuple.releaseSha;
+    expect(workerReleaseSha).not.toBe(backendTupleReleaseSha);
+
+    const pinnedRequest = await makeRequest("readLatest", binding, requestId, now, now + 4_000,
+      tupleWith({ releaseSha: backendTupleReleaseSha }));
+    const verified = await verifyRequest(pinnedRequest, config(() => now, tuple));
+    expect(verified.tuple.releaseSha).toBe(backendTupleReleaseSha);
+
+    const driftedRequest = await makeRequest("readLatest", binding, requestId, now, now + 4_000,
+      tupleWith({ releaseSha: workerReleaseSha }));
+    await expect(verifyRequest(driftedRequest, config(() => now, tuple)))
+      .rejects.toThrow("PROJECTION_TUPLE_MISMATCH");
+  });
+
   it("round trips both fixed operations through existing strict parsers", async () => {
     const bindReq = await makeRequest("resolveBinding", scope);
     expect(bindReq.path).toBe(PROJECTION_PATHS.resolveBinding);
