@@ -1,4 +1,4 @@
-import { act, cleanup, render, renderHook, screen } from "@testing-library/react";
+import { act, cleanup, render, renderHook, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AccountObservation,
@@ -602,5 +602,50 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Live");
     expect(screen.getByText("Reconnecting automatically.")).toBeVisible();
     expect(screen.getByText(/ожидается следующий сбор|следующее обновление через/)).toBeVisible();
+  });
+});
+
+
+describe("DEE-1242 truthful Spot display", () => {
+  it("renders observed USDC decimal strings in native inventory", () => {
+    const usdc = { asset: "USDC", free: "25.00000001", locked: "0.02", total: "25.02000001" };
+    const saved = observation({ balances: component([usdc]), holdings: [usdc] });
+    render(<AccountObservationPanel view={{ status: "CURRENT", observation: saved, stale: false }} />);
+    expect(screen.getByText("USDC: free 25.00000001, locked 0.02, total 25.02000001")).toBeInTheDocument();
+    expect(within(screen.getByTestId("cabinet-usdt-free")).getByText("—")).toBeInTheDocument();
+  });
+
+  it.each(["PARTIAL", "ERROR"] as const)("does not claim absent orders or fills for an empty %s read", status => {
+    const empty = { ...component<never>([]), status, error: status === "ERROR" ? "READ_FAILED" as const : null };
+    const saved = observation({ status, openOrders: empty, trades: [{ symbol: "BTCUSDT", component: empty }] });
+    render(<AccountObservationPanel view={{ status: "PARTIAL", observation: saved, stale: false }} />);
+    expect(screen.queryByText("No working orders.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No fills in this window.")).not.toBeInTheDocument();
+    expect(screen.getAllByText("No rows received; completeness is not confirmed.")).toHaveLength(2);
+    expect(within(screen.getByTestId("cabinet-open-orders")).getByText("0 получено")).toBeInTheDocument();
+    const coverage = status === "PARTIAL" ? "Partial read — some rows may be missing." : "Read failed — coverage unknown.";
+    expect(within(screen.getByRole("region", { name: "Open orders" })).getByText(coverage)).toBeInTheDocument();
+  });
+
+  it("keeps failed null rows unavailable and never displays an observed zero", () => {
+    const failed = { ...component<never>([]), status: "ERROR" as const, values: null, error: "READ_FAILED" as const };
+    render(<AccountObservationPanel view={{ status: "PARTIAL", observation: observation({ openOrders: failed }), stale: false }} />);
+    const orders = within(screen.getByRole("region", { name: "Open orders" }));
+    expect(orders.getByText("Unavailable — not an observed zero.")).toBeInTheDocument();
+    expect(orders.getByText("Read failed — coverage unknown.")).toBeInTheDocument();
+    expect(orders.queryByText("No working orders.")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("cabinet-open-orders")).getByText("—")).toBeInTheDocument();
+  });
+
+  it("labels nonempty partial order rows as received and preserves the row", () => {
+    const order = { symbol: "BTCUSDT", side: "buy" as const, type: "limit" as const, status: "open" as const,
+      quantity: "2.00", filledQuantity: "0", price: "4.00", orderId: "synthetic-order",
+      clientOrderId: "synthetic-client", createdAt: "2026-10-13T00:00:00Z", updatedAt: null };
+    const partial = { ...component([order]), status: "PARTIAL" as const };
+    render(<AccountObservationPanel view={{ status: "PARTIAL", observation: observation({ openOrders: partial }), stale: false }} />);
+    expect(within(screen.getByTestId("cabinet-open-orders")).getByText("1 получено")).toBeInTheDocument();
+    const orders = within(screen.getByRole("region", { name: "Open orders" }));
+    expect(orders.getByText("Partial read — some rows may be missing.")).toBeInTheDocument();
+    expect(orders.getByText(/order synthetic-order/)).toBeInTheDocument();
   });
 });
