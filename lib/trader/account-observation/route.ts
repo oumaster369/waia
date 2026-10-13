@@ -13,6 +13,7 @@ import {
   isAdminConnectedAccountScope,
 } from "@/lib/trader/credentials/admin-connected-account-scope";
 import { createProjectionClient, type ProjectionClient } from "./projection-client";
+import { createObservationFailureTrace } from "./failure-stage";
 import { handleAccountObservationGet, type ObservationReadDependencies } from "./read-handler";
 
 /** Dormant unless the fixed snapshot-only HTTPS transport is explicitly configured.
@@ -22,6 +23,7 @@ import { handleAccountObservationGet, type ObservationReadDependencies } from ".
 export function createAccountObservationRouteDependencies() {
   // Capture before the first session/authorization await, never once per operation.
   const deadlineMs = Date.now() + 5000;
+  const failureTrace = createObservationFailureTrace();
   let access: Promise<WaiaRuntimeDb> | undefined;
   let projection: ProjectionClient | undefined;
   let disposed = false;
@@ -30,8 +32,13 @@ export function createAccountObservationRouteDependencies() {
   };
   const runtime = async (signal: AbortSignal) => {
     assertOpen(signal);
-    access ??= getWaiaRuntimeDb();
-    const db = await access;
+    if (!access) {
+      failureTrace.enter("RUNTIME_INIT");
+      access = getWaiaRuntimeDb();
+    }
+    let db: WaiaRuntimeDb;
+    try { db = await access; }
+    catch (error) { failureTrace.capture("THREW"); throw error; }
     assertOpen(signal);
     if (db.kind !== "postgres") throw new Error("ACCOUNT_OBSERVATION_POSTGRES_REQUIRED");
     return db;
@@ -39,6 +46,7 @@ export function createAccountObservationRouteDependencies() {
   const reader = (signal: AbortSignal) => {
     assertOpen(signal);
     if (!projection) {
+      failureTrace.enter("PROJECTION_CONFIG");
       const keyHex = process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_HMAC_KEY_HEX;
       const workerReleaseSha = process.env.WAIA_RELEASE_SHA ?? "";
       // The Worker release describes this web artifact. The projection tuple's
@@ -61,7 +69,7 @@ export function createAccountObservationRouteDependencies() {
       const keyBytes = Uint8Array.from(keyHex.match(/../g)!, x => Number.parseInt(x, 16));
       try {
         projection = createProjectionClient({
-          fetch: globalThis.fetch.bind(globalThis), clock: Date.now, deadlineMs,
+          fetch: globalThis.fetch.bind(globalThis), clock: Date.now, deadlineMs, failureTrace,
           tuple: { audience: "https://observation-reader.waia.life",
             releaseSha: projectionReleaseSha,
             epochId: process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_EPOCH ?? "",
@@ -75,20 +83,27 @@ export function createAccountObservationRouteDependencies() {
     return projection;
   };
   const deps: ObservationReadDependencies = {
+    failureTrace,
     async getUserId(signal) { assertOpen(signal); return getFreshOptionalAdminSessionUserId(); },
     async hasTraderAccess(_userId, organizationId, signal) {
-      return hasModuleEntitlementPostgres((await runtime(signal)).db, { organizationId, entitlementKey: "trader" });
+      const db = await runtime(signal);
+      failureTrace.enter("ENTITLEMENT");
+      return hasModuleEntitlementPostgres(db.db, { organizationId, entitlementKey: "trader" });
     },
     async hasOrgMembership(userId, organizationId, signal) {
       const db = await runtime(signal);
+      failureTrace.enter("MEMBERSHIP");
       try { await assertOrgMembershipPostgres(db.db, { userId, organizationId }); return true; }
       catch { return false; }
     },
     async hasOperatorAccess(userId, organizationId, signal) {
-      return (await assertAdminPermission(await runtime(signal), userId, organizationId, "admin.audit.read")).allowed;
+      const db = await runtime(signal);
+      failureTrace.enter("OPERATOR_PERMISSION");
+      return (await assertAdminPermission(db, userId, organizationId, "admin.audit.read")).allowed;
     },
     async isAdminListedOrganization(organizationId, signal) {
       const db = await runtime(signal);
+      failureTrace.enter("ADMIN_LIST_SCOPE");
       const rows = await db.db
         .select({
           organizationKind: pgSchema.organizations.kind,

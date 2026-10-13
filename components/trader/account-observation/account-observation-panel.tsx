@@ -2,6 +2,8 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { ObservationComponent } from "@/lib/trader/account-observation/types";
+import type { Balance } from "@/lib/trader/connectors/types";
+import { Button } from "@/components/ui/button";
 import {
   ACCOUNT_OBSERVATION_FIRST_TICK_COPY,
   ageLabel,
@@ -101,6 +103,44 @@ function transportCopy(view: AccountObservationView): string | null {
   if (view.transport === "POLLING") return "Automatic polling fallback; stream retry scheduled.";
   if (view.transport === "RECONNECTING") return "Reconnecting automatically.";
   return null;
+}
+
+function SpotInventory({ rows }: { rows: readonly Balance[] }) {
+  const [page, setPage] = useState(0);
+  const lastPage = Math.max(0, Math.ceil(rows.length / MAX_VISIBLE_ROWS) - 1);
+  const currentPage = Math.min(page, lastPage);
+  // Clamp before rendering when a later snapshot has fewer received currencies.
+  if (page > lastPage) setPage(lastPage);
+  const start = currentPage * MAX_VISIBLE_ROWS;
+  const end = Math.min(start + MAX_VISIBLE_ROWS, rows.length);
+
+  return (
+    <section aria-label="Spot inventory (not PnL)" className="border-border space-y-2 rounded-lg border p-3">
+      <h4 className="font-medium">Spot inventory (not PnL)</h4>
+      <ul>
+        {rows.slice(start, end).map((row, i) => (
+          <li key={`${row.asset}-${start + i}`}>
+            {row.asset}: free {row.free}, locked {row.locked}, total {row.total}
+          </li>
+        ))}
+      </ul>
+      {rows.length > MAX_VISIBLE_ROWS && (
+        <>
+          <p aria-live="polite">Showing {start + 1}–{end} of {rows.length} received currencies.</p>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" size="sm" aria-label="Previous inventory page"
+              disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>
+              Previous
+            </Button>
+            <Button type="button" variant="outline" size="sm" aria-label="Next inventory page"
+              disabled={currentPage === lastPage} onClick={() => setPage(currentPage + 1)}>
+              Next
+            </Button>
+          </div>
+        </>
+      )}
+    </section>
+  );
 }
 
 /** One renderer for Admin and tenant; it cannot authorize reads or control trading. */
@@ -214,16 +254,16 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
             ) : null}
             {observation.holdings === null ? <p>Unavailable — not an observed zero.</p> : null}
             {inventory.length > 0 ? (
-              <section className="border-border space-y-2 rounded-lg border p-3">
-                <h4 className="font-medium">Spot inventory (not PnL)</h4>
-                <ul>
-                  {inventory.slice(0, MAX_VISIBLE_ROWS).map((row, i) => (
-                    <li key={`${row.asset}-${i}`}>
-                      {row.asset}: free {row.free}, locked {row.locked}, total {row.total}
-                    </li>
-                  ))}
-                </ul>
-              </section>
+              <SpotInventory
+                key={JSON.stringify([
+                  observation.binding.organizationId,
+                  observation.binding.credentialId,
+                  observation.binding.exchangeAccountId,
+                  observation.binding.credentialRevision,
+                  observation.binding.configurationRevision,
+                ])}
+                rows={inventory}
+              />
             ) : null}
             <Rows
               title="Open orders"

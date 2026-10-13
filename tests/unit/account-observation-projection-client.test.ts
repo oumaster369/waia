@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { gzipSync } from "node:zlib";
+import { gzipSync, brotliCompressSync } from "node:zlib";
+import { createObservationFailureTrace } from "@/lib/trader/account-observation/failure-stage";
+import { handleAccountObservationGet } from "@/lib/trader/account-observation/read-handler";
 import {
   createProjectionClient,
   type ProjectionClientOptions,
@@ -79,6 +81,79 @@ async function responseFor(request: RequestInfo | URL, init: RequestInit | undef
 
 afterEach(() => vi.useRealTimers());
 
+describe("DEE-1243 shared projection deadline classification", () => {
+  it.each(["FETCH", "BODY"] as const)("retains %s TIMEOUT when the original deadline precedes the handler timer", async phase => {
+    vi.useFakeTimers(); vi.setSystemTime(NOW);
+    const sink = vi.fn(), trace = createObservationFailureTrace(sink, Date.now);
+    let markPhase!: () => void, resolveFetch!: (response: Response) => void;
+    const phaseStarted = new Promise<void>(resolve => { markPhase = resolve; });
+    const cancel = vi.fn();
+    const fetcher: typeof fetch = vi.fn(() => {
+      if (phase === "FETCH") return new Promise<Response>(resolve => { resolveFetch = resolve; markPhase(); });
+      const stream = new ReadableStream<Uint8Array>({
+        pull() { markPhase(); return new Promise<void>(() => undefined); }, cancel,
+      }, { highWaterMark: 0 });
+      return Promise.resolve(new Response(stream, { headers: {
+        "content-type": "application/json", "x-waia-projection-signature": "0".repeat(64),
+      } }));
+    });
+    const client = createProjectionClient(options(fetcher, { clock: Date.now, failureTrace: trace }));
+    await vi.advanceTimersByTimeAsync(200);
+    const pending = handleAccountObservationGet(new Request("https://local.invalid/observation?" + new URLSearchParams(BINDING)), "tenant", {
+      failureTrace: trace, getUserId: async () => "synthetic-user", hasTraderAccess: async () => true,
+      hasOrgMembership: async () => true, hasOperatorAccess: async () => true, isAdminListedOrganization: async () => true,
+      resolveActiveBinding: ({ organizationId, credentialId, exchangeAccountId }, _userId, signal) =>
+        client.resolveActiveBinding({ organizationId, credentialId, exchangeAccountId }, signal), readLatest: vi.fn(),
+    });
+    await Promise.race([phaseStarted, pending.then(response => { throw new Error(`synthetic early handler status ${response.status}`); })]);
+    await vi.advanceTimersByTimeAsync(4800);
+    const response = await pending;
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "ACCOUNT_OBSERVATION_UNAVAILABLE" });
+    expect(Date.now()).toBe(NOW + 5000);
+    expect(sink).toHaveBeenCalledTimes(1);
+    expect(sink.mock.calls[0][0]).toEqual({ event: "ACCOUNT_OBSERVATION_FAILURE", stage: `PROJECTION_${phase}`, outcome: "TIMEOUT", elapsedMs: 5000 });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(vi.mocked(fetcher).mock.calls[0][1]?.body)).deadlineMs).toBe(NOW + 5000);
+    expect(vi.mocked(fetcher).mock.calls[0][1]?.signal?.aborted).toBe(true);
+    if (phase === "FETCH") resolveFetch(new Response(new ReadableStream<Uint8Array>({ cancel })));
+    await vi.advanceTimersByTimeAsync(200);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(sink).toHaveBeenCalledTimes(1);
+    client.dispose();
+    await expect(client.resolveActiveBinding(SCOPE)).rejects.toThrow("PROJECTION_UNAVAILABLE");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an earlier caller abort as THREW even after the deadline passes", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(NOW);
+    const caller = new AbortController(), sink = vi.fn(), trace = createObservationFailureTrace(sink, Date.now);
+    let markCalled!: () => void;
+    const called = new Promise<void>(resolve => { markCalled = resolve; });
+    const fetcher: typeof fetch = vi.fn(() => { markCalled(); return new Promise<Response>(() => undefined); });
+    const client = createProjectionClient(options(fetcher, { clock: Date.now, failureTrace: trace }));
+    const rejected = expect(client.resolveActiveBinding(SCOPE, caller.signal)).rejects.toThrow("PROJECTION_UNAVAILABLE");
+    await called; await vi.advanceTimersByTimeAsync(100); caller.abort(); await rejected;
+    await vi.advanceTimersByTimeAsync(4900); trace.report("THREW");
+    expect(sink).toHaveBeenCalledTimes(1);
+    expect(sink.mock.calls[0][0]).toMatchObject({ stage: "PROJECTION_FETCH", outcome: "THREW" });
+    expect(fetcher).toHaveBeenCalledTimes(1); client.dispose();
+  });
+
+  it("keeps a genuine fetch rejection as THREW and clears the deadline timer", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(NOW);
+    const sink = vi.fn(), trace = createObservationFailureTrace(sink, Date.now);
+    const fetcher: typeof fetch = vi.fn(async () => { throw new Error("synthetic-private-error-canary"); });
+    const client = createProjectionClient(options(fetcher, { clock: Date.now, failureTrace: trace }));
+    await expect(client.resolveActiveBinding(SCOPE)).rejects.toThrow("PROJECTION_UNAVAILABLE");
+    await vi.advanceTimersByTimeAsync(5000); trace.report("THREW");
+    expect(sink).toHaveBeenCalledTimes(1);
+    expect(sink.mock.calls[0][0]).toMatchObject({ stage: "PROJECTION_FETCH", outcome: "THREW" });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain("canary");
+    expect(fetcher).toHaveBeenCalledTimes(1); client.dispose();
+  });
+});
+
 describe("account observation projection client", () => {
   it("uses only the fixed POST paths with no-store, redirect refusal, HMAC and Access service headers", async () => {
     expect(parseAccountObservation(OBSERVATION)).toEqual(OBSERVATION);
@@ -139,12 +214,12 @@ describe("account observation projection client", () => {
   );
 
   it.each(["resolveBinding", "readLatest"] as const)(
-    "still refuses an unexpected compressed response after requesting identity for %s",
+    "accepts retained gzip metadata over an automatically decoded signed body for %s",
     async (operation) => {
       const fetcher: typeof fetch = vi.fn(async (request, init) => {
         expect(new Headers(init?.headers).get("accept-encoding")).toBe("identity");
         const signed = await responseFor(request, init, operation === "resolveBinding" ? BINDING : OBSERVATION);
-        // A valid decoded, signed body cannot bypass the nonidentity encoding guard.
+        // Workerd Fetch can decode the stream while preserving the original header.
         signed.headers.set("content-encoding", "gzip");
         return signed;
       });
@@ -152,7 +227,7 @@ describe("account observation projection client", () => {
       try {
         const result = operation === "resolveBinding"
           ? client.resolveActiveBinding(SCOPE) : client.readLatest(BINDING);
-        await expect(result).rejects.toThrow("PROJECTION_UNAVAILABLE");
+        await expect(result).resolves.toEqual(operation === "resolveBinding" ? BINDING : OBSERVATION);
         expect(fetcher).toHaveBeenCalledTimes(1);
       } finally { client.dispose(); }
     },
@@ -325,3 +400,73 @@ describe("account observation projection client", () => {
     expect(canceled).toBe(true);
   });
 });
+
+
+describe("DEE-1243 decoded Fetch representation and finite failure phases", () => {
+  it.each(["gzip", "br"])("reads a decoded signed body once despite retained %s metadata", async encoding => {
+    const fetcher: typeof fetch = vi.fn(async (request, init) => {
+      const response = await responseFor(request, init);
+      response.headers.set("content-encoding", encoding);
+      return response;
+    });
+    const client = createProjectionClient(options(fetcher));
+    await expect(client.resolveActiveBinding(SCOPE)).resolves.toEqual(BINDING);
+    expect(fetcher).toHaveBeenCalledTimes(1); client.dispose();
+  });
+
+  it.each(["gzip", "br"])("never decompresses genuinely compressed %s bytes again", async encoding => {
+    const fetcher: typeof fetch = vi.fn(async (request, init) => {
+      const signed = await responseFor(request, init); const text = await signed.text();
+      const bytes = encoding === "gzip" ? gzipSync(Buffer.from(text)) : brotliCompressSync(Buffer.from(text));
+      return new Response(Uint8Array.from(bytes), { headers: { ...Object.fromEntries(signed.headers), "content-encoding": encoding } });
+    });
+    const client = createProjectionClient(options(fetcher));
+    await expect(client.resolveActiveBinding(SCOPE)).rejects.toThrow("PROJECTION_UNAVAILABLE");
+    expect(fetcher).toHaveBeenCalledTimes(1); client.dispose();
+  });
+
+  it.each(["deflate", "gzip, br", "gzip, gzip", "", "GZIP"])("refuses unknown/combined encoding %s", async encoding => {
+    const client = createProjectionClient(options(async (request, init) => {
+      const response = await responseFor(request, init); response.headers.set("content-encoding", encoding); return response;
+    }));
+    await expect(client.resolveActiveBinding(SCOPE)).rejects.toThrow("PROJECTION_UNAVAILABLE"); client.dispose();
+  });
+
+  it.each(["fetch", "status", "representation", "body", "mac"])("records only the fixed %s failure phase", async failure => {
+    const sink = vi.fn(), trace = createObservationFailureTrace(sink, () => NOW);
+    const fetcher: typeof fetch = vi.fn(async (request, init) => {
+      if (failure === "fetch") throw new Error("private-fetch-cookie-canary");
+      const signed = await responseFor(request, init);
+      if (failure === "status") return new Response("private-body-canary", { status: 403 });
+      if (failure === "representation") signed.headers.set("content-encoding", "deflate");
+      if (failure === "body") return new Response(Uint8Array.from([255]), { headers: signed.headers });
+      if (failure === "mac") signed.headers.set("x-waia-projection-signature", "0".repeat(64));
+      return signed;
+    });
+    const client = createProjectionClient(options(fetcher, { failureTrace: trace }));
+    await expect(client.resolveActiveBinding(SCOPE)).rejects.toThrow("PROJECTION_UNAVAILABLE");
+    trace.enter("PROJECTION_REQUEST"); trace.report("THREW"); trace.report("THREW");
+    expect(sink).toHaveBeenCalledTimes(1);
+    expect(sink.mock.calls[0][0]).toEqual({ event: "ACCOUNT_OBSERVATION_FAILURE", stage: `PROJECTION_${failure.toUpperCase()}`, outcome: failure === "status" ? "HTTP_403" : "THREW", elapsedMs: 0 });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain("canary"); client.dispose();
+  });
+
+  it("still caps decoded bytes before signature verification with compressed metadata", async () => {
+    const client = createProjectionClient(options(async () => new Response("x".repeat(12 * 1024 * 1024 + 1), {
+      headers: { "content-type": "application/json", "content-encoding": "br", "x-waia-projection-signature": "0".repeat(64) },
+    })));
+    await expect(client.resolveActiveBinding(SCOPE)).rejects.toThrow("PROJECTION_UNAVAILABLE"); client.dispose();
+  });
+});
+
+
+it.each([[401, "HTTP_401"], [403, "HTTP_403"], [404, "HTTP_404"], [502, "HTTP_5XX"], [429, "HTTP_OTHER"]] as const)(
+  "DEE-1243 reports non200 %i as finite %s outcome", async (status, outcome) => {
+    const sink = vi.fn(), trace = createObservationFailureTrace(sink, () => NOW);
+    const client = createProjectionClient(options(async () => new Response("private-response-canary", { status }), { failureTrace: trace }));
+    await expect(client.resolveActiveBinding(SCOPE)).rejects.toThrow("PROJECTION_UNAVAILABLE");
+    trace.report("THREW"); expect(sink).toHaveBeenCalledTimes(1);
+    expect(sink.mock.calls[0][0]).toEqual({ event: "ACCOUNT_OBSERVATION_FAILURE", stage: "PROJECTION_STATUS", outcome, elapsedMs: 0 });
+    client.dispose();
+  },
+);

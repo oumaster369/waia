@@ -11,6 +11,7 @@ import {
 } from "./projection-protocol";
 import { observationBindingSchema } from "./validation";
 import type { AccountObservation, ObservationBinding } from "./types";
+import type { ObservationFailureTrace } from "./failure-stage";
 
 const PROJECTION_ORIGIN = "https://observation-reader.waia.life";
 const PROJECTION_MAC_HEADER = "x-waia-projection-signature";
@@ -29,7 +30,9 @@ export type ProjectionScope = Readonly<{
 }>;
 
 export type ProjectionClientOptions = Readonly<{
+  /** Fetch supplies an automatically decoded stream; encoding headers may be retained. */
   fetch: typeof fetch;
+  failureTrace?: ObservationFailureTrace;
   clock: () => number;
   tuple: ProjectionTuple;
   keyBytes: Uint8Array;
@@ -85,18 +88,24 @@ function makeOperationController(
   deadlineMs: number,
   clock: () => number,
   signals: readonly (AbortSignal | undefined)[],
-): { controller: AbortController; dispose: () => void } {
+): { controller: AbortController; wasDeadlineAbort: () => boolean; dispose: () => void } {
   assertLive(deadlineMs, clock, signals);
   const controller = new AbortController();
+  let deadlineAborted = false;
   const abort = () => controller.abort();
   for (const signal of signals) signal?.addEventListener("abort", abort, { once: true });
   const remaining = deadlineMs - clock();
-  const timer = setTimeout(abort, Math.max(0, Math.min(remaining, 2_147_483_647)));
+  const timer = setTimeout(() => {
+    // A caller/disposal abort that happened first must not become a timeout.
+    if (controller.signal.aborted) return;
+    deadlineAborted = true;
+    controller.abort();
+  }, Math.max(0, Math.min(remaining, 2_147_483_647)));
   const dispose = () => {
     clearTimeout(timer);
     for (const signal of signals) signal?.removeEventListener("abort", abort);
   };
-  return { controller, dispose };
+  return { controller, wasDeadlineAbort: () => deadlineAborted, dispose };
 }
 
 function raceSignal<T>(
@@ -193,10 +202,11 @@ async function readBoundedBody(response: Response, signal: AbortSignal): Promise
   }
 }
 
+// Never decompress this Fetch stream again. Decoded bytes still require UTF8/canonical/MAC checks.
 function validateResponseRepresentation(response: Response): string {
   const contentType = responseHeader(response, "content-type");
   const contentEncoding = responseHeader(response, "content-encoding");
-  if (contentType !== RESPONSE_CONTENT_TYPE || (contentEncoding !== null && contentEncoding !== "identity")) {
+  if (contentType !== RESPONSE_CONTENT_TYPE || (contentEncoding !== null && !["identity", "gzip", "br"].includes(contentEncoding))) {
     throw unavailable();
   }
   const signature = responseHeader(response, PROJECTION_MAC_HEADER);
@@ -223,6 +233,7 @@ export function createProjectionClient(options: ProjectionClientOptions): Projec
     keyBytes.fill(0);
     throw new Error("PROJECTION_CLIENT_CONFIG");
   }
+  const failureTrace = options.failureTrace;
   const fetchImpl = options.fetch;
   const clock = options.clock;
   const clientSignal = options.signal;
@@ -236,11 +247,12 @@ export function createProjectionClient(options: ProjectionClientOptions): Projec
     methodSignal?: AbortSignal): Promise<unknown | null> {
     const signals = [clientSignal, methodSignal] as const;
     if (disposed) throw unavailable();
-    const { controller, dispose } = makeOperationController(deadlineMs, clock, signals);
+    const { controller, wasDeadlineAbort, dispose } = makeOperationController(deadlineMs, clock, signals);
     activeControllers.add(controller);
     let response: Response | undefined;
     try {
       assertLive(deadlineMs, clock, signals);
+      failureTrace?.enter("PROJECTION_REQUEST");
       const issuedAtMs = clock();
       const request = await raceSignal(createProjectionRequest({
         operation,
@@ -264,6 +276,7 @@ export function createProjectionClient(options: ProjectionClientOptions): Projec
         .map(([name, value]) => `${name}: ${value}\r\n`).join("")).byteLength;
       if (rawHeaderBytes > PROJECTION_PROTOCOL_LIMITS.requestHeaderBytes) throw unavailable();
       const url = `${PROJECTION_ORIGIN}${PROJECTION_PATHS[operation]}`;
+      failureTrace?.enter("PROJECTION_FETCH");
       const fetchWork = fetchImpl(url, {
         method: "POST",
         headers: requestHeaders,
@@ -274,10 +287,18 @@ export function createProjectionClient(options: ProjectionClientOptions): Projec
       });
       response = await raceSignal(fetchWork, controller.signal, cancelResponse);
       assertLive(deadlineMs, clock, signals);
-      if (response.status !== 200) throw unavailable();
+      failureTrace?.enter("PROJECTION_STATUS");
+      if (response.status !== 200) {
+        failureTrace?.capture(response.status === 401 ? "HTTP_401" : response.status === 403 ? "HTTP_403" :
+          response.status === 404 ? "HTTP_404" : response.status >= 500 && response.status <= 599 ? "HTTP_5XX" : "HTTP_OTHER");
+        throw unavailable();
+      }
+      failureTrace?.enter("PROJECTION_REPRESENTATION");
       const signature = validateResponseRepresentation(response);
+      failureTrace?.enter("PROJECTION_BODY");
       const body = await readBoundedBody(response, controller.signal);
       assertLive(deadlineMs, clock, signals);
+      failureTrace?.enter("PROJECTION_MAC");
       const verifiedRequest = await raceSignal(verifyProjectionRequest({
         method: request.method,
         path: request.path,
@@ -292,6 +313,7 @@ export function createProjectionClient(options: ProjectionClientOptions): Projec
       assertLive(deadlineMs, clock, signals);
       return data;
     } catch {
+      failureTrace?.capture(wasDeadlineAbort() ? "TIMEOUT" : "THREW");
       if (response) cancelResponse(response);
       throw unavailable();
     } finally {
