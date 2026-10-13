@@ -608,7 +608,7 @@ test("mounted Admin and tenant update the same observation automatically and cle
   });
   await expect(restoredTenantPanel.getByText(observation().observationId)).toBeVisible();
   await expect(restoredTenantPanel.getByRole("region", { name: "Spot" })).toBeVisible();
-  await expect(restoredTenantPanel.getByRole("region", { name: "Futures" })).toBeVisible();
+  await expect(restoredTenantPanel.getByRole("region", { name: "Futures", exact: true })).toBeVisible();
   await expect(restoredTenantPanel.getByText("Account equity (USD)")).toBeVisible();
   await expect(restoredTenantPanel.getByText("Stop: price 59000; quantity 1 contracts")).toBeVisible();
   await expect(restoredTenantPanel.getByText("Target: price 62000; quantity 1 contracts")).toBeVisible();
