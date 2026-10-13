@@ -419,6 +419,75 @@ describe("configured observation runtime, real local composition with mock persi
       [...keys.keys()].sort(),
     );
   });
+  it.each([
+    ["legacy derivatives", true],
+    ["legacy derivatives", false],
+    ["UID-pinned V5", true],
+    ["UID-pinned V5", false],
+  ] as const)("collects dynamic Spot with %s fixed assignment first: %s", async (kind, restrictedFirst) => {
+    const f = setup({ iterationTimeoutMs: 300_000 });
+    const restricted = kind === "legacy derivatives" ? withDerivatives(f.item) : withV5(f.item);
+    const spot = assignment("124", "3");
+    const dynamic: ObservationBinding = {
+      ...spot.binding,
+      credentialId: "00000000-0000-4000-8000-000000000004",
+      exchangeAccountId: "789",
+    };
+    f.input.configured = restrictedFirst ? [restricted, spot] : [spot, restricted];
+    const inventory = vi.fn(async (run: (tx: unknown) => Promise<unknown>) => run(
+      Object.assign(async () => [{
+        organization_id: dynamic.organizationId, credential_id: dynamic.credentialId,
+        exchange_account_id: dynamic.exchangeAccountId, credential_revision: dynamic.credentialRevision,
+        configuration_revision: dynamic.configurationRevision, symbols: ["BTCUSDT"],
+      }], { unsafe: async () => undefined }),
+    ));
+    f.input.collectorSql = { begin: inventory } as unknown as Sql;
+    const bindings = [restricted.binding, spot.binding, dynamic];
+    ports.resolveActiveBinding.mockImplementation(async (scope: Partial<ObservationBinding>) =>
+      bindings.find(binding => binding.organizationId === scope.organizationId &&
+        binding.credentialId === scope.credentialId && binding.exchangeAccountId === scope.exchangeAccountId) ?? null);
+    const credentials = vi.fn(async (_scope: unknown, credentialId: string) => ({
+      apiKey: `synthetic-key-${bindings.find(binding => binding.credentialId === credentialId)!.exchangeAccountId}`,
+      apiSecret: "synthetic-secret",
+    }));
+    f.input.protectedCredentialService = { getDecryptedCredentials: credentials };
+    const baseFetch = f.fetchImpl.getMockImplementation()!;
+    f.fetchImpl.mockImplementation(async (url, init) => {
+      const target = new URL(String(url));
+      const accessKey = target.searchParams.get("AccessKeyId") ?? "";
+      const account = Number(accessKey.split("-").at(-1));
+      if (target.hostname === "api.hbdm.com") {
+        if (target.pathname.startsWith("/v5/")) return baseFetch(url, init);
+        return target.pathname.endsWith("/swap_cross_position_info")
+          ? derivativesPositionResponse() : derivativesResponse();
+      }
+      if (target.pathname === "/v1/account/accounts") return Response.json({ status: "ok",
+        data: [{ id: account, type: "spot", state: "working" }] });
+      if (target.pathname === "/v2/user/uid") return Response.json({ code: 200, data: 456 });
+      if (target.pathname === "/v2/user/api-key") return Response.json({ code: 200,
+        data: [{ accessKey, status: "normal", permission: account === 789 ? "readOnly,trade" : "readOnly" }] });
+      return Response.json({ status: "ok", data: target.pathname.endsWith("/balance")
+        ? { id: account, type: "spot", state: "working", list: [] } : [] });
+    });
+    const stop = new AbortController();
+    const work = createConfiguredHtxObservationRuntime(f.input).run(stop.signal);
+    await vi.advanceTimersByTimeAsync(0);
+    stop.abort();
+    await work;
+    const observations = ports.commitIfCurrent.mock.calls.map(([value]) => value.observation);
+    expect(observations.map(observation => observation.binding.exchangeAccountId).sort()).toEqual(["123", "124", "789"]);
+    expect(inventory).toHaveBeenCalledOnce();
+    const dynamicObservation = observations.find(observation => observation.binding.exchangeAccountId === "789");
+    expect(dynamicObservation).toMatchObject({ schemaVersion: "account-observation/v1", binding: dynamic,
+      balances: { status: "COMPLETE", values: [] } });
+    expect(dynamicObservation.htxV5).toBeUndefined();
+    expect(dynamicObservation.derivatives).toBeUndefined();
+    const dynamicCalls = f.fetchImpl.mock.calls.filter(([url]) => new URL(String(url)).searchParams.get("AccessKeyId") === "synthetic-key-789");
+    expect(dynamicCalls.length).toBeGreaterThan(0);
+    expect(dynamicCalls.every(([url, init]) => new URL(String(url)).hostname === "api.huobi.pro" && init?.method === "GET")).toBe(true);
+    expect(credentials.mock.calls.filter(([, credentialId]) => credentialId === dynamic.credentialId)).toHaveLength(1);
+  });
+
   it.each(["legacy derivatives", "V5"] as const)(
     "does not let an extra verifier grant a %s read for a trading key without consent",
     async (mode) => {

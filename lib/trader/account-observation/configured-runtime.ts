@@ -9,6 +9,7 @@ import {
   type ObservationRuntimeEvent,
 } from "./runtime";
 import { createPostgresObservationAssignmentSource } from "./postgres-assignments";
+import { findSelfServiceObservationTemplate } from "./self-service-template";
 import { createPostgresObservationReader } from "./postgres-reader";
 import { createObservationCredentialStore } from "./credential-store";
 import { openHtxObservationReader, type HtxObservationCredentialHandle } from "./htx-reader-opener";
@@ -175,17 +176,11 @@ export function createConfiguredHtxObservationRuntime(
   };
   // Consent is per exact operator assignment and must never flow through the
   // self-service template path, even when that assignment is first in the list.
-  const template = fixed.find((item) => !item.config.existingKeyReadConsentId && !item.config.htxV5?.financialHistory);
   const ensureStore = (binding: ObservationBinding) => {
     const id = key(binding);
     const assignment =
       fixed.find((item) => key(item.binding) === id) ??
-      (template &&
-      !template.config.htxDerivativesFamilies?.length &&
-      !template.config.htxV5?.expectedHtxUid && !template.config.htxV5?.financialHistory &&
-      binding.configurationRevision === template.config.revision
-        ? template
-        : undefined);
+      findSelfServiceObservationTemplate(fixed, binding.configurationRevision);
     if (!assignment) return null;
     const config = assignment.config;
     const existingStore = stores.get(id);

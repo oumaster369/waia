@@ -4,6 +4,7 @@ import { createPostgresObservationReader } from "./postgres-reader";
 import { createObservationConfiguration, type ObservationAssignment } from "./runtime";
 import { observationBindingSchema } from "./validation";
 import type { ObservationBinding } from "./types";
+import { findSelfServiceObservationTemplate } from "./self-service-template";
 
 /** Filter explicitly authorized, exact-revision targets through current DB state.
  * Manifest bindings are the operator envelope. Additional live enrollments come from
@@ -37,8 +38,7 @@ export function createPostgresObservationAssignmentSource(
     approved.set(key(binding), Object.freeze({ binding, config }));
   }
   // Only a spot envelope can admit self-service inventory, regardless of manifest order.
-  const envelope = [...approved.values()].find(item =>
-    !item.config.existingKeyReadConsentId && !item.config.htxDerivativesFamilies?.length && !item.config.htxV5?.financialHistory);
+  const envelope = findSelfServiceObservationTemplate([...approved.values()]);
   const reader = createPostgresObservationReader(sql);
   let loading = false;
   let live = new Map<string, ObservationAssignment>();
