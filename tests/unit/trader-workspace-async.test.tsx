@@ -51,7 +51,7 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     let finish!: (response: Response) => void;
     fetcher.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
     render(<TraderWorkspace signInHref="https://trader.example.test/" />);
-    expect(screen.getByRole("status")).toHaveTextContent("Проверка доступа");
+    expect(screen.getByRole("status")).toHaveTextContent("Checking access");
     expect(screen.queryByTestId("trader-connect-form")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("HTX Access Key")).not.toBeInTheDocument();
     await act(async () => finish(json({ credentials: [] })));
@@ -66,7 +66,7 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     ));
     render(<TraderWorkspace />);
     expect(await screen.findByTestId("trader-auth-required")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Войти или создать аккаунт" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Sign in or create an account" })).toHaveAttribute(
       "href", "/trader/sign-in",
     );
     expect(screen.getByText("Not signed in")).toBeInTheDocument();
@@ -129,7 +129,7 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     fireEvent.change(screen.getByLabelText("HTX Secret Key"), { target: { value: "synthetic-secret" } });
     fireEvent.submit(screen.getByTestId("trader-connect-form"));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Запрос отклонён. Обновите страницу и повторите действие.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Request rejected. Refresh the page and try again.");
     expect(screen.getByText("User account")).toBeInTheDocument();
     expect(screen.getByTestId("trader-connect-form")).toBeInTheDocument();
     expect(screen.queryByTestId("trader-access-required")).not.toBeInTheDocument();
@@ -152,10 +152,10 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     fireEvent.click(screen.getByTestId("trader-disconnect-button"));
     fireEvent.click(screen.getByTestId("trader-disconnect-confirm"));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Запрос отклонён. Обновите страницу и повторите действие.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Request rejected. Refresh the page and try again.");
     expect(screen.getByText("User account")).toBeInTheDocument();
     expect(screen.getByTestId("trader-account-status")).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Подтвердить отключение" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Confirm disconnection" })).toBeInTheDocument();
     expect(screen.queryByTestId("trader-access-required")).not.toBeInTheDocument();
   });
 
@@ -169,7 +169,7 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     expect(await screen.findByTestId("trader-access-unavailable")).toBeInTheDocument();
     expect(screen.queryByTestId("trader-connect-form")).not.toBeInTheDocument();
     fetcher.mockResolvedValueOnce(json({ credentials: [] }));
-    fireEvent.click(screen.getByRole("button", { name: "Повторить проверку" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
     expect(await screen.findByTestId("trader-connect-form")).toBeInTheDocument();
   });
 
@@ -201,7 +201,7 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
   it("ends initial loading with a generic error after a rejected fetch", async () => {
     setup().mockRejectedValueOnce(new Error("secret transport details"));
     render(<TraderWorkspace />);
-    await waitFor(() => expect(screen.queryByText("Загрузка аккаунтов…")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Loading accounts…")).not.toBeInTheDocument());
     expect(screen.getByRole("alert")).not.toHaveTextContent("secret transport details");
   });
   it("releases connection pending state after a network rejection", async () => {
@@ -216,9 +216,9 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     });
     fetcher.mockRejectedValueOnce(new Error("secret transport details"));
     fireEvent.submit(screen.getByTestId("trader-connect-form"));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Подключить HTX" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Connect HTX" })).toBeEnabled());
     expect(screen.getByRole("alert")).not.toHaveTextContent("secret transport details");
-    expect(screen.getByRole("alert")).toHaveTextContent("Проверьте состояние подключения перед повторной отправкой ключа");
+    expect(screen.getByRole("alert")).toHaveTextContent("Check the connection status before submitting the key again");
   });
   it("fences a retired mount and does not start credential requests after it resolves", async () => {
     const fetcher = setup();
@@ -263,7 +263,7 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
           finish = resolve;
         }),
     );
-    const button = screen.getByRole("button", { name: "Подключить HTX" });
+    const button = screen.getByRole("button", { name: "Connect HTX" });
     fireEvent.click(button);
     fireEvent.click(button);
     expect(fetcher).toHaveBeenCalledTimes(baseline + 1);
@@ -307,17 +307,17 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     });
     vi.stubGlobal("fetch", fetcher);
     render(<TraderWorkspace />);
-    const selector = await screen.findByLabelText("Выберите аккаунт");
+    const selector = await screen.findByLabelText("Select an account");
     expect(selector).toHaveValue("");
     expect(screen.getByTestId("trader-account-selection-prompt")).toBeInTheDocument();
     expect(screen.queryByTestId("trader-account-status")).not.toBeInTheDocument();
 
     fireEvent.change(selector, { target: { value: "456" } });
     expect(screen.getByTestId("trader-credential-account-id")).toHaveTextContent("456");
-    expect(screen.getByText("HTX подключен в WAIA")).toBeInTheDocument();
+    expect(screen.getByText("HTX connected in WAIA")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("trader-replace-button"));
-    expect(screen.getByText(/Это заменит подключение в WAIA/)).toBeInTheDocument();
-    expect(screen.getByText(/а не добавит отдельный ключ наблюдения/)).toBeInTheDocument();
+    expect(screen.getByText(/This will replace the WAIA connection/)).toBeInTheDocument();
+    expect(screen.getByText(/rather than add a separate observation key/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("HTX Access Key"), { target: { value: "replacement-key" } });
     fireEvent.change(screen.getByLabelText("HTX Secret Key"), { target: { value: "replacement-secret" } });
     fireEvent.submit(screen.getByTestId("trader-connect-form"));
@@ -344,8 +344,8 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     fireEvent.click(screen.getByTestId("trader-disconnect-button"));
     expect(fetcher.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
     fireEvent.click(screen.getByTestId("trader-disconnect-confirm"));
-    await waitFor(() => expect(screen.getByTestId("trader-credential-status")).toHaveTextContent("Отозван в WAIA"));
-    expect(screen.getByTestId("trader-account-status")).toHaveTextContent("Подключение HTX отозвано в WAIA");
+    await waitFor(() => expect(screen.getByTestId("trader-credential-status")).toHaveTextContent("Revoked in WAIA"));
+    expect(screen.getByTestId("trader-account-status")).toHaveTextContent("HTX connection revoked in WAIA");
     expect(fetcher.mock.calls.some(([url, init]) => String(url).endsWith("/test-credential") && init?.method === "DELETE")).toBe(true);
     expect(screen.queryByText("Separate shared observation")).not.toBeInTheDocument();
   });
@@ -355,7 +355,7 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     fetcher.mockImplementation(async (input) => String(input) === "/api/trader/exchange-credentials"
       ? json({ credentials: [credential, secondCredential] }) : json({}));
     render(<TraderWorkspace />);
-    const selector = await screen.findByLabelText("Выберите аккаунт");
+    const selector = await screen.findByLabelText("Select an account");
     fireEvent.change(selector, { target: { value: credential.exchangeAccountId } });
     fireEvent.click(screen.getByTestId("trader-replace-button"));
     fireEvent.change(screen.getByLabelText("HTX Access Key"), { target: { value: "stale-key" } });
@@ -379,7 +379,7 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     fireEvent.click(screen.getByTestId("trader-replace-button"));
     fireEvent.change(screen.getByLabelText("HTX Access Key"), { target: { value: "temporary-key" } });
     fireEvent.change(screen.getByLabelText("HTX Secret Key"), { target: { value: "temporary-secret" } });
-    fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByTestId("trader-connect-form")).not.toBeInTheDocument();
     expect(fetcher.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
   });
@@ -405,12 +405,12 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     });
     vi.stubGlobal("fetch", fetcher);
     render(<TraderWorkspace />);
-    await screen.findByText(/Предыдущая запись подключения отозвана в WAIA/);
+    await screen.findByText(/The previous connection record was revoked in WAIA/);
     fireEvent.change(screen.getByLabelText("HTX Access Key"), { target: { value: "one-time-key" } });
     fireEvent.change(screen.getByLabelText("HTX Secret Key"), { target: { value: "one-time-secret" } });
     fireEvent.submit(screen.getByTestId("trader-connect-form"));
     await waitFor(() => expect(screen.getByTestId("trader-account-selection-prompt")).toBeInTheDocument());
-    expect(screen.getByRole("alert")).toHaveTextContent("Не удалось завершить запрос. Проверьте состояние подключения перед повторной отправкой ключа.");
+    expect(screen.getByRole("alert")).toHaveTextContent("The request could not be completed. Check the connection status before submitting the key again.");
     expect(connectCalls).toBe(1);
     expect(fetcher.mock.calls.filter(([url]) => String(url) === "/api/trader/exchange-credentials")).toHaveLength(2);
     expect(screen.getByTestId("trader-account-select")).toHaveValue("");
@@ -435,13 +435,13 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     vi.stubGlobal("fetch", fetcher);
     render(<TraderWorkspace />);
     await screen.findByTestId("trader-replace-button");
-    fireEvent.change(screen.getByLabelText("Выберите аккаунт"), { target: { value: "123" } });
+    fireEvent.change(screen.getByLabelText("Select an account"), { target: { value: "123" } });
     fireEvent.click(screen.getByTestId("trader-replace-button"));
     fireEvent.change(screen.getByLabelText("HTX Access Key"), { target: { value: "replacement-key" } });
     fireEvent.change(screen.getByLabelText("HTX Secret Key"), { target: { value: "replacement-secret" } });
     fireEvent.submit(screen.getByTestId("trader-connect-form"));
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("Не удалось завершить запрос");
+      expect(screen.getByRole("alert")).toHaveTextContent("The request could not be completed");
       expect(fetcher.mock.calls.filter(([url]) => String(url) === "/api/trader/exchange-credentials")).toHaveLength(2);
     });
     expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith("/connect"))).toHaveLength(1);
@@ -467,13 +467,13 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     });
     vi.stubGlobal("fetch", fetcher);
     render(<TraderWorkspace />);
-    await screen.findByText(/Предыдущая запись подключения отозвана в WAIA/);
+    await screen.findByText(/The previous connection record was revoked in WAIA/);
     fireEvent.change(screen.getByLabelText("HTX Access Key"), { target: { value: "another-account-key" } });
     fireEvent.change(screen.getByLabelText("HTX Secret Key"), { target: { value: "another-account-secret" } });
     fireEvent.submit(screen.getByTestId("trader-connect-form"));
     await waitFor(() => expect(screen.getByTestId("trader-account-select")).toHaveValue("456"));
     expect(screen.getByTestId("trader-credential-account-id")).toHaveTextContent("456");
-    expect(screen.getByTestId("trader-account-status")).toHaveTextContent("HTX подключен в WAIA");
+    expect(screen.getByTestId("trader-account-status")).toHaveTextContent("HTX connected in WAIA");
   });
 
   it("keeps the requested replacement account when an ambiguous refresh adds unrelated active accounts", async () => {
@@ -502,7 +502,7 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     fireEvent.change(screen.getByLabelText("HTX Secret Key"), { target: { value: "one-time-secret" } });
     fireEvent.submit(screen.getByTestId("trader-connect-form"));
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("Не удалось завершить запрос");
+      expect(screen.getByRole("alert")).toHaveTextContent("The request could not be completed");
       expect(fetcher.mock.calls.filter(([url]) => String(url) === "/api/trader/exchange-credentials")).toHaveLength(2);
     });
     expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith("/connect"))).toHaveLength(1);
@@ -530,9 +530,9 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     await screen.findByTestId("trader-disconnect-button");
     fireEvent.click(screen.getByTestId("trader-disconnect-button"));
     fireEvent.click(screen.getByTestId("trader-disconnect-confirm"));
-    await waitFor(() => expect(screen.getByTestId("trader-credential-status")).toHaveTextContent("Отозван в WAIA"));
-    expect(screen.getByRole("alert")).toHaveTextContent("Не удалось подтвердить результат запроса");
-    expect(screen.queryByRole("group", { name: "Подтвердить отключение" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("trader-credential-status")).toHaveTextContent("Revoked in WAIA"));
+    expect(screen.getByRole("alert")).toHaveTextContent("The request result could not be confirmed");
+    expect(screen.queryByRole("group", { name: "Confirm disconnection" })).not.toBeInTheDocument();
     expect(fetcher.mock.calls.filter(([url]) => String(url) === "/api/trader/exchange-credentials")).toHaveLength(2);
   });
 
@@ -566,13 +566,13 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     fireEvent.click(screen.getByTestId("trader-disconnect-button"));
     fireEvent.click(screen.getByTestId("trader-disconnect-confirm"));
     await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => String(url) === "/api/trader/exchange-credentials")).toHaveLength(2));
-    expect(screen.getByTestId("trader-credential-status")).toHaveTextContent("Активен в WAIA");
-    expect(screen.queryByRole("group", { name: "Подтвердить отключение" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("trader-credential-status")).toHaveTextContent("Active in WAIA");
+    expect(screen.queryByRole("group", { name: "Confirm disconnection" })).not.toBeInTheDocument();
     expect(screen.getByTestId("trader-disconnect-button")).toBeVisible();
     fireEvent.click(screen.getByTestId("trader-disconnect-button"));
-    expect(screen.getByRole("group", { name: "Подтвердить отключение" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Confirm disconnection" })).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("trader-disconnect-confirm"));
-    await waitFor(() => expect(screen.getByTestId("trader-credential-status")).toHaveTextContent("Отозван в WAIA"));
+    await waitFor(() => expect(screen.getByTestId("trader-credential-status")).toHaveTextContent("Revoked in WAIA"));
     await settle();
     expect(deleteIds).toEqual([credential.id, "replacement-after-other-tab"]);
   });
@@ -601,7 +601,7 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     await waitFor(() => expect(screen.getByTestId("trader-account-selection-prompt")).toBeInTheDocument());
     expect(screen.getByTestId("trader-account-select")).toHaveValue("");
     expect(screen.queryByTestId("trader-credential-status")).not.toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("Не удалось завершить запрос");
+    expect(screen.getByRole("alert")).toHaveTextContent("The request could not be completed");
   });
 
   it("keeps replacement editing and disconnect confirmation mutually exclusive", async () => {
@@ -611,7 +611,7 @@ describe("legacy workspace asynchronous safety (fake HTTP only)", () => {
     fireEvent.click(screen.getByTestId("trader-replace-button"));
     expect(screen.getByTestId("trader-connect-form")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("trader-disconnect-button"));
-    expect(screen.getByRole("group", { name: "Подтвердить отключение" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Confirm disconnection" })).toBeInTheDocument();
     expect(screen.queryByTestId("trader-connect-form")).not.toBeInTheDocument();
   });
 });

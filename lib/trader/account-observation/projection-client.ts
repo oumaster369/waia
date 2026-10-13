@@ -282,7 +282,7 @@ export function createProjectionClient(options: ProjectionClientOptions): Projec
         headers: requestHeaders,
         body: request.body,
         cache: "no-store",
-        redirect: "error",
+        redirect: "manual",
         signal: controller.signal,
       });
       response = await raceSignal(fetchWork, controller.signal, cancelResponse);

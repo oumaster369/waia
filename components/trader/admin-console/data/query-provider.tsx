@@ -20,12 +20,12 @@ export function AdminQueryProvider({ children }: { children: React.ReactNode }) 
     return (
       <div
         role="alert"
-        lang="ru"
+        lang="en"
         className="border-border bg-card text-foreground rounded-xl border p-6"
       >
-        <h1 className="text-lg font-semibold">Доступ к консоли отозван</h1>
+        <h1 className="text-lg font-semibold">Console access revoked</h1>
         <p className="text-muted-foreground mt-2 text-sm">
-          Данные закрыты. Для продолжения нужен действующий допуск администратора.
+          Data is hidden. Valid administrator access is required to continue.
         </p>
       </div>
     );

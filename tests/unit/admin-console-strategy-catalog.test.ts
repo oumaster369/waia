@@ -7,7 +7,7 @@ describe("admin console strategy catalog", () => {
     const rows = mergeStrategyCatalog([{ strategyId: "unknown-strategy", version: "9" }]);
     const extra = rows.find((row) => row.strategyId === "unknown-strategy");
     expect(extra?.source).toBe("trades");
-    expect(extra?.reason).toContain("отсутствует в реестре");
+    expect(extra?.reason).toContain("absent from the registry");
     expect(rows.every((row) => row.returnPct.reason === "RETURN_METHOD_NOT_RATIFIED")).toBe(true);
   });
 });

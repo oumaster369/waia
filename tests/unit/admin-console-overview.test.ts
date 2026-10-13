@@ -179,7 +179,7 @@ describe("account dedupe, mode, attention, overview, and order trace", () => {
       periodBounds: { start: "2026-09-01T00:00:00.000Z", end: "2026-09-23T00:00:00.000Z" },
       mode: "live",
     });
-    expect(overview.coverageLabel).toBe("По 7 актуальным счетам из 10");
+    expect(overview.coverageLabel).toBe("Across 7 current accounts out of 10");
     expect(overview.finance.equity.value?.amount).toBe("70");
     expect(overview.lastKnownEstimate).toBe("30");
     const rowSum = "70";
@@ -187,9 +187,9 @@ describe("account dedupe, mode, attention, overview, and order trace", () => {
   });
 
   it("traces a legacy order as not applicable and counts three fills as one order", () => {
-    expect(ORDER_STATUS_LABELS.ACCEPTED).toBe("Биржа приняла");
-    expect(ORDER_STATUS_LABELS.FILLED).toBe("Исполнено");
-    expect(ORDER_STATUS_LABELS.RECONCILIATION_REQUIRED).toBe("Требует сверки");
+    expect(ORDER_STATUS_LABELS.ACCEPTED).toBe("Accepted by the exchange");
+    expect(ORDER_STATUS_LABELS.FILLED).toBe("Filled");
+    expect(ORDER_STATUS_LABELS.RECONCILIATION_REQUIRED).toBe("Reconciliation required");
     const legacy = buildOrderTrace({
       orderId: "order-1",
       executionAttemptId: null,

@@ -33,7 +33,7 @@ export default function AdminAccountsPage() {
         {formatAdminMoney(value, row.currency)}
         {row.stale ? (
           <span className="text-waia-warning mt-1 block text-[10px]">
-            Последняя известная оценка
+            Last known valuation
           </span>
         ) : null}
       </span>
@@ -45,7 +45,7 @@ export default function AdminAccountsPage() {
         href="/admin/account-observation"
         className="text-waia-fg-muted underline-offset-2 hover:underline"
       >
-        Спот и фьючерсы подключённых счетов
+        Spot and futures for connected accounts
       </Link>
       {read.reason ? <DataState state="unavailable" reason={read.reason} /> : null}
       {context.params.get("mode") === "paper" ? <PaperPortfolios /> : null}
@@ -53,23 +53,23 @@ export default function AdminAccountsPage() {
         <ConsolePanel
           title={
             tab === "history"
-              ? "Подключения биржевых счетов"
+              ? "Exchange account connections"
               : tab === "attention"
-                ? "Счета, требующие внимания"
-                : "Биржевые счета"
+                ? "Accounts needing attention"
+                : "Exchange accounts"
           }
           note={read.envelope?.data.aggregate.coverageLabel}
-          action={<ConsoleBadge>{all.length} счетов</ConsoleBadge>}
+          action={<ConsoleBadge>{all.length} accounts</ConsoleBadge>}
         >
           <ConsoleTable
             rows={rows ?? []}
             rowKey={(row) => row.id}
-            caption="Биржевые счета"
+            caption="Exchange accounts"
             columns={
               tab === "history"
                 ? [
                     {
-                      title: "Счёт",
+                      title: "Account",
                       render: (row) => (
                         <DetailLink onClick={() => context.update({ sel: row.id })}>
                           {row.venue.toUpperCase()} · {row.exchangeAccountId}
@@ -77,59 +77,59 @@ export default function AdminAccountsPage() {
                       ),
                     },
                     {
-                      title: "Подключён с",
+                      title: "Connected since",
                       render: (row) =>
                         row.connectedSince ? (
                           <EvidenceTime at={row.connectedSince} label="" />
                         ) : (
-                          "Не установлена"
+                          "Not established"
                         ),
                     },
-                    { title: "Ключей", render: (row) => String(row.credentialsCount) },
+                    { title: "Keys", render: (row) => String(row.credentialsCount) },
                     {
-                      title: "Последнее наблюдение",
+                      title: "Last observation",
                       render: (row) => <EvidenceTime at={row.observedAt} label="" />,
                     },
                   ]
                 : [
                     {
-                      title: "Счёт / портфель",
+                      title: "Account / portfolio",
                       render: (row) => (
                         <div>
                           <DetailLink onClick={() => context.update({ sel: row.id })}>
                             {row.venue.toUpperCase()} · {row.exchangeAccountId}
                           </DetailLink>
                           <p className="text-waia-fg-muted mt-2 text-[11px]">
-                            Live-портфель · ключей {row.credentialsCount}
+                            Live portfolio · keys {row.credentialsCount}
                           </p>
                         </div>
                       ),
                     },
                     {
-                      title: "Общий капитал",
+                      title: "Total equity",
                       align: "right",
                       render: (row) => money(row.equity, row),
                     },
                     {
-                      title: "Свободно",
+                      title: "Available",
                       align: "right",
                       render: (row) => money(row.freeQuote, row),
                     },
                     {
-                      title: "Резерв в ордерах",
+                      title: "Reserved in orders",
                       align: "right",
                       render: (row) => money(row.lockedQuote, row),
                     },
                     {
-                      title: "Свежесть оценки",
+                      title: "Valuation freshness",
                       render: (row) => (
                         <div className="space-y-1">
                           <ConsoleBadge tone={row.state === "ok" ? "good" : "warning"}>
                             {row.state === "ok"
-                              ? "Актуальна"
+                              ? "Current"
                               : row.stale
-                                ? "Устарела"
-                                : "Есть ограничения"}
+                                ? "Stale"
+                                : "Restrictions apply"}
                           </ConsoleBadge>
                           <EvidenceTime at={row.observedAt} label="" />
                         </div>
@@ -141,8 +141,7 @@ export default function AdminAccountsPage() {
         </ConsolePanel>
       ) : null}
       <p className="text-waia-fg-muted text-xs leading-6">
-        Дата подключения берётся из первого успешного наблюдения. Реальный портфель остаётся Live
-        при запрете торговли; разрешение торговли проверяется отдельно.
+        The connection date comes from the first successful observation. The real portfolio remains Live when trading is prohibited; trading permission is checked separately.
       </p>
       <AccountDetails financeRevision={read.envelope?.financeRevision} />
     </div>

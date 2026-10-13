@@ -36,7 +36,7 @@ describe("admin console clients", () => {
         hasOpenLots: false,
       }),
     ).toBe(false);
-    expect(connectedSinceLabel(null)).toBe("Не установлена");
+    expect(connectedSinceLabel(null)).toBe("Not established");
     expect(isTraderPayment("marketplace")).toBe(false);
     expect(isTraderPayment("trader")).toBe(true);
     expect(
@@ -52,7 +52,7 @@ describe("admin console clients", () => {
         hasDebt: true,
         hasOpenLots: false,
       })?.access,
-    ).toBe("доступ отключён");
+    ).toBe("access disabled");
     expect(
       presentClient({
         id: "org-2",

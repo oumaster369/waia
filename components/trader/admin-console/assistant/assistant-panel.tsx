@@ -100,7 +100,7 @@ function AssistantContextPanel(props: Props) {
       let id = conversation;
       if (!id) {
         const created = await post("/api/trader/admin/console/assistant/conversations", {
-          title: "Разговор с помощником",
+          title: "Assistant conversation",
         });
         id = created.conversation.id;
         if (abort.signal.aborted) return;
@@ -137,17 +137,17 @@ function AssistantContextPanel(props: Props) {
   const messages = history.envelope?.data.messages ?? [];
   const query = new URLSearchParams(context.query);
   return (
-    <section aria-label="Ответы помощника" className="space-y-5 text-xs">
+    <section aria-label="Assistant answers" className="space-y-5 text-xs">
       <p className="text-waia-fg-muted leading-5">
-        Только чтение. Ответы относятся к выбранному охвату, периоду, режиму и валюте.
+        Read-only. Answers refer to the selected scope, period, mode and currency.
       </p>
       <div className="border-waia-divider rounded-lg border p-3 leading-5">
         <span className="font-medium">
           {query.get("exchange_account_id")
-            ? "Выбранный счёт"
+            ? "Selected account"
             : query.get("organization_id")
-              ? "Выбранный клиент"
-              : "Весь парк"}
+              ? "Selected client"
+              : "Entire fleet"}
         </span>
         <span className="text-waia-fg-muted">
           {" "}
@@ -155,12 +155,12 @@ function AssistantContextPanel(props: Props) {
         </span>
         {!enabled ? (
           <p className="text-waia-fg-muted mt-2">
-            Помощник выключен. Быстрые ответы работают без языковой модели.
+            The assistant is disabled. Quick answers work without a language model.
           </p>
         ) : null}
       </div>
       <div>
-        <h3 className="mb-2 font-semibold">Быстрые ответы</h3>
+        <h3 className="mb-2 font-semibold">Quick answers</h3>
         <div className="flex flex-wrap gap-2">
           {answers.map((a) => (
             <button
@@ -176,12 +176,12 @@ function AssistantContextPanel(props: Props) {
         </div>
       </div>
       {quick ? (
-        <section aria-label="Быстрый ответ" className="space-y-3">
+        <section aria-label="Quick answer" className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold">{answer.envelope?.data.title ?? "Читаю источник…"}</h3>
+            <h3 className="font-semibold">{answer.envelope?.data.title ?? "Reading the source…"}</h3>
             <button
               type="button"
-              aria-label="Обновить быстрый ответ"
+              aria-label="Refresh quick answer"
               onClick={answer.reload}
               className="hover:bg-waia-elevated rounded p-2"
             >
@@ -189,7 +189,7 @@ function AssistantContextPanel(props: Props) {
             </button>
           </div>
           {answer.loading ? (
-            <p role="status">Получаю проверяемые данные…</p>
+            <p role="status">Retrieving verifiable data…</p>
           ) : answer.reason ? (
             <DataState state="unavailable" reason={answer.reason} />
           ) : (
@@ -199,7 +199,7 @@ function AssistantContextPanel(props: Props) {
       ) : null}
       <div className="border-waia-divider border-t pt-4">
         <label htmlFor="assistant-history" className="mb-2 block font-semibold">
-          Разговоры
+          Conversations
         </label>
         <select
           id="assistant-history"
@@ -213,7 +213,7 @@ function AssistantContextPanel(props: Props) {
             setReason(null);
           }}
         >
-          <option value="">Новый разговор</option>
+          <option value="">New conversation</option>
           {conversations.envelope?.data.conversations?.map((c) => (
             <option key={c.id} value={c.id}>
               {c.title}
@@ -221,24 +221,23 @@ function AssistantContextPanel(props: Props) {
           ))}
         </select>
         <p className="text-waia-fg-muted mt-2 leading-5">
-          История показывает только сообщения текущего контекста. Данные старых ответов имеют свою
-          дату и ревизию.
+          History shows messages only from the current context. Earlier answers have their own date and revision.
         </p>
         {conversation && !history.loading && !messages.length && !history.reason ? (
-          <p className="text-waia-fg-muted mt-3">В этом контексте пока нет сообщений.</p>
+          <p className="text-waia-fg-muted mt-3">No messages in this context yet.</p>
         ) : null}
         {history.reason ? <DataState state="unavailable" reason={history.reason} /> : null}
-        <div className="mt-4 space-y-4" role="log" aria-label="История сообщений">
+        <div className="mt-4 space-y-4" role="log" aria-label="Message history">
           {messages.map((m) => (
             <article key={m.id} className="border-waia-divider rounded-lg border p-3">
-              <p className="mb-2 font-semibold">{m.role === "user" ? "Вы" : "Помощник"}</p>
+              <p className="mb-2 font-semibold">{m.role === "user" ? "You" : "Assistant"}</p>
               {m.blocks?.facts?.length ? (
                 <AssistantFacts facts={m.blocks.facts} />
               ) : (
                 <p className="leading-5 break-words whitespace-pre-wrap">{m.content}</p>
               )}
               {m.blocks?.unverified ? (
-                <p className="text-waia-fg-muted mt-2">Неподтверждённое утверждение удалено.</p>
+                <p className="text-waia-fg-muted mt-2">Unverified claim removed.</p>
               ) : null}
               <div className="mt-2 text-[10px]">
                 <EvidenceTime at={m.at} />
@@ -250,25 +249,25 @@ function AssistantContextPanel(props: Props) {
           <div className="mt-4">
             <AssistantFacts facts={latest.facts} />
             {latest.unverified ? (
-              <p className="text-waia-fg-muted mt-2">Неподтверждённое утверждение удалено.</p>
+              <p className="text-waia-fg-muted mt-2">Unverified claim removed.</p>
             ) : null}
           </div>
         ) : null}
         {pending ? (
           <p role="status" className="mt-3 flex items-center gap-2">
             <LoaderCircle size={14} className="animate-spin" />
-            Проверяю источники и готовлю ответ…
+            Checking sources and preparing an answer…
           </p>
         ) : null}
         {reason ? (
           <div className="mt-3">
             <DataState state="unavailable" reason={reason} />
-            <p className="text-waia-fg-muted mt-2">Можно открыть быстрый ответ выше.</p>
+            <p className="text-waia-fg-muted mt-2">You can open a quick answer above.</p>
           </div>
         ) : null}
         <form onSubmit={submit} className="mt-4 space-y-2">
           <label htmlFor="assistant-question" className="block font-semibold">
-            Вопрос по данным консоли
+            Question about console data
           </label>
           <textarea
             id="assistant-question"
@@ -277,7 +276,7 @@ function AssistantContextPanel(props: Props) {
             maxLength={4000}
             rows={3}
             disabled={!enabled || !!pending}
-            placeholder={enabled ? "Что требует внимания?" : "Языковая модель выключена"}
+            placeholder={enabled ? "What needs attention?" : "Language model disabled"}
             className={`${controlClass} h-auto w-full resize-y p-3 leading-5 disabled:opacity-60`}
           />
           <div className="flex justify-end gap-2">
@@ -291,7 +290,7 @@ function AssistantContextPanel(props: Props) {
                   setReason("ASSISTANT_STOPPED");
                 }}
               >
-                Остановить ответ
+                Stop response
               </button>
             ) : null}
             <button
@@ -300,7 +299,7 @@ function AssistantContextPanel(props: Props) {
               disabled={!enabled || !!pending || !question.trim()}
             >
               <ArrowUp size={14} />
-              Отправить
+              Send
             </button>
           </div>
         </form>
@@ -314,7 +313,7 @@ export function AssistantFacts({ facts }: { facts: readonly AssistantFact[] }) {
     <div className="space-y-3">
       {revisions.size > 1 ? (
         <p className="text-waia-fg-muted leading-5">
-          Финансовые источники имеют разные ревизии. Значения не объединены в новую сумму.
+          Financial sources have different revisions. Their values are not combined into a new total.
         </p>
       ) : null}
       {facts.map((f) => (
@@ -326,14 +325,14 @@ export function AssistantFacts({ facts }: { facts: readonly AssistantFact[] }) {
           <p className="text-waia-fg-muted leading-5">{f.label}</p>
           <p className="mt-1 font-semibold break-words tabular-nums">
             {f.value === null
-              ? "Недоступно"
+              ? "Unavailable"
               : f.currency
                 ? formatAdminMoney(f.value, f.currency)
                 : f.value}
           </p>
           {f.coverage ? (
             <p className="text-waia-fg-muted mt-1">
-              Охват: {f.coverage.included}/{f.coverage.total ?? "не установлен"}
+              Scope: {f.coverage.included}/{f.coverage.total ?? "not established"}
             </p>
           ) : null}
           {f.reasons.map((r) => (
@@ -347,11 +346,11 @@ export function AssistantFacts({ facts }: { facts: readonly AssistantFact[] }) {
             <EvidenceTime at={f.observedAt ?? f.generatedAt} />
             <Link
               href={f.href}
-              title={`Ревизия: ${f.revision}`}
+              title={`Revision: ${f.revision}`}
               className="text-waia-fg inline-flex items-center gap-1 underline underline-offset-4"
             >
               <BookOpen size={12} />
-              Источник
+              Source
             </Link>
           </div>
         </article>

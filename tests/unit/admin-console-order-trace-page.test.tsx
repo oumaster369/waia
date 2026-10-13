@@ -10,7 +10,7 @@ describe("admin console order trace page", () => {
   it("shows reconciliation required and does not offer a retry", () => {
     const row = orderRowView({ id: "1", symbol: "btcusdt", state: "RECONCILIATION_REQUIRED" });
     render(<OrdersPanel rows={[row]} />);
-    expect(screen.getByText("Требует сверки")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /повтор/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Reconciliation required")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
   });
 });

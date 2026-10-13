@@ -84,7 +84,7 @@ describe("cabinet observation view", () => {
     expect(secondsUntilNextPoll(now, now + 180_000)).toBe(0);
   });
 
-  it("keeps Live as the headline while a snapshot is on screen", () => {
+  it("marks an ERROR with a retained snapshot as Last tick", () => {
     expect(
       cabinetLiveLabel({
         status: "ERROR",
@@ -92,14 +92,27 @@ describe("cabinet observation view", () => {
         stale: false,
         transport: "RECONNECTING",
       }),
-    ).toBe("Live");
+    ).toBe("Last tick");
+  });
+
+  it("marks an ERROR without a snapshot as Data unavailable", () => {
     expect(
       cabinetLiveLabel({
         status: "ERROR",
         observation: null,
         stale: false,
       }),
-    ).toBe("Connecting");
+    ).toBe("Data unavailable");
+  });
+
+  it("keeps initial LOADING without a snapshot as Connecting", () => {
+    expect(cabinetLiveLabel({ status: "LOADING", observation: null, stale: false })).toBe("Connecting");
+  });
+
+  it.each([
+    ["REVOKED", "Revoked"], ["DISCONNECTED", "Idle"], ["STALE", "Last tick"],
+  ])("preserves the %s headline", (status, label) => {
+    expect(cabinetLiveLabel({ status, observation, stale: false })).toBe(label);
   });
 
   it("summarizes a cabinet without inventing PnL", () => {

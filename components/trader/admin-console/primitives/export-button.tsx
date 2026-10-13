@@ -77,14 +77,14 @@ export function ExportButton({
         onClick={() => void download()}
       >
         <Download size={14} aria-hidden="true" />
-        {pending ? "Подготовка…" : `Скачать ${format.toUpperCase()}`}
+        {pending ? "Preparing…" : `Download ${format.toUpperCase()}`}
       </button>
       {pending ? (
         <button
           type="button"
           className={controlClass}
           onClick={() => controller.current?.abort()}
-          aria-label="Отменить выгрузку"
+          aria-label="Cancel export"
         >
           <X size={14} aria-hidden="true" />
         </button>

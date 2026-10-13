@@ -22,8 +22,8 @@ export function CycleDetails() {
   return (
     <ConsoleDialog
       open={!!id}
-      title="Доказательства цикла"
-      description="23 архитектурных этапа в шести группах. Сохранённая запись подтверждает факт, а не готовность всех этапов."
+      title="Cycle evidence"
+      description="23 architectural stages in six groups. A saved record confirms a fact, not readiness of all stages."
       onClose={() => context.update({ cycle: null })}
       wide
     >
@@ -55,10 +55,10 @@ export function CycleDetails() {
                         {stage?.sourceId ? (
                           <>
                             <p className="text-waia-success mt-1 text-xs">
-                              Есть сохранённое доказательство
+                              Saved evidence present
                             </p>
                             <details className="text-waia-fg-muted mt-1 text-[11px]">
-                              <summary className="cursor-pointer">Идентификатор записи</summary>
+                              <summary className="cursor-pointer">Record identifier</summary>
                               <p className="mt-1 font-mono break-all">{stage.sourceId}</p>
                             </details>
                           </>

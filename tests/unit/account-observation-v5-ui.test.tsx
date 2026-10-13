@@ -203,30 +203,30 @@ describe("HTX futures snapshot UI", () => {
   it("keeps USD aggregates, currency collateral, contract volumes, order triggers, and fills distinct", () => {
     render(<HtxV5AccountSection projection={projection()} stale={false} nowMs={now} />);
     const balance = screen.getByRole("region", { name: "HTX futures balance" });
-    expect(within(balance).getByText("Капитал счёта (USD)")).toBeInTheDocument();
+    expect(within(balance).getByText("Account equity (USD)")).toBeInTheDocument();
     expect(within(balance).getByText("1000.25")).toBeInTheDocument();
-    expect(within(balance).getByText("Обеспечение в USDT")).toBeInTheDocument();
-    expect(within(balance).getByText("Капитал (в единицах валюты)")).toBeInTheDocument();
-    expect(screen.getByText("Объём позиции (контракты)")).toBeInTheDocument();
+    expect(within(balance).getByText("Collateral in USDT")).toBeInTheDocument();
+    expect(within(balance).getByText("Equity (native currency units)")).toBeInTheDocument();
+    expect(screen.getByText("Position quantity (contracts)")).toBeInTheDocument();
     expect(screen.getByText("7", { exact: true })).toBeInTheDocument();
     expect(screen.getByText("59000", { exact: true })).toBeInTheDocument();
     expect(
       within(screen.getByRole("region", { name: "HTX conditional orders" })).getByText(
-        /Стоп-заявка/,
+        /Stop order/,
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("Объём исполнения (контракты)")).toBeInTheDocument();
-    expect(screen.getByText("Контракты чтения: BTC-USDT")).toBeInTheDocument();
-    expect(screen.getByText(/^Период истории:/)).toBeInTheDocument();
-    expect(screen.getAllByText("В этой выборке могут отсутствовать некоторые записи.")).toHaveLength(3);
+    expect(screen.getByText("Fill quantity (contracts)")).toBeInTheDocument();
+    expect(screen.getByText("Read contracts: BTC-USDT")).toBeInTheDocument();
+    expect(screen.getByText(/^History window:/)).toBeInTheDocument();
+    expect(screen.getAllByText("Some records may be missing from this sample.")).toHaveLength(3);
     expect(
       within(screen.getByRole("region", { name: "HTX conditional orders" })).getByText(
-        /Наличие защиты открытой позиции не подтверждено этим снимком/,
+        /This snapshot does not confirm protection of the open position/,
       ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Этот период не подтверждает полную дневную активность или итог за день.",
+        "This window does not confirm complete daily activity or a daily result.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText("9988776655")).not.toBeInTheDocument();
@@ -245,16 +245,16 @@ describe("HTX futures snapshot UI", () => {
     });
     render(<HtxV5AccountSection projection={result} stale={true} nowMs={now + 1} />);
     expect(
-      screen.getByText("Баланс недоступен — это не означает нулевое значение."),
+      screen.getByText("Balance unavailable — this does not mean zero."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Открытые позиции не получены.")).toBeInTheDocument();
-    expect(screen.getByText("Истекло время чтения счёта.")).toBeInTheDocument();
+    expect(screen.getByText("No open positions were received.")).toBeInTheDocument();
+    expect(screen.getByText("The account read timed out.")).toBeInTheDocument();
     expect(
-      within(screen.getByRole("region", { name: "Открытые заявки HTX" })).getByText(
+      within(screen.getByRole("region", { name: "HTX open orders" })).getByText(
         "BTC-USDT · sell · new",
       ),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("устарело · частичные данные")).toHaveLength(3);
+    expect(screen.getAllByText("stale · partial data")).toHaveLength(3);
   });
 
   it("shows only received position-matched stop and target details and keeps protection unconfirmed", () => {
@@ -273,13 +273,13 @@ describe("HTX futures snapshot UI", () => {
     });
     render(<HtxV5AccountSection projection={result} stale={false} nowMs={now} />);
     const positions = within(screen.getByRole("region", { name: "HTX positions" }));
-    expect(positions.getByText("Стоп: цена 58999; объём 3 контр.")).toBeInTheDocument();
-    expect(positions.getByText("Цель: цена 62000; объём 3 контр.")).toBeInTheDocument();
+    expect(positions.getByText("Stop: price 58999; quantity 3 contracts")).toBeInTheDocument();
+    expect(positions.getByText("Target: price 62000; quantity 3 contracts")).toBeInTheDocument();
     expect(positions.queryByText(/wrong-side/)).not.toBeInTheDocument();
     expect(
-      positions.getByText("Полнота покрытия позиции неизвестна; защита не подтверждена."),
+      positions.getByText("Position coverage is unknown; protection is not confirmed."),
     ).toBeInTheDocument();
-    expect(positions.queryByText(/защищена|полностью защищена/i)).not.toBeInTheDocument();
+    expect(positions.queryByText(/protected|fully protected/i)).not.toBeInTheDocument();
   });
 
   it("marks unconfigured fills unavailable rather than zero and does not claim protection", () => {
@@ -308,17 +308,17 @@ describe("HTX futures snapshot UI", () => {
     });
     render(<HtxV5AccountSection projection={result} stale={false} nowMs={now} />);
     expect(
-      screen.getByText("История исполнений недоступна; число исполнений неизвестно."),
+      screen.getByText("Fill history unavailable; the fill count is unknown."),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Данные условных заявок недоступны. Наличие защиты не подтверждено."),
+      screen.getByText("Conditional order data unavailable. Protection is not confirmed."),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("Исполнения по указанным контрактам и за показанный период не получены."),
+      screen.queryByText("No fills were received for the specified contracts and displayed window."),
     ).not.toBeInTheDocument();
     expect(
       within(screen.getByRole("region", { name: "HTX conditional orders" })).getByText(
-        /Наличие защиты открытой позиции не подтверждено этим снимком/,
+        /This snapshot does not confirm protection of the open position/,
       ),
     ).toHaveAttribute("role", "alert");
   });
@@ -358,36 +358,36 @@ describe("HTX futures snapshot UI", () => {
     render(<HtxV5AccountSection projection={result} stale={false} nowMs={now} />);
     expect(
       within(screen.getByRole("region", { name: "HTX positions" })).getAllByText(
-        "BTC-USDT · лонг · кросс-маржа",
+        "BTC-USDT · long · cross margin",
       ),
     ).toHaveLength(100);
     expect(
       within(screen.getByRole("region", { name: "HTX positions" })).getByText(
-        "Показаны первые 100 из 103 полученных позиций.",
+        "Showing the first 100 of 103 received positions.",
       ),
     ).toBeInTheDocument();
     expect(
-      within(screen.getByRole("region", { name: "Открытые заявки HTX" })).getAllByText(
+      within(screen.getByRole("region", { name: "HTX open orders" })).getAllByText(
         "BTC-USDT · sell · new",
       ),
     ).toHaveLength(100);
     expect(
-      within(screen.getByRole("region", { name: "Открытые заявки HTX" })).getByText(
-        "Показаны первые 100 из 103 полученных строк.",
+      within(screen.getByRole("region", { name: "HTX open orders" })).getByText(
+        "Showing the first 100 of 103 received rows.",
       ),
     ).toBeInTheDocument();
     expect(
       within(screen.getByRole("region", { name: "HTX conditional orders" })).getAllByText(
-        "BTC-USDT · Стоп-заявка",
+        "BTC-USDT · Stop order",
       ),
     ).toHaveLength(100);
     expect(
       within(screen.getByRole("region", { name: "HTX conditional orders" })).getByText(
-        "Показаны первые 100 из 103 полученных строк.",
+        "Showing the first 100 of 103 received rows.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Исполнение · BTC-USDT · sell")).toHaveLength(100);
-    expect(screen.getByText("Показаны первые 100 из 103 полученных исполнений.")).toBeInTheDocument();
+    expect(screen.getAllByText("Fill · BTC-USDT · sell")).toHaveLength(100);
+    expect(screen.getByText("Showing the first 100 of 103 received fills.")).toBeInTheDocument();
   });
 
   it("keeps a flat-or-unavailable position snapshot from creating a protection alert", () => {
@@ -395,11 +395,11 @@ describe("HTX futures snapshot UI", () => {
     const result = projection({ positions: { ...base.positions, values: [] } });
     render(<HtxV5AccountSection projection={result} stale={false} nowMs={now} />);
     expect(
-      screen.queryByText(/Наличие защиты открытой позиции не подтверждено этим снимком/),
+      screen.queryByText(/This snapshot does not confirm protection of the open position/),
     ).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        "Условные заявки показаны отдельно от позиций; полнота защиты не оценивается.",
+        "Conditional orders are shown separately from positions; protection completeness is not assessed.",
       ),
     ).toBeInTheDocument();
   });
@@ -421,20 +421,20 @@ describe("HTX futures snapshot UI", () => {
     );
     expect(screen.getByText("0e-10", { exact: true })).toBeInTheDocument();
     expect(
-      screen.queryByText(/Наличие защиты открытой позиции не подтверждено этим снимком/),
+      screen.queryByText(/This snapshot does not confirm protection of the open position/),
     ).not.toBeInTheDocument();
     rerender(<HtxV5AccountSection projection={positive} stale={false} nowMs={now} />);
     expect(screen.getByText("0.0000000000000000000000001", { exact: true })).toBeInTheDocument();
-    expect(screen.getByText(/Наличие защиты открытой позиции не подтверждено этим снимком/)).toHaveAttribute(
+    expect(screen.getByText(/This snapshot does not confirm protection of the open position/)).toHaveAttribute(
       "role",
       "alert",
     );
   });
-  it.each([['buy', 'лонг'], ['sell', 'шорт']] as const)("shows direction %s in one-way positions", (direction, label) => {
+  it.each([['buy', 'long'], ['sell', 'short']] as const)("shows direction %s in one-way positions", (direction, label) => {
     const base = projection();
     const result = projection({ positions: { ...base.positions, values: [{ ...base.positions.values![0], positionSide: "both", direction }] } });
     render(<HtxV5AccountSection projection={result} stale={false} nowMs={now} />);
-    expect(screen.getByRole("heading", { name: `BTC-USDT · ${label} (односторонний режим) · кросс-маржа` })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: `BTC-USDT · ${label} (one-way mode) · cross margin` })).toBeInTheDocument();
   });
 
 });
@@ -444,28 +444,28 @@ describe("received stop evidence explanations", () => {
     const base = projection();
     render(<HtxV5AccountSection projection={{ ...base, algoOrders: { ...base.algoOrders, readCompletedAtMs: now - 5 } }} stale={false} nowMs={now} />);
     const positions = within(screen.getByRole("region", { name: "HTX positions" }));
-    expect(positions.getByText("Полученный объём одной SL-заявки (3 контр.) меньше объёма позиции (7 контр.). Это сравнение полученных чисел, не подтверждение защиты.")).toBeInTheDocument();
-    expect(positions.getByText(/Позиции прочитаны:/)).toHaveTextContent(new Date(now).toISOString());
-    expect(positions.getByText(/Позиции прочитаны:/)).toHaveTextContent(new Date(now - 5).toISOString());
-    expect(positions.getByText(/Эти чтения не являются одновременным снимком/)).toBeInTheDocument();
-    expect(positions.getByText("По этим данным не подтверждено, какой объём позиции будет закрыт.")).toBeInTheDocument();
-    expect(positions.getByText("Получена неполная выборка: в ней могут отсутствовать стоп-заявки.")).toBeInTheDocument();
-    expect(positions.queryByText(/защищена|полностью защищена/i)).not.toBeInTheDocument();
+    expect(positions.getByText("Received quantity of one SL order (3 contracts) less than the quantity of the position (7 contracts). This compares received numbers; it does not confirm protection.")).toBeInTheDocument();
+    expect(positions.getByText(/Positions read at:/)).toHaveTextContent(new Date(now).toISOString());
+    expect(positions.getByText(/Positions read at:/)).toHaveTextContent(new Date(now - 5).toISOString());
+    expect(positions.getByText(/These reads are not a simultaneous snapshot/)).toBeInTheDocument();
+    expect(positions.getByText("These data do not confirm how much of the position would be closed.")).toBeInTheDocument();
+    expect(positions.getByText("The received sample is incomplete; stop orders may be missing.")).toBeInTheDocument();
+    expect(positions.queryByText(/protected|fully protected/i)).not.toBeInTheDocument();
   });
 
   it.each(["stale", "error", "scope"] as const)("clears a displayed quantity comparison on %s update", change => {
     const base = projection();
     const { rerender } = render(<HtxV5AccountSection projection={base} stale={false} nowMs={now} />);
-    expect(screen.getByText(/Полученный объём одной SL-заявки/)).toBeInTheDocument();
+    expect(screen.getByText(/Received quantity of one SL order/)).toBeInTheDocument();
     const changed = change === "error"
       ? { ...base, algoOrders: { ...base.algoOrders, status: "ERROR" as const, error: "READ_FAILED" as const } }
       : change === "scope"
         ? { ...base, positions: { ...base.positions, values: [{ ...base.positions.values![0]!, contractCode: "ETH-USDT" }] } }
         : base;
     rerender(<HtxV5AccountSection projection={changed} stale={change === "stale"} nowMs={now} />);
-    expect(screen.queryByText(/Полученный объём одной SL-заявки/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Received quantity of one SL order/)).not.toBeInTheDocument();
     const positions = within(screen.getByRole("region", { name: "HTX positions" }));
-    expect(positions.queryByText(/защищена|полностью защищена/i)).not.toBeInTheDocument();
+    expect(positions.queryByText(/protected|fully protected/i)).not.toBeInTheDocument();
   });
 
   it.each(["duplicate", "multiple", "tp-only"] as const)("explains %s evidence without aggregating quantities", kind => {
@@ -475,11 +475,11 @@ describe("received stop evidence explanations", () => {
     const values = kind === "tp-only" ? [second] : [sl, kind === "multiple" ? { ...sl, id: "second-sl", algoId: "second-sl" } : second];
     render(<HtxV5AccountSection projection={{ ...base, algoOrders: { ...base.algoOrders, values } }} stale={false} nowMs={now} />);
     const positions = within(screen.getByRole("region", { name: "HTX positions" }));
-    expect(positions.queryByText(/Полученный объём одной SL-заявки/)).not.toBeInTheDocument();
+    expect(positions.queryByText(/Received quantity of one SL order/)).not.toBeInTheDocument();
     expect(positions.getByText(kind === "duplicate"
-      ? "Идентификатор заявки повторяется в полученных данных; объёмы не сравниваются."
+      ? "An order identity is duplicated in the received data; quantities are not compared."
       : kind === "multiple"
-        ? "Получено несколько совпавших стоп-заявок; их объёмы не складываются."
-        : "Совпавшая стоп-заявка SL не получена; это не доказывает её отсутствие. Цель TP не заменяет стоп.")).toBeInTheDocument();
+        ? "Multiple matching stop orders were received; their quantities are not added together."
+        : "No matching SL order was received; this does not prove its absence. A TP target does not replace a stop.")).toBeInTheDocument();
   });
 });

@@ -35,7 +35,7 @@ export function ConsolePanel({
     </section>
   );
 }
-export function ConsoleLoading({ label = "Читаем сохранённые данные…" }: { label?: string }) {
+export function ConsoleLoading({ label = "Reading saved data…" }: { label?: string }) {
   return (
     <div
       role="status"
@@ -51,8 +51,8 @@ export function ConsoleLoading({ label = "Читаем сохранённые д
   );
 }
 export function ConsoleEmpty({
-  title = "Записей пока нет",
-  description = "В выбранном охвате нет сохранённых записей.",
+  title = "No records yet",
+  description = "No saved records in the selected scope.",
 }: {
   title?: string;
   description?: string;
@@ -73,7 +73,7 @@ export function SectionTabs({ section }: { section: AdminSection }) {
   return (
     <div
       role="tablist"
-      aria-label={`Вкладки: ${section.title}`}
+      aria-label={`Tabs: ${section.title}`}
       className="border-waia-divider bg-waia-field-mid sticky top-0 z-10 mb-6 flex gap-1 overflow-x-auto border-b"
     >
       {section.tabs.map(([id, label], index) => (
@@ -252,7 +252,7 @@ export function ConsoleDialog({
         </div>
         <button
           type="button"
-          aria-label="Закрыть"
+          aria-label="Close"
           disabled={!dismissible}
           onClick={onClose}
           className="text-waia-fg-muted hover:bg-waia-elevated focus-visible:outline-waia-accent-cool shrink-0 rounded-lg p-1.5 focus-visible:outline-2 disabled:opacity-40"
@@ -284,17 +284,17 @@ export function DetailLink({
 }
 export function EvidenceTime({
   at,
-  label = "По состоянию на",
+  label = "As of",
 }: {
   at?: string | null;
   label?: string;
 }) {
   if (!at || !Number.isFinite(Date.parse(at)))
-    return <span className="text-waia-fg-muted">Время не установлено</span>;
+    return <span className="text-waia-fg-muted">Time not established</span>;
   return (
     <time dateTime={at} title={at} className="text-waia-fg-muted tabular-nums">
       {label}{" "}
-      {new Intl.DateTimeFormat("ru-RU", {
+      {new Intl.DateTimeFormat("en-GB", {
         timeZone: "Europe/Moscow",
         year: "numeric",
         day: "2-digit",
@@ -303,7 +303,7 @@ export function EvidenceTime({
         minute: "2-digit",
         second: "2-digit",
       }).format(new Date(at))}{" "}
-      МСК
+      MSK
     </time>
   );
 }

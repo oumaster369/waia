@@ -21,7 +21,7 @@ export function presentStrategyWorkspace(evidence: readonly StrategyEvidence[], 
       version: row.version,
       displayName: row.strategyId,
       source: "registry",
-      reason: "Версия из сохранённых доказательств",
+      reason: "Version based on saved evidence",
       returnPct: { state: "unavailable", reason: "RETURN_METHOD_NOT_RATIFIED" },
     });
   }
@@ -62,14 +62,14 @@ export function presentStrategyWorkspace(evidence: readonly StrategyEvidence[], 
               : "proposed",
       activityLabel:
         deployments.length > 0
-          ? "Работает: продвижение EFFECTIVE"
+          ? "Running: EFFECTIVE promotion"
           : recentlyWorked
-            ? "Недавно работала · deployment не подтверждён"
+            ? "Recently active · deployment unconfirmed"
             : retired
-              ? "В архиве"
+              ? "Archived"
               : testing
-                ? "Исследование / тестирование"
-                : "В каталоге · без подтверждённого deployment",
+                ? "Research / testing"
+                : "In catalog · no confirmed deployment",
     };
   });
 }

@@ -151,10 +151,10 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await page.waitForURL("**/trader");
     await page.goto("/admin");
     await expect(
-      page.getByRole("navigation", { name: "Консоль администратора AI-TRADER", exact: true }),
+      page.getByRole("navigation", { name: "AI-TRADER admin console", exact: true }),
     ).toBeVisible();
     await expect(page.getByTestId("admin-org-select")).toHaveCount(0);
-    await page.getByRole("button", { name: "Выйти", exact: true }).click();
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await expect(page).toHaveURL("/");
     await expectProtectedObserverApisFailClosed(page, 401);
   });
@@ -233,9 +233,9 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await page.waitForURL("**/trader");
     await page.goto(`/admin?organization_id=${organizationId}`);
     await expect(
-      page.getByRole("navigation", { name: "Консоль администратора AI-TRADER", exact: true }),
+      page.getByRole("navigation", { name: "AI-TRADER admin console", exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: "Обзор", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Overview", exact: true })).toBeVisible();
     await expect(page.getByTestId("admin-org-select")).toHaveCount(0);
   });
 

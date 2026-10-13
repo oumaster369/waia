@@ -13,8 +13,8 @@ describe("admin console billing automation", () => {
       lastSuspensionAt: null,
     });
     expect(view.stages).toHaveLength(9);
-    expect(view.caption).toContain("подтверждение администратора");
-    expect(view.stages[6]?.note).toContain("не реализовано");
+    expect(view.caption).toContain("administrator confirmation");
+    expect(view.stages[6]?.note).toContain("not implemented");
     expect(view.stages[4]?.note).toContain("ADR-0008");
   });
 });

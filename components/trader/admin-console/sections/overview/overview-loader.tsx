@@ -64,10 +64,10 @@ function OverviewSummary() {
         summary={null}
         unavailableReason={
           accountWithoutOrganization && !duplicateScope && !invalidAccount
-            ? "Для фильтра по счёту сначала выберите клиента."
+            ? "Select a client before filtering by account."
             : invalidScope
-              ? "Проверьте фильтр клиента и счёта."
-              : "Наблюдения фьючерсов доступны только в контуре Live."
+              ? "Check the client and account filters."
+              : "Futures observations are available only in Live mode."
         }
       />
     );
@@ -83,20 +83,20 @@ function OverviewSummary() {
   const spot =
     view?.state === "unavailable" ? (
       <>
-        <h2 className="px-1 text-lg font-semibold">Спот</h2>
+        <h2 className="px-1 text-lg font-semibold">Spot</h2>
         <DataState state="unavailable" reason={view.reason} />
       </>
     ) : view ? (
       <OverviewPanel view={view} />
     ) : read.reason ? (
       <>
-        <h2 className="px-1 text-lg font-semibold">Спот</h2>
+        <h2 className="px-1 text-lg font-semibold">Spot</h2>
         <DataState state="unavailable" reason={read.reason} />
       </>
     ) : null;
   return (
     <div className="space-y-5">
-      <section aria-label="Спот" className="space-y-4">
+      <section aria-label="Spot" className="space-y-4">
         {spot}
       </section>
       {futures}

@@ -34,15 +34,15 @@ function snapshot(revision = "read-4", state = "INACTIVE") {
 }
 async function confirm() {
   render(<EmergencyWorkflow open onClose={() => undefined} catalogue={null} />);
-  fireEvent.click(screen.getByRole("button", { name: "Дальше" }));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Дальше" })).toBeEnabled());
-  expect(screen.getByText(/Команда не размещает и не отменяет ордера/)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Дальше" }));
-  expect(screen.getByRole("button", { name: "Отправить команду" })).toBeDisabled();
-  fireEvent.change(screen.getByRole("textbox", { name: "Причина" }), {
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Next" })).toBeEnabled());
+  expect(screen.getByText(/The command does not place or cancel orders/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(screen.getByRole("button", { name: "Submit command" })).toBeDisabled();
+  fireEvent.change(screen.getByRole("textbox", { name: "Reason" }), {
     target: { value: "Нарушение сверки" },
   });
-  fireEvent.click(screen.getByRole("checkbox", { name: "Подтверждаю область и эффект команды" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "I confirm the command scope and effect" }));
 }
 describe("admin console emergency workflow", () => {
   it("requires a read revision and verifies persisted state before showing success", async () => {
@@ -61,7 +61,7 @@ describe("admin console emergency workflow", () => {
     });
     vi.stubGlobal("fetch", fetcher);
     await confirm();
-    fireEvent.click(screen.getByRole("button", { name: "Отправить команду" }));
+    fireEvent.click(screen.getByRole("button", { name: "Submit command" }));
     await waitFor(() =>
       expect(posted).toMatchObject({
         target: { scope: "platform", switch_type: "PAUSE" },
@@ -71,10 +71,10 @@ describe("admin console emergency workflow", () => {
         reason: "Нарушение сверки",
       }),
     );
-    expect(screen.queryByText("Состояние подтверждено повторным чтением")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ожидаем повторного чтения…" })).toBeDisabled();
+    expect(screen.queryByText("State confirmed by reread")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Waiting for reread…" })).toBeDisabled();
     resolveReadBack(Response.json(snapshot("written-5", "ACTIVE")));
-    await screen.findByText("Состояние подтверждено повторным чтением");
+    await screen.findByText("State confirmed by reread");
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
   });
   it("keeps submission unavailable without a state read", async () => {
@@ -83,12 +83,12 @@ describe("admin console emergency workflow", () => {
       vi.fn(async () => Response.json({ error: { code: "READ_FAILED" } }, { status: 503 })),
     );
     render(<EmergencyWorkflow open onClose={() => undefined} catalogue={null} />);
-    fireEvent.click(screen.getByRole("button", { name: "Дальше" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(
-      (await screen.findByText(/Не удалось прочитать данные/)).closest("[data-reason]"),
+      (await screen.findByText(/Data could not be read/)).closest("[data-reason]"),
     ).toHaveAttribute("data-reason", "READ_FAILED");
-    expect(screen.getByRole("button", { name: "Дальше" })).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "Отправить команду" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Submit command" })).not.toBeInTheDocument();
   });
   it("returns to fresh review on conflict and never retries the command", async () => {
     const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) =>
@@ -98,8 +98,8 @@ describe("admin console emergency workflow", () => {
     );
     vi.stubGlobal("fetch", fetcher);
     await confirm();
-    fireEvent.click(screen.getByRole("button", { name: "Отправить команду" }));
-    await screen.findByText(/Состояние изменилось/);
+    fireEvent.click(screen.getByRole("button", { name: "Submit command" }));
+    await screen.findByText(/State changed/);
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
   });
@@ -114,9 +114,9 @@ describe("admin console emergency workflow", () => {
     });
     vi.stubGlobal("fetch", fetcher);
     await confirm();
-    fireEvent.click(screen.getByRole("button", { name: "Отправить команду" }));
-    await screen.findByText(/Команда могла примениться/);
-    expect(screen.queryByRole("button", { name: "Отправить команду" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Submit command" }));
+    await screen.findByText(/The command may have applied/);
+    expect(screen.queryByRole("button", { name: "Submit command" })).not.toBeInTheDocument();
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
   });
   it("acks the first painted order version once", async () => {

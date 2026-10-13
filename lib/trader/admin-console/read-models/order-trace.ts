@@ -1,16 +1,16 @@
 export const ORDER_STATUS_LABELS = {
-  CREATED: "Создан",
-  RISK_APPROVED: "Риск одобрил",
-  SENT_TO_EXCHANGE: "Отправлен на биржу",
-  ACCEPTED: "Биржа приняла",
-  PARTIALLY_FILLED: "Частично исполнен",
-  FILLED: "Исполнено",
-  CANCEL_REQUESTED: "Отмена запрошена",
-  CANCELLED: "Отменён",
-  REJECTED: "Отклонён",
-  EXPIRED: "Истёк",
-  FAILED: "Ошибка",
-  RECONCILIATION_REQUIRED: "Требует сверки",
+  CREATED: "Created",
+  RISK_APPROVED: "Risk approved",
+  SENT_TO_EXCHANGE: "Submitted to the exchange",
+  ACCEPTED: "Accepted by the exchange",
+  PARTIALLY_FILLED: "Partially filled",
+  FILLED: "Filled",
+  CANCEL_REQUESTED: "Cancellation requested",
+  CANCELLED: "Cancelled",
+  REJECTED: "Rejected",
+  EXPIRED: "Expired",
+  FAILED: "Error",
+  RECONCILIATION_REQUIRED: "Reconciliation required",
 } as const;
 
 export const WORKING_ORDER_STATES = [

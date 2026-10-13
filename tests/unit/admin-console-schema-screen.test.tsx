@@ -16,7 +16,7 @@ vi.stubGlobal(
   ),
 );
 
-const PHRASE = "Появится после применения схемы консоли";
+const PHRASE = "Available after the console schema is applied";
 
 describe("console screens when the schema is not applied", () => {
   it("shows the schema phrase and keeps the list unmounted", async () => {

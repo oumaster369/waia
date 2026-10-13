@@ -74,7 +74,7 @@ describe("Trader Dashboard V2", () => {
     await waitFor(() =>
       expect(screen.getByText(ACCOUNT_OBSERVATION_FIRST_TICK_COPY)).toBeInTheDocument(),
     );
-    expect(screen.getByTestId("trader-account-status")).toHaveTextContent("HTX подключен в WAIA");
+    expect(screen.getByTestId("trader-account-status")).toHaveTextContent("HTX connected in WAIA");
     expect(screen.getByTestId("trader-credential-account-id")).toHaveTextContent("account-1");
     expect(screen.getByTestId("trader-credential-masked-key")).toHaveTextContent("abc…xyz");
     expect(screen.getByText("User account")).toBeInTheDocument();
@@ -82,7 +82,7 @@ describe("Trader Dashboard V2", () => {
     expect(screen.getByText(ACCOUNT_OBSERVATION_FIRST_TICK_COPY)).toBeInTheDocument();
     expect(screen.queryByTestId("trader-sync-balances")).not.toBeInTheDocument();
     expect(screen.queryByTestId("trader-unavailable-read-model")).not.toBeInTheDocument();
-    expect(screen.getByTestId("trader-authority-boundary")).toHaveTextContent("Только наблюдение");
+    expect(screen.getByTestId("trader-authority-boundary")).toHaveTextContent("Observation only");
     expect(screen.queryByRole("button", { name: /enable live/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /kill switch/i })).not.toBeInTheDocument();
   });
@@ -172,13 +172,13 @@ describe("Trader Dashboard V2", () => {
     render(<TraderWorkspace />);
 
     expect(await screen.findByTestId("trader-permission-explainer")).toHaveTextContent(
-      "ключ с Read и Trade тоже можно подключить",
+      "a key with Read and Trade can also be connected",
     );
     expect(screen.getByTestId("trader-permission-explainer")).toHaveTextContent(
-      "Не включайте Withdraw",
+      "Do not enable Withdraw",
     );
     expect(screen.getByTestId("trader-permission-explainer")).toHaveTextContent(
-      "не выполняет торговые операции",
+      "does not perform trades",
     );
     fireEvent.change(screen.getByTestId("trader-api-key"), { target: { value: "synthetic-read-trade-key" } });
     fireEvent.change(screen.getByTestId("trader-api-secret"), {
@@ -194,8 +194,8 @@ describe("Trader Dashboard V2", () => {
       expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/api/trader/account-observation/stream?"))).toBe(true),
     );
     expect(await screen.findByTestId("cabinet-usdt-free")).toHaveTextContent("125.50");
-    expect(screen.getByTestId("trader-authority-boundary")).toHaveTextContent("Только наблюдение");
-    expect(screen.getByText(/Только просмотр\..*заявки отсюда не отправляются\./)).toBeInTheDocument();
+    expect(screen.getByTestId("trader-authority-boundary")).toHaveTextContent("Observation only");
+    expect(screen.getByText(/Read only\..*orders cannot be submitted here\./)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("synthetic-secret");
   });
 

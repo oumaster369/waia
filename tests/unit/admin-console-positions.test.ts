@@ -70,7 +70,7 @@ describe("open positions", () => {
     expect(view.guardian.newOpportunitySufficiency).toBe("INSUFFICIENT");
     expect(view.guardian.recommendation).toBe("HOLD");
     expect(view.riskPermission.posture).toBe("CLOSE_ONLY");
-    expect(view.riskPermission.label).toBe("Только закрытие");
+    expect(view.riskPermission.label).toBe("Close only");
     expect(view.executedReduction.quantity).toBe("0.6");
     expect(view.remainingQty).toBe("0.4");
     expect(view.openLotsInGroup).toBe(2);
@@ -92,7 +92,7 @@ describe("open positions", () => {
     expect(missing.guardian.recommendation).toBeNull();
     expect(missing.riskPermission.reasons).toContain("RISK_ACCOUNT_UNMATCHED");
     expect(missing.executedReduction.quantity).toBe("0");
-    expect(missing.allocation).toBe("Не распределено");
+    expect(missing.allocation).toBe("Unattributed");
 
     const stale = presentOpenLot(
       lot({

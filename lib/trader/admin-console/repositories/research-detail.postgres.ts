@@ -94,7 +94,7 @@ export async function readResearchDetail(
       model: null,
     };
     if (str(row.evidence_digest))
-      base.artifacts.push({ label: "Доказательство теста", digest: String(row.evidence_digest) });
+      base.artifacts.push({ label: "Test evidence", digest: String(row.evidence_digest) });
     // Only the explicit aggregate slice is a run total. Never sum regime slices.
     const results = rowsOf(
       await tx.execute(sql`SELECT b.regime_label,b.metrics_json FROM trader_backtest_results b
@@ -159,11 +159,11 @@ export async function readResearchDetail(
   base.conditions.dataset = str(row.dataset_authority_digest_hex);
   if (str(row.policy_config_digest_hex))
     base.artifacts.push({
-      label: "Конфигурация политики",
+      label: "Policy configuration",
       digest: String(row.policy_config_digest_hex),
     });
   if (base.conditions.dataset)
-    base.artifacts.push({ label: "Набор данных", digest: base.conditions.dataset });
+    base.artifacts.push({ label: "Dataset", digest: base.conditions.dataset });
   base.events = rowsOf(
     await tx.execute(sql`SELECT phase,observed_at,error_code,committed_cycles FROM trader_historical_simulation_run_lifecycle_event_v2
     WHERE organization_id=${org}::uuid AND run_id=${run} ORDER BY event_sequence DESC LIMIT 50`),

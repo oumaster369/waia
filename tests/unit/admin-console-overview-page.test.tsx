@@ -44,15 +44,15 @@ describe("admin console overview page", () => {
       coverage: { excluded: [{ id: "acc-2", reason: "NO_QUOTE:BTC" }] },
     });
     render(<OverviewPanel view={view} />);
-    expect(screen.getByTestId("overview-Капитал спота")).toHaveTextContent("10");
-    expect(screen.getByTestId("overview-Капитал спота")).not.toHaveTextContent("4");
+    expect(screen.getByTestId("overview-Spot equity")).toHaveTextContent("10");
+    expect(screen.getByTestId("overview-Spot equity")).not.toHaveTextContent("4");
     expect(screen.getByTestId("overview-last-known")).toHaveTextContent("4");
     expect(screen.getByText("acc-2")).toBeInTheDocument();
-    expect(screen.getByText(/Нет котировки · BTC/).closest("[data-reason]")).toHaveAttribute(
+    expect(screen.getByText(/No quote · BTC/).closest("[data-reason]")).toHaveAttribute(
       "data-reason",
       "NO_QUOTE:BTC",
     );
-    expect(screen.getByTestId("overview-Результат спота")).toHaveTextContent("—");
+    expect(screen.getByTestId("overview-Spot result")).toHaveTextContent("—");
   });
 
   it("shows postgres required instead of zeros", () => {
@@ -63,7 +63,7 @@ describe("admin console overview page", () => {
         })}
       />,
     );
-    expect(screen.getByText(/Нужен Postgres/)).toBeInTheDocument();
+    expect(screen.getByText(/Postgres is required/)).toBeInTheDocument();
     expect(screen.queryByText("0 USDT")).not.toBeInTheDocument();
   });
 
@@ -89,13 +89,13 @@ describe("admin console overview page", () => {
 
     const compactText = (label: string) =>
       screen.getByText(label).parentElement?.textContent?.replaceAll(/\s/g, "");
-    expect(compactText("Капитал фьючерсов")).toContain("12345678901234567890,123456789012");
-    expect(compactText("Доступная маржа фьючерсов")).toContain("0,000000000001");
-    expect(compactText("Нереализованный результат фьючерсов")).toContain("−0,00000000000012");
+    expect(compactText("Futures equity")).toContain("12345678901234567890,123456789012");
+    expect(compactText("Available futures margin")).toContain("0,000000000001");
+    expect(compactText("Unrealized futures result")).toContain("−0,00000000000012");
     expect(
-      screen.getByText("Счёт account-a: Список счетов не удалось обновить"),
+      screen.getByText("Account account-a: Could not refresh account list"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Счёт account-b: Счет совпадает с другой записью")).toBeInTheDocument();
+    expect(screen.getByText("Account account-b: Account matches another record")).toBeInTheDocument();
     expect(screen.queryByText("DIRECTORY_STALE")).not.toBeInTheDocument();
     expect(screen.queryByText("DUPLICATE_IDENTITY")).not.toBeInTheDocument();
   });
@@ -130,7 +130,7 @@ describe("admin console overview page", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
     render(<OverviewLoader />);
-    await waitFor(() => expect(screen.getByText("Фьючерсы")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Futures")).toBeInTheDocument());
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -141,8 +141,8 @@ describe("admin console overview page", () => {
     const fetchSpy = vi.fn(async () => Response.json({ accounts: [] }));
     vi.stubGlobal("fetch", fetchSpy);
     render(<OverviewLoader />);
-    await waitFor(() => expect(screen.getByText("Фьючерсы")).toBeInTheDocument());
-    expect(screen.getByText(/Нужен Postgres/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Futures")).toBeInTheDocument());
+    expect(screen.getByText(/Postgres is required/)).toBeInTheDocument();
     expect(fetchSpy).toHaveBeenCalledWith(
       "/api/trader/admin/connected-accounts",
       expect.objectContaining({ cache: "no-store", credentials: "same-origin" }),

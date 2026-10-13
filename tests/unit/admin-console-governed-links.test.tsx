@@ -6,11 +6,11 @@ import { GovernedProcessLinks } from "@/components/trader/admin-console/shell/go
 describe("admin console governed process links", () => {
   it("keeps the existing operator pages reachable from the new sections", () => {
     render(<GovernedProcessLinks section="system" />);
-    expect(screen.getByRole("link", { name: "Журнал аудита" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Audit log" })).toHaveAttribute(
       "href",
       "/admin/system?tab=audit",
     );
-    expect(screen.getByRole("link", { name: "Полномочия исполнения" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Execution authority" })).toHaveAttribute(
       "href",
       "/admin/system?tab=authority",
     );

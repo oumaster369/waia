@@ -101,7 +101,7 @@ export async function handleAdminConsoleAssistantConversationsPost(
       id,
       organizationId: opened.contextOrgId,
       adminUserId: opened.userId,
-      title: redactDiagnosticText(parsed.data.title ?? "Новый разговор", 80),
+      title: redactDiagnosticText(parsed.data.title ?? "New conversation", 80),
       createdAt: now,
       updatedAt: now,
     });
@@ -110,7 +110,7 @@ export async function handleAdminConsoleAssistantConversationsPost(
         data: {
           conversation: {
             id,
-            title: redactDiagnosticText(parsed.data.title ?? "Новый разговор", 80),
+            title: redactDiagnosticText(parsed.data.title ?? "New conversation", 80),
             createdAt: now.toISOString(),
             updatedAt: now.toISOString(),
           },
@@ -194,7 +194,7 @@ export async function handleAdminConsoleAssistantConversationGet(
             status: m.status,
             content:
               m.role === "assistant" && m.promptVersion !== "admin-assistant/v2"
-                ? "Старый ответ не прошёл проверку фактов. Запросите актуальные данные."
+                ? "The old response failed fact validation. Request current data."
                 : redactDiagnosticText(m.content, 8000),
             blocks: m.promptVersion === "admin-assistant/v2" ? m.blocks : null,
             context: m.context,

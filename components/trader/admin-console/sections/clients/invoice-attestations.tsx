@@ -10,12 +10,12 @@ import {
 } from "@/lib/trader/billing/invoice-issuance.types";
 
 const LABELS: Record<(typeof ISSUANCE_ATTESTATION_KEYS)[number], string> = {
-  depositsVerified: "Вводы проверены",
-  withdrawalsVerified: "Выводы проверены",
-  balanceSnapshotsVerified: "Снимки баланса проверены",
-  reconciliationVerified: "Сверка проверена",
-  exchangeSyncVerified: "Синхронизация с биржей проверена",
-  realizedFillFinalityVerified: "Финальность исполнений проверена",
+  depositsVerified: "Deposits verified",
+  withdrawalsVerified: "Withdrawals verified",
+  balanceSnapshotsVerified: "Balance snapshots verified",
+  reconciliationVerified: "Reconciliation verified",
+  exchangeSyncVerified: "Exchange synchronization verified",
+  realizedFillFinalityVerified: "Fill finality verified",
 };
 
 const EMPTY: IssuanceAttestation = {
@@ -56,7 +56,7 @@ export function InvoiceAttestations({
         </label>
       ))}
       <button type="submit" className={`${controlClass} mt-2 justify-self-start`} disabled={!ready}>
-        Подтвердить выпуск
+        Confirm issuance
       </button>
     </form>
   );

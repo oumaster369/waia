@@ -21,13 +21,13 @@ export const ADMIN_JOB_CATALOG: readonly JobCatalogEntry[] = [
     jobKey: "account_observation",
     owner: "execution-host",
     cron: null,
-    capability: "выполняется на execution host",
+    capability: "runs on the execution host",
   },
   {
     jobKey: "invoice_issue",
     owner: "human",
     cron: null,
-    capability: "ручной выпуск, не расписание",
+    capability: "manual issuance, not scheduled",
   },
 ];
 

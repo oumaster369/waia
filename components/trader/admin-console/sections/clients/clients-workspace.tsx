@@ -86,16 +86,16 @@ function Clients() {
       {read.reason ? <DataState state="unavailable" reason={read.reason} /> : null}
       {rows ? (
         <ConsolePanel
-          title="Клиенты AI-TRADER"
-          note="Клиент с долгом или историей подключения остаётся видимым при отключённом доступе."
+          title="AI-TRADER clients"
+          note="A client with debt or connection history remains visible when access is disabled."
         >
           <ConsoleTable
             rows={rows}
             rowKey={(row) => row.id}
-            caption="Клиенты AI-TRADER"
+            caption="AI-TRADER clients"
             columns={[
               {
-                title: "Клиент",
+                title: "Client",
                 render: (row) => (
                   <div>
                     <DetailLink onClick={() => context.update({ sel: row.id })}>
@@ -105,18 +105,18 @@ function Clients() {
                   </div>
                 ),
               },
-              { title: "Доступ", render: (row) => <ConsoleBadge>{row.access}</ConsoleBadge> },
+              { title: "Access", render: (row) => <ConsoleBadge>{row.access}</ConsoleBadge> },
               {
-                title: "Подключён с",
+                title: "Connected since",
                 render: (row) =>
                   row.connectedSinceValue ? (
                     <EvidenceTime at={row.connectedSinceValue} label="" />
                   ) : (
-                    "Не установлена"
+                    "Not established"
                   ),
               },
               {
-                title: "Организация",
+                title: "Organization",
                 render: (row) => (
                   <span className="text-waia-fg-muted font-mono text-[10px] break-all">
                     {row.id}
@@ -127,9 +127,9 @@ function Clients() {
           />
           <div className="border-waia-divider flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4 text-xs">
             <span className="text-waia-fg-muted">
-              Показано {rows.length}
+              Showing {rows.length}
               {read.envelope?.data.aggregate?.total != null
-                ? ` из ${read.envelope.data.aggregate.total}`
+                ? ` of ${read.envelope.data.aggregate.total}`
                 : ""}
             </span>
             <div className="flex gap-2">
@@ -139,7 +139,7 @@ function Clients() {
                   type="button"
                   onClick={() => context.update({ cursor: null, sel: null })}
                 >
-                  В начало
+                  First page
                 </button>
               ) : null}
               {read.envelope?.data.nextCursor ? (
@@ -150,7 +150,7 @@ function Clients() {
                     context.update({ cursor: read.envelope!.data.nextCursor, sel: null })
                   }
                 >
-                  Следующие клиенты
+                  Next clients
                 </button>
               ) : null}
             </div>
@@ -160,8 +160,8 @@ function Clients() {
       <ConsoleDialog
         open={Boolean(selectedId)}
         onClose={() => context.update({ sel: null, detail: null, nested: null })}
-        title={selected?.name || selected?.ownerEmail || "Клиент"}
-        description="История и финансовые документы организации сохраняются независимо от текущего доступа."
+        title={selected?.name || selected?.ownerEmail || "Client"}
+        description="Organization history and financial documents are preserved regardless of current access."
         wide
       >
         {detail.loading ? <ConsoleLoading /> : null}
@@ -179,30 +179,30 @@ export function Payments() {
       {read.reason ? <DataState state="unavailable" reason={read.reason} /> : null}
       {read.envelope?.data.items ? (
         <ConsolePanel
-          title="Платежи AI-TRADER"
-          note="Обнаруженная транзакция не означает зачёт платежа. Другие продукты в эту выборку не входят."
+          title="AI-TRADER payments"
+          note="A detected transaction does not mean payment application. Other products are excluded from this selection."
         >
           <ConsoleTable
             rows={read.envelope.data.items}
             rowKey={(row) => row.id}
-            caption="Платежи AI-TRADER"
+            caption="AI-TRADER payments"
             columns={[
               {
-                title: "Событие",
+                title: "Event",
                 render: (row) => (
                   <ConsoleBadge>
                     {(
                       {
-                        DETECTED: "Обнаружен",
-                        CONFIRMED: "Подтверждён",
-                        FAILED: "Ошибка",
+                        DETECTED: "Detected",
+                        CONFIRMED: "Confirmed",
+                        FAILED: "Error",
                       } as Record<string, string>
                     )[row.eventType] ?? row.eventType}
                   </ConsoleBadge>
                 ),
               },
               {
-                title: "Сумма",
+                title: "Amount",
                 align: "right",
                 render: (row) =>
                   row.amount !== null && row.asset ? (
@@ -211,35 +211,35 @@ export function Payments() {
                     <DataState state="unavailable" reason="PAYMENT_AMOUNT_NOT_RECORDED" />
                   ),
               },
-              { title: "Счёт на оплату", render: (row) => row.subjectInvoiceId ?? "Не привязан" },
+              { title: "Invoice", render: (row) => row.subjectInvoiceId ?? "Not linked" },
               {
-                title: "Сеть и транзакция",
+                title: "Network and transaction",
                 render: (row) => (
                   <div className="max-w-52 break-all">
-                    {row.network ?? "Сеть не сохранена"}
+                    {row.network ?? "Network not saved"}
                     <br />
-                    {row.txHash ?? "Хэш не сохранён"}
+                    {row.txHash ?? "Hash not saved"}
                   </div>
                 ),
               },
               {
-                title: "Подтверждения",
+                title: "Confirmations",
                 render: (row) =>
                   `${row.confirmationsObserved ?? "—"} / ${row.confirmationsRequired ?? "—"}`,
               },
               {
-                title: "Зачёт",
+                title: "Application",
                 render: (row) =>
                   row.appliedAt ? (
-                    <EvidenceTime at={row.appliedAt} label="Зачтён" />
+                    <EvidenceTime at={row.appliedAt} label="Applied" />
                   ) : row.settlementOutcome === "EXCEPTION" ? (
-                    "На сверке"
+                    "Under reconciliation"
                   ) : (
-                    "Не зачтён"
+                    "Not applied"
                   ),
               },
               {
-                title: "Зарегистрировано",
+                title: "Registered",
                 render: (row) => <EvidenceTime at={row.createdAt} label="" />,
               },
             ]}
@@ -257,18 +257,18 @@ export function Periods() {
       {read.reason ? <DataState state="unavailable" reason={read.reason} /> : null}
       {read.envelope?.data.items ? (
         <ConsolePanel
-          title="Отчётные периоды"
-          note="Начало включено, окончание исключено: [start, end). Время показано по Москве."
+          title="Reporting periods"
+          note="Start inclusive, end exclusive: [start, end). Time is shown in Moscow time."
         >
           <ConsoleTable
             rows={read.envelope.data.items}
             rowKey={(row) => row.id}
-            caption="Отчётные периоды"
+            caption="Reporting periods"
             columns={[
-              { title: "Биржевой счёт", render: (row) => row.exchangeAccountId },
-              { title: "Начало", render: (row) => <EvidenceTime at={row.start} label="" /> },
-              { title: "Окончание", render: (row) => <EvidenceTime at={row.end} label="" /> },
-              { title: "Статус", render: (row) => <ConsoleBadge>{row.status}</ConsoleBadge> },
+              { title: "Exchange account", render: (row) => row.exchangeAccountId },
+              { title: "Start", render: (row) => <EvidenceTime at={row.start} label="" /> },
+              { title: "End", render: (row) => <EvidenceTime at={row.end} label="" /> },
+              { title: "Status", render: (row) => <ConsoleBadge>{row.status}</ConsoleBadge> },
             ]}
           />
         </ConsolePanel>
@@ -287,36 +287,35 @@ function Disputes() {
       {read.reason ? <DataState state="unavailable" reason={read.reason} /> : null}
       {read.envelope?.data.items ? (
         <ConsolePanel
-          title="Споры и сверка"
-          note="Исправления расчётов проходят существующий процесс биллинга; сохранённые суммы не подменяются."
+          title="Disputes and reconciliation"
+          note="Calculation corrections follow the existing billing process; saved amounts are not replaced."
         >
           {read.envelope.data.truncated ? (
             <div className="px-5 py-3">
               <DataState state="partial" reason="LIST_COVERAGE_LIMITED" />
               <p className="text-waia-fg-muted text-xs">
-                Показано {read.envelope.data.items.length} из {read.envelope.data.total}. Уточните
-                охват.
+                Showing {read.envelope.data.items.length} of {read.envelope.data.total}. Refine the scope.
               </p>
             </div>
           ) : null}
           <ConsoleTable
             rows={read.envelope.data.items}
             rowKey={(row) => row.id}
-            caption="Споры, корректировки и сверка"
+            caption="Disputes, corrections and reconciliation"
             columns={[
               {
-                title: "Тип",
+                title: "Type",
                 render: (row) =>
                   (
                     ({
-                      dispute: "Спор",
-                      correction: "Корректировка",
-                      reconciliation: "Сверка",
+                      dispute: "Dispute",
+                      correction: "Correction",
+                      reconciliation: "Reconciliation",
                     }) as Record<string, string>
                   )[row.kind] ?? row.kind,
               },
               {
-                title: "Счёт на оплату",
+                title: "Invoice",
                 render: (row) =>
                   row.invoiceId ? (
                     <Link
@@ -326,26 +325,26 @@ function Disputes() {
                       {row.invoiceId}
                     </Link>
                   ) : (
-                    "Не привязан"
+                    "Not linked"
                   ),
               },
               {
-                title: "Сумма",
+                title: "Amount",
                 render: (row) =>
                   row.amount !== null && row.currency
                     ? formatAdminMoney(row.amount, row.currency)
-                    : "Не применимо",
+                    : "Not applicable",
               },
               {
-                title: "Статус",
+                title: "Status",
                 render: (row) => (
                   <ConsoleBadge tone={row.status === "OPEN" ? "warning" : "neutral"}>
                     {row.status}
                   </ConsoleBadge>
                 ),
               },
-              { title: "Причина", render: (row) => row.reason ?? "Причина не сохранена" },
-              { title: "Открыт", render: (row) => <EvidenceTime at={row.openedAt} label="" /> },
+              { title: "Reason", render: (row) => row.reason ?? "Reason not saved" },
+              { title: "Opened", render: (row) => <EvidenceTime at={row.openedAt} label="" /> },
             ]}
           />
         </ConsolePanel>

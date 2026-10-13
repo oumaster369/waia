@@ -22,4 +22,4 @@ export function factSegmentMatches(text: string, refs: readonly { value: string 
   return claimed.every((token) => values.has(token.replace("%", "").replace(",", ".")));
 }
 
-export const UNVERIFIED_SEGMENT = "утверждение удалено: не подтверждено данными";
+export const UNVERIFIED_SEGMENT = "Claim removed: not supported by data";

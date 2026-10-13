@@ -194,7 +194,7 @@ describe("admin console routes on sqlite", () => {
       deps(ADMIN_ID),
     );
     expect(help.status).toBe(200);
-    expect(JSON.stringify(help.body)).toContain("Сводка");
+    expect(JSON.stringify(help.body)).toContain("Summary");
     expect(JSON.stringify(help.body)).not.toContain("POSTGRES_REQUIRED");
     const anonymous = await handleAdminConsoleAssistantHelpGet(
       new Request("http://localhost/api/trader/admin/console/assistant/help"),

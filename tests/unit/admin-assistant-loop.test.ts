@@ -19,7 +19,7 @@ describe("admin assistant loop", () => {
       factRefs: [],
     });
     expect(calls).toBe(2);
-    expect(result).toEqual({ status: "failed", message: "Не удалось разобрать ответ модели" });
+    expect(result).toEqual({ status: "failed", message: "Could not parse the model response" });
   });
 
   it("drops a citation that was not in the tool results and removes an unproven fact", async () => {

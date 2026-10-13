@@ -100,11 +100,9 @@ export function ageLabel(completedAtMs: number, nowMs: number): string {
 export function cabinetLiveLabel(view: CabinetLiveInput): string {
   if (view.status === "REVOKED") return "Revoked";
   if (view.status === "DISCONNECTED") return "Idle";
+  if (view.status === "ERROR") return view.observation ? "Last tick" : "Data unavailable";
   if (!view.observation) return "Connecting";
   if (view.status === "STALE" || view.stale) return "Last tick";
-  if (view.observation) return "Live";
-  if (view.status === "LOADING") return "Connecting";
-  if (view.status === "ERROR") return "Reconnecting";
   return "Live";
 }
 

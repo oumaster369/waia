@@ -115,7 +115,7 @@ describe("invoice attestations", () => {
   it("keeps approve disabled until all six attestations are manually checked", () => {
     const onApprove = vi.fn();
     render(<InvoiceAttestations onApprove={onApprove} />);
-    const button = screen.getByRole("button", { name: "Подтвердить выпуск" });
+    const button = screen.getByRole("button", { name: "Confirm issuance" });
     expect(button).toBeDisabled();
     expect(screen.getAllByRole("checkbox")).toHaveLength(ISSUANCE_ATTESTATION_KEYS.length);
     for (const box of screen.getAllByRole("checkbox")) {
@@ -131,12 +131,12 @@ describe("invoice attestations", () => {
     const calls = mockInvoices();
     render(<InvoicesPanel />);
     fireEvent.click(await screen.findByRole("button", { name: firstId }));
-    await screen.findByRole("button", { name: "Подтвердить выпуск" });
+    await screen.findByRole("button", { name: "Confirm issuance" });
     for (const box of screen.getAllByRole("checkbox")) fireEvent.click(box);
-    expect(screen.getByRole("button", { name: "Подтвердить выпуск" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Закрыть" }));
+    expect(screen.getByRole("button", { name: "Confirm issuance" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     fireEvent.click(screen.getByRole("button", { name: secondId }));
-    expect(await screen.findByRole("button", { name: "Подтвердить выпуск" })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Confirm issuance" })).toBeDisabled();
     for (const box of screen.getAllByRole("checkbox")) expect(box).not.toBeChecked();
     expect(calls).toEqual([]);
   });
@@ -144,20 +144,20 @@ describe("invoice attestations", () => {
     const calls = mockInvoices();
     render(<InvoicesPanel />);
     fireEvent.click(await screen.findByRole("button", { name: firstId }));
-    await screen.findByRole("button", { name: "Подтвердить выпуск" });
+    await screen.findByRole("button", { name: "Confirm issuance" });
     for (const box of screen.getAllByRole("checkbox")) fireEvent.click(box);
-    fireEvent.click(screen.getByRole("button", { name: "Подтвердить выпуск" }));
-    await screen.findByText("Команда подтверждена повторным чтением документа.");
+    fireEvent.click(screen.getByRole("button", { name: "Confirm issuance" }));
+    await screen.findByText("Command confirmed by document reread.");
     expect(calls[0].body).toEqual({
       organization_id: organizationId,
       expectedRevision: `${firstId}:draft`,
       command: "approve",
       attestations: Object.fromEntries(ISSUANCE_ATTESTATION_KEYS.map((key) => [key, true])),
     });
-    expect(screen.getByRole("button", { name: "Подтвердить выпуск" })).toBeDisabled();
-    const cancel = await screen.findByRole("button", { name: "Отменить выпуск" });
+    expect(screen.getByRole("button", { name: "Confirm issuance" })).toBeDisabled();
+    const cancel = await screen.findByRole("button", { name: "Revoke issuance confirmation" });
     expect(cancel).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Причина отмены подтверждения"), {
+    fireEvent.change(screen.getByLabelText("Reason for revoking confirmation"), {
       target: { value: "Требуется повторная проверка" },
     });
     await waitFor(() => expect(cancel).toBeEnabled());
@@ -197,6 +197,6 @@ describe("clients page", () => {
       "datetime",
       "2026-01-01T00:00:00.000Z",
     );
-    expect(screen.queryByRole("button", { name: "Подтвердить выпуск" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Confirm issuance" })).toBeNull();
   });
 });

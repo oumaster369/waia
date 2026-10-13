@@ -50,7 +50,7 @@ test.describe("/trader static shell boundary (AT-E1 S1)", () => {
     await expect(page.getByText("Not signed in")).toBeVisible();
     await expect(page.getByText("User account")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Войти или создать аккаунт" })).toHaveAttribute(
+    await expect(page.getByRole("link", { name: "Sign in or create an account" })).toHaveAttribute(
       "href",
       "/trader/sign-in",
     );
@@ -65,7 +65,7 @@ test.describe("/trader static shell boundary (AT-E1 S1)", () => {
 
     await page.goto("/trader");
     await expect(page.getByTestId("trader-auth-required")).toBeVisible();
-    await page.getByRole("link", { name: "Войти или создать аккаунт" }).click();
+    await page.getByRole("link", { name: "Sign in or create an account" }).click();
     await expect(page.getByTestId("trader-landing")).toBeVisible();
     await expect(page).toHaveURL(/trader\.localhost:\d+\/$/);
 
@@ -154,17 +154,17 @@ test.describe("/trader static shell boundary (AT-E1 S1)", () => {
     await expect(selector).toHaveValue("account-a");
     await page.getByTestId("trader-replace-button").focus();
     await page.keyboard.press("Enter");
-    await expect(page.getByTestId("trader-connect-section")).toContainText("Это заменит подключение в WAIA");
-    await page.getByRole("button", { name: "Отмена" }).focus();
+    await expect(page.getByTestId("trader-connect-section")).toContainText("This will replace the WAIA connection");
+    await page.getByRole("button", { name: "Cancel" }).focus();
     await page.keyboard.press("Enter");
     await page.getByTestId("trader-disconnect-button").focus();
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("group", { name: "Подтвердить отключение" })).toContainText(
-      "Сам ключ HTX и внешний исполнитель не изменятся",
+    await expect(page.getByRole("group", { name: "Confirm disconnection" })).toContainText(
+      "The HTX key and external executor will remain unchanged",
     );
     await expect(page.getByTestId("trader-disconnect-confirm")).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("account-lifecycle-mobile.png") });
-    await page.getByRole("button", { name: "Отмена" }).focus();
+    await page.getByRole("button", { name: "Cancel" }).focus();
     await page.keyboard.press("Enter");
   });
 
@@ -227,7 +227,7 @@ test.describe("/trader static shell boundary (AT-E1 S1)", () => {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(credential) });
     });
     await page.goto("/trader");
-    await expect(page.getByTestId("trader-permission-explainer")).toContainText("Read и Trade тоже можно подключить");
+    await expect(page.getByTestId("trader-permission-explainer")).toContainText("Read and Trade can also be connected");
     await page.getByTestId("trader-api-key").fill("synthetic-read-trade-key");
     await page.getByTestId("trader-api-secret").fill("synthetic-secret");
     await page.getByTestId("trader-connect-submit").click();
@@ -236,9 +236,9 @@ test.describe("/trader static shell boundary (AT-E1 S1)", () => {
     await expect(page.getByTestId("trader-credential-scopes")).toHaveText("read, trade");
     await expect(page.getByTestId("cabinet-usdt-free")).toContainText("125.50");
     await expect(page.getByTestId("trader-connect-form")).toHaveCount(0);
-    await expect(page.getByTestId("trader-authority-boundary")).toContainText("Только наблюдение");
+    await expect(page.getByTestId("trader-authority-boundary")).toContainText("Observation only");
     await expect(page.getByRole("region", { name: "Account observation" })).toContainText(
-      /Только просмотр\..*заявки отсюда не отправляются\./,
+      /Read only\..*orders cannot be submitted here\./,
     );
     await expect(page.getByTestId("trader-workspace")).not.toContainText("synthetic-secret");
     expect(connectRequests).toBe(1);

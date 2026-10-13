@@ -1,13 +1,13 @@
-export const OWNER_EMAIL_NOTE = "владелец (не подтверждённый billing-контакт)";
+export const OWNER_EMAIL_NOTE = "owner (not a verified billing contact)";
 
 export function clientAccessStatus(input: {
   entitlementEnabled: boolean;
   hasDebt: boolean;
   hasOpenLots: boolean;
-}): "активен" | "доступ отключён" | "только история" {
-  if (input.entitlementEnabled) return "активен";
-  if (input.hasDebt || input.hasOpenLots) return "доступ отключён";
-  return "только история";
+}): "active" | "access disabled" | "history only" {
+  if (input.entitlementEnabled) return "active";
+  if (input.hasDebt || input.hasOpenLots) return "access disabled";
+  return "history only";
 }
 
 export function presentClient(input: {
@@ -56,7 +56,7 @@ export function includeClient(input: {
 }
 
 export function connectedSinceLabel(firstConnectedAt: string | null): string {
-  return firstConnectedAt ?? "Не установлена";
+  return firstConnectedAt ?? "Not established";
 }
 
 export function isTraderPayment(subjectModule: string): boolean {

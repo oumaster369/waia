@@ -80,8 +80,8 @@ export function OrderList({ tab }: { tab: string }) {
       {!items && !reason ? <ConsoleLoading /> : null}
       {items ? (
         <ConsolePanel
-          title={tab === "all" ? "Все ордера периода" : "Рабочие ордера"}
-          note="Принятие биржей не означает исполнение. Требующий сверки ордер не отправляется повторно."
+          title={tab === "all" ? "All orders in the period" : "Working orders"}
+          note="Exchange acceptance does not mean execution. An order requiring reconciliation is not resubmitted."
         >
           <OrdersPanel
             rows={items.map(orderRowView)}
@@ -101,16 +101,16 @@ export function Fills() {
       {read.reason ? <DataState state="unavailable" reason={read.reason} /> : null}
       {read.envelope?.data.items ? (
         <ConsolePanel
-          title="Исполнения"
-          note="Одна строка на сохранённый fill. Цена указана в валюте инструмента."
+          title="Fills"
+          note="One row per saved fill. Price is in the instrument currency."
         >
           <ConsoleTable
             rows={read.envelope.data.items}
             rowKey={(row) => row.id}
-            caption="Исполнения ордеров"
+            caption="Order fills"
             columns={[
               {
-                title: "Инструмент",
+                title: "Instrument",
                 render: (row) => (
                   <div>
                     <DetailLink onClick={() => context.update({ order: row.orderId })}>
@@ -120,15 +120,15 @@ export function Fills() {
                   </div>
                 ),
               },
-              { title: "Количество", align: "right", render: (row) => row.quantity },
-              { title: "Цена", align: "right", render: (row) => row.price },
+              { title: "Quantity", align: "right", render: (row) => row.quantity },
+              { title: "Price", align: "right", render: (row) => row.price },
               {
-                title: "Комиссия биржи",
+                title: "Exchange fee",
                 align: "right",
                 render: (row) => formatAdminMoney(row.fee, row.feeAsset),
               },
               {
-                title: "Исполнено",
+                title: "Filled",
                 render: (row) => <EvidenceTime at={row.executedAt} label="" />,
               },
             ]}
@@ -146,46 +146,46 @@ export function Positions() {
       {read.reason ? <DataState state="unavailable" reason={read.reason} /> : null}
       {read.envelope?.data.items ? (
         <ConsolePanel
-          title="Открытые позиции"
-          note="Рекомендация Guardian, разрешение Risk и исполненное сокращение показаны раздельно."
+          title="Open positions"
+          note="Guardian recommendation, Risk permission and executed reduction are shown separately."
         >
           <ConsoleTable
             rows={read.envelope.data.items}
             rowKey={(row) => row.lotId}
-            caption="Открытые позиции"
+            caption="Open positions"
             columns={[
               {
-                title: "Позиция / счёт",
+                title: "Position / account",
                 render: (row) => (
                   <div>
                     <p className="font-medium">{row.symbol}</p>
                     <p className="text-waia-fg-muted mt-1 text-xs">
-                      {row.allocation} · {row.mode ?? "режим не установлен"}
+                      {row.allocation} · {row.mode ?? "mode not established"}
                     </p>
                   </div>
                 ),
               },
-              { title: "Остаток", align: "right", render: (row) => row.remainingQty },
+              { title: "Remaining", align: "right", render: (row) => row.remainingQty },
               {
                 title: "Guardian",
                 render: (row) => (
                   <div className="space-y-2">
-                    <p>{row.guardian.recommendationLabel ?? "Нет оценки"}</p>
+                    <p>{row.guardian.recommendationLabel ?? "No valuation"}</p>
                     {row.guardian.state === "stale" ? (
                       <DataState state="stale" reason={row.guardian.reasons[0]} />
                     ) : null}
                     <p className="text-waia-fg-muted text-[10px]">
-                      Открытая позиция: {row.guardian.openPositionSufficiency ?? "не установлено"}
+                      Open position: {row.guardian.openPositionSufficiency ?? "not established"}
                       <br />
-                      Новая возможность:{" "}
-                      {row.guardian.newOpportunitySufficiency ?? "не установлено"}
+                      New opportunity:{" "}
+                      {row.guardian.newOpportunitySufficiency ?? "not established"}
                     </p>
                     <EvidenceTime at={row.guardian.assessedAt} label="" />
                   </div>
                 ),
               },
               {
-                title: "Разрешение Risk",
+                title: "Risk permission",
                 render: (row) =>
                   row.riskPermission.label ? (
                     <ConsoleBadge>{row.riskPermission.label}</ConsoleBadge>
@@ -194,7 +194,7 @@ export function Positions() {
                   ),
               },
               {
-                title: "Исполнено сокращение",
+                title: "Reduction executed",
                 align: "right",
                 render: (row) =>
                   row.executedReduction.quantity ?? (
@@ -216,30 +216,30 @@ function ClosedTrades() {
       {read.reason ? <DataState state="unavailable" reason={read.reason} /> : null}
       {read.envelope?.data.items ? (
         <ConsolePanel
-          title="Закрытые сделки"
-          note="Операционный результат сделки не является базой комиссии сервиса."
+          title="Closed trades"
+          note="The operational trade result is not the service-fee basis."
         >
           <ConsoleTable
             rows={read.envelope.data.items}
             rowKey={(row) => row.id}
-            caption="Закрытые сделки"
+            caption="Closed trades"
             columns={[
-              { title: "Инструмент", render: (row) => row.symbol },
-              { title: "Стратегия", render: (row) => `${row.strategyId} · ${row.strategyVersion}` },
-              { title: "Статус", render: (row) => <ConsoleBadge>{row.label}</ConsoleBadge> },
+              { title: "Instrument", render: (row) => row.symbol },
+              { title: "Strategy", render: (row) => `${row.strategyId} · ${row.strategyVersion}` },
+              { title: "Status", render: (row) => <ConsoleBadge>{row.label}</ConsoleBadge> },
               {
-                title: "Сохранённый результат",
+                title: "Saved result",
                 align: "right",
                 render: (row) => (
                   <span>
                     {row.realizedPnl}
                     <span className="text-waia-fg-muted mt-1 block text-[10px]">
-                      В валюте расчёта сделки
+                      In the trade settlement currency
                     </span>
                   </span>
                 ),
               },
-              { title: "Закрыта", render: (row) => <EvidenceTime at={row.closedAt} label="" /> },
+              { title: "Closed", render: (row) => <EvidenceTime at={row.closedAt} label="" /> },
             ]}
           />
         </ConsolePanel>

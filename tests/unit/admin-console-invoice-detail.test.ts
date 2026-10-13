@@ -43,19 +43,19 @@ describe("admin console invoice detail", () => {
     expect(checkFeeChain(valid()).ok).toBe(true);
     expect(checkFeeChain({ ...valid(), cumulative: "9999" })).toMatchObject({
       ok: false,
-      link: "кумулятивный результат",
+      link: "cumulative result",
     });
     expect(checkFeeChain({ ...valid(), newProfitAboveHwm: "1" })).toMatchObject({
       ok: false,
-      link: "прибыль над HWM",
+      link: "profit above HWM",
     });
     expect(checkFeeChain({ ...valid(), performanceFee: "1" })).toMatchObject({
       ok: false,
-      link: "комиссия",
+      link: "fee",
     });
     expect(checkFeeChain({ ...valid(), billable: false })).toMatchObject({
       ok: false,
-      link: "порог",
+      link: "threshold",
     });
     expect(checkFeeChain({ ...valid(), ledgerPreviousHwm: "1" })).toMatchObject({
       ok: false,

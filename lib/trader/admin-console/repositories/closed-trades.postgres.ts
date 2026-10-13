@@ -6,8 +6,8 @@ import { adminEnvelope } from "@/lib/trader/admin-console/data-state";
 import { adminScopeFromQuery, periodBounds } from "@/lib/trader/admin-console/scope";
 
 const CLOSED_TRADE_LABELS: Record<string, string> = {
-  CLOSED: "Закрыта",
-  FORCED_FLAT: "Принудительно закрыта",
+  CLOSED: "Closed",
+  FORCED_FLAT: "Forcibly closed",
 };
 
 function rowsOf(result: unknown): Record<string, unknown>[] {

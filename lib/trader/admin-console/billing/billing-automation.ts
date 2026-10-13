@@ -1,5 +1,5 @@
 export const BILLING_AUTOMATION_CAPTION =
-  "Автоматически: расчёт и черновик. Выпуск: подтверждение администратора";
+  "Automatic: calculation and draft. Issuance: administrator confirmation";
 
 export type BillingAutomationFacts = {
   lastClosedAt: string | null;
@@ -17,21 +17,21 @@ export function billingAutomation(facts: BillingAutomationFacts): {
   return {
     caption: BILLING_AUTOMATION_CAPTION,
     stages: [
-      { id: 1, note: "Вручную: команда закрытия периода", at: facts.lastClosedAt },
-      { id: 2, note: "Автоматически после закрытия", at: facts.lastDraftAt },
-      { id: 3, note: "Автоматически после закрытия", at: facts.lastDraftAt },
-      { id: 4, note: "Автоматически после закрытия", at: facts.lastDraftAt },
-      { id: 5, note: "Выпуск: подтверждение администратора (ADR-0008)", at: facts.lastIssuedAt },
-      { id: 6, note: "Выпуск: подтверждение администратора (ADR-0008)", at: facts.lastIssuedAt },
-      { id: 7, note: "Уведомления: не реализовано", at: null },
+      { id: 1, note: "Manual: period-closing command", at: facts.lastClosedAt },
+      { id: 2, note: "Automatic after period close", at: facts.lastDraftAt },
+      { id: 3, note: "Automatic after period close", at: facts.lastDraftAt },
+      { id: 4, note: "Automatic after period close", at: facts.lastDraftAt },
+      { id: 5, note: "Issuance: administrator confirmation (ADR-0008)", at: facts.lastIssuedAt },
+      { id: 6, note: "Issuance: administrator confirmation (ADR-0008)", at: facts.lastIssuedAt },
+      { id: 7, note: "Notifications: not implemented", at: null },
       {
         id: 8,
-        note: `Последний зачтённый платёж; запусков settlement: ${facts.settlementRuns}`,
+        note: `Latest applied payment; settlement runs: ${facts.settlementRuns}`,
         at: facts.lastAppliedAt,
       },
       {
         id: 9,
-        note: "Проверка просрочки не запланирована в Worker",
+        note: "Overdue checks are not scheduled in the Worker",
         at: facts.lastSuspensionAt,
       },
     ],

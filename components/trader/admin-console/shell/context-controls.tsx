@@ -33,19 +33,19 @@ export function ContextControls({ catalogue }: { catalogue: ConsoleCatalogue | n
       <div className="flex flex-wrap items-end gap-3">
         <div className="text-waia-fg-muted hidden h-9 items-center gap-2 pr-1 text-xs xl:flex">
           <SlidersHorizontal size={14} aria-hidden="true" />
-          Охват
+          Coverage
         </div>
         <label className="text-waia-fg-muted grid gap-1 text-[11px]">
-          Клиент
+          Client
           <select
-            aria-label="Охват: клиент"
+            aria-label="Scope: client"
             className={`${controlClass} w-48`}
             value={org}
             onChange={(event) => update({ organization_id: event.target.value || null })}
           >
-            <option value="">Весь парк</option>
+            <option value="">Entire fleet</option>
             {org && !catalogue?.clients.some((item) => item.id === org) ? (
-              <option value={org}>Клиент {org}</option>
+              <option value={org}>Client {org}</option>
             ) : null}
             {catalogue?.clients.map((item) => (
               <option value={item.id} key={item.id}>
@@ -55,15 +55,15 @@ export function ContextControls({ catalogue }: { catalogue: ConsoleCatalogue | n
           </select>
         </label>
         <label className="text-waia-fg-muted grid gap-1 text-[11px]">
-          Биржевой счёт
+          Exchange account
           <select
-            aria-label="Охват: счёт"
+            aria-label="Scope: account"
             className={`${controlClass} w-44`}
             disabled={!org}
             value={account}
             onChange={(event) => update({ exchange_account_id: event.target.value || null })}
           >
-            <option value="">{org ? "Все счета клиента" : "Сначала выберите клиента"}</option>
+            <option value="">{org ? "All client accounts" : "Select a client first"}</option>
             {account && !uniqueAccounts.some((item) => item.exchangeAccountId === account) ? (
               <option value={account}>{account}</option>
             ) : null}
@@ -75,9 +75,9 @@ export function ContextControls({ catalogue }: { catalogue: ConsoleCatalogue | n
           </select>
         </label>
         <label className="text-waia-fg-muted grid gap-1 text-[11px]">
-          Период · МСК
+          Period · MSK
           <select
-            aria-label="Период"
+            aria-label="Period"
             className={controlClass}
             value={custom ? "custom" : (params.get("period") ?? "7d")}
             onChange={(event) => {
@@ -89,17 +89,17 @@ export function ContextControls({ catalogue }: { catalogue: ConsoleCatalogue | n
               update({ period: event.target.value, from: null, to: null, tz: "Europe/Moscow" });
             }}
           >
-            <option value="today">Сегодня</option>
-            <option value="7d">7 дней</option>
-            <option value="30d">30 дней</option>
-            <option value="90d">90 дней</option>
-            <option value="custom">Свой период</option>
+            <option value="today">Today</option>
+            <option value="7d">7 days</option>
+            <option value="30d">30 days</option>
+            <option value="90d">90 days</option>
+            <option value="custom">Custom period</option>
           </select>
         </label>
         <label className="text-waia-fg-muted grid gap-1 text-[11px]">
-          Валюта
+          Currency
           <select
-            aria-label="Валюта"
+            aria-label="Currency"
             className={controlClass}
             value={params.get("currency") ?? "USDT"}
             onChange={(event) => update({ currency: event.target.value })}
@@ -109,7 +109,7 @@ export function ContextControls({ catalogue }: { catalogue: ConsoleCatalogue | n
           </select>
         </label>
         <fieldset className="ml-auto">
-          <legend className="text-waia-fg-muted mb-1 text-[11px]">Контур данных</legend>
+          <legend className="text-waia-fg-muted mb-1 text-[11px]">Data mode</legend>
           <div className="border-waia-rim flex h-9 rounded-lg border p-0.5">
             {[
               ["live", "Live"],
@@ -142,7 +142,7 @@ export function ContextControls({ catalogue }: { catalogue: ConsoleCatalogue | n
               !Number.isFinite(end.getTime()) ||
               start >= end
             ) {
-              setError("Начало периода должно быть раньше окончания.");
+              setError("Period start must precede its end.");
               return;
             }
             update({
@@ -156,7 +156,7 @@ export function ContextControls({ catalogue }: { catalogue: ConsoleCatalogue | n
           }}
         >
           <label className="grid gap-1 text-xs">
-            С · МСК
+            From · MSK
             <input
               type="datetime-local"
               className={controlClass}
@@ -166,7 +166,7 @@ export function ContextControls({ catalogue }: { catalogue: ConsoleCatalogue | n
             />
           </label>
           <label className="grid gap-1 text-xs">
-            До · МСК
+            To · MSK
             <input
               type="datetime-local"
               className={controlClass}
@@ -177,7 +177,7 @@ export function ContextControls({ catalogue }: { catalogue: ConsoleCatalogue | n
           </label>
           <button className={`${controlClass} inline-flex items-center gap-2`} type="submit">
             <CalendarDays size={14} />
-            Применить
+            Apply
           </button>
           {error ? (
             <p role="alert" className="text-waia-warning text-sm">
@@ -190,10 +190,10 @@ export function ContextControls({ catalogue }: { catalogue: ConsoleCatalogue | n
       (catalogue.clients.length < catalogue.clientsTotal || catalogue.accountsTruncated) ? (
         <p className="text-waia-warning mt-2 text-xs">
           {catalogue.clients.length < catalogue.clientsTotal
-            ? `В списке выбора клиентов ${catalogue.clients.length} из ${catalogue.clientsTotal}. Полная выборка — в разделе «Клиенты». `
+            ? `In the client picker ${catalogue.clients.length} of ${catalogue.clientsTotal}. The complete selection is in Clients. `
             : ""}
           {catalogue.accountsTruncated
-            ? "Список выбора биржевых счетов ограничен. Откройте нужный счёт в разделе «Счета»."
+            ? "The exchange account picker is limited. Open the required account in Accounts."
             : ""}
         </p>
       ) : null}
