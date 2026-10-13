@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { gzipSync } from "node:zlib";
 import {
   createProjectionClient,
   type ProjectionClientOptions,
@@ -109,6 +110,53 @@ describe("account observation projection client", () => {
       expect(new URL(String(calls[0].url)).search).toBe("");
     }
   });
+
+  it.each(["resolveBinding", "readLatest"] as const)(
+    "requests an identity representation when the endpoint negotiates compression for %s",
+    async (operation) => {
+      const representations: string[] = [];
+      const expected = operation === "resolveBinding" ? BINDING : OBSERVATION;
+      const fetcher: typeof fetch = vi.fn(async (request, init) => {
+        const signed = await responseFor(request, init, expected);
+        const representation = new Headers(init?.headers).get("accept-encoding") === "identity"
+          ? "identity" : "gzip";
+        representations.push(representation);
+        const body = await signed.arrayBuffer();
+        return new Response(representation === "identity" ? body : Uint8Array.from(gzipSync(Buffer.from(body))), {
+          status: signed.status,
+          headers: { ...Object.fromEntries(signed.headers), "content-encoding": representation },
+        });
+      });
+      const client = createProjectionClient(options(fetcher));
+      try {
+        const result = operation === "resolveBinding"
+          ? client.resolveActiveBinding(SCOPE) : client.readLatest(BINDING);
+        await expect(result).resolves.toEqual(expected);
+        expect(representations).toEqual(["identity"]);
+        expect(fetcher).toHaveBeenCalledTimes(1);
+      } finally { client.dispose(); }
+    },
+  );
+
+  it.each(["resolveBinding", "readLatest"] as const)(
+    "still refuses an unexpected compressed response after requesting identity for %s",
+    async (operation) => {
+      const fetcher: typeof fetch = vi.fn(async (request, init) => {
+        expect(new Headers(init?.headers).get("accept-encoding")).toBe("identity");
+        const signed = await responseFor(request, init, operation === "resolveBinding" ? BINDING : OBSERVATION);
+        // A valid decoded, signed body cannot bypass the nonidentity encoding guard.
+        signed.headers.set("content-encoding", "gzip");
+        return signed;
+      });
+      const client = createProjectionClient(options(fetcher));
+      try {
+        const result = operation === "resolveBinding"
+          ? client.resolveActiveBinding(SCOPE) : client.readLatest(BINDING);
+        await expect(result).rejects.toThrow("PROJECTION_UNAVAILABLE");
+        expect(fetcher).toHaveBeenCalledTimes(1);
+      } finally { client.dispose(); }
+    },
+  );
 
   it("refuses invalid, expired or already aborted calls before fetch", async () => {
     const fetcher = vi.fn(async () => new Response(null));
