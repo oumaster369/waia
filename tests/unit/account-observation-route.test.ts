@@ -285,3 +285,26 @@ describe("account observation route wiring, no external requests", () => {
     expect(mocks.end).toHaveBeenCalledOnce();
   });
 });
+
+
+describe("DEE-1243 route-owned pre-fetch failure telemetry", () => {
+  it.each(["session", "runtime", "entitlement", "config"])("keeps public503 generic for %s and logs no dependency values", async stage => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      configureProjection();
+      if (stage === "session") mocks.user.mockRejectedValue(new Error("session-secret-canary"));
+      if (stage === "runtime") mocks.access.mockRejectedValue(new Error("database-url-query-canary"));
+      if (stage === "entitlement") mocks.entitlement.mockRejectedValue(new Error("organization-query-canary"));
+      if (stage === "config") vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_ENABLED", "0");
+      const response = await accountObservationRoute(request(), "tenant");
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: "ACCOUNT_OBSERVATION_UNAVAILABLE" });
+      const expected = { session: "SESSION_INITIAL", runtime: "RUNTIME_INIT", entitlement: "ENTITLEMENT", config: "PROJECTION_CONFIG" }[stage];
+      expect(log).toHaveBeenCalledTimes(1); expect(typeof log.mock.calls[0][0]).toBe("string");
+      expect(JSON.parse(log.mock.calls[0][0] as string)).toMatchObject({ event: "ACCOUNT_OBSERVATION_FAILURE", stage: expected, outcome: "THREW" });
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/canary|synthetic|account-a/);
+      expect(mocks.resolve).not.toHaveBeenCalled();
+      expect(mocks.end).not.toHaveBeenCalled();
+    } finally { log.mockRestore(); }
+  });
+});
