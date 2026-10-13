@@ -45,7 +45,37 @@ test.describe("/trader static shell boundary (AT-E1 S1)", () => {
     await page.goto("/trader");
     await expect(page).toHaveURL("/trader");
     await expectStaticShellContainsNoProtectedData(page);
+    await expect(page.getByTestId("trader-auth-required")).toBeVisible();
+    await expect(page.getByTestId("trader-connect-form")).toHaveCount(0);
+    await expect(page.getByText("Not signed in")).toBeVisible();
+    await expect(page.getByText("User account")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+    const traderSignInUrl = new URL(await page.getByRole("link", { name: "Войти или создать аккаунт" }).getAttribute("href") ?? "");
+    expect(traderSignInUrl.pathname).toBe("/");
     await expectProtectedObserverApisFailClosed(page, 401);
+  });
+
+  test("takes an unauthenticated user through Trader sign-in and returns to /trader", async ({ page }) => {
+    const email = `e2e-trader-return-${Date.now()}@example.com`;
+    await signUpAndOpenDashboard(page, email);
+    grantTraderEntitlementByUserEmail(email);
+    await page.context().clearCookies();
+
+    await page.goto("/trader");
+    await expect(page.getByTestId("trader-auth-required")).toBeVisible();
+    await page.getByRole("link", { name: "Войти или создать аккаунт" }).click();
+    await expect(page.getByTestId("trader-landing")).toBeVisible();
+    await expect(page).toHaveURL(/trader\.localhost:\d+\/$/);
+
+    await page.getByTestId("landing-auth-mode-sign-in").click();
+    const identity = page.getByTestId("landing-auth-identity");
+    await identity.fill(email);
+    await expect(identity).toHaveValue(email);
+    await page.getByTestId("landing-auth-password").fill("password123!");
+    await page.getByTestId("landing-auth-submit").click();
+    await page.waitForURL("**/trader");
+    await expect(page.getByTestId("trader-workspace")).toBeVisible();
+    await expect(page.getByTestId("trader-connect-form")).toBeVisible();
   });
 
   test("renders a data-empty shell for a user without entitlement while APIs reject access", async ({
@@ -57,6 +87,8 @@ test.describe("/trader static shell boundary (AT-E1 S1)", () => {
     await page.goto("/trader");
     await expect(page).toHaveURL("/trader");
     await expectStaticShellContainsNoProtectedData(page);
+    await expect(page.getByTestId("trader-access-required")).toBeVisible();
+    await expect(page.getByTestId("trader-connect-form")).toHaveCount(0);
     await expectProtectedObserverApisFailClosed(page, 403);
   });
 
@@ -75,7 +107,10 @@ test.describe("/trader static shell boundary (AT-E1 S1)", () => {
     await expect(page.getByTestId("trader-connect-form")).toBeVisible();
     await expect(page.getByTestId("trader-permission-explainer")).toBeVisible();
     await expect(page.getByTestId("trader-api-key")).toBeVisible();
+    await expect(page.getByTestId("trader-api-key")).toHaveAttribute("autocomplete", "off");
+    await expect(page.getByTestId("trader-api-key")).toHaveAttribute("name", "htx-access-key");
     await expect(page.getByTestId("trader-api-secret")).toHaveAttribute("type", "password");
+    await expect(page.getByTestId("trader-api-secret")).toHaveAttribute("autocomplete", "new-password");
     await expect(page.getByTestId("trader-connect-submit")).toBeEnabled();
     await expect(
       page.getByText("This workspace cannot enable live trading or change capital authority."),

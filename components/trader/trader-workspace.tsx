@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WaiaSurface } from "@/components/waia/waia-surface";
 import { HistoricalV2ObservationDashboard } from "@/components/trader/historical-v2-observation-dashboard";
@@ -138,12 +139,15 @@ function credentialRequestError(code: string | undefined, status: number): strin
   }
 }
 
-function ExchangeTraderWorkspace() {
+type WorkspaceAccess = "loading" | "allowed" | "unauthenticated" | "forbidden" | "unavailable";
+
+function ExchangeTraderWorkspace({ signInHref }: { signInHref: string }) {
   const [credentials, setCredentials] = React.useState<CredentialMetadataDto[]>([]);
   const [selectedAccountId, setSelectedAccountId] = React.useState("");
   const [addingNewAccount, setAddingNewAccount] = React.useState(false);
   const [editingReplacement, setEditingReplacement] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
+  const [access, setAccess] = React.useState<WorkspaceAccess>("loading");
   const [connecting, setConnecting] = React.useState(false);
   const [disconnecting, setDisconnecting] = React.useState(false);
   const [confirmDisconnectCredentialId, setConfirmDisconnectCredentialId] = React.useState<string | null>(null);
@@ -157,6 +161,26 @@ function ExchangeTraderWorkspace() {
   const pending = React.useRef(new Map<string, object>());
   const asyncError =
     "Запрос не завершился. Проверьте состояние подключения перед повторной отправкой ключа.";
+
+  const clearCredentialInputs = React.useCallback(() => {
+    setApiKey("");
+    setApiSecret("");
+    setAccountLabel("");
+    selectedAccountIdRef.current = "";
+    setSelectedAccountId("");
+    setAddingNewAccount(false);
+    setEditingReplacement(false);
+    setConfirmDisconnectCredentialId(null);
+  }, []);
+
+  const loseAccess = React.useCallback((next: "unauthenticated" | "forbidden") => {
+    setAccess(next);
+    setCredentials([]);
+    clearCredentialInputs();
+    setErrorMessage(null);
+    setConnecting(false);
+    setDisconnecting(false);
+  }, [clearCredentialInputs]);
 
   const accountOptions = credentialAccountOptions(credentials);
   const selectedAccount = accountOptions.find((account) => account.accountId === selectedAccountId);
@@ -173,15 +197,27 @@ function ExchangeTraderWorkspace() {
     setDisconnecting(false);
     setLoading(true);
     if (clearError) setErrorMessage(null);
+    setAccess("loading");
     try {
       const result = await listExchangeCredentialsClient();
       if (scope.current !== generation) return null;
       if (result.kind === "err") {
+        if (result.status === 401) {
+          loseAccess("unauthenticated");
+          return null;
+        }
+        if (result.status === 403) {
+          loseAccess("forbidden");
+          return null;
+        }
+        setAccess("unavailable");
+        clearCredentialInputs();
         setErrorMessage(credentialRequestError(result.code, result.status));
         setCredentials([]);
         return null;
       }
       assertNoSecretsInPayload(JSON.stringify(result.data));
+      setAccess("allowed");
       setCredentials(result.data);
       const options = credentialAccountOptions(result.data);
       const previousSelection = selectedAccountIdRef.current;
@@ -202,12 +238,17 @@ function ExchangeTraderWorkspace() {
       setSelectedAccountId(nextSelection);
       return result.data;
     } catch {
-      if (scope.current === generation) setErrorMessage(asyncError);
+      if (scope.current === generation) {
+        setAccess("unavailable");
+        setCredentials([]);
+        clearCredentialInputs();
+        setErrorMessage(asyncError);
+      }
       return null;
     } finally {
       if (scope.current === generation) setLoading(false);
     }
-  }, []);
+  }, [asyncError, clearCredentialInputs, loseAccess]);
 
   const retireScope = React.useCallback(() => {
     ++scope.current;
@@ -279,6 +320,10 @@ function ExchangeTraderWorkspace() {
       });
       if (!isCurrent()) return;
       if (result.kind === "err") {
+        if (result.status === 401 || result.status === 403) {
+          loseAccess(result.status === 401 ? "unauthenticated" : "forbidden");
+          return;
+        }
         const displayMessage = credentialRequestError(result.code, result.status);
         setApiKey("");
         setApiSecret("");
@@ -322,6 +367,10 @@ function ExchangeTraderWorkspace() {
       const result = await revokeExchangeCredentialClient(credentialId);
       if (!isCurrent()) return;
       if (result.kind === "err") {
+        if (result.status === 401 || result.status === 403) {
+          loseAccess(result.status === 401 ? "unauthenticated" : "forbidden");
+          return;
+        }
         const displayMessage = credentialRequestError(result.code, result.status);
         const refresh = loadWorkspace(false);
         const refreshGeneration = scope.current;
@@ -350,9 +399,12 @@ function ExchangeTraderWorkspace() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-muted-foreground text-xs tracking-wide uppercase">WAIA · Trader</p>
           <span className="border-border bg-muted/20 rounded-full border px-3 py-1 text-xs">
-            User account
+            {access === "allowed" ? "User account" :
+              access === "unauthenticated" ? "Not signed in" :
+                access === "forbidden" ? "Access required" :
+                  access === "unavailable" ? "Access unavailable" : "Checking access…"}
           </span>
-          <TraderSignOut />
+          {access === "allowed" ? <TraderSignOut /> : null}
         </div>
         <h1
           data-testid="trader-workspace-title"
@@ -375,8 +427,33 @@ function ExchangeTraderWorkspace() {
         </p>
       ) : null}
 
-      {loading ? (
-        <p className="text-muted-foreground text-sm">Загрузка аккаунтов…</p>
+      {access === "unauthenticated" ? (
+        <WaiaSurface variant="raised" className="mx-auto w-full max-w-lg space-y-3 p-6" data-testid="trader-auth-required">
+          <h2 className="text-lg font-medium">Войдите, чтобы подключить HTX</h2>
+          <p className="text-muted-foreground text-sm">
+            Подключение HTX доступно после входа в аккаунт WAIA. После входа вернитесь в AI-TRADER.
+          </p>
+          <Link href={signInHref} className={buttonVariants({ className: "w-full" })} data-testid="trader-sign-in-link">
+            Войти или создать аккаунт
+          </Link>
+        </WaiaSurface>
+      ) : access === "forbidden" ? (
+        <WaiaSurface variant="raised" className="mx-auto w-full max-w-lg space-y-3 p-6" data-testid="trader-access-required">
+          <h2 className="text-lg font-medium">Нет доступа к AI-TRADER</h2>
+          <p className="text-muted-foreground text-sm">
+            Войдите в аккаунт с доступом к AI-TRADER или обратитесь в поддержку. Данные подключения здесь не загружены.
+          </p>
+        </WaiaSurface>
+      ) : access === "unavailable" ? (
+        <WaiaSurface variant="raised" className="mx-auto w-full max-w-lg space-y-3 p-6" data-testid="trader-access-unavailable">
+          <h2 className="text-lg font-medium">Не удалось проверить доступ</h2>
+          <p className="text-muted-foreground text-sm">{errorMessage ?? asyncError}</p>
+          <Button type="button" variant="outline" onClick={() => void loadWorkspace()}>
+            Повторить проверку
+          </Button>
+        </WaiaSurface>
+      ) : access === "loading" || loading ? (
+        <p className="text-muted-foreground text-sm" role="status">Проверка доступа и подключений…</p>
       ) : (
         <div className="space-y-6">
           {accountOptions.length > 0 ? (
@@ -511,13 +588,13 @@ function ExchangeTraderWorkspace() {
                 <form className="mt-6 space-y-4" onSubmit={handleConnect} data-testid="trader-connect-form">
                   <div>
                     <label className="text-sm font-medium" htmlFor="trader-api-key">HTX Access Key</label>
-                    <Input id="trader-api-key" data-testid="trader-api-key" className="mt-1"
+                    <Input id="trader-api-key" name="htx-access-key" data-testid="trader-api-key" className="mt-1"
                       value={apiKey} onChange={(e) => setApiKey(e.target.value)} autoComplete="off" required />
                   </div>
                   <div>
                     <label className="text-sm font-medium" htmlFor="trader-api-secret">HTX Secret Key</label>
-                    <Input id="trader-api-secret" data-testid="trader-api-secret" type="password" className="mt-1"
-                      value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} autoComplete="off" required />
+                    <Input id="trader-api-secret" name="htx-secret-key" data-testid="trader-api-secret" type="password" className="mt-1"
+                      value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} autoComplete="new-password" required />
                   </div>
                   <div>
                     <label className="text-sm font-medium" htmlFor="trader-account-label">Название аккаунта (необязательно)</label>
@@ -588,7 +665,7 @@ function HistoricalTraderWorkspace(): React.ReactNode {
 }
 
 /** Historical mode is a separate component boundary so exchange effects never mount. */
-export function TraderWorkspace(): React.ReactNode {
+export function TraderWorkspace({ signInHref = "/" }: { signInHref?: string }): React.ReactNode {
   const runId = useSearchParams().get("campaign_run_id")?.trim() ?? "";
-  return runId ? <HistoricalTraderWorkspace key={runId} /> : <ExchangeTraderWorkspace />;
+  return runId ? <HistoricalTraderWorkspace key={runId} /> : <ExchangeTraderWorkspace signInHref={signInHref} />;
 }
