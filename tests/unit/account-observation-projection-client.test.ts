@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { gzipSync, brotliCompressSync } from "node:zlib";
 import { createObservationFailureTrace } from "@/lib/trader/account-observation/failure-stage";
+import { handleAccountObservationGet } from "@/lib/trader/account-observation/read-handler";
 import {
   createProjectionClient,
   type ProjectionClientOptions,
@@ -79,6 +80,79 @@ async function responseFor(request: RequestInfo | URL, init: RequestInit | undef
 }
 
 afterEach(() => vi.useRealTimers());
+
+describe("DEE-1243 shared projection deadline classification", () => {
+  it.each(["FETCH", "BODY"] as const)("retains %s TIMEOUT when the original deadline precedes the handler timer", async phase => {
+    vi.useFakeTimers(); vi.setSystemTime(NOW);
+    const sink = vi.fn(), trace = createObservationFailureTrace(sink, Date.now);
+    let markPhase!: () => void, resolveFetch!: (response: Response) => void;
+    const phaseStarted = new Promise<void>(resolve => { markPhase = resolve; });
+    const cancel = vi.fn();
+    const fetcher: typeof fetch = vi.fn(() => {
+      if (phase === "FETCH") return new Promise<Response>(resolve => { resolveFetch = resolve; markPhase(); });
+      const stream = new ReadableStream<Uint8Array>({
+        pull() { markPhase(); return new Promise<void>(() => undefined); }, cancel,
+      }, { highWaterMark: 0 });
+      return Promise.resolve(new Response(stream, { headers: {
+        "content-type": "application/json", "x-waia-projection-signature": "0".repeat(64),
+      } }));
+    });
+    const client = createProjectionClient(options(fetcher, { clock: Date.now, failureTrace: trace }));
+    await vi.advanceTimersByTimeAsync(200);
+    const pending = handleAccountObservationGet(new Request("https://local.invalid/observation?" + new URLSearchParams(BINDING)), "tenant", {
+      failureTrace: trace, getUserId: async () => "synthetic-user", hasTraderAccess: async () => true,
+      hasOrgMembership: async () => true, hasOperatorAccess: async () => true, isAdminListedOrganization: async () => true,
+      resolveActiveBinding: ({ organizationId, credentialId, exchangeAccountId }, _userId, signal) =>
+        client.resolveActiveBinding({ organizationId, credentialId, exchangeAccountId }, signal), readLatest: vi.fn(),
+    });
+    await Promise.race([phaseStarted, pending.then(response => { throw new Error(`synthetic early handler status ${response.status}`); })]);
+    await vi.advanceTimersByTimeAsync(4800);
+    const response = await pending;
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "ACCOUNT_OBSERVATION_UNAVAILABLE" });
+    expect(Date.now()).toBe(NOW + 5000);
+    expect(sink).toHaveBeenCalledTimes(1);
+    expect(sink.mock.calls[0][0]).toEqual({ event: "ACCOUNT_OBSERVATION_FAILURE", stage: `PROJECTION_${phase}`, outcome: "TIMEOUT", elapsedMs: 5000 });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(vi.mocked(fetcher).mock.calls[0][1]?.body)).deadlineMs).toBe(NOW + 5000);
+    expect(vi.mocked(fetcher).mock.calls[0][1]?.signal?.aborted).toBe(true);
+    if (phase === "FETCH") resolveFetch(new Response(new ReadableStream<Uint8Array>({ cancel })));
+    await vi.advanceTimersByTimeAsync(200);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(sink).toHaveBeenCalledTimes(1);
+    client.dispose();
+    await expect(client.resolveActiveBinding(SCOPE)).rejects.toThrow("PROJECTION_UNAVAILABLE");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an earlier caller abort as THREW even after the deadline passes", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(NOW);
+    const caller = new AbortController(), sink = vi.fn(), trace = createObservationFailureTrace(sink, Date.now);
+    let markCalled!: () => void;
+    const called = new Promise<void>(resolve => { markCalled = resolve; });
+    const fetcher: typeof fetch = vi.fn(() => { markCalled(); return new Promise<Response>(() => undefined); });
+    const client = createProjectionClient(options(fetcher, { clock: Date.now, failureTrace: trace }));
+    const rejected = expect(client.resolveActiveBinding(SCOPE, caller.signal)).rejects.toThrow("PROJECTION_UNAVAILABLE");
+    await called; await vi.advanceTimersByTimeAsync(100); caller.abort(); await rejected;
+    await vi.advanceTimersByTimeAsync(4900); trace.report("THREW");
+    expect(sink).toHaveBeenCalledTimes(1);
+    expect(sink.mock.calls[0][0]).toMatchObject({ stage: "PROJECTION_FETCH", outcome: "THREW" });
+    expect(fetcher).toHaveBeenCalledTimes(1); client.dispose();
+  });
+
+  it("keeps a genuine fetch rejection as THREW and clears the deadline timer", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(NOW);
+    const sink = vi.fn(), trace = createObservationFailureTrace(sink, Date.now);
+    const fetcher: typeof fetch = vi.fn(async () => { throw new Error("synthetic-private-error-canary"); });
+    const client = createProjectionClient(options(fetcher, { clock: Date.now, failureTrace: trace }));
+    await expect(client.resolveActiveBinding(SCOPE)).rejects.toThrow("PROJECTION_UNAVAILABLE");
+    await vi.advanceTimersByTimeAsync(5000); trace.report("THREW");
+    expect(sink).toHaveBeenCalledTimes(1);
+    expect(sink.mock.calls[0][0]).toMatchObject({ stage: "PROJECTION_FETCH", outcome: "THREW" });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain("canary");
+    expect(fetcher).toHaveBeenCalledTimes(1); client.dispose();
+  });
+});
 
 describe("account observation projection client", () => {
   it("uses only the fixed POST paths with no-store, redirect refusal, HMAC and Access service headers", async () => {

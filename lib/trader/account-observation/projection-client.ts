@@ -88,18 +88,24 @@ function makeOperationController(
   deadlineMs: number,
   clock: () => number,
   signals: readonly (AbortSignal | undefined)[],
-): { controller: AbortController; dispose: () => void } {
+): { controller: AbortController; wasDeadlineAbort: () => boolean; dispose: () => void } {
   assertLive(deadlineMs, clock, signals);
   const controller = new AbortController();
+  let deadlineAborted = false;
   const abort = () => controller.abort();
   for (const signal of signals) signal?.addEventListener("abort", abort, { once: true });
   const remaining = deadlineMs - clock();
-  const timer = setTimeout(abort, Math.max(0, Math.min(remaining, 2_147_483_647)));
+  const timer = setTimeout(() => {
+    // A caller/disposal abort that happened first must not become a timeout.
+    if (controller.signal.aborted) return;
+    deadlineAborted = true;
+    controller.abort();
+  }, Math.max(0, Math.min(remaining, 2_147_483_647)));
   const dispose = () => {
     clearTimeout(timer);
     for (const signal of signals) signal?.removeEventListener("abort", abort);
   };
-  return { controller, dispose };
+  return { controller, wasDeadlineAbort: () => deadlineAborted, dispose };
 }
 
 function raceSignal<T>(
@@ -241,7 +247,7 @@ export function createProjectionClient(options: ProjectionClientOptions): Projec
     methodSignal?: AbortSignal): Promise<unknown | null> {
     const signals = [clientSignal, methodSignal] as const;
     if (disposed) throw unavailable();
-    const { controller, dispose } = makeOperationController(deadlineMs, clock, signals);
+    const { controller, wasDeadlineAbort, dispose } = makeOperationController(deadlineMs, clock, signals);
     activeControllers.add(controller);
     let response: Response | undefined;
     try {
@@ -307,7 +313,7 @@ export function createProjectionClient(options: ProjectionClientOptions): Projec
       assertLive(deadlineMs, clock, signals);
       return data;
     } catch {
-      failureTrace?.capture("THREW");
+      failureTrace?.capture(wasDeadlineAbort() ? "TIMEOUT" : "THREW");
       if (response) cancelResponse(response);
       throw unavailable();
     } finally {
