@@ -76,7 +76,7 @@ describe.skipIf(!enabled)("scoped entity evidence on Postgres", () => {
       cursor: expect.any(String),
       scope: { kind: "account", organizationId: org, exchangeAccountId: account },
       data: {
-        order: { id: order, label: "Частично исполнен", filledQuantity: "0.5" },
+        order: { id: order, label: "Partially filled", filledQuantity: "0.5" },
         trace: {
           allowedActions: [],
           steps: [{ state: "not_applicable", reason: "LEGACY_ORDER_NO_V2_BINDING" }],
@@ -239,7 +239,7 @@ describe.skipIf(!enabled)("scoped entity evidence on Postgres", () => {
         facets: expect.arrayContaining([
           {
             id: "reconciliation",
-            label: "Сверка",
+            label: "Reconciliation",
             value: null,
             reason: "RISK_ACCOUNT_BINDING_NOT_PERSISTED",
           },

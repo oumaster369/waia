@@ -97,14 +97,14 @@ describe.skipIf(!enabled)("assistant grounded facts and contextual ownership on 
       const facts = (answer.body as { data: { facts: AssistantFact[] } }).data.facts;
       const failed = facts.find((fact) => fact.entityId === "payment_watcher")!;
       expect(failed).toMatchObject({
-        label: "Наблюдение платежей · последний запуск",
-        value: "Ошибка",
+        label: "Payment observation · last run",
+        value: "Error",
         state: "ok",
         href: expect.stringContaining("tab=jobs"),
       });
       expect(Date.parse(failed.observedAt!)).toBe(Date.parse(observedAt));
       expect(facts.find((fact) => fact.entityId === "invoice_issue")).toMatchObject({
-        label: "Ручной выпуск счетов · последний запуск",
+        label: "Manual invoice issuance · last run",
         value: null,
         state: "unavailable",
         reasons: ["MANUAL_OPERATION_NOT_SCHEDULED"],
