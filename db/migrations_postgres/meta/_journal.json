@@ -1625,6 +1625,13 @@
       "when": 1780000000231,
       "tag": "0231_trader_observation_purpose_projection_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 232,
+      "version": "7",
+      "when": 1780000000233,
+      "tag": "0233_trader_account_financial_history_v1",
+      "breakpoints": true
     }
   ]
 }

@@ -38,7 +38,8 @@ describe.skipIf(!enabled)("DEE-1233 financial JSON publication on isolated TLS P
     // Exact minimal existing migrations, including 0205's reader-role policy blocks.
     // No production journal or 0229/0230/0231 replay is involved.
     for (const path of ["db/migrations_postgres/0006_exchange_credentials.sql", "db/migrations_postgres/0007_exchange_credentials_rls.sql",
-      "db/migrations_postgres/0205_trader_account_observation_v1.sql"])
+      "db/migrations_postgres/0205_trader_account_observation_v1.sql",
+      "db/migrations_postgres/0233_trader_account_financial_history_v1.sql"])
       await admin.unsafe(readFileSync(path, "utf8").replaceAll("--> statement-breakpoint", ""));
     const suffix = randomUUID().replaceAll("-", "");
     const collectorLogin = `fin_collect_${suffix}`, readerLogin = `fin_read_${suffix}`;

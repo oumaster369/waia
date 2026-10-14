@@ -137,6 +137,7 @@ export function createAccountObservationRouteDependencies() {
       return reader(signal).resolveActiveBinding({ organizationId: scope.organizationId,
         credentialId: scope.credentialId, exchangeAccountId: scope.exchangeAccountId }, signal);
     },
+    async readFinancialHistory(input, signal) { return reader(signal).readFinancialHistory(input, signal); },
     async readLatest(binding, signal) { return reader(signal).readLatest(binding, signal); },
   };
   return { deps, async dispose() {
@@ -149,7 +150,7 @@ export function createAccountObservationRouteDependencies() {
 }
 
 export async function accountObservationRoute(request: Request, surface: "tenant" | "admin",
-  mode: "observation" | "binding" = "observation") {
+  mode: "observation" | "binding" | "financial-history" = "observation") {
   const context = createAccountObservationRouteDependencies();
   try { return await handleAccountObservationGet(request, surface, context.deps, mode); }
   finally { await context.dispose(); }

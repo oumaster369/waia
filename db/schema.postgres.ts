@@ -917,6 +917,88 @@ export const traderAccountObservations = pgTable(
   ],
 );
 
+/** DEE-1248 append-only persisted bill facts; SQL migration owns RLS and mutation guards. */
+export const traderAccountFinancialBills = pgTable(
+  "trader_account_financial_bills",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    credentialId: uuid("credential_id")
+      .notNull()
+      .references(() => exchangeCredentials.id),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    observationId: uuid("observation_id").notNull(),
+    htxUid: text("htx_uid").notNull(),
+    providerBillId: text("provider_bill_id").notNull(),
+    createdTimeMs: bigint("created_time_ms", { mode: "number" }).notNull(),
+    bill: jsonb("bill").notNull(),
+    provenance: jsonb("provenance").notNull(),
+    recordedXid: customType<{ data: string }>({ dataType: () => "xid8" })("recorded_xid")
+      .notNull()
+      .default(sql`pg_current_xact_id()`),
+    recordedAt: timestamp("recorded_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .default(sql`clock_timestamp()`),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.credentialId, t.exchangeAccountId, t.htxUid, t.providerBillId],
+    }),
+    foreignKey({
+      columns: [t.organizationId, t.credentialId, t.exchangeAccountId, t.observationId],
+      foreignColumns: [
+        traderAccountObservations.organizationId,
+        traderAccountObservations.credentialId,
+        traderAccountObservations.exchangeAccountId,
+        traderAccountObservations.observationId,
+      ],
+    }),
+  ],
+);
+
+/** Per-observation bounded-window evidence, never a history-completeness assertion. */
+export const traderAccountFinancialCoverage = pgTable(
+  "trader_account_financial_coverage",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    credentialId: uuid("credential_id")
+      .notNull()
+      .references(() => exchangeCredentials.id),
+    exchangeAccountId: text("exchange_account_id").notNull(),
+    observationId: uuid("observation_id").notNull(),
+    htxUid: text("htx_uid"),
+    scopeId: uuid("scope_id").notNull(),
+    windowStartMs: bigint("window_start_ms", { mode: "number" }).notNull(),
+    windowEndMs: bigint("window_end_ms", { mode: "number" }).notNull(),
+    collectionCompletedMs: bigint("collection_completed_ms", { mode: "number" }).notNull(),
+    coverage: jsonb("coverage").notNull(),
+    provenance: jsonb("provenance").notNull(),
+    recordedXid: customType<{ data: string }>({ dataType: () => "xid8" })("recorded_xid")
+      .notNull()
+      .default(sql`pg_current_xact_id()`),
+    recordedAt: timestamp("recorded_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .default(sql`clock_timestamp()`),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.credentialId, t.exchangeAccountId, t.observationId, t.scopeId],
+    }),
+    foreignKey({
+      columns: [t.organizationId, t.credentialId, t.exchangeAccountId, t.observationId],
+      foreignColumns: [
+        traderAccountObservations.organizationId,
+        traderAccountObservations.credentialId,
+        traderAccountObservations.exchangeAccountId,
+        traderAccountObservations.observationId,
+      ],
+    }),
+  ],
+);
+
 /** AI-TRADER: point-in-time balance snapshots (DEE-237 / AT-E2). */
 export const traderBalanceSnapshots = pgTable(
   "trader_balance_snapshots",

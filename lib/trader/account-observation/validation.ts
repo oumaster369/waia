@@ -176,7 +176,7 @@ const htxV5 = z.object({
           c.status === "PARTIAL" && c.values !== null && c.error === null && c.pageScope !== null &&
             c.windowStartMs !== null && c.windowEndMs !== null && c.windowStartMs < c.windowEndMs)),
 }).strict();
-const v5Bill = z.object({ id: z.string().regex(/^(?:0|[1-9]\d{0,18})$/).refine(id => BigInt(id) <= 9223372036854775807n),
+export const v5Bill = z.object({ id: z.string().regex(/^(?:0|[1-9]\d{0,18})$/).refine(id => BigInt(id) <= 9223372036854775807n),
   contractCode: z.union([v5Contract, z.literal("")]), marginMode: v5MarginMode,
   currency: z.string().regex(/^[A-Z0-9]{2,16}$/), type: z.string().min(1).max(256).regex(/^\d+$/),
   category: z.string().min(1).max(256), amount: v5Decimal, createdTimeMs: time }).strict();

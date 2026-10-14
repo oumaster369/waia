@@ -85,6 +85,9 @@ describe("projection image Docker source closure", () => {
     const required = [
       "lib/trader/account-observation/coverage.ts",
       "lib/trader/account-observation/derivatives/htx-v5-bill-groups.ts",
+      "lib/trader/account-observation/financial-history.ts",
+      "lib/trader/account-observation/financial-history-cursor.ts",
+      "lib/trader/account-observation/postgres-financial-history-read.ts",
     ];
 
     for (const source of required) {
@@ -141,8 +144,8 @@ describe("projection image Docker source closure", () => {
       const manifest = JSON.parse(
         await readFile(path.join(output, "dependency-manifest.json"), "utf8"),
       ) as { repositoryInputs: string[] };
-      expect(manifest.repositoryInputs).toContain(required[0]);
-      expect(manifest.repositoryInputs).toContain(required[1]);
+      for (const source of required) expect(manifest.repositoryInputs).toContain(source);
+      expect(manifest.repositoryInputs).not.toContain("lib/trader/account-observation/postgres-financial-history-write.ts");
     } finally {
       await rm(context, { recursive: true, force: true });
     }

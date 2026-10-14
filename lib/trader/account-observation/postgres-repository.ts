@@ -1,4 +1,5 @@
 import "server-only";
+import { appendFinancialHistory } from "./postgres-financial-history-write";
 import { randomUUID } from "node:crypto";
 import type { Sql, TransactionSql } from "postgres";
 import { observationBindingSchema, parseAccountObservation, accountObservationFinancialScopeAt, sameObservationBinding } from "./validation";
@@ -161,6 +162,7 @@ export function createPostgresObservationRepository(sql: Sql): ObservationReposi
         VALUES (${b.organizationId}, ${b.credentialId}, ${b.exchangeAccountId}, ${o.observationId},
           ${b.credentialRevision}, ${b.configurationRevision}, ${lease.token}, ${tx.json(JSON.parse(payload))})`;
       }
+      await appendFinancialHistory(tx, actual);
       const financial = actual.htxV5?.schemaVersion === "htx-v5-observation/v2" && actual.htxV5.bills.status === "PARTIAL"
         ? actual.htxV5.bills : null;
       const committed = await tx`UPDATE public.trader_account_collection_state

@@ -35,13 +35,13 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
   })();
 
   it("accepts all exact migration bytes applied by the full checkout migration job", () => {
-    expect(fullApplied).toHaveLength(232);
+    expect(fullApplied).toHaveLength(233);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: fullApplied }),
     ).not.toThrow();
   });
 
-  it("requires the complete Cody policy prefix and admits 0208-0231 only as explicit compatible additive", () => {
+  it("requires the complete Cody policy prefix and admits 0208-0231 and 0233 only as explicit compatible additive", () => {
     const journal = JSON.parse(
       readFileSync(join(process.cwd(), "db/migrations_postgres/meta/_journal.json"), "utf8"),
     ) as { entries: Array<{ idx: number; when: number; tag: string }> };
@@ -77,6 +77,7 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
       "0229_trader_observation_read_only_credential_v1",
       "0230_trader_observation_consent_revision_grants_v1",
       "0231_trader_observation_purpose_projection_v1",
+      "0233_trader_account_financial_history_v1",
     ]);
     expect(() =>
       assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied: baseline }),
@@ -106,6 +107,17 @@ describe("FHV V2 PostgreSQL schema preflight", () => {
         applied: fullApplied.filter((row) => row.createdAt !== String(canonical[idx]!.when)),
       }),
     ).toThrow(`${canonical[idx]!.tag} is not applied`);
+  });
+
+  it("rejects changed compatible0233 bytes and the unadmitted reserved0232 identity", () => {
+    for (const changed of [
+      { createdAt: "1780000000233", hash: "f".repeat(64) },
+      { createdAt: "1780000000232", hash: "f".repeat(64) },
+    ]) {
+      const applied = fullApplied.map(row => row.createdAt === "1780000000233" ? changed : row);
+      expect(() => assertFhvV2CanonicalMigrationsApplied({ canonical, compatibleAdditive, applied }))
+        .toThrow(changed.createdAt === "1780000000233" ? "APPLIED_MIGRATION_HASH_MISMATCH" : "UNKNOWN_APPLIED_MIGRATION");
+    }
   });
 
   it("rejects changed Cody policy SQL bytes", () => {

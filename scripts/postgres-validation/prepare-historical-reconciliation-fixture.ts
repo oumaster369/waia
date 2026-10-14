@@ -42,13 +42,13 @@ export function assertBootstrapEndpoint(env: Readonly<Record<string, string | un
 export function assertBootstrapJournal(value: unknown): Journal {
   if (!value || typeof value !== "object") return refuse("JOURNAL_SHAPE");
   const j = value as Partial<Journal>;
-  if (j.version !== "7" || j.dialect !== "postgresql" || !Array.isArray(j.entries) || j.entries.length !== 232) refuse("JOURNAL_BOUNDARY");
+  if (j.version !== "7" || j.dialect !== "postgresql" || !Array.isArray(j.entries) || j.entries.length !== 233) refuse("JOURNAL_BOUNDARY");
   const entries = j.entries!;
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
     if (!entry || entry.idx !== i || entry.version !== "7" || entry.breakpoints !== true ||
       !Number.isSafeInteger(entry.when) || entry.when <= 0 || (i > 0 && entry.when <= entries[i - 1]!.when) ||
-      typeof entry.tag !== "string" || !new RegExp(`^${String(i).padStart(4, "0")}_[a-z0-9_]+$`).test(entry.tag)) refuse("JOURNAL_IDENTITY");
+      typeof entry.tag !== "string" || !new RegExp(`^${String(i === 232 ? 233 : i).padStart(4, "0")}_[a-z0-9_]+$`).test(entry.tag)) refuse("JOURNAL_IDENTITY");
   }
   if (entries[221]!.tag !== "0221_trader_research_understanding_v1" || entries[221]!.when !== 1780000000221 ||
     entries[222]!.tag !== "0222_trader_historical_reconciliation_v1" || entries[222]!.when !== 1780000000222 ||
@@ -60,7 +60,8 @@ export function assertBootstrapJournal(value: unknown): Journal {
     entries[228]!.tag !== "0228_trader_discovery_loop_postgres_v1_rls" || entries[228]!.when !== 1780000000228 ||
     entries[229]!.tag !== "0229_trader_observation_read_only_credential_v1" || entries[229]!.when !== 1780000000229 ||
     entries[230]!.tag !== "0230_trader_observation_consent_revision_grants_v1" || entries[230]!.when !== 1780000000230 ||
-    entries[231]!.tag !== "0231_trader_observation_purpose_projection_v1" || entries[231]!.when !== 1780000000231) refuse("JOURNAL_BOUNDARY");
+    entries[231]!.tag !== "0231_trader_observation_purpose_projection_v1" || entries[231]!.when !== 1780000000231 ||
+    entries[232]!.tag !== "0233_trader_account_financial_history_v1" || entries[232]!.when !== 1780000000233) refuse("JOURNAL_BOUNDARY");
   return { version: "7", dialect: "postgresql", entries: entries.map(e => ({ ...e })) };
 }
 export function assertPrefixSeed(value: Uint8Array): void {

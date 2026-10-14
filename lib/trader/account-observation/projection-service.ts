@@ -34,6 +34,7 @@ export async function runProjectionService(input: {
   const report = (event: ProjectionServiceEvent) => { try { input.report(event); } catch { /* No diagnostic may tear down ownership. */ } };
   const socketPath = `${PROJECTION_RUNTIME_DIRECTORY}/http.sock`;
   let sql: ReturnType<typeof postgres> | undefined;
+  let reader: ReturnType<typeof createPostgresObservationReader> | undefined;
   let dispatcher: ReturnType<typeof createProjectionDispatcher> | undefined;
   let server: Server | undefined;
   let monitor: ReturnType<typeof setInterval> | undefined;
@@ -65,8 +66,9 @@ export async function runProjectionService(input: {
       if (!old.isSocket() || old.uid !== process.getuid?.()) throw refused();
       unlinkSync(socketPath);
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    reader = createPostgresObservationReader(sql, { financialHistoryCursorKey: input.hmacKey });
     dispatcher = createProjectionDispatcher({ tuple: input.config.tuple,
-      keyBytes: input.hmacKey, reader: createPostgresObservationReader(sql) });
+      keyBytes: input.hmacKey, reader });
     input.hmacKey.fill(0);
     server = createProjectionHttpServer({ dispatcher });
     server.on("error", () => { terminalFailure = true; stop(); });
@@ -103,6 +105,7 @@ export async function runProjectionService(input: {
       await delay(25);
     }
     await closed;
+    reader?.dispose();
     // No timeout argument: postgres.js must actually drain before OS lock release.
     try { await sql?.end(); }
     catch {

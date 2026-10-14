@@ -4,6 +4,13 @@ import {
   parseAccountObservation,
   sameObservationBinding,
 } from "./validation";
+import {
+  financialHistoryRequestSchema,
+  financialHistoryResponseSchema,
+  assertFinancialHistoryResponse,
+  type FinancialHistoryRequest,
+  type FinancialHistoryResponse,
+} from "./financial-history";
 import type { AccountObservation, ObservationBinding } from "./types";
 import type { ObservationFailureTrace } from "./failure-stage";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
@@ -22,6 +29,10 @@ export type ObservationReadDependencies = Readonly<{
     userId: string,
     signal: AbortSignal,
   ): Promise<ObservationBinding | null>;
+  readFinancialHistory?(
+    input: FinancialHistoryRequest,
+    signal: AbortSignal,
+  ): Promise<FinancialHistoryResponse | null>;
   readLatest(binding: ObservationBinding, signal: AbortSignal): Promise<AccountObservation | null>;
 }>;
 const headers = {
@@ -43,7 +54,7 @@ export async function handleAccountObservationGet(
   request: Request,
   surface: "tenant" | "admin",
   deps: ObservationReadDependencies,
-  mode: "observation" | "binding" = "observation",
+  mode: "observation" | "binding" | "financial-history" = "observation",
 ): Promise<Response> {
   const trace = deps.failureTrace;
   const abort = new AbortController();
@@ -89,12 +100,40 @@ export async function handleAccountObservationGet(
               "credentialId",
               "exchangeAccountId",
             ];
+      const optionalKeys =
+        mode === "financial-history" ? ["pageSize", "cursor", "windowStartMs", "windowEndMs"] : [];
       if (
+        optionalKeys.some((k) => url.searchParams.getAll(k).length > 1) ||
         keys.some((k) => url.searchParams.getAll(k).length !== 1) ||
-        [...url.searchParams.keys()].some((k) => !keys.includes(k))
+        [...url.searchParams.keys()].some((k) => !keys.includes(k) && !optionalKeys.includes(k))
       )
         return fail(400);
-      const params = Object.fromEntries(url.searchParams);
+      const params = Object.fromEntries(
+        [...url.searchParams].filter(([key]) => keys.includes(key)),
+      );
+      const numberParam = (key: string, fallback: number | null): number | null => {
+        const value = url.searchParams.get(key);
+        if (value === null) return fallback;
+        if (!/^(0|[1-9]\d{0,15})$/.test(value)) throw new Error("INVALID_HISTORY_QUERY");
+        return Number(value);
+      };
+      let historyOptions: Omit<FinancialHistoryRequest, "binding"> | undefined;
+      if (mode === "financial-history") {
+        try {
+          historyOptions = {
+            pageSize: numberParam("pageSize", 100)!,
+            cursor: url.searchParams.get("cursor"),
+            filters: {
+              windowStartMs: numberParam("windowStartMs", null),
+              windowEndMs: numberParam("windowEndMs", null),
+            },
+          };
+          // Scope/binding validation follows authorization resolution; validate pagination now.
+          financialHistoryRequestSchema.omit({ binding: true }).parse(historyOptions);
+        } catch {
+          return fail(400);
+        }
+      }
       const parsed =
         mode === "observation"
           ? observationBindingSchema.safeParse(params)
@@ -115,20 +154,35 @@ export async function handleAccountObservationGet(
         const currentUserId = await deps.getUserId(abort.signal);
         if (abort.signal.aborted || currentUserId !== userId) return false;
         trace?.enter("ENTITLEMENT");
-        const hasTraderAccess = await deps.hasTraderAccess(userId!, scope.organizationId, abort.signal);
+        const hasTraderAccess = await deps.hasTraderAccess(
+          userId!,
+          scope.organizationId,
+          abort.signal,
+        );
         if (abort.signal.aborted || !hasTraderAccess) return false;
         // Admin is platform-operator authority on the target org, not membership.
         // Tenant stays membership-gated. RLS still binds the row to this exact account.
         if (surface === "admin") {
           trace?.enter("OPERATOR_PERMISSION");
-          const hasOperatorAccess = await deps.hasOperatorAccess(userId!, scope.organizationId, abort.signal);
+          const hasOperatorAccess = await deps.hasOperatorAccess(
+            userId!,
+            scope.organizationId,
+            abort.signal,
+          );
           if (abort.signal.aborted || !hasOperatorAccess) return false;
           trace?.enter("ADMIN_LIST_SCOPE");
-          const isAdminListed = await deps.isAdminListedOrganization(scope.organizationId, abort.signal);
+          const isAdminListed = await deps.isAdminListedOrganization(
+            scope.organizationId,
+            abort.signal,
+          );
           return !abort.signal.aborted && isAdminListed;
         }
         trace?.enter("MEMBERSHIP");
-        const hasOrgMembership = await deps.hasOrgMembership(userId!, scope.organizationId, abort.signal);
+        const hasOrgMembership = await deps.hasOrgMembership(
+          userId!,
+          scope.organizationId,
+          abort.signal,
+        );
         return !abort.signal.aborted && hasOrgMembership;
       }
       if (!(await allowed())) return fail(403);
@@ -146,10 +200,23 @@ export async function handleAccountObservationGet(
       )
         return fail(403);
       if (mode === "binding") return Response.json(binding, { headers });
-      if (!sameObservationBinding(binding, observationBindingSchema.parse(scope)))
+      if (
+        mode === "observation" &&
+        !sameObservationBinding(binding, observationBindingSchema.parse(scope))
+      )
         return fail(403);
       trace?.enter("PROJECTION_REQUEST");
-      const stored = await deps.readLatest(binding, abort.signal);
+      const historyRequest =
+        mode === "financial-history"
+          ? financialHistoryRequestSchema.parse({ binding, ...historyOptions })
+          : null;
+      const stored = historyRequest
+        ? deps.readFinancialHistory
+          ? await deps.readFinancialHistory(historyRequest, abort.signal)
+          : (() => {
+              throw new Error("HISTORY_UNAVAILABLE");
+            })()
+        : await deps.readLatest(binding, abort.signal);
       if (!(await allowed())) return fail(403);
       trace?.enter("PROJECTION_REQUEST");
       const after = await deps.resolveActiveBinding(binding, userId, abort.signal);
@@ -157,6 +224,11 @@ export async function handleAccountObservationGet(
       if (abort.signal.aborted) return fail(503);
       if (!stored) return new Response(null, { status: 204, headers });
       trace?.enter("OBSERVATION_VALIDATION");
+      if (historyRequest) {
+        const history = financialHistoryResponseSchema.parse(stored);
+        assertFinancialHistoryResponse(historyRequest, history);
+        return Response.json(history, { headers });
+      }
       const o = parseAccountObservation(stored);
       if (!sameObservationBinding(binding, o.binding)) return fail(503);
       return Response.json(o, { headers });
