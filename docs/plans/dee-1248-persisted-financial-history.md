@@ -75,3 +75,8 @@ Migration memory: this remains the existing Postgres-only isolated projection bo
 ## CI compatibility follow-up
 
 The first PR run exposed omitted explicit migration inventory/count updates and an exact-text reader trace mismatch caused by an extra space. Add only the coordinated 0233 identity to compatibility admission and full-journal fixtures, preserving the required 0207 frontier and every existing 0229–0231 guard. The reserved 0232 identity remains rejected. Restore the existing `SET TRANSACTION READ ONLY` bytes while retaining REPEATABLE READ only for history. Preserve the original failed CI evidence and obtain fresh independent review before pushing the follow-up. The follow-up focused pass contains 152 passing tests across five suites, including reserved-slot and changed-content rejection. Full unit validation remains CI-only.
+
+
+## Isolated reader bundle follow-up
+
+A deployment-closure review reproduced `ACCOUNT_OBSERVATION_PROJECTION_BUILD_REFUSED:source closure` for the three new history reader modules. Add those exact files to the builder input set, first-stage Docker COPY list and deny-all Docker context exceptions. Keep collector writes and credential material excluded and preserve forbidden-symbol checks. The actual Node 22 projection bundle and the focused test that builds from only the Docker COPY context both pass; scoped lint also passes. This local bundle evidence does not run a service or contact a database/provider; obtain independent review before publishing the repair.

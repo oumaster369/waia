@@ -9,6 +9,9 @@ COPY lib/trader/account-observation/database-node-tls.ts ./lib/trader/account-ob
 COPY lib/trader/account-observation/derivatives/types.ts ./lib/trader/account-observation/derivatives/types.ts
 COPY lib/trader/account-observation/host-role-probe.ts ./lib/trader/account-observation/host-role-probe.ts
 COPY lib/trader/account-observation/postgres-reader.ts ./lib/trader/account-observation/postgres-reader.ts
+COPY lib/trader/account-observation/financial-history.ts ./lib/trader/account-observation/financial-history.ts
+COPY lib/trader/account-observation/financial-history-cursor.ts ./lib/trader/account-observation/financial-history-cursor.ts
+COPY lib/trader/account-observation/postgres-financial-history-read.ts ./lib/trader/account-observation/postgres-financial-history-read.ts
 COPY lib/trader/account-observation/projection-dispatcher.ts ./lib/trader/account-observation/projection-dispatcher.ts
 COPY lib/trader/account-observation/projection-http.ts ./lib/trader/account-observation/projection-http.ts
 COPY lib/trader/account-observation/projection-protocol.ts ./lib/trader/account-observation/projection-protocol.ts
