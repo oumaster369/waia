@@ -28,6 +28,14 @@ ALTER TABLE public.trader_account_financial_bills FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 REVOKE ALL ON public.trader_account_financial_bills FROM PUBLIC, anon, authenticated;
 --> statement-breakpoint
+-- Supabase defaults can grant service_role privileges independently of PUBLIC.
+-- Keep this table private without changing defaults or requiring that platform role.
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'service_role') THEN
+    REVOKE ALL ON public.trader_account_financial_bills FROM service_role;
+  END IF;
+END $$;
+--> statement-breakpoint
 GRANT SELECT ON public.trader_account_financial_bills TO waia_account_observer;
 --> statement-breakpoint
 GRANT INSERT (organization_id, credential_id, exchange_account_id, observation_id, htx_uid,
@@ -84,6 +92,12 @@ ALTER TABLE public.trader_account_financial_coverage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trader_account_financial_coverage FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 REVOKE ALL ON public.trader_account_financial_coverage FROM PUBLIC, anon, authenticated;
+--> statement-breakpoint
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'service_role') THEN
+    REVOKE ALL ON public.trader_account_financial_coverage FROM service_role;
+  END IF;
+END $$;
 --> statement-breakpoint
 GRANT SELECT ON public.trader_account_financial_coverage TO waia_account_observer;
 --> statement-breakpoint

@@ -29,6 +29,8 @@ describe.skipIf(!enabled)(
     let projection: Sql;
     let repo: ReturnType<typeof createPostgresObservationRepository>;
     let reader: ReturnType<typeof createPostgresObservationReader>;
+    let defaultsBeforeHistory: string;
+    let controlAclBeforeHistory: string;
     beforeAll(async () => {
       const caPath = process.env.DEE1248_HISTORY_CA;
       if (!caPath) throw new Error("DEE1248_HISTORY_CA_REQUIRED");
@@ -60,6 +62,7 @@ describe.skipIf(!enabled)(
       await admin.unsafe(`DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN CREATE ROLE service_role NOLOGIN BYPASSRLS; END IF;
     END $$; CREATE TABLE public.organizations(id uuid PRIMARY KEY);`);
       // Exact minimal existing migrations, including 0205's reader-role policy blocks.
       // No production journal or 0229/0230/0231 replay is involved.
@@ -67,9 +70,25 @@ describe.skipIf(!enabled)(
         "db/migrations_postgres/0006_exchange_credentials.sql",
         "db/migrations_postgres/0007_exchange_credentials_rls.sql",
         "db/migrations_postgres/0205_trader_account_observation_v1.sql",
-        "db/migrations_postgres/0233_trader_account_financial_history_v1.sql",
       ])
         await admin.unsafe(readFileSync(path, "utf8").replaceAll("--> statement-breakpoint", ""));
+      // Seed every PG17 table privilege, including structural privileges that RLS
+      // cannot remove. The pending migration must revoke only the two new tables.
+      await admin.unsafe(`ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+        GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLES TO service_role;
+        CREATE TABLE public.history_fixture_acl_control (id integer);`);
+      defaultsBeforeHistory = (
+        await admin`SELECT coalesce(jsonb_agg(to_jsonb(d) ORDER BY d.oid)::text,'[]') AS value FROM pg_default_acl d`
+      )[0].value;
+      controlAclBeforeHistory = (
+        await admin`SELECT relacl::text AS value FROM pg_class WHERE oid='public.history_fixture_acl_control'::regclass`
+      )[0].value;
+      await admin.unsafe(
+        readFileSync(
+          "db/migrations_postgres/0233_trader_account_financial_history_v1.sql",
+          "utf8",
+        ).replaceAll("--> statement-breakpoint", ""),
+      );
       const suffix = randomUUID().replaceAll("-", "");
       const collectorLogin = `hist_collect_${suffix}`,
         readerLogin = `hist_read_${suffix}`;
@@ -694,6 +713,52 @@ describe.skipIf(!enabled)(
       });
       expect(await commit(await due(b), noUid)).toBe(true);
       expect(await history(b)).toBeNull();
+    });
+    it("removes all inherited service-role privileges only from the two history tables", async () => {
+      const privileges = [
+        "SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE",
+        "REFERENCES", "TRIGGER", "MAINTAIN",
+      ];
+      for (const privilege of privileges) {
+        expect(
+          (await admin`SELECT has_table_privilege('service_role','public.history_fixture_acl_control',${privilege}) AS allowed`)[0].allowed,
+        ).toBe(true);
+        for (const table of ["trader_account_financial_bills", "trader_account_financial_coverage"]) {
+          expect(
+            (await admin`SELECT has_table_privilege('service_role',${table},${privilege}) AS allowed`)[0].allowed,
+          ).toBe(false);
+        }
+      }
+      expect(
+        (await admin`SELECT coalesce(jsonb_agg(to_jsonb(d) ORDER BY d.oid)::text,'[]') AS value FROM pg_default_acl d`)[0].value,
+      ).toBe(defaultsBeforeHistory);
+      expect(
+        (await admin`SELECT relacl::text AS value FROM pg_class WHERE oid='public.history_fixture_acl_control'::regclass`)[0].value,
+      ).toBe(controlAclBeforeHistory);
+      const acls = await admin`SELECT c.relname AS table_name, coalesce(r.rolname,'PUBLIC') AS grantee, a.privilege_type
+        FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) a LEFT JOIN pg_roles r ON r.oid=a.grantee
+        WHERE c.oid IN ('public.trader_account_financial_bills'::regclass,'public.trader_account_financial_coverage'::regclass)
+          AND a.grantee<>c.relowner ORDER BY c.relname,r.rolname,a.privilege_type`;
+      expect([...acls]).toEqual(
+        ["trader_account_financial_bills", "trader_account_financial_coverage"].flatMap((table_name) => [
+          { table_name, grantee: "waia_account_observation_reader", privilege_type: "SELECT" },
+          { table_name, grantee: "waia_account_observer", privilege_type: "SELECT" },
+        ]),
+      );
+      for (const table of ["trader_account_financial_bills", "trader_account_financial_coverage"]) {
+        expect(
+          (await admin`SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE oid=${table}::regclass`)[0],
+        ).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
+        expect(
+          (await admin`SELECT has_column_privilege('waia_account_observer',${table},'provenance','INSERT') AS allowed`)[0].allowed,
+        ).toBe(true);
+        await expect(
+          admin.begin(async (tx) => {
+            await tx`SET LOCAL ROLE service_role`;
+            return tx.unsafe(`SELECT * FROM public.${table}`);
+          }),
+        ).rejects.toThrow("permission denied");
+      }
     });
     it("denies reader writes, tenant mismatch and all mutation/truncation even by the owner", async () => {
       const b = await seed();
