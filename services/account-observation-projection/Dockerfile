@@ -2,6 +2,7 @@
 FROM node@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS build
 WORKDIR /src
 COPY package.json pnpm-lock.yaml tsconfig.json ./
+COPY patches/postgres@3.4.9.patch ./patches/postgres@3.4.9.patch
 RUN corepack enable && corepack pnpm@10.28.1 install --frozen-lockfile --ignore-scripts
 COPY scripts/trader/build-account-observation-projection.mjs ./scripts/trader/build-account-observation-projection.mjs
 COPY scripts/trader/account-observation-projection-host.ts ./scripts/trader/account-observation-projection-host.ts

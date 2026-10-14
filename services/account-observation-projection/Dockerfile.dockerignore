@@ -1,6 +1,8 @@
 **
 !package.json
 !pnpm-lock.yaml
+!patches
+!patches/postgres@3.4.9.patch
 !tsconfig.json
 !scripts
 !scripts/trader

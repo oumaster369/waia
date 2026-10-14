@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ObservationBinding } from "@/lib/trader/account-observation/types";
 import { observationBindingSchema } from "@/lib/trader/account-observation/validation";
 import { ACCOUNT_OBSERVATION_STALE_AFTER_MS } from "@/lib/trader/account-observation/cabinet-view";
+import { FinancialHistorySection } from "./financial-history-section";
 import { AccountObservationPanel } from "./account-observation-panel";
 import { readBoundedObservationJson } from "./polling-subscriber";
 import { createStreamingObservationSubscriber } from "./streaming-subscriber";
@@ -27,17 +28,26 @@ export function ConnectedAccountObservationPanel({
   target,
   mode = "tenant",
   fetcher = browserFetch,
+  sessionKey,
 }: {
   target: AccountObservationTarget | null;
   mode?: "tenant" | "admin";
   fetcher?: typeof fetch;
+  /** Change with the authenticated session, or unmount/reset target on session end. */
+  sessionKey?: string;
 }) {
   const key = target
     ? JSON.stringify([target.credentialId, target.exchangeAccountId, target.organizationId ?? ""])
     : "";
   const endpoint =
     mode === "admin" ? "/api/trader/admin/account-observation" : "/api/trader/account-observation";
-  const scope = useMemo(() => ({ key, endpoint, fetcher }), [key, endpoint, fetcher]);
+  const scope = useMemo(
+    () => ({ key, endpoint, fetcher, sessionKey }),
+    [key, endpoint, fetcher, sessionKey],
+  );
+  const [revokedScope, setRevokedScope] = useState<object | null>(null);
+  const historyRevoked = revokedScope === scope;
+  const onHistoryRevoked = useCallback(() => setRevokedScope(scope), [scope]);
   const [stored, setStored] = useState<BindingState | null>(null);
   const subscribe = useMemo(
     () => createStreamingObservationSubscriber({ endpointPath: endpoint, fetcher }),
@@ -149,10 +159,14 @@ export function ConnectedAccountObservationPanel({
 
   const current = stored?.scope === scope ? stored : null;
   const view = useAccountObservation({
-    binding: key ? (current?.binding ?? null) : null,
+    binding: key && !historyRevoked ? (current?.binding ?? null) : null,
     subscribe,
     staleAfterMs: ACCOUNT_OBSERVATION_STALE_AFTER_MS,
   });
+  if (historyRevoked)
+    return (
+      <AccountObservationPanel view={{ status: "REVOKED", observation: null, stale: false }} />
+    );
   if (!key)
     return (
       <AccountObservationPanel view={{ status: "DISCONNECTED", observation: null, stale: false }} />
@@ -173,5 +187,21 @@ export function ConnectedAccountObservationPanel({
       </div>
     );
   }
-  return <AccountObservationPanel view={view} />;
+  const uid = view.observation?.htxV5?.htxUid;
+  const historyKey = JSON.stringify([current.binding, uid, sessionKey]);
+  return (
+    <div className="space-y-4">
+      <AccountObservationPanel view={view} />
+      {uid && view.observation && view.status !== "REVOKED" && view.status !== "ERROR" ? (
+        <FinancialHistorySection
+          key={historyKey}
+          binding={current.binding}
+          uid={uid}
+          endpoint={endpoint}
+          fetcher={fetcher}
+          onRevoked={onHistoryRevoked}
+        />
+      ) : null}
+    </div>
+  );
 }

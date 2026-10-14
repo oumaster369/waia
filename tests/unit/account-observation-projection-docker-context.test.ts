@@ -72,6 +72,25 @@ async function packageRootFor(requireFromRoot: NodeRequire, packageName: string)
 }
 
 describe("projection image Docker source closure", () => {
+  it.each([
+    "services/ai-trader-account-observation-host/Dockerfile",
+    "services/account-observation-projection/Dockerfile",
+  ])("stages declared dependency patches before install in %s", async (source) => {
+    const metadata = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8")) as {
+      pnpm: { patchedDependencies: Record<string, string> };
+    };
+    const patches = Object.values(metadata.pnpm.patchedDependencies);
+    expect(patches.length).toBeGreaterThan(0);
+    const dockerfile = await readFile(path.join(repoRoot, source), "utf8");
+    const install = /^RUN\s+.*\bpnpm@[^\s]+\s+install\b/m.exec(dockerfile);
+    expect(install).not.toBeNull();
+    const copies = dockerCopies(dockerfile.slice(0, install!.index));
+    for (const patch of patches) {
+      expect(copies).toContainEqual({ source: patch, destination: `./${patch}`, stage: 1 });
+      expect((await readFile(path.join(repoRoot, patch))).byteLength).toBeGreaterThan(0);
+    }
+  });
+
   it("bundles runtime imports from the exact first-stage COPY context", async () => {
     const dockerfile = await readFile(dockerfilePath, "utf8");
     const dockerignore = await readFile(`${dockerfilePath}.dockerignore`, "utf8");
