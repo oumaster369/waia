@@ -7,9 +7,17 @@ import {
   parseAccountObservation,
   sameObservationBinding,
 } from "./validation";
+import {
+  financialHistoryRequestSchema,
+  financialHistoryResponseSchema,
+  assertFinancialHistoryResponse,
+  FINANCIAL_HISTORY_LIMITS,
+  type FinancialHistoryRequest,
+  type FinancialHistoryResponse,
+} from "./financial-history";
 import type { AccountObservation, ObservationBinding } from "./types";
 
-export type ProjectionOperation = "resolveBinding" | "readLatest";
+export type ProjectionOperation = "resolveBinding" | "readLatest" | "readFinancialHistory";
 export type ProjectionTuple = Readonly<{
   audience: string;
   releaseSha: string;
@@ -20,7 +28,7 @@ export type ProjectionScope = Pick<
   ObservationBinding,
   "organizationId" | "credentialId" | "exchangeAccountId"
 >;
-export type ProjectionPayload = ProjectionScope | ObservationBinding;
+export type ProjectionPayload = ProjectionScope | ObservationBinding | FinancialHistoryRequest;
 export type SignedProjectionRequest = Readonly<{
   method: "POST";
   path: string;
@@ -42,15 +50,20 @@ export type VerifiedProjectionRequest = Readonly<{
   requestId: string;
   issuedAtMs: number;
   deadlineMs: number;
-  payload: ProjectionScope | ObservationBinding;
+  payload: ProjectionScope | ObservationBinding | FinancialHistoryRequest;
   body: string;
   bodySha256: string;
 }>;
-export type ProjectionResponseData = AccountObservation | ObservationBinding | null;
+export type ProjectionResponseData =
+  | AccountObservation
+  | ObservationBinding
+  | FinancialHistoryResponse
+  | null;
 
 export const PROJECTION_PATHS: Readonly<Record<ProjectionOperation, string>> = Object.freeze({
   resolveBinding: "/internal/v1/account-observation/resolve-binding",
   readLatest: "/internal/v1/account-observation/read-latest",
+  readFinancialHistory: "/internal/v1/account-observation/read-financial-history",
 });
 export const PROJECTION_PROTOCOL_LIMITS = Object.freeze({
   requestBytes: 8 * 1024,
@@ -248,6 +261,7 @@ function validatePayload(
   value: unknown,
 ): ObservationBinding | ProjectionPayload {
   try {
+    if (operation === "readFinancialHistory") return financialHistoryRequestSchema.parse(value);
     return operation === "resolveBinding"
       ? observationBindingSchema
           .pick({ organizationId: true, credentialId: true, exchangeAccountId: true })
@@ -262,8 +276,9 @@ function validatePayload(
 function parseResponseData(
   operation: ProjectionOperation,
   value: unknown,
-): AccountObservation | ObservationBinding {
+): AccountObservation | ObservationBinding | FinancialHistoryResponse {
   try {
+    if (operation === "readFinancialHistory") return financialHistoryResponseSchema.parse(value);
     return operation === "resolveBinding"
       ? observationBindingSchema.parse(value)
       : parseAccountObservation(value);
@@ -276,8 +291,15 @@ type ResponseBindingContext = Pick<VerifiedProjectionRequest, "operation" | "pay
 
 function assertResponseBinding(
   request: ResponseBindingContext,
-  data: AccountObservation | ObservationBinding,
+  data: AccountObservation | ObservationBinding | FinancialHistoryResponse,
 ): void {
+  if (request.operation === "readFinancialHistory") {
+    assertFinancialHistoryResponse(
+      request.payload as FinancialHistoryRequest,
+      data as FinancialHistoryResponse,
+    );
+    return;
+  }
   if (request.operation === "resolveBinding") {
     const actual = data as ObservationBinding;
     const requested = request.payload as ProjectionScope;
@@ -398,7 +420,11 @@ function requestEnvelope(input: {
     fail("PROJECTION_REQUEST_ID");
   if (!Number.isSafeInteger(input.issuedAtMs) || !Number.isSafeInteger(input.deadlineMs))
     fail("PROJECTION_TIME");
-  if (input.operation !== "resolveBinding" && input.operation !== "readLatest")
+  if (
+    input.operation !== "resolveBinding" &&
+    input.operation !== "readLatest" &&
+    input.operation !== "readFinancialHistory"
+  )
     fail("PROJECTION_OPERATION");
   const payload = validatePayload(input.operation, input.payload);
   if (canonical(payload) !== canonical(input.payload)) fail("PROJECTION_PAYLOAD_NORMALIZED");
@@ -477,7 +503,9 @@ export async function verifyProjectionRequest(
   const envelope = parsedEnvelope;
   if (
     envelope.version !== 1 ||
-    (envelope.operation !== "resolveBinding" && envelope.operation !== "readLatest") ||
+    (envelope.operation !== "resolveBinding" &&
+      envelope.operation !== "readLatest" &&
+      envelope.operation !== "readFinancialHistory") ||
     typeof envelope.requestId !== "string" ||
     !REQUEST_ID_RE.test(envelope.requestId) ||
     typeof envelope.issuedAtMs !== "number" ||
@@ -545,7 +573,7 @@ export async function createProjectionResponse(
   };
   const body = canonical(envelope);
   const bytes = encoder.encode(body);
-  if (bytes.byteLength > PROJECTION_PROTOCOL_LIMITS.responseBytes) fail("PROJECTION_BODY_SIZE");
+  if (bytes.byteLength > responseByteLimit(context.operation)) fail("PROJECTION_BODY_SIZE");
   const signature = await sign(
     key,
     responseMacInput(context.path, context.bodySha256, await bodyHash(bytes)),
@@ -588,7 +616,7 @@ export async function verifyProjectionResponse(
   if (!sameTuple(context.tuple, expectedTuple)) fail("PROJECTION_TUPLE_MISMATCH");
   const { parsed: parsedEnvelope, bytes } = parseCanonical(
     body,
-    PROJECTION_PROTOCOL_LIMITS.responseBytes,
+    responseByteLimit(context.operation),
     "PROJECTION_RESPONSE_JSON",
   );
   exactObjectKeys(parsedEnvelope, RESPONSE_FIELDS, "PROJECTION_RESPONSE_FIELDS");
@@ -617,4 +645,10 @@ export async function verifyProjectionResponse(
   if (readClock(clock) >= context.deadlineMs) fail("PROJECTION_RESPONSE_STATUS_OR_LATE");
   assertResponseBinding(context, parsedData);
   return parsedData;
+}
+
+export function responseByteLimit(operation: ProjectionOperation): number {
+  return operation === "readFinancialHistory"
+    ? FINANCIAL_HISTORY_LIMITS.responseBytes
+    : PROJECTION_PROTOCOL_LIMITS.responseBytes;
 }

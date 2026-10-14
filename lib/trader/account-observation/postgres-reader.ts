@@ -1,4 +1,6 @@
 import "server-only";
+import { readPersistedFinancialHistory } from "./postgres-financial-history-read";
+import { financialHistoryRequestSchema, type FinancialHistoryRequest, type FinancialHistoryResponse } from "./financial-history";
 import type { Sql, TransactionSql } from "postgres";
 import { observationBindingSchema, parseAccountObservation, sameObservationBinding } from "./validation";
 import type { AccountObservation, ObservationBinding } from "./types";
@@ -13,17 +15,20 @@ export class ObservationReaderFailure extends Error {
 /** Inject a dedicated bounded pool. The caller authenticates and authorizes scope first.
  * No getDb/environment fallback, credential access, write grants or collector row locks.
  */
-export function createPostgresObservationReader(sql: Sql) {
+export function createPostgresObservationReader(sql: Sql, options?: { financialHistoryCursorKey: Uint8Array }) {
+  let disposed = false;
+  const cursorKey = options ? Uint8Array.from(options.financialHistoryCursorKey) : null;
   async function scoped<T>(input: ObservationReadScope,
-    fn: (tx: TransactionSql, scope: ObservationReadScope) => Promise<T>): Promise<T> {
+    fn: (tx: TransactionSql, scope: ObservationReadScope) => Promise<T>, repeatableSnapshot = false): Promise<T> {
     try {
+      if (disposed) throw new ObservationReaderFailure();
       const scope = scopeSchema.parse({ organizationId: input.organizationId,
         credentialId: input.credentialId, exchangeAccountId: input.exchangeAccountId });
       return await sql.begin(async tx => {
         // Dispatch FIFO on this transaction's reserved connection. With the dedicated
         // prepare:false pool, overlap static setup with scope-query parsing, then wait for
         // every issued query before returning to sql.begin (commit/rollback stays last).
-        const settings = tx.unsafe(`SET TRANSACTION READ ONLY;
+        const settings = tx.unsafe(`SET TRANSACTION ${repeatableSnapshot ? "ISOLATION LEVEL REPEATABLE READ," : ""} READ ONLY;
           SET LOCAL ROLE waia_account_observation_reader;
           SET LOCAL statement_timeout = '3000ms';
           SET LOCAL lock_timeout = '1000ms';
@@ -42,6 +47,14 @@ export function createPostgresObservationReader(sql: Sql) {
     } catch { throw new ObservationReaderFailure(); }
   }
   return {
+    dispose() { disposed = true; cursorKey?.fill(0); },
+    async readFinancialHistory(input: FinancialHistoryRequest): Promise<FinancialHistoryResponse | null> {
+      try {
+        if (!cursorKey || cursorKey.byteLength !== 32) throw new ObservationReaderFailure();
+        const request = financialHistoryRequestSchema.parse(input);
+        return await scoped(request.binding, tx => readPersistedFinancialHistory(tx, request, cursorKey), true);
+      } catch { throw new ObservationReaderFailure(); }
+    },
     /** Current database fence for an already authorized assignment, not authority
      * to discover accounts, decrypt keys or admit venue permissions. */
     async isCurrentAssignment(input: ObservationBinding, symbols: readonly string[]): Promise<boolean> {

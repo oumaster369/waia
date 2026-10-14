@@ -8,7 +8,9 @@ import {
   type ProjectionTuple,
   PROJECTION_PATHS,
   PROJECTION_PROTOCOL_LIMITS,
+  responseByteLimit, type ProjectionOperation,
 } from "./projection-protocol";
+import { financialHistoryRequestSchema, type FinancialHistoryRequest, type FinancialHistoryResponse } from "./financial-history";
 import { observationBindingSchema } from "./validation";
 import type { AccountObservation, ObservationBinding } from "./types";
 import type { ObservationFailureTrace } from "./failure-stage";
@@ -16,7 +18,6 @@ import type { ObservationFailureTrace } from "./failure-stage";
 const PROJECTION_ORIGIN = "https://observation-reader.waia.life";
 const PROJECTION_MAC_HEADER = "x-waia-projection-signature";
 const RESPONSE_CONTENT_TYPE = "application/json";
-const MAX_RESPONSE_BYTES = PROJECTION_PROTOCOL_LIMITS.responseBytes;
 const UNAVAILABLE = "PROJECTION_UNAVAILABLE";
 
 const projectionScopeSchema = observationBindingSchema
@@ -46,6 +47,7 @@ export type ProjectionClientOptions = Readonly<{
 export type ProjectionClient = Readonly<{
   resolveActiveBinding(scope: ProjectionScope, signal?: AbortSignal): Promise<ObservationBinding | null>;
   readLatest(binding: ObservationBinding, signal?: AbortSignal): Promise<AccountObservation | null>;
+  readFinancialHistory(input: FinancialHistoryRequest, signal?: AbortSignal): Promise<FinancialHistoryResponse | null>;
   dispose(): void;
 }>;
 
@@ -152,7 +154,7 @@ function responseHeader(response: Response, name: string): string | null {
   return value;
 }
 
-async function readBoundedBody(response: Response, signal: AbortSignal): Promise<string> {
+async function readBoundedBody(response: Response, signal: AbortSignal, maxBytes: number): Promise<string> {
   const reader = response.body?.getReader();
   if (!reader) throw unavailable();
   const chunks: Uint8Array[] = [];
@@ -176,7 +178,7 @@ async function readBoundedBody(response: Response, signal: AbortSignal): Promise
       if (result.done) break;
       const chunk = result.value;
       total += chunk.byteLength;
-      if (total > MAX_RESPONSE_BYTES) throw unavailable();
+      if (total > maxBytes) throw unavailable();
       chunks.push(chunk);
     }
     if (signal.aborted) throw unavailable();
@@ -243,7 +245,7 @@ export function createProjectionClient(options: ProjectionClientOptions): Projec
   const activeControllers = new Set<AbortController>();
   let disposed = false;
 
-  async function execute(operation: "resolveBinding" | "readLatest", payload: ProjectionPayload | ObservationBinding,
+  async function execute(operation: ProjectionOperation, payload: ProjectionPayload | ObservationBinding,
     methodSignal?: AbortSignal): Promise<unknown | null> {
     const signals = [clientSignal, methodSignal] as const;
     if (disposed) throw unavailable();
@@ -296,7 +298,7 @@ export function createProjectionClient(options: ProjectionClientOptions): Projec
       failureTrace?.enter("PROJECTION_REPRESENTATION");
       const signature = validateResponseRepresentation(response);
       failureTrace?.enter("PROJECTION_BODY");
-      const body = await readBoundedBody(response, controller.signal);
+      const body = await readBoundedBody(response, controller.signal, responseByteLimit(operation));
       assertLive(deadlineMs, clock, signals);
       failureTrace?.enter("PROJECTION_MAC");
       const verifiedRequest = await raceSignal(verifyProjectionRequest({
@@ -330,6 +332,9 @@ export function createProjectionClient(options: ProjectionClientOptions): Projec
     async readLatest(binding: ObservationBinding, signal?: AbortSignal): Promise<AccountObservation | null> {
       const validBinding = validateBinding(binding);
       return await execute("readLatest", validBinding, signal) as AccountObservation | null;
+    },
+    async readFinancialHistory(input: FinancialHistoryRequest, signal?: AbortSignal): Promise<FinancialHistoryResponse | null> {
+      return await execute("readFinancialHistory", financialHistoryRequestSchema.parse(input), signal) as FinancialHistoryResponse | null;
     },
     dispose(): void {
       if (disposed) return;
