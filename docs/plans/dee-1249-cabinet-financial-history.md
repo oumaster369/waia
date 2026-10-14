@@ -39,3 +39,8 @@ Source readiness is separate from production acceptance. Compatible migration/is
 - Normal Node22 Turbopack build, typecheck and full lint passed. Full lint has 337 existing warnings and zero errors; no new feature warnings. Focused tests also exercise timeout/no-overlap, malformed/mismatched/oversize pages, conflicting duplicates, repeated cursor rejection, 10-page/200-row caps, and abort-resistant replies after session/target changes.
 - Evidence: /Users/legco/Projects/waia-evidence/oct14-history-ui-validation. Only this worktree's port3219 server and dee1249-ui SQLite fixture were used. Owned local resources are removed at handoff.
 - Backend follow-up 26c6e182 is separately under review; this UI remains stacked on reviewed bdb20aeb exactly. No push, PR, rebase or deployment has been performed. Root owns independent UI review and the eventual backend-main dependency gate.
+
+
+## Release packaging prerequisite
+
+The first actual linux/amd64 builds of the merged history backend failed because both observation Dockerfiles omitted `patches/postgres@3.4.9.patch`, which the frozen package manifest and lockfile already require. This change copies that exact existing file before dependency installation in both images, and admits only that file through the projection image context. The package manifest, lockfile and driver patch are unchanged. A focused regression derives declared patch paths from the manifest, rejects both original image contexts and passes with the correction. Actual candidate image builds and final merged-release identities remain separate release gates.
