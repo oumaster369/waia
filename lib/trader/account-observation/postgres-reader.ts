@@ -28,7 +28,7 @@ export function createPostgresObservationReader(sql: Sql, options?: { financialH
         // Dispatch FIFO on this transaction's reserved connection. With the dedicated
         // prepare:false pool, overlap static setup with scope-query parsing, then wait for
         // every issued query before returning to sql.begin (commit/rollback stays last).
-        const settings = tx.unsafe(`SET TRANSACTION ${repeatableSnapshot ? "ISOLATION LEVEL REPEATABLE READ," : ""} READ ONLY;
+        const settings = tx.unsafe(`SET TRANSACTION ${repeatableSnapshot ? "ISOLATION LEVEL REPEATABLE READ, " : ""}READ ONLY;
           SET LOCAL ROLE waia_account_observation_reader;
           SET LOCAL statement_timeout = '3000ms';
           SET LOCAL lock_timeout = '1000ms';

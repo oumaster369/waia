@@ -48,6 +48,8 @@ export const FHV_V2_POSTGRES_REQUIRED_MIGRATION_MAX = 207 as const;
 // noncapital lease attribution. 0226 adds the durable LiveCapitalEnvelopeV2
 // producer tables. Amount columns have no default. None of them changes the
 // required207 read frontier or adds a required FHV table.
+// 0233 adds append-only collector financial history. Journal idx232 deliberately
+// skips the reserved 0232 filename; no required FHV table or authority changes.
 const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag: string }[] = [
   { idx: 208, when: 1780000000208, tag: "0208_historical_terminal_receipts_v1" },
   { idx: 209, when: 1780000000209, tag: "0209_ai_twin_epistemic_persistence_v1" },
@@ -73,6 +75,7 @@ const COMPATIBLE_ADDITIVE_MIGRATIONS: readonly { idx: number; when: number; tag:
   { idx: 229, when: 1780000000229, tag: "0229_trader_observation_read_only_credential_v1" },
   { idx: 230, when: 1780000000230, tag: "0230_trader_observation_consent_revision_grants_v1" },
   { idx: 231, when: 1780000000231, tag: "0231_trader_observation_purpose_projection_v1" },
+  { idx: 232, when: 1780000000233, tag: "0233_trader_account_financial_history_v1" },
 ];
 
 export const FHV_V2_POSTGRES_REQUIRED_TABLES = [

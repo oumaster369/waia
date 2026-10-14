@@ -17,12 +17,12 @@ state:
   currentWorkPackage: WP-3
   completedWorkPackages: [WP-1, WP-2]
   remainingWorkPackages: [WP-3]
-  prNumber: null
-  prUrl: null
-  lastValidatedGitSha: null
+  prNumber: 788
+  prUrl: https://github.com/oumaster369/waia/pull/788
+  lastValidatedGitSha: bdb20aeb1a7552b5de645eb882de1c704a911712
   lastValidationAt: "2026-10-14T02:05:54Z"
   blockedReason: null
-  nextAction: "Independent source review and PR governance; no runtime or production acceptance is claimed."
+  nextAction: "Review CI compatibility repairs, then validate the updated draft PR; no runtime or production acceptance is claimed."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -70,4 +70,8 @@ Migration memory: this remains the existing Postgres-only isolated projection bo
 - Typecheck passed. Scoped lint passed with no errors and one preexisting unused-parameter warning in the unrelated schema section.
 - Normal Node 22 `pnpm build` passed using owned dependency files. An earlier dependency-symlink attempt failed in Turbopack; a webpack diagnostic fallback failed in an unrelated research import. Neither required product-source changes.
 - All 234 existing non-journal migration paths remain byte-identical, and all 232 prior journal entries remain an identical prefix. Only migration 0233 and its single coordinated journal entry are added. No historical migration replay or production application occurred.
-- Full unit CI, full lint/PR governance, independent review and Human merge/rollout remain separate gates. No venue call, financial diagnostic write, UI history implementation, backfill or full-period acceptance is implied.
+- Full lint passed with zero errors and 337 warnings; PR governance tests and rendered-body preflight passed. Independent source review passed without findings at the first implementation commit. Draft PR788 is open; Human merge/rollout remain separate gates. No venue call, financial diagnostic write, UI history implementation, backfill or full-period acceptance is implied.
+
+## CI compatibility follow-up
+
+The first PR run exposed omitted explicit migration inventory/count updates and an exact-text reader trace mismatch caused by an extra space. Add only the coordinated 0233 identity to compatibility admission and full-journal fixtures, preserving the required 0207 frontier and every existing 0229–0231 guard. The reserved 0232 identity remains rejected. Restore the existing `SET TRANSACTION READ ONLY` bytes while retaining REPEATABLE READ only for history. Preserve the original failed CI evidence and obtain fresh independent review before pushing the follow-up. The follow-up focused pass contains 152 passing tests across five suites, including reserved-slot and changed-content rejection. Full unit validation remains CI-only.

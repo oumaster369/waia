@@ -27,7 +27,7 @@ describe("HTX observation-purpose SQL projection", () => {
     expect(revisionGrantsMigration).toContain(
       "GRANT SELECT (configuration_revision)\n  ON public.trader_account_collection_state TO waia_account_observation_credential;",
     );
-    expect(journal.entries.slice(-2).map(({ idx, when, tag }) => ({ idx, when, tag }))).toEqual([
+    expect(journal.entries.slice(230, 232).map(({ idx, when, tag }) => ({ idx, when, tag }))).toEqual([
       {
         idx: 230,
         when: 1780000000230,
