@@ -11,6 +11,10 @@ includedIssues: []
 state:
   status: in-progress
   currentWorkPackage: WP-1
+provenance:
+  createdFrom: chat
+  gapRegistry: null
+  supersedes: null
 ---
 
 ## Goal and boundary
@@ -26,7 +30,7 @@ The latest-snapshot HtxV5BillsSection stays separate. History retains raw signed
 - Refresh clears the prior snapshot before requesting a new one. Deduplicate exact identical rows; conflicting duplicates, identity mismatches, invalid or repeated cursors fail closed. Bound accumulated records, coverage and requests. Generic errors never expose response bodies.
 - Distinguish loading, empty, current NOT_CONFIGURED, unavailable, error and revoked states; show receipt/collection times and UNKNOWN completeness explicitly.
 
-## Validation and risk
+## Acceptance and validation
 
 Focused rendered tests cover synchronous selection/session/revision/UID reset, stale responses that ignore abort, paging/dedupe/caps, malformed and mismatched pages, 204/503/401/403, refresh and NOT_CONFIGURED with retained data. Run the existing connected panel suite and focused latest-snapshot tests. Add an isolated mounted Chromium scenario for tenant/admin navigation, paging, partial/empty/revocation, mobile layout and absence of account writes. Only the owned local server/SQLite fixture may be created and cleaned. Run typecheck, lint and normal Node22 build with an owned APFS dependency clone; no full local unit campaign.
 
