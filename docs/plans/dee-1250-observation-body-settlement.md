@@ -27,6 +27,8 @@ The user authorized autonomous completion and repair of account connection, fres
 
 Use a narrowly scoped owned-response-body helper across Spot/admission, legacy derivatives and V5 transports. A terminal stream error must be established before cancellation while the same reader remains exclusively owned. A real cancellation failure on a previously readable stream must still reject settlement. Do not clear the global cleanup barrier or discard an unsettled owner. Continue to await every tracked fetch, action, read and cancellation promise, including late responses after timeout.
 
+Update the three existing observation-only consumer content pins and the exact GET transport import allowlist for the shared settlement helper. Preserve all discovery roots, file counts, path digests, admission rules and connector reference checks.
+
 Preserve generic sanitized read failures, current-key identity and permission checks, pre-decrypt guards, bounded GETs, deadlines, account binding, response-size limits, TLS and lease ownership until actual settlement. No database or provider I/O in tests.
 
 ## Acceptance
