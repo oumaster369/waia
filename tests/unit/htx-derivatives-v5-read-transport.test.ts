@@ -598,3 +598,13 @@ describe("HTX V5 owned read-only transport", () => {
     });
   });
 });
+
+it.each([200, 500])("settles terminal native V5 bodies at HTTP %s", async status => {
+  const f = setup({ fetchImpl: async input => {
+    const url = new URL(String(input));
+    if (url.hostname === "api.huobi.pro") return json(payload(url.pathname));
+    return new Response(new ReadableStream({ start(c) { c.error(new Error("synthetic body failure")); } }), { status });
+  } });
+  await expect(f.transport.readAssetMode(signal())).rejects.toMatchObject({ code: "READ_FAILED" });
+  await expect(f.transport.settled()).resolves.toBeUndefined();
+});

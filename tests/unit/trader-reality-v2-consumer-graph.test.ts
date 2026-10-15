@@ -160,6 +160,7 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
         "./validation",
         "./types",
         "./htx-reader",
+        "./response-body-settlement",
       ].sort(),
     );
     const signer = ast.statements
