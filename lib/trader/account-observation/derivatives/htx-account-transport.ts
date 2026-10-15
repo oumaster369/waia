@@ -1,4 +1,5 @@
 import "server-only";
+import { createObservationResponseBodyOwner, settleObservationResponseBody, type ObservationResponseBodyOwner } from "../response-body-settlement";
 import { createHash } from "node:crypto";
 import { buildSignedPostQueryString, formatHtxTimestamp } from "@/lib/trader/connectors/htx/signing";
 import { AccountObservationReadFailure } from "../service";
@@ -112,8 +113,14 @@ export function createHtxDerivativesAccountTransport(input: Readonly<{
     const admissionRequest: HtxDerivativesReadAdmissionRequest = Object.freeze({ binding, family, accessKeySha256: keyDigest });
     const controller = new AbortController(); active = controller;
     const cancel = () => controller.abort(); signal.addEventListener("abort", cancel, { once: true });
-    let bodyReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    let bodyOwner: ObservationResponseBodyOwner | undefined;
     let response: Response | undefined;
+    let bodyCleanupStarted = false;
+    const cancelBody = () => {
+      if (bodyCleanupStarted || !response?.body) return;
+      bodyCleanupStarted = true;
+      cancelQuietly(bodyOwner ? bodyOwner.settled() : settleObservationResponseBody(response.body));
+    };
     let admissionCalls = 0;
     let initialAdmissionPassed = false;
     let postAdmissionChecked = false;
@@ -136,27 +143,27 @@ export function createHtxDerivativesAccountTransport(input: Readonly<{
         redirect: "error", credentials: "omit", cache: "no-store",
         headers: { Accept: "application/json", "Content-Type": "application/json" },
         body: JSON.stringify(body) });
-      if (disposed || controller.signal.aborted) { cancelQuietly(response.body?.cancel()); fail("READ_FAILED"); }
+      if (disposed || controller.signal.aborted) { cancelBody(); fail("READ_FAILED"); }
       if (response.redirected || (response.url && response.url !== url) || response.status !== 200) {
         // Recheck authorization even when the venue returned an HTTP error or
         // redirect. A failed observation must not publish data under a revoked key.
         await isCurrent();
-        cancelQuietly(response.body?.cancel());
+        cancelBody();
         if (response.status === 429) fail("RATE_LIMITED");
         if (response.status === 401 || response.status === 403) fail("PERMISSION_DENIED");
         fail("READ_FAILED");
       }
       const length = response.headers.get("content-length");
       if (length !== null && (!/^\d+$/.test(length) || Number(length) > maxResponseBytes)) {
-        cancelQuietly(response.body?.cancel()); fail("INVALID_RESPONSE");
+        cancelBody(); fail("INVALID_RESPONSE");
       }
       const responseBody = response.body;
       if (!responseBody) fail("INVALID_RESPONSE");
-      bodyReader = responseBody!.getReader();
+      bodyOwner = createObservationResponseBodyOwner(responseBody!);
       const decoder = new TextDecoder("utf-8", { fatal: true });
       let byteCount = 0; let text = "";
       while (true) {
-        const chunk = await bodyReader.read();
+        const chunk = await bodyOwner.read();
         if (disposed || controller.signal.aborted) fail("READ_FAILED");
         if (chunk.done) break;
         if (!(chunk.value instanceof Uint8Array) || (byteCount += chunk.value.byteLength) > maxResponseBytes) fail("INVALID_RESPONSE");
@@ -184,8 +191,7 @@ export function createHtxDerivativesAccountTransport(input: Readonly<{
       if (error instanceof AccountObservationReadFailure) throw error;
       return fail("READ_FAILED");
     } finally {
-      cancelQuietly(bodyReader?.cancel());
-      if (!bodyReader && response?.body) cancelQuietly(response.body.cancel());
+      cancelBody();
       signal.removeEventListener("abort", cancel);
       controller.abort(); active = null;
     }

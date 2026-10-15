@@ -1,4 +1,5 @@
 import "server-only";
+import { createObservationResponseBodyOwner, settleObservationResponseBody, type ObservationResponseBodyOwner } from "../response-body-settlement";
 import { createHash } from "node:crypto";
 import { types } from "node:util";
 import { buildSignedQueryString, formatHtxTimestamp } from "@/lib/trader/connectors/htx/signing";
@@ -384,17 +385,16 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
       controller.signal.addEventListener("abort", rejectAbort, { once: true });
     });
     let response: Response | undefined;
-    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    let bodyOwner: ObservationResponseBodyOwner | undefined;
     let bodyConsumed = false;
     let bodyCleanupStarted = false;
     let before: HtxReadIdentityEvidence | undefined;
     let afterCheckStarted = false;
     const cancelBody = () => {
       if (bodyCleanupStarted || bodyConsumed) return;
-      const cleanup = reader?.cancel() ?? response?.body?.cancel();
-      if (!cleanup) return;
+      if (!response?.body) return;
       bodyCleanupStarted = true;
-      cancelQuietly(cleanup);
+      cancelQuietly(bodyOwner ? bodyOwner.settled() : settleObservationResponseBody(response.body));
     };
     const checkAfter = async (): Promise<HtxReadIdentityEvidence> => {
       if (!before || afterCheckStarted) return fail("READ_FAILED");
@@ -470,12 +470,12 @@ export function createHtxV5ReadTransport(input: TransportInput): HtxV5ReadTransp
           await checkAfter();
           return invalidResponse("BILLS_BODY_MISSING");
         }
-        reader = responseBody.getReader();
+        bodyOwner = createObservationResponseBodyOwner(responseBody);
         const decoder = new TextDecoder("utf-8", { fatal: true });
         let byteCount = 0;
         let body = "";
         while (true) {
-          const chunk = await reader.read();
+          const chunk = await bodyOwner.read();
           if (disposed || controller.signal.aborted) fail("READ_FAILED");
           if (chunk.done) {
             bodyConsumed = true;
