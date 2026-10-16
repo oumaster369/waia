@@ -1,0 +1,20 @@
+[Unit]
+Description=Committee HTX USDT-M autoexec
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/workspace/committee/exec
+Environment=PYTHONPATH=/workspace/ops/autoexec
+Environment=AUTOEXEC_ROOT=/workspace/committee/exec
+Environment=AUTOEXEC_CONFIG=/workspace/committee/exec/autoexec.json
+Environment=AUTOEXEC_ACCOUNT=small
+Environment=AUTOEXEC_LIVE=0
+EnvironmentFile=-/workspace/committee/exec/autoexec.env
+ExecStart=/workspace/ops/autoexec/run_autoexec_loop.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
