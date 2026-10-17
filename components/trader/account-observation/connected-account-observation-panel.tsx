@@ -22,6 +22,34 @@ type BindingState = {
   status: "LOADING" | "NOT_CONFIGURED" | "ERROR" | "REVOKED";
 };
 
+function PendingHistoryStatus({
+  status,
+}: {
+  status: "LOADING" | "NOT_CONFIGURED" | "IDENTITY_PENDING" | "ERROR";
+}) {
+  const copy = {
+    LOADING: "Waiting for this account's current observation before checking financial history.",
+    NOT_CONFIGURED:
+      "Financial history is not available yet. No current observation configuration was returned.",
+    IDENTITY_PENDING: "History identity is not yet verified for this account.",
+    ERROR:
+      "Financial history status is unavailable while this account's current observation cannot be verified.",
+  };
+  return (
+    <section
+      aria-label="Financial history status"
+      className="border-border space-y-2 rounded-lg border p-4"
+    >
+      <h2 className="font-medium">Financial history</h2>
+      <p className="text-sm">{copy[status]}</p>
+      <p className="text-waia-fg-muted text-xs">
+        Connecting an account does not automatically enable financial history collection. History
+        requires separate authorization for this account.
+      </p>
+    </section>
+  );
+}
+
 /** GETs only an authorized stored binding/projection; it never connects to HTX or
  * configures a collector. Unmount/reset target when the authenticated session ends. */
 export function ConnectedAccountObservationPanel({
@@ -184,6 +212,9 @@ export function ConnectedAccountObservationPanel({
         {current?.status === "NOT_CONFIGURED" || current?.status === "ERROR" ? (
           <p className="text-waia-fg-muted text-sm">Checking again automatically.</p>
         ) : null}
+        {current?.status !== "REVOKED" ? (
+          <PendingHistoryStatus status={current?.status ?? "LOADING"} />
+        ) : null}
       </div>
     );
   }
@@ -200,6 +231,12 @@ export function ConnectedAccountObservationPanel({
           endpoint={endpoint}
           fetcher={fetcher}
           onRevoked={onHistoryRevoked}
+        />
+      ) : view.status !== "REVOKED" ? (
+        <PendingHistoryStatus
+          status={
+            view.status === "ERROR" ? "ERROR" : view.observation ? "IDENTITY_PENDING" : "LOADING"
+          }
         />
       ) : null}
     </div>
