@@ -1,6 +1,11 @@
 "use client";
 
 import type { ObservationBinding } from "@/lib/trader/account-observation/types";
+import type { FinancialHistoryRecord } from "@/lib/trader/account-observation/financial-history";
+import {
+  htxV5BillGroups,
+  type HtxV5BillCategory,
+} from "@/lib/trader/account-observation/derivatives/htx-v5-bill-groups";
 import { Button } from "@/components/ui/button";
 import { useFinancialHistory, HISTORY_MAX_ROWS } from "./use-financial-history";
 
@@ -18,6 +23,88 @@ const currentCopy = {
   UNAVAILABLE:
     "Current collection is unavailable. Persisted records below are historical evidence.",
 };
+
+function LoadedRecordTotals({
+  records,
+  capped,
+  hasMore,
+}: {
+  records: readonly FinancialHistoryRecord[];
+  capped: boolean;
+  hasMore: boolean;
+}) {
+  let groups: ReturnType<typeof htxV5BillGroups> | null = null;
+  try {
+    // The history schema verifies the category/type pair; its inferred category is a string.
+    groups = htxV5BillGroups(
+      records.map(({ bill }) => ({
+        ...bill,
+        category: bill.category as HtxV5BillCategory,
+      })),
+    );
+  } catch {
+    // Raw evidence remains available when an amount cannot be summed exactly.
+  }
+  return (
+    <section aria-label="Loaded record totals" className="space-y-2">
+      <h3 className="text-sm font-medium">Loaded records by currency and type</h3>
+      <p className="text-waia-fg-muted text-xs">
+        Loaded records: {records.length}. These sums cover only the records loaded below, not the
+        full account or period. Currencies are kept separate; completeness is unknown.
+        {capped
+          ? " The display limit has been reached."
+          : hasMore
+            ? " Load more to include further saved records."
+            : ""}
+      </p>
+      {records.length === 0 ? (
+        <p className="text-sm">
+          Totals unavailable: no records loaded. This is not an observed zero.
+        </p>
+      ) : groups === null ? (
+        <p className="text-sm">
+          Exact totals are unavailable. The original amounts remain listed below.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <caption className="sr-only">Loaded amounts by currency and record type</caption>
+            <thead className="text-waia-fg-muted text-xs">
+              <tr>
+                <th scope="col" className="py-2 pr-3">
+                  Currency
+                </th>
+                <th scope="col" className="py-2 pr-3">
+                  Type / category
+                </th>
+                <th scope="col" className="py-2 pr-3 text-right">
+                  Records
+                </th>
+                <th scope="col" className="py-2 text-right">
+                  Loaded amount
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.map((group) => (
+                <tr key={`${group.currency}:${group.type}`} className="border-border border-t">
+                  <td className="py-2 pr-3 font-mono">{group.currency}</td>
+                  <td className="py-2 pr-3">
+                    {group.type} · {group.category.toLowerCase().replaceAll("_", " ")}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">{group.recordCount}</td>
+                  <td className="py-2 text-right font-mono tabular-nums">
+                    {group.observedAmountSum}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
 
 /** Keyed by the parent so another identity cannot render this component's previous state. */
 export function FinancialHistorySection(props: {
@@ -54,6 +141,22 @@ export function FinancialHistorySection(props: {
         Amounts retain their reported sign and currency. No currency conversion or profit
         calculation is performed.
       </p>
+      <section aria-label="Profit calculation availability" className="space-y-2 text-sm">
+        <dl className="grid gap-2 sm:grid-cols-2">
+          <div>
+            <dt>Net P&amp;L</dt>
+            <dd>Unavailable</dd>
+          </div>
+          <div>
+            <dt>Daily P&amp;L</dt>
+            <dd>Unavailable</dd>
+          </div>
+        </dl>
+        <p className="text-waia-fg-muted text-xs">
+          Complete accounting for these results is not available. Received bill amounts and
+          venue-reported unrealized P&amp;L do not establish net or daily profit.
+        </p>
+      </section>
       <div aria-live="polite" aria-atomic="true">
         {history.status === "LOADING" ? <p>Loading persisted financial history…</p> : null}
         {history.loadingMore ? <p>Loading more persisted records…</p> : null}
@@ -79,6 +182,11 @@ export function FinancialHistorySection(props: {
             Collection dates below describe the original evidence; retrieval does not make it newly
             collected.
           </p>
+          <LoadedRecordTotals
+            records={history.data.records}
+            capped={history.capped}
+            hasMore={!!history.data.nextCursor}
+          />
           {history.data.records.length === 0 ? (
             <p>
               No persisted records were returned in this snapshot. This does not mean zero fees,
