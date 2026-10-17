@@ -87,18 +87,30 @@ test("persisted history paging, selected account isolation, empty coverage and r
   await expect(panel.getByText("10001", { exact: true })).toBeVisible();
   await expect(panel.getByText("-0.750000000000000001 USDT", { exact: true })).toBeVisible();
   await expect(panel.getByText(/Collection is currently not configured/)).toBeVisible();
+  const totals = panel.getByRole("region", { name: "Loaded record totals" });
+  await expect(totals.getByText(/Loaded records: 1/)).toBeVisible();
+  await expect(
+    panel
+      .getByRole("region", { name: "Profit calculation availability" })
+      .getByText("Unavailable", { exact: true }),
+  ).toHaveCount(2);
   await panel.getByRole("button", { name: "Load more history" }).click();
   await expect(panel.getByText("10002", { exact: true })).toBeVisible();
   await expect(
     panel.getByRole("list", { name: "Persisted financial records" }).getByRole("listitem"),
   ).toHaveCount(2);
   await expect(panel.getByRole("button", { name: "Load more history" })).toBeDisabled();
+  await expect(
+    totals.getByRole("cell", { name: "-1.500000000000000002", exact: true }),
+  ).toBeVisible();
+  await expect(totals.getByText(/completeness is unknown/)).toBeVisible();
   await panel.screenshot({ path: info.outputPath("history-desktop.png") });
   await page.setViewportSize({ width: 390, height: 844 });
   await panel.screenshot({ path: info.outputPath("history-mobile.png") });
   expect(await panel.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   await page.getByLabel("Select an account").selectOption("account-b");
   await expect(panel.getByText(/No persisted records were returned/)).toBeVisible();
+  await expect(totals.getByText(/Totals unavailable: no records loaded/)).toBeVisible();
   await expect(panel.getByText("10001", { exact: true })).toHaveCount(0);
   await expect(panel.getByText(/0 records in one page/)).toBeVisible();
   const admin = await context.newPage();

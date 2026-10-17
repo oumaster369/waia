@@ -116,6 +116,12 @@ describe("DEE-961 connected panel (fake HTTP only)", () => {
       redirect: "error",
     });
     expect(fetcher.mock.calls[1][0]).toContain("credentialRevision=1");
+    expect(screen.getByRole("region", { name: "Financial history status" })).toHaveTextContent(
+      "History identity is not yet verified for this account.",
+    );
+    expect(fetcher.mock.calls.every(([url]) => !String(url).includes("/financial-history?"))).toBe(
+      true,
+    );
     expect(fetcher.mock.calls[1][0]).toContain("/stream?");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
@@ -162,6 +168,9 @@ describe("DEE-961 connected panel (fake HTTP only)", () => {
       render(<ConnectedAccountObservationPanel target={target} fetcher={fetcher} />);
       await settle();
       expect(screen.getByText("Access revoked; account data cleared.")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("region", { name: "Financial history status" }),
+      ).not.toBeInTheDocument();
       await act(async () => vi.advanceTimersByTimeAsync(60_000));
       expect(fetcher).toHaveBeenCalledTimes(1);
       expect(vi.getTimerCount()).toBe(0);
@@ -175,6 +184,12 @@ describe("DEE-961 connected panel (fake HTTP only)", () => {
     await settle();
     expect(screen.getByText(/Waiting for the first live snapshot/)).toBeInTheDocument();
     expect(screen.queryByText("Observed zero rows.")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Financial history status" })).toHaveTextContent(
+      "No current observation configuration was returned.",
+    );
+    expect(
+      screen.getByText(/History requires separate authorization for this account/),
+    ).toBeVisible();
     await act(async () => vi.advanceTimersByTimeAsync(5000));
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(fetcher.mock.calls.every(([url]) => String(url).includes("/binding?"))).toBe(true);
