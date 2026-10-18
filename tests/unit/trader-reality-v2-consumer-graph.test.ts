@@ -504,7 +504,7 @@ describe("Reality V2 whole-repository source/consumer closure (DEE-679)", () => 
     expect(refinementArrows).toEqual([
       "s => s.windowStartMs < s.windowEndMs && s.windowEndMs - s.windowStartMs <= 172800000 &&\n" +
         "  s.windowEndMs <= s.validFromMs && s.validFromMs < s.validUntilMs && s.validUntilMs - s.validFromMs <= 600000",
-      "c => !c.financialHistory || c.enabled && !!c.expectedHtxUid && c.fillContracts === undefined",
+      "c => !c.financialHistory || c.enabled && !!c.expectedHtxUid && (c.fillContracts?.length ?? 0) <= 7",
     ]);
     expect(otherFunctionSyntax).toBe(0);
     expect(hasRuntimeDynamicImport(ast)).toBe(false);

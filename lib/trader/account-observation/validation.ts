@@ -585,7 +585,7 @@ function validateHtxV5Projection(
     throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
   if (projection.schemaVersion === "htx-v5-observation/v2") {
     const bills = projection.bills;
-    if (projection.fills.status !== "NOT_CONFIGURED") throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
+    if (projection.fills.contracts.length > 7) throw new Error("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
     if (bills.status === "PARTIAL") {
       try {
         const rows = bills.values!;

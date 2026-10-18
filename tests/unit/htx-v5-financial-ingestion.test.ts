@@ -28,7 +28,7 @@ function response(path: string, rows: unknown[] = [bill]) {
     maintenance_margin: "0", maintenance_margin_rate: "0", profit_unreal: "0", available_margin: "1", voucher_value: "0", details: [] }, ts };
   return { code: 200, data: path === "/v5/account/bills" ? rows : [], ts };
 }
-function setup(options: { scope?: HtxV5FinancialHistoryScope | null; rows?: unknown[];
+function setup(options: { scope?: HtxV5FinancialHistoryScope | null; rows?: unknown[]; contracts?: readonly string[];
   intercept?: (url: URL, init?: RequestInit) => Response | undefined | Promise<Response | undefined>; authorize?: () => Promise<boolean> } = {}) {
   const calls: URL[] = [];
   const input = { credential: { binding, apiKey: "fixture-key", apiSecret: "fixture-secret", dispose() {} },
@@ -36,7 +36,8 @@ function setup(options: { scope?: HtxV5FinancialHistoryScope | null; rows?: unkn
     authorizeCurrent: options.authorize ?? (async () => true),
     fetchImpl: vi.fn<typeof fetch>(async (url, init) => { const parsed = new URL(String(url)); calls.push(parsed);
       return await options.intercept?.(parsed, init) ?? json(response(parsed.pathname, options.rows)); }) };
-  const reader = createHtxV5ObservationReader({ ...input, ...(options.scope === null ? {} : { financialHistory: options.scope ?? scope }) });
+  const reader = createHtxV5ObservationReader({ ...input, ...(options.contracts ? { contracts: options.contracts } : {}),
+    ...(options.scope === null ? {} : { financialHistory: options.scope ?? scope }) });
   return { reader, input, calls };
 }
 function envelope(projection: HtxV5AccountObservation): AccountObservation {
@@ -54,6 +55,53 @@ beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(ts); });
 afterEach(() => vi.useRealTimers());
 
 describe("bounded optional financial-history ingestion", () => {
+  it("retains separate bounded windows when fills and bills share the exact current binding", async () => {
+    const f = await read({ contracts: ["BTC-USDT"] });
+    expect(f.projection.fills).toMatchObject({ status: "PARTIAL", contracts: ["BTC-USDT"],
+      windowStartMs: ts - 86_400_000, windowEndMs: ts, pageScope: { completeness: "UNKNOWN" } });
+    expect(f.projection).toMatchObject({ bills: { status: "PARTIAL", scopeId: scope.scopeId,
+      windowStartMs: scope.windowStartMs, windowEndMs: scope.windowEndMs, completeness: "UNKNOWN", netPnl: null, dailyPnl: null } });
+    expect(f.observation.binding).toEqual(binding);
+  });
+  it("rejects a combined configuration exceeding the existing request budget before fetch", () => {
+    const contracts = ["BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "LTC", "BCH"].map(symbol => `${symbol}-USDT`);
+    const fetchImpl = vi.fn<typeof fetch>();
+    const f = setup({ scope: null });
+    expect(() => createHtxV5ObservationReader({ ...f.input, fetchImpl, contracts, financialHistory: scope })).toThrow("INVALID_RESPONSE");
+    expect(() => createHtxV5ObservationReader({ ...f.input, fetchImpl, contracts: contracts.slice(0, 7),
+      expectedHtxUid: undefined, financialHistory: scope })).toThrow("INVALID_RESPONSE");
+    expect(fetchImpl).not.toHaveBeenCalled();
+    f.reader.dispose();
+  });
+  it("rechecks finite bills consent after fills without suppressing the separately configured fills", async () => {
+    const f = await read({ contracts: ["BTC-USDT"], intercept: url => {
+      if (url.pathname === "/v5/trade/order/details") vi.setSystemTime(scope.validUntilMs);
+      return undefined;
+    } });
+    expect(f.projection.fills.status).toBe("PARTIAL");
+    expect(f.projection).toMatchObject({ bills: { status: "UNAVAILABLE", unavailableReason: "SCOPE_EXPIRED", values: null } });
+    expect(f.calls.some(url => url.pathname === "/v5/account/bills")).toBe(false);
+  });
+  it("rejects an eight-contract financial DTO even when each component is otherwise valid", async () => {
+    const contracts = ["BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "LTC", "BCH"].map(symbol => `${symbol}-USDT`);
+    const fills = await read({ scope: null, contracts });
+    const financial = await read();
+    expect(() => parseAccountObservation({ ...financial.observation,
+      htxV5: { ...financial.projection, fills: fills.projection.fills } })).toThrow("ACCOUNT_OBSERVATION_INVALID_PAYLOAD");
+  });
+  it.each(["uid", "revocation"])("refuses %s change between configured fills and bills", async kind => {
+    let fillsRead = false;
+    const f = setup({ contracts: ["BTC-USDT"], authorize: async () => kind !== "revocation" || !fillsRead,
+      intercept: url => {
+        if (url.pathname === "/v5/trade/order/details") fillsRead = true;
+        if (kind === "uid" && fillsRead && url.pathname === "/v2/user/uid") return json({ code: 200, data: 789 });
+        return undefined;
+      } });
+    await expect(f.reader.read(new AbortController().signal)).rejects.toMatchObject({
+      code: kind === "uid" ? "IDENTITY_MISMATCH" : "PERMISSION_DENIED" });
+    expect(f.calls.some(url => url.pathname === "/v5/account/bills")).toBe(false);
+    f.reader.dispose(); await f.reader.settled();
+  });
   it("keeps the absent capability on the exact legacy schema without bills calls", async () => {
     const f = await read({ scope: null });
     expect(f.projection.schemaVersion).toBe("htx-v5-observation/v1");
@@ -150,6 +198,30 @@ describe("bounded optional financial-history ingestion", () => {
     expect(() => parse(base)).toThrow("SCHEMA");
     expect(parse({ ...base, schemaVersion: "waia.account_observation_assignment_manifest.v2" }).configured[0]!.config).toEqual(configured);
     expect(createAccountObservationSelfServiceConfiguration().revision).toBe("sha256:6adf6fd4a1f08081df76d44651d17f2030ae1a4d7f94e1d9cfd554f6ba5e7254");
+  });
+  it("binds combined coverage into a distinct manifest revision without changing legacy identity", () => {
+    const legacy = manifestAssignment({ htxV5: { enabled: true, expectedHtxUid: "456" }, leaseTtlMs: 300000 });
+    const input = { symbols: legacy.symbols, pollIntervalMs: legacy.pollIntervalMs,
+      maxBackoffMs: legacy.maxBackoffMs, readTimeoutMs: legacy.readTimeoutMs, leaseTtlMs: legacy.leaseTtlMs,
+      htxCoverage: { ...legacy.readerLimits, host: "api.huobi.pro" as const }, htxV5: legacy.htxV5! };
+    expect(createObservationConfiguration(input).revision).toBe(legacy.configurationRevision);
+    const fillContracts = ["BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "LTC"].map(symbol => `${symbol}-USDT`);
+    const combined = { ...legacy.htxV5!, fillContracts, financialHistory: scope };
+    const configured = createObservationConfiguration({ ...input, htxV5: combined });
+    const billsOnly = createObservationConfiguration({ ...input, htxV5: { ...legacy.htxV5!, financialHistory: scope } });
+    expect(configured.revision).not.toBe(legacy.configurationRevision);
+    expect(configured.revision).not.toBe(billsOnly.revision);
+    const body = { ...manifestBody({ assignments: [{ ...legacy, configurationRevision: configured.revision, htxV5: combined }] }),
+      schemaVersion: "waia.account_observation_assignment_manifest.v2" as const };
+    const digest = accountObservationManifestDigest(body);
+    expect(parseAccountObservationAssignmentManifest(JSON.stringify({ ...body, contentSha256: digest }),
+      { expectedDigest: digest, expectedReleaseSha: MANIFEST_RELEASE_SHA }).configured[0]!.config).toEqual(configured);
+    expect(() => createObservationConfiguration({ ...input, htxV5: { ...combined,
+      fillContracts: [...fillContracts, "BCH-USDT"] } })).toThrow();
+    expect(() => createObservationConfiguration({ ...input, htxV5: { ...combined, expectedHtxUid: undefined } })).toThrow();
+    expect(() => createObservationConfiguration({ ...input, htxV5: { ...combined, enabled: false } })).toThrow();
+    expect(() => createObservationConfiguration({ ...input, htxV5: { enabled: true,
+      fillContracts: [...fillContracts, "BCH-USDT"] } })).not.toThrow();
   });
   it.each([
     { ...scope, windowEndMs: scope.windowStartMs }, { ...scope, validUntilMs: scope.validFromMs + 600001 },
