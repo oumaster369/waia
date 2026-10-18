@@ -54,15 +54,15 @@ describe("server-bound admin assistant facts", () => {
     });
     const facts = factsFromTool({ tool: "system_status", body: envelope({ jobs }) }, query);
     expect(facts.find((fact) => fact.entityId === "admin_market_quotes")).toMatchObject({
-      label: "Котировки HTX · последний запуск",
-      value: "Ошибка",
+      label: "HTX quotes · last run",
+      value: "Error",
       state: "ok",
       observedAt: "2026-09-25T00:59:00.000Z",
       href: expect.stringContaining("tab=jobs"),
     });
     expect(facts.find((fact) => fact.entityId === "admin_news")).toMatchObject({
-      label: "Новости · последний запуск",
-      value: "Успешно",
+      label: "News · last run",
+      value: "Succeeded",
       state: "stale",
       reasons: ["JOB_RUN_STALE"],
       observedAt: "2026-09-24T22:00:00.000Z",
@@ -76,7 +76,7 @@ describe("server-bound admin assistant facts", () => {
       });
     }
     expect(facts.find((fact) => fact.entityId === "invoice_issue")?.label).toBe(
-      "Ручной выпуск счетов · последний запуск",
+      "Manual invoice issuance · last run",
     );
     expect(facts.find((fact) => fact.field === "jobs.coverage")).toMatchObject({
       value: "13",
@@ -100,7 +100,7 @@ describe("server-bound admin assistant facts", () => {
     });
     expect(facts.filter((fact) => fact.entityId !== null)).toHaveLength(50);
     expect(facts.find((fact) => fact.entityId === "future_job_0")).toMatchObject({
-      label: "future_job_0 · последний запуск",
+      label: "future_job_0 · last run",
       value: "future_outcome",
     });
   });
@@ -137,7 +137,7 @@ describe("server-bound admin assistant facts", () => {
       answer: {
         unverified: false,
         citations: [equity.id],
-        summary: "Общий капитал: 9007199254740993.12345678 USDT; охват 1/2; неполные данные",
+        summary: "Total equity: 9007199254740993.12345678 USDT; coverage 1/2; partial data",
       },
     });
   });

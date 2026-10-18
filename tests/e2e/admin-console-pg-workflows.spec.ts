@@ -97,17 +97,17 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
     await page.goto(`/admin?${context}`);
     await expect(page.locator("main")).toContainText("12 540,125");
     await expect(
-      page.getByRole("heading", { name: "История капитала и результата" }),
+      page.getByRole("heading", { name: "Equity and result history" }),
     ).toBeVisible();
-    await page.getByText("Из чего складывается результат Трейдера", { exact: true }).click();
-    await expect(page.getByText("Комиссии открытия", { exact: true })).toBeVisible();
+    await page.getByText("Trader result breakdown", { exact: true }).click();
+    await expect(page.getByText("Opening fees", { exact: true })).toBeVisible();
     await page
-      .getByRole("group", { name: "Показатель графика" })
-      .getByRole("button", { name: "Результат Трейдера", exact: true })
+      .getByRole("group", { name: "Chart metric" })
+      .getByRole("button", { name: "Trader result", exact: true })
       .click();
-    await expect(page.getByRole("img", { name: /Результат Трейдера, USDT/ })).toBeVisible();
+    await expect(page.getByRole("img", { name: /Trader result, USDT/ })).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Последние исполнения", exact: true }),
+      page.getByRole("heading", { name: "Recent fills", exact: true }),
     ).toBeVisible();
     expect((await new AxeBuilder({ page }).include("main").analyze()).violations).toEqual([]);
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -116,35 +116,35 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
       fullPage: true,
     });
     await verifySizes("overview");
-    await page.getByRole("button", { name: "Помощник", exact: true }).click();
+    await page.getByRole("button", { name: "Assistant", exact: true }).click();
     const assistant = page.locator("#admin-assistant");
     await expect(
-      assistant.getByText("Помощник выключен. Быстрые ответы работают без языковой модели.", {
+      assistant.getByText("The assistant is disabled. Quick answers work without a language model.", {
         exact: true,
       }),
     ).toBeVisible();
-    await assistant.getByRole("button", { name: "Сводка", exact: true }).click();
-    await expect(assistant.getByRole("region", { name: "Быстрый ответ" })).toContainText(
+    await assistant.getByRole("button", { name: "Summary", exact: true }).click();
+    await expect(assistant.getByRole("region", { name: "Quick answer" })).toContainText(
       /12\s540,125\s*USDT/,
     );
     await expect(
-      assistant.getByRole("link", { name: "Источник", exact: true }).first(),
+      assistant.getByRole("link", { name: "Source", exact: true }).first(),
     ).toHaveAttribute("href", new RegExp(`organization_id=${clients[0].id}`));
-    await page.getByLabel("Охват: клиент").selectOption(clients[1].id);
+    await page.getByLabel("Scope: client").selectOption(clients[1].id);
     await expect(page).toHaveURL(new RegExp(`organization_id=${clients[1].id}`));
-    await expect(page.getByLabel("Охват: клиент")).toHaveValue(clients[1].id);
+    await expect(page.getByLabel("Scope: client")).toHaveValue(clients[1].id);
     await expect(assistant).not.toContainText(/12\s540,125/);
-    await assistant.getByRole("button", { name: "Сводка", exact: true }).click();
-    await expect(assistant.getByRole("region", { name: "Быстрый ответ" })).toContainText(
+    await assistant.getByRole("button", { name: "Summary", exact: true }).click();
+    await expect(assistant.getByRole("region", { name: "Quick answer" })).toContainText(
       /890,5\s*USDT/,
     );
     await expect(assistant).not.toContainText(accounts[0]);
-    await assistant.getByRole("button", { name: "Система и релиз", exact: true }).click();
-    const systemAnswer = assistant.getByRole("region", { name: "Быстрый ответ" });
-    await expect(systemAnswer).toContainText("Наблюдение платежей · последний запуск");
-    await expect(systemAnswer).toContainText("Ручной выпуск счетов · последний запуск");
-    await expect(systemAnswer).toContainText("Охват: 13/13");
-    await expect(systemAnswer).toContainText("Ручная операция, без расписания");
+    await assistant.getByRole("button", { name: "System and release", exact: true }).click();
+    const systemAnswer = assistant.getByRole("region", { name: "Quick answer" });
+    await expect(systemAnswer).toContainText("Payment observation · last run");
+    await expect(systemAnswer).toContainText("Manual invoice issuance · last run");
+    await expect(systemAnswer).toContainText("Scope: 13/13");
+    await expect(systemAnswer).toContainText("Manual operation, without a schedule");
     await expect(systemAnswer.locator('a[href*="tab=jobs"]').first()).toBeVisible();
     expect(
       (await new AxeBuilder({ page }).include("#admin-assistant").analyze()).violations,
@@ -153,17 +153,17 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
       path: testInfo.outputPath("assistant-real-postgres.png"),
       fullPage: true,
     });
-    await assistant.getByRole("button", { name: "Закрыть помощника", exact: true }).click();
-    await page.getByLabel("Охват: клиент").selectOption(clients[0].id);
-    await page.getByRole("tab", { name: "Рынок и новости", exact: true }).click();
+    await assistant.getByRole("button", { name: "Close assistant", exact: true }).click();
+    await page.getByLabel("Scope: client").selectOption(clients[0].id);
+    await page.getByRole("tab", { name: "Market and news", exact: true }).click();
     await expect(page).toHaveURL(/tab=market/);
-    await expect(page.getByRole("heading", { name: "Рынок и новости", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Market and news", exact: true })).toBeVisible();
     await page.goto(`/admin?organization_id=${clients[0].id}&mode=all&tab=algorithm`);
     await expect(page.getByText("QA-CYCLE · undetermined", { exact: true })).toBeVisible();
-    await page.getByRole("link", { name: "Доказательства цикла →", exact: true }).click();
-    await expect(page.getByRole("dialog", { name: "Доказательства цикла" })).toBeVisible();
+    await page.getByRole("link", { name: "Cycle evidence →", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Cycle evidence" })).toBeVisible();
     await expect(
-      page.getByRole("dialog").getByRole("heading", { name: "Прогноз", exact: true }),
+      page.getByRole("dialog").getByRole("heading", { name: "Forecast", exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole("dialog").locator('[data-reason="NOT_PERSISTED_FOR_CYCLE"]'),
@@ -171,8 +171,8 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
     await page.keyboard.press("Escape");
     await page.goto(`/admin?${context}`);
     await page
-      .getByRole("navigation", { name: "Консоль администратора AI-TRADER" })
-      .getByRole("link", { name: "Счета", exact: true })
+      .getByRole("navigation", { name: "AI-TRADER admin console" })
+      .getByRole("link", { name: "Accounts", exact: true })
       .click();
     await expect(page.locator("main")).toContainText(accounts[0]);
     await expect(page.locator("main")).not.toContainText(accounts[1]);
@@ -180,15 +180,15 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
     await expect(page.getByRole("dialog")).toBeVisible();
     const accountDialog = page.getByRole("dialog");
     await expect(
-      accountDialog.getByRole("table", { name: "Активы счёта", exact: true }),
+      accountDialog.getByRole("table", { name: "Account assets", exact: true }),
     ).toBeVisible();
-    await expect(accountDialog.getByText("Подключение", { exact: true })).toBeVisible();
+    await expect(accountDialog.getByText("Connecting", { exact: true })).toBeVisible();
     for (const [tabLabel, evidence] of [
-      ["Ордера и сделки", "Все ордера периода"],
-      ["Стратегии", "Стратегии и версии"],
-      ["Риск и Guardian", "Сохранённое состояние Risk"],
-      ["Биллинг", "Счета на оплату"],
-      ["События", "Ключи подключения"],
+      ["Orders and trades", "All orders in the period"],
+      ["Strategies", "Strategies and versions"],
+      ["Risk and Guardian", "Saved Risk state"],
+      ["Billing", "Invoices"],
+      ["Events", "Connection keys"],
     ]) {
       await accountDialog.getByRole("button", { name: tabLabel, exact: true }).click();
       await expect(
@@ -197,18 +197,18 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
       await expect(accountDialog.locator('[data-reason="ADMIN_SCOPE_MISMATCH"]')).toHaveCount(0);
       await expect(accountDialog.locator('[data-reason="ADMIN_HTTP_500"]')).toHaveCount(0);
     }
-    await accountDialog.getByRole("button", { name: "Ордера и сделки", exact: true }).click();
+    await accountDialog.getByRole("button", { name: "Orders and trades", exact: true }).click();
     await accountDialog.getByRole("button", { name: "QA0BTC0", exact: true }).click();
-    const orderDialog = page.getByRole("dialog", { name: "Ордер · QA0BTC0", exact: true });
+    const orderDialog = page.getByRole("dialog", { name: "Order · QA0BTC0", exact: true });
     await expect(orderDialog).toBeVisible();
     await expect(orderDialog.locator('[data-reason="LEGACY_ORDER_NO_V2_BINDING"]')).toBeVisible();
     await expect(
-      orderDialog.getByRole("heading", { name: "Исполнения", exact: true }),
+      orderDialog.getByRole("heading", { name: "Fills", exact: true }),
     ).toBeVisible();
     await expect(orderDialog.getByRole("button")).toHaveCount(1);
-    await orderDialog.getByRole("button", { name: "Закрыть", exact: true }).click();
+    await orderDialog.getByRole("button", { name: "Close", exact: true }).click();
     await expect(orderDialog).not.toBeVisible();
-    await accountDialog.getByRole("button", { name: "Портфель", exact: true }).click();
+    await accountDialog.getByRole("button", { name: "Portfolio", exact: true }).click();
     expect((await new AxeBuilder({ page }).include("dialog[open]").analyze()).violations).toEqual(
       [],
     );
@@ -216,33 +216,33 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
       path: testInfo.outputPath("account-details-real-postgres.png"),
       fullPage: true,
     });
-    await accountDialog.getByRole("button", { name: "Закрыть", exact: true }).click();
+    await accountDialog.getByRole("button", { name: "Close", exact: true }).click();
     await expect(page).not.toHaveURL(/sel=/);
     await page.goBack();
     await expect(page.getByRole("dialog")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).not.toBeVisible();
-    await page.getByLabel("Охват: клиент").selectOption(clients[1].id);
+    await page.getByLabel("Scope: client").selectOption(clients[1].id);
     await expect(page.locator("main")).toContainText(accounts[1]);
     await expect(page.locator("main")).not.toContainText(accounts[0]);
-    await page.getByLabel("Охват: клиент").selectOption(clients[0].id);
+    await page.getByLabel("Scope: client").selectOption(clients[0].id);
     await expect(page.locator("main")).toContainText(accounts[0]);
-    await page.getByRole("button", { name: "Представления", exact: true }).click();
-    await page.getByLabel("Название представления", { exact: true }).fill("Контрольный охват А");
-    await page.getByRole("button", { name: "Сохранить текущий вид", exact: true }).click();
+    await page.getByRole("button", { name: "Views", exact: true }).click();
+    await page.getByLabel("View name", { exact: true }).fill("Контрольный охват А");
+    await page.getByRole("button", { name: "Save current view", exact: true }).click();
     await expect(
       page.getByRole("link", { name: "Контрольный охват А", exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Представления", exact: true }).click();
-    await page.getByLabel("Охват: клиент").selectOption(clients[1].id);
+    await page.getByRole("button", { name: "Views", exact: true }).click();
+    await page.getByLabel("Scope: client").selectOption(clients[1].id);
     await expect(page.locator("main")).toContainText(accounts[1]);
-    await page.getByRole("button", { name: "Представления", exact: true }).click();
+    await page.getByRole("button", { name: "Views", exact: true }).click();
     await page.getByRole("link", { name: "Контрольный охват А", exact: true }).click();
-    await expect(page.getByLabel("Охват: клиент")).toHaveValue(clients[0].id);
+    await expect(page.getByLabel("Scope: client")).toHaveValue(clients[0].id);
     await expect(page.locator("main")).toContainText(accounts[0]);
     await expect(page.locator("main")).not.toContainText(accounts[1]);
     const downloaded = page.waitForEvent("download");
-    await page.getByRole("button", { name: "Скачать CSV", exact: true }).click();
+    await page.getByRole("button", { name: "Download CSV", exact: true }).click();
     const exportFile = await downloaded;
     expect(exportFile.suggestedFilename()).toBe("accounts.csv");
     const stream = await exportFile.createReadStream();
@@ -252,22 +252,22 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
     expect(csv).toContain(accounts[0]);
     expect(csv).not.toContain(accounts[1]);
     expect(csv).toContain("12540.125");
-    await page.getByRole("button", { name: "Представления", exact: true }).click();
+    await page.getByRole("button", { name: "Views", exact: true }).click();
     await page
-      .getByRole("button", { name: "Удалить представление Контрольный охват А", exact: true })
+      .getByRole("button", { name: "Delete view Контрольный охват А", exact: true })
       .click();
     await expect(page.getByRole("link", { name: "Контрольный охват А", exact: true })).toHaveCount(
       0,
     );
-    await page.getByRole("button", { name: "Представления", exact: true }).click();
+    await page.getByRole("button", { name: "Views", exact: true }).click();
     await verifySizes("accounts");
     for (const [path, title] of [
-      ["orders", "Ордера"],
-      ["clients", "Клиенты"],
-      ["strategies", "Стратегии"],
-      ["research", "Исследования"],
-      ["errors", "Ошибки"],
-      ["system", "Система"],
+      ["orders", "Orders"],
+      ["clients", "Clients"],
+      ["strategies", "Strategies"],
+      ["research", "Research"],
+      ["errors", "Errors"],
+      ["system", "System"],
     ]) {
       const entityPath =
         path === "research" ? "research/catalog" : path === "errors" ? "incidents" : path;
@@ -277,7 +277,7 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
           response.request().method() === "GET",
       );
       await page
-        .getByRole("navigation", { name: "Консоль администратора AI-TRADER" })
+        .getByRole("navigation", { name: "AI-TRADER admin console" })
         .getByRole("link", { name: title, exact: true })
         .click();
       const response = await pendingRead;
@@ -292,7 +292,7 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
       if (path === "research") {
         await expect(
           page.getByRole("row").filter({ hasText: "Контрольная кампания" }),
-        ).toContainText("Черновик");
+        ).toContainText("Draft");
       }
       // App Router streams metadata separately from the data response.
       await expect(page).toHaveTitle(/\S/);
@@ -305,12 +305,12 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
         await page.getByRole("button", { name: clients[0].name, exact: true }).click();
         const clientDialog = page.getByRole("dialog", { name: clients[0].name, exact: true });
         for (const [label, heading] of [
-          ["Биржевые счета", "Биржевые счета клиента"],
-          ["Результаты", "История капитала и результата"],
-          ["Счета на оплату", "Счета на оплату"],
-          ["Платежи", "Платежи AI-TRADER"],
-          ["Отчётные периоды", "Отчётные периоды"],
-          ["История", "Сохранённая история клиента"],
+          ["Exchange accounts", "Client exchange accounts"],
+          ["Results", "Equity and result history"],
+          ["Invoices", "Invoices"],
+          ["Payments", "AI-TRADER payments"],
+          ["Reporting periods", "Reporting periods"],
+          ["History", "Saved client history"],
         ]) {
           await clientDialog.getByRole("button", { name: label, exact: true }).click();
           await expect(
@@ -318,8 +318,8 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
           ).toBeVisible();
           await expect(clientDialog).not.toContainText(accounts[1]);
         }
-        await expect(clientDialog).toContainText("Добавлен ключ подключения");
-        await clientDialog.getByRole("button", { name: "Сводка", exact: true }).click();
+        await expect(clientDialog).toContainText("Connection key added");
+        await clientDialog.getByRole("button", { name: "Summary", exact: true }).click();
         await expect(clientDialog).toContainText("12 540,125");
         expect(
           (await new AxeBuilder({ page }).include("dialog[open]").analyze()).violations,
@@ -328,21 +328,21 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
           path: testInfo.outputPath("client-details-real-postgres.png"),
           fullPage: true,
         });
-        await clientDialog.getByRole("button", { name: "Закрыть", exact: true }).click();
+        await clientDialog.getByRole("button", { name: "Close", exact: true }).click();
         await page.goto(`/admin/clients?${context}&tab=invoices&sel=${invoiceId}`);
-        const invoiceDialog = page.getByRole("dialog", { name: "Счёт на оплату", exact: true });
+        const invoiceDialog = page.getByRole("dialog", { name: "Invoice", exact: true });
         await expect(
-          invoiceDialog.getByRole("heading", { name: "Сохранённый расчёт", exact: true }),
+          invoiceDialog.getByRole("heading", { name: "Saved calculation", exact: true }),
         ).toBeVisible();
         await expect(invoiceDialog).toContainText("30,00000001");
         await expect(invoiceDialog.locator('[data-reason="ADMIN_MODE_MISMATCH"]')).toHaveCount(0);
         await expect(invoiceDialog.getByRole("checkbox")).toHaveCount(6);
         await expect(invoiceDialog.locator('input[type="checkbox"]:checked')).toHaveCount(0);
         await expect(
-          invoiceDialog.getByRole("button", { name: "Подтвердить выпуск", exact: true }),
+          invoiceDialog.getByRole("button", { name: "Confirm issuance", exact: true }),
         ).toBeDisabled();
         await expect(
-          invoiceDialog.getByRole("heading", { name: "История документа", exact: true }),
+          invoiceDialog.getByRole("heading", { name: "Document history", exact: true }),
         ).toBeVisible();
         expect(
           (await new AxeBuilder({ page }).include("dialog[open]").analyze()).violations,
@@ -352,7 +352,7 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
           fullPage: true,
         });
         const invoiceDownload = page.waitForEvent("download");
-        await invoiceDialog.getByRole("button", { name: "Скачать JSON", exact: true }).click();
+        await invoiceDialog.getByRole("button", { name: "Download JSON", exact: true }).click();
         const invoiceFile = await invoiceDownload;
         const invoiceStream = await invoiceFile.createReadStream();
         const invoiceChunks: Buffer[] = [];
@@ -361,7 +361,7 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
         expect(savedInvoice.mode).toBe("live");
         expect(savedInvoice.data.stored.performanceFee).toBe("30.00000001");
         expect(savedInvoice.data.approvedAt).toBe(null);
-        await invoiceDialog.getByRole("button", { name: "Закрыть", exact: true }).click();
+        await invoiceDialog.getByRole("button", { name: "Close", exact: true }).click();
         await page.goto(`/admin/clients?${context}`);
         await expect(
           page.getByRole("button", { name: clients[0].name, exact: true }),
@@ -379,7 +379,7 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
           expect(
             await incidentDialog.evaluate((element) => element.scrollWidth <= element.clientWidth),
           ).toBe(true);
-          const close = incidentDialog.getByRole("button", { name: "Закрыть", exact: true });
+          const close = incidentDialog.getByRole("button", { name: "Close", exact: true });
           const dialogBox = await incidentDialog.boundingBox();
           const closeBox = await close.boundingBox();
           expect(dialogBox).not.toBeNull();
@@ -401,47 +401,47 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
         await page.setViewportSize({ width: 1280, height: 900 });
 
         const mute = incidentDialog.getByRole("button", {
-          name: "Скрыть уведомления на час",
+          name: "Mute notifications for one hour",
           exact: true,
         });
         await expect(mute).toBeDisabled();
         await incidentDialog
-          .getByLabel("Причина", { exact: true })
+          .getByLabel("Reason", { exact: true })
           .fill("Локальная проверка уведомлений");
         await incidentDialog
-          .getByLabel("Доказательство или ссылка", { exact: true })
+          .getByLabel("Evidence or link", { exact: true })
           .fill("Синтетическая запись в тестовой БД");
         await mute.click();
-        await expect(incidentDialog).toContainText("Версия 2");
+        await expect(incidentDialog).toContainText("Version 2");
         await expect(incidentDialog).toContainText("MUTE: Локальная проверка уведомлений");
         expect(
           (await sql`SELECT status FROM trader_admin_incident WHERE id=${incidentId}::uuid`)[0]
             .status,
         ).toBe("new");
         await expect(
-          incidentDialog.getByRole("button", { name: "Вернуть уведомления", exact: true }),
+          incidentDialog.getByRole("button", { name: "Restore notifications", exact: true }),
         ).toBeDisabled();
-        await incidentDialog.getByRole("button", { name: "Закрыть", exact: true }).click();
+        await incidentDialog.getByRole("button", { name: "Close", exact: true }).click();
       }
       await verifySizes(path);
     }
     await page.keyboard.press("ControlOrMeta+k");
-    const palette = page.getByRole("dialog", { name: "Перейти к разделу" });
+    const palette = page.getByRole("dialog", { name: "Go to section" });
     await expect(palette).toBeVisible();
-    await expect(palette.getByPlaceholder("Название раздела…")).toBeFocused();
+    await expect(palette.getByPlaceholder("Section name…")).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(palette).not.toBeVisible();
     await page.goto(`/admin/accounts?${context.replace("mode=live", "mode=paper")}`);
     await expect(
-      page.getByRole("heading", { name: "Виртуальные портфели Paper", exact: true }),
+      page.getByRole("heading", { name: "Virtual Paper portfolios", exact: true }),
     ).toBeVisible();
-    await expect(page.locator("main")).toContainText("Начальный виртуальный остаток не сохранён");
+    await expect(page.locator("main")).toContainText("Initial virtual cash was not persisted");
     await page.goto(`/admin/orders?${context}`);
     await expect(page.locator("main")).toContainText("QA0BTC0");
     await expect(page.locator("main")).toContainText("QA0BTC29");
     await page.evaluate(() => window.scrollTo(0, 900));
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(700);
-    const fillsTab = page.getByRole("tab", { name: "Исполнения", exact: true });
+    const fillsTab = page.getByRole("tab", { name: "Fills", exact: true });
     await fillsTab.evaluate((element) =>
       element.addEventListener(
         "click",
@@ -458,33 +458,33 @@ test("eight console sections use real PostgreSQL evidence, preserve context and 
     expect(previousScroll).toBeGreaterThan(700);
     await expect(page).toHaveURL(/tab=fills/);
     await page.goBack();
-    await expect(page.getByRole("tab", { name: "Рабочие", exact: true })).toHaveAttribute(
+    await expect(page.getByRole("tab", { name: "Working", exact: true })).toHaveAttribute(
       "aria-selected",
       "true",
     );
     await expect
       .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - previousScroll))
       .toBeLessThan(2);
-    await page.getByRole("button", { name: "Аварийная остановка", exact: true }).click();
-    await expect(page.getByLabel("Область остановки")).toHaveValue("organization");
-    await page.getByRole("button", { name: "Дальше", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Дальше", exact: true })).toBeEnabled();
-    await page.getByRole("button", { name: "Дальше", exact: true }).click();
+    await page.getByRole("button", { name: "Emergency stop", exact: true }).click();
+    await expect(page.getByLabel("Stop scope")).toHaveValue("organization");
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Next", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(
-      page.getByRole("button", { name: "Отправить команду", exact: true }),
+      page.getByRole("button", { name: "Submit command", exact: true }),
     ).toBeDisabled();
     await page
-      .getByRole("textbox", { name: "Причина", exact: true })
+      .getByRole("textbox", { name: "Reason", exact: true })
       .fill("Локальная синтетическая проверка");
-    await page.getByRole("checkbox", { name: "Подтверждаю область и эффект команды" }).check();
+    await page.getByRole("checkbox", { name: "I confirm the command scope and effect" }).check();
     const commandResponse = page.waitForResponse(
       (response) =>
         response.url().includes("/console/kill-switch") && response.request().method() === "POST",
     );
-    await page.getByRole("button", { name: "Отправить команду", exact: true }).click();
+    await page.getByRole("button", { name: "Submit command", exact: true }).click();
     const commandResult = await commandResponse;
     expect(commandResult.status(), await commandResult.text()).toBe(200);
-    await expect(page.getByText("Состояние подтверждено повторным чтением")).toBeVisible();
+    await expect(page.getByText("State confirmed by reread")).toBeVisible();
     await page.keyboard.press("Escape");
     const saved =
       await sql`SELECT state,state_version FROM trader_kill_switches WHERE organization_id=${clients[0].id}::uuid AND switch_type='PAUSE'`;
@@ -544,15 +544,15 @@ test("research details, comparison, version tabs and manual promotion acknowledg
     await page.goto(`/admin/research?${query}&tab=runs`);
     await expect(page.getByRole("button", { name: new RegExp(runs[0]) })).toBeVisible();
     await page.getByRole("button", { name: new RegExp(runs[0]) }).click();
-    const dialog = page.getByRole("dialog", { name: "Доказательства запуска" });
+    const dialog = page.getByRole("dialog", { name: "Run evidence" });
     await expect(dialog).toContainText("12,12345678");
     await expect(dialog).not.toContainText("SEALED_MUST_NOT_APPEAR");
     for (const label of [
-      "Циклы и причины",
-      "Данные",
-      "Артефакты",
-      "Журнал",
-      "Сделки и результаты",
+      "Cycles and reasons",
+      "Data",
+      "Artifacts",
+      "Log",
+      "Trades and results",
     ]) {
       await dialog.getByRole("button", { name: label, exact: true }).click();
       await expect(dialog).toBeVisible();
@@ -561,18 +561,18 @@ test("research details, comparison, version tabs and manual promotion acknowledg
       [],
     );
     await page.screenshot({ path: testInfo.outputPath("research-detail.png"), fullPage: true });
-    await dialog.getByRole("button", { name: "Закрыть", exact: true }).click();
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
     for (const run of runs)
-      await page.getByRole("checkbox", { name: `Сравнить запуск ${run}`, exact: true }).check();
-    await page.getByRole("button", { name: "Сравнить (2)", exact: true }).click();
-    const comparison = page.getByRole("dialog", { name: "Сравнение запусков" });
-    await expect(comparison).toContainText("Есть различия или неподтверждённые условия");
+      await page.getByRole("checkbox", { name: `Compare run ${run}`, exact: true }).check();
+    await page.getByRole("button", { name: "Compare (2)", exact: true }).click();
+    const comparison = page.getByRole("dialog", { name: "Run comparison" });
+    await expect(comparison).toContainText("Differences or unconfirmed conditions");
     await expect(
-      comparison.getByRole("heading", { name: "Сначала — условия сравнения" }),
+      comparison.getByRole("heading", { name: "Comparison conditions first" }),
     ).toBeVisible();
     await expect(comparison).toContainText("v1");
     await expect(comparison).toContainText("v2");
-    await comparison.getByRole("button", { name: "Закрыть", exact: true }).click();
+    await comparison.getByRole("button", { name: "Close", exact: true }).click();
     await page.goBack();
     await expect(comparison).toBeVisible();
     await page.keyboard.press("Escape");
@@ -581,37 +581,37 @@ test("research details, comparison, version tabs and manual promotion acknowledg
     );
     const strategyDialog = page.getByRole("dialog", { name: `${strategy} · v1`, exact: true });
     await expect(strategyDialog).toBeVisible();
-    for (const label of ["Счета и сделки", "Решения", "Проверки", "Версии", "Результаты"]) {
+    for (const label of ["Accounts and trades", "Decisions", "Checks", "Versions", "Results"]) {
       await strategyDialog.getByRole("button", { name: label, exact: true }).click();
       await expect(strategyDialog).toBeVisible();
     }
-    await expect(strategyDialog).toContainText("History — воспроизведение");
+    await expect(strategyDialog).toContainText("History · replay");
     expect((await new AxeBuilder({ page }).include("dialog[open]").analyze()).violations).toEqual(
       [],
     );
     await page.goto(`/admin/strategy-promotions?${query}&strategy_id=${strategy}`);
     await expect(
-      page.getByRole("button", { name: "Ввести в действие", exact: true }),
+      page.getByRole("button", { name: "Make effective", exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Ввести в действие", exact: true }).click();
-    const confirmation = page.getByRole("dialog", { name: "Ввести в действие", exact: true });
-    await expect(confirmation).toContainText("версия состояния 7");
-    await confirmation.getByLabel("Причина действия").fill("Синтетическая проверка интерфейса");
+    await page.getByRole("button", { name: "Make effective", exact: true }).click();
+    const confirmation = page.getByRole("dialog", { name: "Make effective", exact: true });
+    await expect(confirmation).toContainText("state version 7");
+    await confirmation.getByLabel("Action reason").fill("Синтетическая проверка интерфейса");
     const ack = confirmation.getByRole("checkbox");
     await expect(ack).not.toBeChecked();
     await expect(
-      confirmation.getByRole("button", { name: "Подтвердить действие", exact: true }),
+      confirmation.getByRole("button", { name: "Confirm action", exact: true }),
     ).toBeDisabled();
     await ack.check();
     await expect(
-      confirmation.getByRole("button", { name: "Подтвердить действие", exact: true }),
+      confirmation.getByRole("button", { name: "Confirm action", exact: true }),
     ).toBeEnabled();
     await page.screenshot({
       path: testInfo.outputPath("promotion-manual-review.png"),
       fullPage: true,
     });
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Ввести в действие", exact: true }).click();
+    await page.getByRole("button", { name: "Make effective", exact: true }).click();
     await expect(page.getByRole("dialog").getByRole("checkbox")).not.toBeChecked();
     await page.keyboard.press("Escape");
     const saved =

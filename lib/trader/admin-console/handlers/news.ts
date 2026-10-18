@@ -49,7 +49,7 @@ export async function handleAdminConsoleNewsGet(
                 : null,
               observedAt: new Date(String(row.observed_at)).toISOString(),
             })),
-            scopeLabel: "Общие рыночные новости",
+            scopeLabel: "Shared market news",
             truncated: rows.length > parsed.query.limit,
           },
         }),

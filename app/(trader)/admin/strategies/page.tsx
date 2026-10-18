@@ -36,19 +36,19 @@ export default function AdminStrategiesPage() {
       {data && !read.reason ? (
         <ConsolePanel
           title={section.tabs.find(([id]) => id === tab)![1]}
-          note="Стратегия и версия. Продвижение, квалификация и разрешение Live — отдельные факты."
+          note="Strategy and version. Promotion, qualification and Live permission are separate facts."
           action={
             <Link
               className={`${controlClass} inline-flex items-center`}
               href={context.href("/admin/strategy-promotions")}
             >
-              Продвижение стратегий
+              Strategy promotions
             </Link>
           }
         >
           <div className="border-waia-divider text-waia-fg-muted flex flex-wrap items-center gap-3 border-b px-5 py-3 text-xs">
-            <span>Подтверждённый deployment: {data.workingCount ?? "неполный охват"}</span>
-            <span>Контур: {read.envelope?.mode}</span>
+            <span>Confirmed deployment: {data.workingCount ?? "partial coverage"}</span>
+            <span>Mode: {read.envelope?.mode}</span>
             {data.scopeReason ? <DataState state="unavailable" reason={data.scopeReason} /> : null}
             {data.evidenceTruncated ? (
               <DataState state="partial" reason="STRATEGY_EVIDENCE_TRUNCATED" />
@@ -57,10 +57,10 @@ export default function AdminStrategiesPage() {
           <ConsoleTable
             rows={items.filter((row) => row.tab === tab)}
             rowKey={(row) => `${row.strategyId}:${row.version}`}
-            caption="Стратегии и версии"
+            caption="Strategies and versions"
             columns={[
               {
-                title: "Стратегия",
+                title: "Strategy",
                 render: (row) => (
                   <>
                     <DetailLink
@@ -73,11 +73,11 @@ export default function AdminStrategiesPage() {
                 ),
               },
               {
-                title: "Версия",
+                title: "Version",
                 render: (row) => <span className="font-mono text-xs">{row.version}</span>,
               },
               {
-                title: "Состояние",
+                title: "State",
                 render: (row) => (
                   <ConsoleBadge tone={row.working ? "good" : "neutral"}>
                     {row.activityLabel}
@@ -85,15 +85,15 @@ export default function AdminStrategiesPage() {
                 ),
               },
               {
-                title: "Основание",
+                title: "Basis",
                 render: (row) =>
                   row.deployments.length
-                    ? `${row.deployments.length} действующих продвижений`
+                    ? `${row.deployments.length} effective promotions`
                     : row.recentlyWorked
-                      ? "Сохранённые сделки выбранного контура"
+                      ? "Saved trades in the selected mode"
                       : row.evidence.length
-                        ? "Сохранённые записи исследования"
-                        : "Каталог реализации",
+                        ? "Saved research records"
+                        : "Implementation catalog",
               },
             ]}
           />
@@ -107,7 +107,7 @@ export default function AdminStrategiesPage() {
       <ConsoleDialog
         open={Boolean(selected)}
         onClose={() => context.update({ sel: null })}
-        title={selected ? `${selected.displayName} · ${selected.version}` : "Стратегия"}
+        title={selected ? `${selected.displayName} · ${selected.version}` : "Strategy"}
         wide
       >
         {selected ? <StrategyDetails strategy={selected} all={items} /> : null}

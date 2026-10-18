@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { accountObservationClock } from "@/lib/trader/account-observation/clock";
 import { AccountObservationReadFailure } from "@/lib/trader/account-observation/service";
 import type { HtxObservationCredentialHandle } from "@/lib/trader/account-observation/htx-reader-opener";
-import type { ObservationBinding, ObservationClock } from "@/lib/trader/account-observation/types";
+import type { HtxV5FinancialHistoryScope, ObservationBinding, ObservationClock } from "@/lib/trader/account-observation/types";
 import { createHtxV5ObservationReader } from "@/lib/trader/account-observation/derivatives/htx-v5-reader";
 import { parseAccountObservation } from "@/lib/trader/account-observation/validation";
 
@@ -19,6 +19,9 @@ const apiKey = "synthetic-reader-key";
 const apiSecret = "synthetic-reader-secret";
 const uid = "456";
 const ts = 1_791_028_800_000;
+const financialHistory: HtxV5FinancialHistoryScope = { enabled: true,
+  scopeId: "00000000-0000-4000-8000-000000000003", windowStartMs: ts - 10000,
+  windowEndMs: ts - 1, validFromMs: ts - 1, validUntilMs: ts + 1000 };
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
 
 function body(path: string, permission = "readOnly"): unknown {
@@ -33,7 +36,7 @@ function body(path: string, permission = "readOnly"): unknown {
     maintenance_margin_rate: "0", profit_unreal: "0", available_margin: "0", voucher_value: "0",
     details: [],
   }, ts };
-  if (["/v5/trade/position/opens", "/v5/trade/order/opens", "/v5/algo/order/opens", "/v5/trade/order/details"].includes(path))
+  if (["/v5/trade/position/opens", "/v5/trade/order/opens", "/v5/algo/order/opens", "/v5/trade/order/details", "/v5/account/bills"].includes(path))
     return { code: 200, data: [], ts };
   return { code: 404, message: "unsupported" };
 }
@@ -43,6 +46,7 @@ function credential(): HtxObservationCredentialHandle {
 }
 
 function setup(overrides: Readonly<{ uid?: string; contracts?: readonly string[]; fetchImpl?: typeof fetch;
+  financialHistory?: HtxV5FinancialHistoryScope;
   credential?: HtxObservationCredentialHandle; timeoutMs?: number; maxResponseBytes?: number;
   expectedPermission?: "readOnly" | "readOnly,trade"; permission?: string; clock?: ObservationClock }> = {}) {
   const calls: URL[] = [];
@@ -61,6 +65,7 @@ function setup(overrides: Readonly<{ uid?: string; contracts?: readonly string[]
     authorizeCurrent: async () => true,
     ...(overrides.uid ? { expectedHtxUid: overrides.uid } : {}),
     ...(overrides.contracts ? { contracts: overrides.contracts } : {}),
+    ...(overrides.financialHistory ? { financialHistory: overrides.financialHistory } : {}),
     ...(overrides.expectedPermission !== undefined ? { expectedPermission: overrides.expectedPermission } : {}),
   });
   return { reader, calls, requestCalls, credentialHandle, fetchImpl };
@@ -220,7 +225,10 @@ describe("HTX V5 observation reader", () => {
     await f.reader.settled();
   });
 
-  it("stays inside the 31-request worst-case page budget across all configured contracts", async () => {
+  it.each([
+    { contractCount: 8, withBills: false, requests: 31 },
+    { contractCount: 7, withBills: true, requests: 30 },
+  ])("stays inside the unchanged budget with $contractCount fill contracts and bills=$withBills", async ({ contractCount, withBills, requests }) => {
     const requestCount = new Map<string, number>();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = new URL(String(input));
@@ -248,8 +256,9 @@ describe("HTX V5 observation reader", () => {
       }
       if (url.pathname === "/v5/trade/order/details") {
         const contractCode = url.searchParams.get("contract_code")!;
-        const offset = page === 1 ? 1 : 13;
-        return json({ code: 200, ts, data: generated(offset, 12, id => ({ id: String(id), trade_id: `trade_${id}`,
+        const size = Number(url.searchParams.get("limit"));
+        const offset = page === 1 ? 1 : size + 1;
+        return json({ code: 200, ts, data: generated(offset, size, id => ({ id: String(id), trade_id: `trade_${id}`,
           order_id: `order_${id}`, contract_code: contractCode, side: "sell", position_side: "short",
           order_type: "1", margin_mode: "cross", trade_price: "1", trade_volume: "1", trade_turnover: "1",
           trade_fee: "0", fee_currency: "USDT", profit: "0", created_time: ts, updated_time: ts })) });
@@ -257,14 +266,21 @@ describe("HTX V5 observation reader", () => {
       return json(body(url.pathname));
     });
     const contracts = ["BTC-USDT", "ETH-USDT", "SOL-USDT", "XRP-USDT", "ADA-USDT", "DOGE-USDT", "LTC-USDT", "BCH-USDT"];
-    const f = setup({ uid, contracts, fetchImpl, maxResponseBytes: 1_048_576 });
+    const f = setup({ uid, contracts: contracts.slice(0, contractCount), fetchImpl, maxResponseBytes: 1_048_576,
+      ...(withBills ? { financialHistory } : {}) });
     const result = await f.reader.read(new AbortController().signal);
-    expect([...requestCount.values()].reduce((sum, count) => sum + count, 0)).toBe(31);
-    expect(f.fetchImpl).toHaveBeenCalledTimes(31 * 7);
+    expect([...requestCount.values()].reduce((sum, count) => sum + count, 0)).toBe(requests);
+    expect(f.fetchImpl).toHaveBeenCalledTimes(requests * 7);
     expect(result.openOrders.values).toHaveLength(200);
     expect(result.algoOrders.values).toHaveLength(200);
-    expect(result.fills.values).toHaveLength(192);
-    expect(result.fills.pageScope?.queries).toHaveLength(8);
+    expect(result.fills.values).toHaveLength(Math.floor(100 / contractCount) * 2 * contractCount);
+    expect(result.fills.pageScope?.queries).toHaveLength(contractCount);
+    expect(requestCount.get("/v5/account/bills") ?? 0).toBe(withBills ? 1 : 0);
+    if (withBills) {
+      expect(result).toMatchObject({ fills: { status: "PARTIAL", pageScope: { completeness: "UNKNOWN" } },
+        bills: { status: "PARTIAL", completeness: "UNKNOWN", netPnl: null, dailyPnl: null } });
+      expect(() => parseAccountObservation({ ...accountEnvelope(result), schemaVersion: "account-observation/v4" })).not.toThrow();
+    }
     await f.reader.settled();
   });
 
@@ -490,7 +506,7 @@ describe("HTX V5 observation reader", () => {
     expect(f.credentialHandle.dispose).not.toHaveBeenCalled();
   });
 
-  it("enforces the wall-clock whole-read deadline when the injected clock does not advance", async () => {
+  it.each([false, true])("enforces the unchanged wall-clock deadline with combined sources=%s and a frozen clock", async combined => {
     const v5Started = deferred<void>();
     let v5Fetches = 0;
     const frozenClock = { now: () => ts, sleep: accountObservationClock.sleep.bind(accountObservationClock) };
@@ -505,7 +521,8 @@ describe("HTX V5 observation reader", () => {
       return Promise.resolve(json(body(url.pathname)));
     });
     const reader = createHtxV5ObservationReader({ credential: credential(), clock: frozenClock, fetchImpl,
-      timeoutMs: 120_000, maxResponseBytes: 4096, authorizeCurrent: async () => true });
+      timeoutMs: 120_000, maxResponseBytes: 4096, authorizeCurrent: async () => true,
+      ...(combined ? { expectedHtxUid: uid, contracts: ["BTC-USDT"], financialHistory } : {}) });
     const reading = reader.read(new AbortController().signal);
     await v5Started.promise;
     await vi.advanceTimersByTimeAsync(120_000);

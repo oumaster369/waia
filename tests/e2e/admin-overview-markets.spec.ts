@@ -207,14 +207,14 @@ test("main Overview separates Spot/Futures, scopes all accounts and clears revok
   });
 
   await page.goto("/admin?currency=USDT");
-  await expect(page.getByTestId("overview-Капитал спота")).toContainText(/10\s390,03/);
-  await expect(page.getByText("Капитал фьючерсов", { exact: true })).toBeVisible();
-  const futures = page.getByRole("region", { name: "Фьючерсы", exact: true });
-  await expect(futures.getByText("Снимки учтены: 3 из 3")).toBeVisible();
+  await expect(page.getByTestId("overview-Spot equity")).toContainText(/10\s390,03/);
+  await expect(page.getByText("Futures equity", { exact: true })).toBeVisible();
+  const futures = page.getByRole("region", { name: "Futures", exact: true });
+  await expect(futures.getByText("Snapshots included: 3 of 3")).toBeVisible();
   await expect(futures).toContainText(/5\s207,48000000001/);
   await expect(futures).toContainText("USD");
   await expect(page.getByTestId("admin-connected-accounts").locator("tbody tr")).toHaveCount(3);
-  await expect(page.getByText("Общий капитал", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Total equity", { exact: true })).toHaveCount(0);
   await page.screenshot({
     path: testInfo.outputPath("overview-spot-futures-fixture.png"),
     fullPage: true,
@@ -224,14 +224,14 @@ test("main Overview separates Spot/Futures, scopes all accounts and clears revok
   await page.goto(
     `/admin?organization_id=${accounts[0]!.organizationId}&exchange_account_id=fixture-1`,
   );
-  await expect(page.getByText("Снимки учтены: 1 из 1")).toBeVisible();
+  await expect(page.getByText("Snapshots included: 1 of 1")).toBeVisible();
   await expect(page.getByTestId("admin-connected-accounts").locator("tbody tr")).toHaveCount(1);
   expect(new Set(observationRequests)).toEqual(new Set(["fixture-1"]));
 
   canonicalUnavailable = true;
   await page.goto("/admin?currency=USD");
-  await expect(page.getByText("Снимки учтены: 3 из 3")).toBeVisible();
-  await expect(page.getByText("Капитал фьючерсов", { exact: true })).toBeVisible();
+  await expect(page.getByText("Snapshots included: 3 of 3")).toBeVisible();
+  await expect(page.getByText("Futures equity", { exact: true })).toBeVisible();
 
   for (const query of [
     "mode=paper",
@@ -242,7 +242,7 @@ test("main Overview separates Spot/Futures, scopes all accounts and clears revok
     observationRequests.length = 0;
     const before = directoryRequests;
     await page.goto(`/admin?${query}`);
-    await expect(page.getByText("Капитал фьючерсов", { exact: true })).toBeVisible();
+    await expect(page.getByText("Futures equity", { exact: true })).toBeVisible();
     await expect(page.getByTestId("admin-connected-accounts")).toHaveCount(0);
     expect(directoryRequests).toBe(before);
     expect(observationRequests).toEqual([]);
@@ -252,14 +252,14 @@ test("main Overview separates Spot/Futures, scopes all accounts and clears revok
   await page.clock.install();
   missing = true;
   await page.goto("/admin?mode=live");
-  await expect(page.getByText("Снимки учтены: 0 из 3")).toBeVisible();
+  await expect(page.getByText("Snapshots included: 0 of 3")).toBeVisible();
   await expect(
-    page.getByText("Нет полного актуального снимка по счетам в выбранном охвате."),
+    page.getByText("No complete current account snapshot in the selected scope."),
   ).toBeVisible();
   await expect(futures.getByText("0 USD", { exact: true })).toHaveCount(0);
   denied = true;
   await page.clock.fastForward(60_001);
-  await expect(page.getByText("Доступ отозван. Данные счетов очищены.")).toBeVisible();
+  await expect(page.getByText("Access revoked. Account data cleared.")).toBeVisible();
   await expect(page.getByTestId("admin-connected-accounts")).toHaveCount(0);
   await expect(page.getByText("Тестовый счёт 1", { exact: true })).toHaveCount(0);
 });

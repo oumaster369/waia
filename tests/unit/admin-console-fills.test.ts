@@ -33,7 +33,7 @@ describe("fills and closed trades", () => {
       closedAt: "2026-09-23T00:00:00.000Z",
     });
     expect(trade.realizedPnl).toBe("-2.25");
-    expect(trade.label).toBe("Принудительно закрыта");
+    expect(trade.label).toBe("Forcibly closed");
   });
 
   it("bounds a closed-trade period as a half-open interval", () => {

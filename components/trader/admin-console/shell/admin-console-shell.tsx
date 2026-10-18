@@ -79,12 +79,12 @@ export function AdminConsoleShell({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
   return (
-    <div lang="ru" aria-label="Консоль администратора AI-TRADER" className="min-h-dvh md:flex">
+    <div lang="en" aria-label="AI-TRADER admin console" className="min-h-dvh md:flex">
       <a
         href="#admin-content"
         className="bg-waia-elevated sr-only z-50 rounded-lg px-4 py-3 focus:not-sr-only focus:fixed focus:top-4 focus:left-4"
       >
-        К содержимому
+        Skip to content
       </a>
       <aside
         className={cn(
@@ -94,7 +94,7 @@ export function AdminConsoleShell({
       >
         <Link
           href={href("/admin")}
-          aria-label="AI-TRADER — обзор"
+          aria-label="AI-TRADER · overview"
           className="focus-visible:ring-waia-accent-cool flex h-20 items-center gap-3 px-6 outline-none focus-visible:ring-2 focus-visible:ring-inset"
         >
           <ConsoleBrandIcon
@@ -106,13 +106,13 @@ export function AdminConsoleShell({
             <span>
               <span className="block text-sm font-bold tracking-[0.12em]">AI-TRADER</span>
               <span className="text-waia-fg-muted mt-1 block text-[10px] tracking-widest uppercase">
-                Администрирование
+                Administration
               </span>
             </span>
           )}
         </Link>
         <nav
-          aria-label="Консоль администратора AI-TRADER"
+          aria-label="AI-TRADER admin console"
           data-collapsed={collapsed ? "true" : "false"}
           className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:overflow-visible md:pt-5"
         >
@@ -150,7 +150,7 @@ export function AdminConsoleShell({
         <div className="border-waia-divider mt-auto hidden border-t p-4 md:block">
           <button
             type="button"
-            aria-label={collapsed ? "Развернуть меню" : "Свернуть меню"}
+            aria-label={collapsed ? "Expand menu" : "Collapse menu"}
             aria-pressed={collapsed}
             onClick={() => {
               const next = !collapsed;
@@ -169,7 +169,7 @@ export function AdminConsoleShell({
             ) : (
               <>
                 <ChevronLeft size={16} />
-                Свернуть меню
+                Collapse menu
               </>
             )}
           </button>
@@ -179,19 +179,19 @@ export function AdminConsoleShell({
         <header className="border-waia-divider flex min-h-20 flex-wrap items-center justify-between gap-4 border-b px-4 py-4 lg:px-8">
           <div>
             <p className="text-waia-fg-muted text-[10px] font-medium tracking-[0.16em] uppercase">
-              Консоль оператора
+              Operator console
             </p>
             <h1 className="mt-1 text-xl font-semibold tracking-tight">{section.title}</h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              aria-label="Поиск по консоли"
+              aria-label="Search console"
               className={`${controlClass} inline-flex items-center gap-2`}
               onClick={() => setPalette(true)}
             >
               <Search size={15} aria-hidden="true" />
-              <span className="hidden lg:inline">Перейти</span>
+              <span className="hidden lg:inline">Go</span>
               <kbd className="border-waia-rim text-waia-fg-muted hidden rounded border px-1.5 text-[10px] sm:inline">
                 ⌘ / Ctrl K
               </kbd>
@@ -204,7 +204,7 @@ export function AdminConsoleShell({
               onClick={() => setAssistant(!assistant)}
             >
               <Sparkles size={15} aria-hidden="true" />
-              <span className="hidden sm:inline">Помощник</span>
+              <span className="hidden sm:inline">Assistant</span>
             </button>
             <button
               type="button"
@@ -212,9 +212,9 @@ export function AdminConsoleShell({
               onClick={() => setEmergency(true)}
             >
               <CircleStop size={15} aria-hidden="true" />
-              Аварийная остановка
+              Emergency stop
             </button>
-            <TraderSignOut locale="ru" />
+            <TraderSignOut locale="en" />
           </div>
         </header>
         <ContextControls catalogue={catalogue} />
@@ -229,17 +229,17 @@ export function AdminConsoleShell({
           {assistant ? (
             <aside
               id="admin-assistant"
-              aria-label="Помощник"
+              aria-label="Assistant"
               className="border-waia-divider bg-waia-field-mid fixed inset-y-0 right-0 z-30 w-96 max-w-[90vw] overflow-y-auto border-l p-5 shadow-2xl 2xl:sticky 2xl:top-0 2xl:z-auto 2xl:h-dvh 2xl:shrink-0 2xl:shadow-none"
             >
               <div className="mb-5 flex items-center justify-between">
                 <h2 className="flex items-center gap-2 text-sm font-semibold">
                   <Sparkles size={16} />
-                  Помощник
+                  Assistant
                 </h2>
                 <button
                   type="button"
-                  aria-label="Закрыть помощника"
+                  aria-label="Close assistant"
                   onClick={() => setAssistant(false)}
                   className="hover:bg-waia-elevated rounded-lg p-1.5"
                 >
@@ -255,17 +255,17 @@ export function AdminConsoleShell({
       <ConsoleDialog
         open={palette}
         onClose={() => setPalette(false)}
-        title="Перейти к разделу"
-        description="Поиск открывает страницы. Команды управления здесь не выполняются."
+        title="Go to section"
+        description="Search opens pages. Management commands are not executed here."
       >
-        <Command label="Поиск по консоли">
+        <Command label="Search console">
           <CommandInput
             data-console-autofocus
-            placeholder="Название раздела…"
+            placeholder="Section name…"
             className={`${controlClass} mb-3 w-full`}
           />
           <CommandList className="max-h-80 overflow-y-auto">
-            <CommandEmpty className="text-waia-fg-muted p-4 text-sm">Раздел не найден</CommandEmpty>
+            <CommandEmpty className="text-waia-fg-muted p-4 text-sm">Section not found</CommandEmpty>
             {ADMIN_SECTIONS.map((item) => (
               <CommandItem
                 key={item.href}

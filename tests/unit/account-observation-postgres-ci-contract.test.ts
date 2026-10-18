@@ -78,10 +78,12 @@ describe("account observation PostgreSQL CI contract", () => {
     // An intentional future change needs an independently reviewed contract update.
     // DEE-1152: the integration job changed only by adding
     // tests/integration/postgres-dee540-blind-tail-max-pool.test.ts to its test list.
+    // DEE-1251: each historical job changes only its pnpm pin from 10 to 10.34.1.
+    // Keep hashing the complete jobs so every other workflow change remains review-gated.
     expect(createHash("sha256").update(job(historicalWorkflow, "integration")).digest("hex"))
-      .toBe("1c81412ccc89b82effbbe7b8ba3918fca8d4022fc3d3fc77edd43cfa62475509");
+      .toBe("0685a577e900a53a7423391fa88829ed8ce7c9cafcc0b9d104135351212c4b6c");
     expect(createHash("sha256").update(job(historicalWorkflow, "historical-postgres17")).digest("hex"))
-      .toBe("e85758d52b4ee3b7ca1f6993ad31be8a336695bdfb49aa47d63fe55612daa250");
+      .toBe("65c087475d535109e82f263d8e5829f6453c207d6d1364f8daa0b9902cbb00b3");
   });
 
   it("runs all five real suites serially on a separate synthetic PostgreSQL 17 service", () => {

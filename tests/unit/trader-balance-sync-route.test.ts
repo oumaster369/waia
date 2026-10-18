@@ -30,6 +30,10 @@ import {
 import { handleHtxConnectPost } from "@/lib/trader/credentials/connect-handler";
 import { CredentialDecryptError } from "@/lib/trader/credentials/errors";
 import { createMasterKeyProvider } from "@/lib/trader/security/create-master-key-provider";
+import {
+  buildHtxObservationPermissionMetadata,
+  buildHtxPermissionMetadata,
+} from "@/lib/trader/security/htx-credential-types";
 import { MasterKeyNotReadyError } from "@/lib/trader/security/errors";
 import { traderAuditActions } from "@/lib/trader/types";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
@@ -263,6 +267,68 @@ describe("HTX balance sync API (DEE-237)", () => {
     expect((result.body as { error: { code: string } }).error.code).toBe(
       HTX_BALANCE_SYNC_ERROR_CODES.CREDENTIAL_NOT_FOUND,
     );
+  });
+
+  it("refuses invalid stored HTX policy before decrypt or connector creation", async () => {
+    const getDecryptedCredentials = vi.fn(async () => {
+      throw new Error("unexpected decrypt");
+    });
+    const createConnector = vi.fn(() => {
+      throw new Error("unexpected connector construction");
+    });
+    const result = await handleBalanceSyncPost(credentialId, createDeps({
+      createCredentialService: (runtime, createProvider) => {
+        const service = runtime.kind === "sqlite"
+          ? createSqliteCredentialService(runtime.db, { createProvider })
+          : createPostgresCredentialService(runtime.db, { createProvider });
+        return {
+          ...service,
+          async listCredentialMetadata(context) {
+            return (await service.listCredentialMetadata(context)).map((row) => ({
+              ...row,
+              permissionMetadata: null,
+            }));
+          },
+          getDecryptedCredentials,
+        };
+      },
+      createConnector,
+    }));
+    expect(result.status).toBe(409);
+    expect((result.body as { error: { code: string } }).error.code).toBe(HTX_BALANCE_SYNC_ERROR_CODES.STORED_POLICY_INVALID);
+    expect(getDecryptedCredentials).not.toHaveBeenCalled();
+    expect(createConnector).not.toHaveBeenCalled();
+    expect(JSON.stringify(result.body)).not.toContain("test-secret-key");
+  });
+
+  it.each([
+    buildHtxPermissionMetadata({ exchangeAccountId: String(SPOT_ACCOUNT_ID), scopes: ["read", "trade"] }),
+    buildHtxObservationPermissionMetadata({ exchangeAccountId: String(SPOT_ACCOUNT_ID), scopes: ["read", "trade"] }),
+  ])("allows valid stored read policy through fresh validation and balance read (%j)", async (permissionMetadata) => {
+    const didDecrypt = vi.fn();
+    const result = await handleBalanceSyncPost(credentialId, createDeps({
+      createCredentialService: (runtime, createProvider) => {
+        const service = runtime.kind === "sqlite"
+          ? createSqliteCredentialService(runtime.db, { createProvider })
+          : createPostgresCredentialService(runtime.db, { createProvider });
+        const decrypt = vi.fn(service.getDecryptedCredentials.bind(service));
+        return {
+          ...service,
+          async listCredentialMetadata(context) {
+            return (await service.listCredentialMetadata(context)).map((row) => ({
+              ...row,
+              permissionMetadata,
+            }));
+          },
+          getDecryptedCredentials: async (context, id) => {
+            didDecrypt();
+            return decrypt(context, id);
+          },
+        };
+      },
+    }));
+    expect(result.status).toBe(200);
+    expect(didDecrypt).toHaveBeenCalledOnce();
   });
 
   it.each([false, true])("rejects different stored account before data fetch/write (stub=%s)", async (stubValidation) => {

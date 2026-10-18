@@ -90,17 +90,17 @@ export function SavedViews({ actions }: { actions?: React.ReactNode }) {
       }
       setMessage(
         response.status === 409
-          ? "Список изменился. Показаны свежие представления; проверьте их перед повтором."
+          ? "The list changed. Fresh views are shown; review them before retrying."
           : response.ok
             ? id
-              ? "Представление удалено."
-              : "Представление сохранено."
-            : `Не удалось сохранить: ${data.error?.code ?? "READ_FAILED"}`,
+              ? "View deleted."
+              : "View saved."
+            : `Could not save: ${data.error?.code ?? "READ_FAILED"}`,
       );
       if (response.ok) setName("");
     } catch {
       if (!signal?.aborted)
-        setMessage("Не удалось подтвердить изменение. Закройте и снова откройте представления.");
+        setMessage("Could not confirm the change. Close and reopen views.");
     } finally {
       setPending(false);
     }
@@ -119,21 +119,21 @@ export function SavedViews({ actions }: { actions?: React.ReactNode }) {
             setOpen((v) => !v);
           }}
         >
-          Представления
+          Views
         </button>
         {actions}
         {context.params.get("status") ? (
           <span className="border-waia-rim rounded border px-3 py-2">
-            Фильтр:{" "}
+            Filter:{" "}
             {(
               {
-                ISSUED: "не оплачены",
-                REJECTED: "отклонены",
-                inactive: "кампании: черновики, приостановленные и архив",
+                ISSUED: "unpaid",
+                REJECTED: "rejected",
+                inactive: "campaigns: drafts, paused and archived",
               } as Record<string, string>
             )[context.params.get("status")!] ?? context.params.get("status")}{" "}
             <button className="ml-2 underline" onClick={() => context.update({ status: null })}>
-              Сбросить
+              Reset
             </button>
           </span>
         ) : null}
@@ -142,7 +142,7 @@ export function SavedViews({ actions }: { actions?: React.ReactNode }) {
         <div className="mt-3 grid gap-4 lg:grid-cols-2">
           <div>
             <p className="text-waia-fg-muted mb-2">
-              Готовые представления · сохраняют текущий охват
+              Built-in views · retain the current scope
             </p>
             <div className="flex flex-wrap gap-2">
               {BUILTIN_VIEWS.map((view) => (
@@ -159,7 +159,7 @@ export function SavedViews({ actions }: { actions?: React.ReactNode }) {
           </div>
           <div>
             <p className="text-waia-fg-muted mb-2">
-              Мои представления · восстанавливают сохранённый охват и период
+              My views · restore the saved scope and period
             </p>
             {reason ? (
               <DataState state="unavailable" reason={reason} />
@@ -174,26 +174,26 @@ export function SavedViews({ actions }: { actions?: React.ReactNode }) {
                           {view.name}
                         </Link>
                       ) : (
-                        <span>{view.name} · формат не поддерживается</span>
+                        <span>{view.name} · unsupported format</span>
                       )}
                       <button
                         type="button"
                         disabled={pending}
                         onClick={() => void mutate(view.id)}
                         className="text-waia-fg-muted ml-auto underline"
-                        aria-label={`Удалить представление ${view.name}`}
+                        aria-label={`Delete view ${view.name}`}
                       >
-                        Удалить
+                        Delete
                       </button>
                     </li>
                   );
                 })}
                 {!collection.views.length ? (
-                  <li className="text-waia-fg-muted">Пока нет сохранённых представлений</li>
+                  <li className="text-waia-fg-muted">No saved views yet</li>
                 ) : null}
               </ul>
             ) : (
-              <p>Загрузка представлений…</p>
+              <p>Loading views…</p>
             )}
             <form
               className="mt-3 flex flex-wrap gap-2"
@@ -203,18 +203,18 @@ export function SavedViews({ actions }: { actions?: React.ReactNode }) {
               }}
             >
               <label className="sr-only" htmlFor="admin-view-name">
-                Название представления
+                View name
               </label>
               <input
                 id="admin-view-name"
                 maxLength={80}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Название представления"
+                placeholder="View name"
                 className={controlClass}
               />
               <button className={controlClass} disabled={!collection || pending || !name.trim()}>
-                {pending ? "Сохранение…" : "Сохранить текущий вид"}
+                {pending ? "Saving…" : "Save current view"}
               </button>
             </form>
             {message ? (

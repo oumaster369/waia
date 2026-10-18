@@ -2,6 +2,7 @@
 FROM node@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS build
 WORKDIR /src
 COPY package.json pnpm-lock.yaml tsconfig.json ./
+COPY patches/postgres@3.4.9.patch ./patches/postgres@3.4.9.patch
 RUN corepack enable && corepack pnpm@10.28.1 install --frozen-lockfile --ignore-scripts
 COPY scripts/trader/build-account-observation-projection.mjs ./scripts/trader/build-account-observation-projection.mjs
 COPY scripts/trader/account-observation-projection-host.ts ./scripts/trader/account-observation-projection-host.ts
@@ -9,12 +10,17 @@ COPY lib/trader/account-observation/database-node-tls.ts ./lib/trader/account-ob
 COPY lib/trader/account-observation/derivatives/types.ts ./lib/trader/account-observation/derivatives/types.ts
 COPY lib/trader/account-observation/host-role-probe.ts ./lib/trader/account-observation/host-role-probe.ts
 COPY lib/trader/account-observation/postgres-reader.ts ./lib/trader/account-observation/postgres-reader.ts
+COPY lib/trader/account-observation/financial-history.ts ./lib/trader/account-observation/financial-history.ts
+COPY lib/trader/account-observation/financial-history-cursor.ts ./lib/trader/account-observation/financial-history-cursor.ts
+COPY lib/trader/account-observation/postgres-financial-history-read.ts ./lib/trader/account-observation/postgres-financial-history-read.ts
 COPY lib/trader/account-observation/projection-dispatcher.ts ./lib/trader/account-observation/projection-dispatcher.ts
 COPY lib/trader/account-observation/projection-http.ts ./lib/trader/account-observation/projection-http.ts
 COPY lib/trader/account-observation/projection-protocol.ts ./lib/trader/account-observation/projection-protocol.ts
 COPY lib/trader/account-observation/projection-service-config.ts ./lib/trader/account-observation/projection-service-config.ts
 COPY lib/trader/account-observation/projection-service.ts ./lib/trader/account-observation/projection-service.ts
 COPY lib/trader/account-observation/types.ts ./lib/trader/account-observation/types.ts
+COPY lib/trader/account-observation/coverage.ts ./lib/trader/account-observation/coverage.ts
+COPY lib/trader/account-observation/derivatives/htx-v5-bill-groups.ts ./lib/trader/account-observation/derivatives/htx-v5-bill-groups.ts
 COPY lib/trader/account-observation/validation.ts ./lib/trader/account-observation/validation.ts
 RUN node scripts/trader/build-account-observation-projection.mjs /out
 

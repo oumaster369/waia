@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { getFreshOptionalAdminSessionUserId } from "@/lib/auth/session-user";
 import { disposeWaiaRuntimeDb, getWaiaRuntimeDb, type WaiaRuntimeDb } from "@/db/waia-runtime-db";
 import * as pgSchema from "@/db/schema.postgres";
-import { assertOrgMembershipPostgres } from "@/lib/waia-core/scope/org-context";
+import { assertOrgMembershipPostgres, OrgScopeError } from "@/lib/waia-core/scope/org-context";
 import { hasModuleEntitlementPostgres } from "@/lib/waia-core/entitlements/authoritative";
 import { assertAdminPermission } from "@/lib/waia-core/permissions/admin-http";
 import {
@@ -13,6 +13,7 @@ import {
   isAdminConnectedAccountScope,
 } from "@/lib/trader/credentials/admin-connected-account-scope";
 import { createProjectionClient, type ProjectionClient } from "./projection-client";
+import { createObservationFailureTrace } from "./failure-stage";
 import { handleAccountObservationGet, type ObservationReadDependencies } from "./read-handler";
 
 /** Dormant unless the fixed snapshot-only HTTPS transport is explicitly configured.
@@ -22,6 +23,7 @@ import { handleAccountObservationGet, type ObservationReadDependencies } from ".
 export function createAccountObservationRouteDependencies() {
   // Capture before the first session/authorization await, never once per operation.
   const deadlineMs = Date.now() + 5000;
+  const failureTrace = createObservationFailureTrace();
   let access: Promise<WaiaRuntimeDb> | undefined;
   let projection: ProjectionClient | undefined;
   let disposed = false;
@@ -30,8 +32,13 @@ export function createAccountObservationRouteDependencies() {
   };
   const runtime = async (signal: AbortSignal) => {
     assertOpen(signal);
-    access ??= getWaiaRuntimeDb();
-    const db = await access;
+    if (!access) {
+      failureTrace.enter("RUNTIME_INIT");
+      access = getWaiaRuntimeDb();
+    }
+    let db: WaiaRuntimeDb;
+    try { db = await access; }
+    catch (error) { failureTrace.capture("THREW"); throw error; }
     assertOpen(signal);
     if (db.kind !== "postgres") throw new Error("ACCOUNT_OBSERVATION_POSTGRES_REQUIRED");
     return db;
@@ -39,15 +46,32 @@ export function createAccountObservationRouteDependencies() {
   const reader = (signal: AbortSignal) => {
     assertOpen(signal);
     if (!projection) {
+      failureTrace.enter("PROJECTION_CONFIG");
       const keyHex = process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_HMAC_KEY_HEX;
+      const workerReleaseSha = process.env.WAIA_RELEASE_SHA ?? "";
+      // The Worker release describes this web artifact. The projection tuple's
+      // release must remain pinned to the independently deployed reader until
+      // that reader's expected tuple is deliberately rotated. An unset pin
+      // retains the historical coupling for deployments that haven't adopted
+      // the separate setting; an explicitly empty or malformed pin is refused.
+      const configuredProjectionReleaseSha =
+        process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_RELEASE_SHA;
+      const projectionReleaseSha =
+        configuredProjectionReleaseSha === undefined
+          ? workerReleaseSha
+          : configuredProjectionReleaseSha;
       if (process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_ENABLED !== "1" ||
-          !keyHex || !/^[0-9a-f]{64}$/.test(keyHex)) throw new Error("ACCOUNT_OBSERVATION_NOT_CONFIGURED");
+          !keyHex || !/^[0-9a-f]{64}$/.test(keyHex) ||
+          !/^[0-9a-f]{40}$/.test(workerReleaseSha) ||
+          !/^[0-9a-f]{40}$/.test(projectionReleaseSha)) {
+        throw new Error("ACCOUNT_OBSERVATION_NOT_CONFIGURED");
+      }
       const keyBytes = Uint8Array.from(keyHex.match(/../g)!, x => Number.parseInt(x, 16));
       try {
         projection = createProjectionClient({
-          fetch: globalThis.fetch.bind(globalThis), clock: Date.now, deadlineMs,
+          fetch: globalThis.fetch.bind(globalThis), clock: Date.now, deadlineMs, failureTrace,
           tuple: { audience: "https://observation-reader.waia.life",
-            releaseSha: process.env.WAIA_RELEASE_SHA ?? "",
+            releaseSha: projectionReleaseSha,
             epochId: process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_EPOCH ?? "",
             keyId: process.env.WAIA_ACCOUNT_OBSERVATION_PROJECTION_KEY_ID ?? "" },
           keyBytes,
@@ -59,20 +83,33 @@ export function createAccountObservationRouteDependencies() {
     return projection;
   };
   const deps: ObservationReadDependencies = {
+    failureTrace,
     async getUserId(signal) { assertOpen(signal); return getFreshOptionalAdminSessionUserId(); },
     async hasTraderAccess(_userId, organizationId, signal) {
-      return hasModuleEntitlementPostgres((await runtime(signal)).db, { organizationId, entitlementKey: "trader" });
+      const db = await runtime(signal);
+      failureTrace.enter("ENTITLEMENT");
+      return hasModuleEntitlementPostgres(db.db, { organizationId, entitlementKey: "trader" });
     },
     async hasOrgMembership(userId, organizationId, signal) {
       const db = await runtime(signal);
+      failureTrace.enter("MEMBERSHIP");
       try { await assertOrgMembershipPostgres(db.db, { userId, organizationId }); return true; }
-      catch { return false; }
+      catch (error) {
+        // Only an authoritative missing-membership result is a denial. A failed
+        // read must stay unavailable, so the browser can recover without treating
+        // a transient database error as permanent credential revocation.
+        if (error instanceof OrgScopeError && error.message === "ORG_MEMBERSHIP_REQUIRED") return false;
+        throw error;
+      }
     },
     async hasOperatorAccess(userId, organizationId, signal) {
-      return (await assertAdminPermission(await runtime(signal), userId, organizationId, "admin.audit.read")).allowed;
+      const db = await runtime(signal);
+      failureTrace.enter("OPERATOR_PERMISSION");
+      return (await assertAdminPermission(db, userId, organizationId, "admin.audit.read")).allowed;
     },
     async isAdminListedOrganization(organizationId, signal) {
       const db = await runtime(signal);
+      failureTrace.enter("ADMIN_LIST_SCOPE");
       const rows = await db.db
         .select({
           organizationKind: pgSchema.organizations.kind,
@@ -100,6 +137,7 @@ export function createAccountObservationRouteDependencies() {
       return reader(signal).resolveActiveBinding({ organizationId: scope.organizationId,
         credentialId: scope.credentialId, exchangeAccountId: scope.exchangeAccountId }, signal);
     },
+    async readFinancialHistory(input, signal) { return reader(signal).readFinancialHistory(input, signal); },
     async readLatest(binding, signal) { return reader(signal).readLatest(binding, signal); },
   };
   return { deps, async dispose() {
@@ -112,7 +150,7 @@ export function createAccountObservationRouteDependencies() {
 }
 
 export async function accountObservationRoute(request: Request, surface: "tenant" | "admin",
-  mode: "observation" | "binding" = "observation") {
+  mode: "observation" | "binding" | "financial-history" = "observation") {
   const context = createAccountObservationRouteDependencies();
   try { return await handleAccountObservationGet(request, surface, context.deps, mode); }
   finally { await context.dispose(); }

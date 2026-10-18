@@ -22,6 +22,7 @@ const CONSUMER_SCRIPT = resolve(APP_ROOT, "scripts/trader/account-observation-co
 const SERVER_ONLY_PRELUDE = resolve(APP_ROOT, "scripts/trader/trader-cli-server-only-prelude.cjs");
 const CONSUMER_STARTED = "waia.account_observation_collector.started.v1";
 const MANIFEST_SCHEMA = "waia.account_observation_assignment_manifest.v1";
+const FINANCIAL_MANIFEST_SCHEMA = "waia.account_observation_assignment_manifest.v2";
 const MANIFEST_MAX_BYTES = 65536;
 const COLLECTOR_LOGIN = "waia_account_observer_login";
 const READER_LOGIN = "waia_account_observation_reader_login";
@@ -105,9 +106,15 @@ function assertDeclaredManifest(path, expectedDigest, releaseSha, readFile) {
   } catch {
     refuse("MANIFEST_JSON");
   }
-  if (!parsed || typeof parsed !== "object" || parsed.schemaVersion !== MANIFEST_SCHEMA) {
+  if (!parsed || typeof parsed !== "object" ||
+      ![MANIFEST_SCHEMA, FINANCIAL_MANIFEST_SCHEMA].includes(parsed.schemaVersion) ||
+      !Array.isArray(parsed.assignments)) {
     refuse("MANIFEST_SCHEMA");
   }
+  // Match the collector's version/scope envelope. The collector still validates
+  // the full scope, recomputes the digest and revisions before opening any pool.
+  const financial = parsed.assignments.some((item) => item?.htxV5?.financialHistory !== undefined);
+  if (financial !== (parsed.schemaVersion === FINANCIAL_MANIFEST_SCHEMA)) refuse("MANIFEST_SCHEMA");
   if (parsed.contentSha256 !== expectedDigest) refuse("MANIFEST_DECLARED_DIGEST");
   if (parsed.releaseSha !== releaseSha) refuse("MANIFEST_RELEASE_SHA");
 }

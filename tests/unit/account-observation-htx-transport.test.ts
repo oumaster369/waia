@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { createHash, createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createHtxObservationGetTransport } from "@/lib/trader/account-observation/htx-get-transport";
+import { createHtxObservationGetTransport, createHtxAccountAcquisitionGetTransport } from "@/lib/trader/account-observation/htx-get-transport";
 import { createHtxAccountObservationReader, type HtxObservationGetTransport } from "@/lib/trader/account-observation/htx-reader";
 import type { ObservationBinding, ObservationClock } from "@/lib/trader/account-observation/types";
 
@@ -31,14 +31,15 @@ function setup(overrides: Partial<Input> = {}) {
 }
 function streamed(chunks: Uint8Array[], options: { status?: number; headers?: Record<string, string>; close?: boolean } = {}) {
   const cancel = vi.fn(); let index = 0;
+  const pull = vi.fn((controller: ReadableStreamDefaultController<Uint8Array>) => {
+    if (index < chunks.length) controller.enqueue(chunks[index++]);
+    else if (options.close !== false) controller.close();
+  });
   const stream = new ReadableStream<Uint8Array>({
-    pull(controller) {
-      if (index < chunks.length) controller.enqueue(chunks[index++]);
-      else if (options.close !== false) controller.close();
-    }, cancel,
+    pull, cancel,
   }, { highWaterMark: 0 });
   const response = new Response(stream, { status: options.status ?? 200, headers: options.headers });
-  return { response, cancel, getReader: vi.spyOn(stream, "getReader") };
+  return { response, cancel, pull };
 }
 afterEach(() => vi.useRealTimers());
 
@@ -147,7 +148,7 @@ describe("admitted HTX GET observation transport with synthetic keys and in-memo
     const f = setup(); const stream = streamed([new TextEncoder().encode("sensitive")], { close: false,
       headers: { "content-length": length } }); f.fetchImpl.mockResolvedValueOnce(stream.response);
     await expect(f.transport.signedGet(request())).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
-    expect(stream.getReader).not.toHaveBeenCalled(); expect(stream.cancel).toHaveBeenCalledTimes(1);
+    expect(stream.pull).not.toHaveBeenCalled(); expect(stream.cancel).toHaveBeenCalledTimes(1);
   });
   it.each([new Uint8Array([0xc3, 0x28]), new Uint8Array([0xc3])])("rejects malformed UTF-8 %j", async chunk => {
     const f = setup(); const stream = streamed([chunk]); f.fetchImpl.mockResolvedValueOnce(stream.response);
@@ -158,7 +159,7 @@ describe("admitted HTX GET observation transport with synthetic keys and in-memo
     const f = setup(); const stream = streamed([new TextEncoder().encode("sensitive echoed signature")], { status, close: false });
     f.fetchImpl.mockResolvedValueOnce(stream.response);
     expect(await f.transport.signedGet(request())).toEqual({ binding, httpStatus: status, body: "" });
-    expect(stream.getReader).not.toHaveBeenCalled(); expect(stream.cancel).toHaveBeenCalledTimes(1);
+    expect(stream.pull).not.toHaveBeenCalled(); expect(stream.cancel).toHaveBeenCalledTimes(1);
     expect(f.verifyReadAdmission).toHaveBeenCalledTimes(2);
   });
   it.each(["redirected", "foreign-url", "redirect-status"])("refuses %s response and cancels its body", async kind => {
@@ -167,7 +168,7 @@ describe("admitted HTX GET observation transport with synthetic keys and in-memo
     if (kind === "foreign-url") Object.defineProperty(stream.response, "url", { value: "https://attacker.test/" });
     f.fetchImpl.mockResolvedValueOnce(stream.response);
     await expect(f.transport.signedGet(request())).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
-    expect(stream.cancel).toHaveBeenCalledTimes(1); expect(stream.getReader).not.toHaveBeenCalled();
+    expect(stream.cancel).toHaveBeenCalledTimes(1); expect(stream.pull).not.toHaveBeenCalled();
   });
   it("sanitizes unexpected admission, fetch and body failures", async () => {
     const f = setup(); f.verifyReadAdmission.mockRejectedValueOnce(new Error("SECRET admission key"));
@@ -188,7 +189,7 @@ describe("admitted HTX GET observation transport with synthetic keys and in-memo
   it("cancels a stalled body on caller abort", async () => {
     const f = setup(); const stream = streamed([], { close: false }); f.fetchImpl.mockResolvedValueOnce(stream.response);
     const abort = new AbortController(); const pending = f.transport.signedGet(request({ signal: abort.signal }));
-    await vi.waitFor(() => expect(stream.getReader).toHaveBeenCalled()); abort.abort();
+    await vi.waitFor(() => expect(stream.pull).toHaveBeenCalled()); abort.abort();
     await expect(pending).rejects.toMatchObject({ code: "READ_FAILED" }); expect(stream.cancel).toHaveBeenCalledTimes(1);
     expect(f.fetchImpl.mock.calls[0][1]?.signal?.aborted).toBe(true);
   });
@@ -199,7 +200,7 @@ describe("admitted HTX GET observation transport with synthetic keys and in-memo
     await vi.advanceTimersByTimeAsync(1000); await assertion;
     expect(f.fetchImpl.mock.calls[0][1]?.signal?.aborted).toBe(true);
     const late = streamed([], { close: false }); finish(late.response); await vi.advanceTimersByTimeAsync(0);
-    expect(late.cancel).toHaveBeenCalledTimes(1); expect(late.getReader).not.toHaveBeenCalled();
+    expect(late.cancel).toHaveBeenCalledTimes(1); expect(late.pull).not.toHaveBeenCalled();
     expect(f.verifyReadAdmission).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(0);
     await expect(f.transport.signedGet(request())).rejects.toMatchObject({ code: "READ_FAILED" });
     expect(f.fetchImpl).toHaveBeenCalledTimes(1);
@@ -260,5 +261,20 @@ describe("admitted HTX GET observation transport with synthetic keys and in-memo
     expect(f.fetchImpl).toHaveBeenCalledTimes(4);
     expect(f.fetchImpl.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
     expect(f.verifyReadAdmission).toHaveBeenCalledTimes(8); reader.dispose();
+  });
+});
+
+describe("native response errors do not become cleanup failures", () => {
+  it.each(["observation", "acquisition"] as const)("settles %s terminal read errors and pre-read HTTP errors", async lane => {
+    for (const status of [200, 500]) {
+      const f = setup({ fetchImpl: async () => new Response(new ReadableStream({
+        start(c) { c.error(new Error("synthetic body failure")); },
+      }), { status }) });
+      const transport = lane === "observation" ? f.transport : createHtxAccountAcquisitionGetTransport({ ...f.input, knownOrderIds: [] });
+      const read = () => transport.signedGet({ ...request(), path: "/v1/account/accounts/123/balance" });
+      if (status === 200) await expect(read()).rejects.toMatchObject({ code: "READ_FAILED" });
+      else await expect(read()).resolves.toMatchObject({ httpStatus: 500, body: "" });
+      await expect(transport.settled()).resolves.toBeUndefined();
+    }
   });
 });

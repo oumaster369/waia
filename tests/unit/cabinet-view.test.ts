@@ -84,7 +84,7 @@ describe("cabinet observation view", () => {
     expect(secondsUntilNextPoll(now, now + 180_000)).toBe(0);
   });
 
-  it("keeps Live as the headline while a snapshot is on screen", () => {
+  it("marks an ERROR with a retained snapshot as Last tick", () => {
     expect(
       cabinetLiveLabel({
         status: "ERROR",
@@ -92,14 +92,27 @@ describe("cabinet observation view", () => {
         stale: false,
         transport: "RECONNECTING",
       }),
-    ).toBe("Live");
+    ).toBe("Last tick");
+  });
+
+  it("marks an ERROR without a snapshot as Data unavailable", () => {
     expect(
       cabinetLiveLabel({
         status: "ERROR",
         observation: null,
         stale: false,
       }),
-    ).toBe("Connecting");
+    ).toBe("Data unavailable");
+  });
+
+  it("keeps initial LOADING without a snapshot as Connecting", () => {
+    expect(cabinetLiveLabel({ status: "LOADING", observation: null, stale: false })).toBe("Connecting");
+  });
+
+  it.each([
+    ["REVOKED", "Revoked"], ["DISCONNECTED", "Idle"], ["STALE", "Last tick"],
+  ])("preserves the %s headline", (status, label) => {
+    expect(cabinetLiveLabel({ status, observation, stale: false })).toBe(label);
   });
 
   it("summarizes a cabinet without inventing PnL", () => {
@@ -140,10 +153,10 @@ describe("cabinet observation view", () => {
     });
   });
 
-  it("keeps V5 futures USD fields separate and preserves observed zero strings", () => {
+  it.each(["account-observation/v3", "account-observation/v4"] as const)("keeps %s futures USD fields separate and preserves observed zero strings", schemaVersion => {
     const v3 = {
       ...observation,
-      schemaVersion: "account-observation/v3",
+      schemaVersion,
       htxV5: {
         balance: {
           status: "COMPLETE",
@@ -197,5 +210,31 @@ describe("cabinet observation view", () => {
       profitUnrealUsd: null,
       stale: false,
     });
+  });
+});
+
+
+describe("DEE-1242 native inventory and complete order totals", () => {
+  it("keeps nonzero USDC in its own native currency without changing USDT", () => {
+    const usdc = { asset: "USDC", free: "25.00000001", locked: "0.02", total: "25.02000001" };
+    const rows = [...observation.balances.values!, usdc];
+    expect(nonUsdtInventory(rows)).toContainEqual(usdc);
+    expect(usdtSpot(rows)).toEqual({ free: "12.50", locked: "3.00", total: "15.50" });
+    expect(nonUsdtInventory([...rows, { asset: "USDC", free: "0", locked: "0", total: "0.000" }])).toEqual([
+      { asset: "BTC", free: "0.010", locked: "0", total: "0.010" }, usdc,
+    ]);
+  });
+
+  it.each(["PARTIAL", "ERROR"] as const)("does not publish an unqualified total for %s empty orders", status => {
+    const snapshot = { ...observation, openOrders: { ...observation.openOrders, status, values: [] } };
+    expect(summarizeCabinetObservation(snapshot).openOrdersCount).toBeNull();
+  });
+
+  it("does not publish a complete order count when received rows have incomplete coverage", () => {
+    const snapshot = { ...observation, openOrders: { ...observation.openOrders, status: "PARTIAL" as const,
+      values: [{ orderId: "synthetic-order", clientOrderId: "synthetic-client", symbol: "BTCUSDT",
+        side: "buy" as const, type: "limit" as const, status: "open" as const, quantity: "2.00", filledQuantity: "0",
+        createdAt: "2026-10-13T00:00:00Z", updatedAt: null }] } };
+    expect(summarizeCabinetObservation(snapshot).openOrdersCount).toBeNull();
   });
 });

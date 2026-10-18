@@ -91,33 +91,33 @@ function ReadList<T>({
       )}
       {read.envelope?.data.truncated ? (
         <p className="text-waia-fg-muted px-5 pb-4 text-xs">
-          Показаны последние записи. Полный список — в разделе.
+          Recent records are shown. The complete list is in the section.
         </p>
       ) : null}
     </ConsolePanel>
   );
 }
 const attentionLabels: Record<string, string> = {
-  UNKNOWN_ORDER_OUTCOME: "Неизвестен итог отправки ордера",
-  POSTURE_KILLED: "Активна аварийная остановка",
-  RUNTIME_HALT: "Runtime остановлен",
-  GUARDIAN_STALE: "Нужна свежая оценка позиции",
-  MONEY_DIVERGENCE: "Требуется сверка средств",
-  STALE_ACTIVE_OBSERVATION: "Устарело наблюдение активного счёта",
-  SERVICE_FAILURE: "Сбой сервиса или повторные ошибки задания",
-  OWNERSHIP_CONFLICT: "Счёт заявлен в двух организациях",
-  BILLING_ATTENTION: "Нужна проверка счёта на оплату",
-  PERIOD_BLOCKED: "Отчётный период требует внимания",
-  STALE_QUIET_OBSERVATION: "Давно не обновлялся счёт",
-  PROMOTION_REVIEW: "Есть предложение стратегии на рассмотрение",
+  UNKNOWN_ORDER_OUTCOME: "Order submission outcome unknown",
+  POSTURE_KILLED: "Emergency stop active",
+  RUNTIME_HALT: "Runtime stopped",
+  GUARDIAN_STALE: "A fresh position valuation is needed",
+  MONEY_DIVERGENCE: "Funds reconciliation required",
+  STALE_ACTIVE_OBSERVATION: "Active account observation is stale",
+  SERVICE_FAILURE: "Service failure or repeated job errors",
+  OWNERSHIP_CONFLICT: "The account is claimed by two organizations",
+  BILLING_ATTENTION: "Invoice review needed",
+  PERIOD_BLOCKED: "Reporting period needs attention",
+  STALE_QUIET_OBSERVATION: "Account has not refreshed recently",
+  PROMOTION_REVIEW: "Strategy proposal awaiting review",
 };
 export function AttentionPanel() {
   return (
     <ReadList<AttentionItem>
       path="/api/trader/admin/console/attention"
-      title="Требует внимания"
-      note="Одна запись на причину. Обоснованный отказ от сделки не является инцидентом"
-      action={<Action path="/admin/errors">Инциденты →</Action>}
+      title="Needs attention"
+      note="One record per reason. A justified decision not to trade is not an incident"
+      action={<Action path="/admin/errors">Incidents →</Action>}
     >
       {(items) => (
         <ul className="divide-waia-divider divide-y">
@@ -131,11 +131,11 @@ export function AttentionPanel() {
                 <p className="text-sm">{attentionLabels[item.reason] ?? item.reason}</p>
                 <p className="text-waia-fg-muted mt-1 text-xs">
                   {item.entityIds.length
-                    ? `Записей: ${item.entityIds.length}`
-                    : "Проверка состояния системы"}
+                    ? `Records: ${item.entityIds.length}`
+                    : "System status check"}
                 </p>
               </div>
-              <Action path={item.href}>Открыть →</Action>
+              <Action path={item.href}>Open →</Action>
             </li>
           ))}
         </ul>
@@ -151,21 +151,21 @@ export function OverviewFinancialDetails({ data }: { data: OverviewData }) {
       {period ? (
         <details className="border-waia-divider bg-waia-field-mid rounded-xl border p-5">
           <summary className="cursor-pointer text-sm font-medium">
-            Из чего складывается результат Трейдера
+            Trader result breakdown
           </summary>
           <div className="mt-5 space-y-5">
             <p className="text-waia-fg-muted text-xs leading-6">
-              Операционный результат до комиссии сервиса 30%. Это не база для выпуска счёта. Охват:{" "}
+              Operational result before the 30% service fee. This is not the invoice issuance basis. Coverage:{" "}
               {period.breakdown.included}/{period.breakdown.total}.
             </p>
             <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {(
                 [
-                  ["realized", "Реализованный результат"],
-                  ["unrealizedChange", "Изменение нереализованного"],
-                  ["tradingFees", "Торговые комиссии"],
-                  ["openFees", "Комиссии открытия"],
-                  ["closeFees", "Комиссии закрытия"],
+                  ["realized", "Realized result"],
+                  ["unrealizedChange", "Change in unrealized result"],
+                  ["tradingFees", "Trading fees"],
+                  ["openFees", "Opening fees"],
+                  ["closeFees", "Closing fees"],
                 ] as const
               ).map(([key, label]) => (
                 <div key={key} className="border-waia-divider rounded-lg border p-4">
@@ -181,30 +181,29 @@ export function OverviewFinancialDetails({ data }: { data: OverviewData }) {
               ))}
             </dl>
             <p className="text-waia-fg-muted text-xs">
-              Комиссии уже учтены в реализованном результате: открытие вычтено отдельно, закрытие
-              входит в сохранённый результат исполнения.
+              Fees are already included in the realized result: opening is deducted separately; closing is included in the saved fill result.
             </p>
             <div className="grid gap-3 sm:grid-cols-3">
               {(
                 [
-                  ["DRAFT", "Начислено в черновиках"],
-                  ["ISSUED", "Выставлено"],
-                  ["PAID", "Оплачено"],
+                  ["DRAFT", "Accrued in drafts"],
+                  ["ISSUED", "Issued"],
+                  ["PAID", "Paid"],
                 ] as const
               ).map(([status, label]) => (
                 <div key={status} className="border-waia-divider rounded-lg border p-4">
-                  <p className="text-waia-fg-muted text-xs">Комиссия сервиса · {label}</p>
+                  <p className="text-waia-fg-muted text-xs">Service fee · {label}</p>
                   {period.serviceFees
                     .filter((f) => f.status === status)
                     .map((f) => (
                       <p className="mt-2 tabular-nums" key={f.currency}>
                         {formatAdminMoney(f.amount, f.currency)}{" "}
-                        <span className="text-waia-fg-muted text-xs">· {f.count} сч.</span>
+                        <span className="text-waia-fg-muted text-xs">· {f.count} inv.</span>
                       </p>
                     ))}
                   {!period.serviceFees.some((f) => f.status === status) ? (
                     <p className="text-waia-fg-muted mt-2 text-xs">
-                      Нет сохранённых счетов этого статуса
+                      No saved invoices with this status
                     </p>
                   ) : null}
                 </div>
@@ -217,7 +216,7 @@ export function OverviewFinancialDetails({ data }: { data: OverviewData }) {
                 .map((a) => (
                   <li key={a.account} className="border-waia-divider border-t pt-2 text-xs">
                     <span className="text-waia-fg-muted">
-                      Счёт {a.account.split(":").at(-1)?.slice(-10)}
+                      Account {a.account.split(":").at(-1)?.slice(-10)}
                     </span>
                     {a.result.reasons.map((reason) => (
                       <DataState key={reason} state={a.result.state} reason={reason} />
@@ -248,17 +247,17 @@ export function AccountsPreview({ data }: { data: OverviewData }) {
     .slice(0, 8);
   return (
     <ConsolePanel
-      title="Биржевые счета"
-      note="Сначала счета с ограничениями оценки"
-      action={<Action path="/admin/accounts">Все счета →</Action>}
+      title="Exchange accounts"
+      note="Accounts with valuation limitations first"
+      action={<Action path="/admin/accounts">All accounts →</Action>}
     >
       <ConsoleTable
-        caption="Биржевые счета обзора"
+        caption="Overview exchange accounts"
         rows={accounts}
         rowKey={(a) => a.id}
         columns={[
           {
-            title: "Счёт",
+            title: "Account",
             render: (a) => (
               <Link
                 className="hover:text-waia-accent-cool font-medium"
@@ -273,7 +272,7 @@ export function AccountsPreview({ data }: { data: OverviewData }) {
             ),
           },
           {
-            title: "Капитал",
+            title: "Equity",
             render: (a) =>
               a.equity === null ? (
                 <DataState state="unavailable" reason={a.reason} />
@@ -282,7 +281,7 @@ export function AccountsPreview({ data }: { data: OverviewData }) {
               ),
           },
           {
-            title: "Результат",
+            title: "Result",
             render: (a) =>
               a.traderPnl === null ? (
                 <DataState state="unavailable" reason="PNL_PERIOD_EVIDENCE_MISSING" />
@@ -291,7 +290,7 @@ export function AccountsPreview({ data }: { data: OverviewData }) {
               ),
           },
           {
-            title: "Оценка",
+            title: "Valuation",
             render: (a) =>
               a.reason ? (
                 <DataState state={a.included ? "partial" : "unavailable"} reason={a.reason} />
@@ -317,9 +316,9 @@ export function NewsPanel({ full = false }: { full?: boolean }) {
   return (
     <ReadList<News>
       path={`/api/trader/admin/console/news?limit=${full ? 50 : 7}`}
-      title="Рынок и новости"
-      note="Общие рыночные источники. Время публикации и получения показаны отдельно"
-      action={full ? undefined : <Action path="/admin?tab=market">Все новости →</Action>}
+      title="Market and news"
+      note="Shared market sources. Publication and receipt times are shown separately"
+      action={full ? undefined : <Action path="/admin?tab=market">All news →</Action>}
     >
       {(items) => (
         <div className={full ? "grid gap-px md:grid-cols-2" : "divide-waia-divider divide-y"}>
@@ -327,7 +326,7 @@ export function NewsPanel({ full = false }: { full?: boolean }) {
             <article key={item.id} className="min-w-0 p-5">
               <div className="text-waia-fg-muted mb-2 flex flex-wrap justify-between gap-2 text-[11px]">
                 <span>{item.source}</span>
-                <EvidenceTime at={item.publishedAt} label="Опубликовано" />
+                <EvidenceTime at={item.publishedAt} label="Published" />
               </div>
               <h3 className="text-sm leading-6 font-medium">
                 {item.url ? (
@@ -347,7 +346,7 @@ export function NewsPanel({ full = false }: { full?: boolean }) {
                 <p className="text-waia-fg-muted mt-3 text-sm leading-6">{item.summary}</p>
               ) : null}
               <p className="mt-3 text-[10px]">
-                <EvidenceTime at={item.observedAt} label="Получено" />
+                <EvidenceTime at={item.observedAt} label="Received" />
               </p>
             </article>
           ))}
@@ -373,9 +372,9 @@ export function FillsPreview() {
   return (
     <ReadList<Fill>
       path="/api/trader/admin/console/fills?limit=7"
-      title="Последние исполнения"
-      note="Только подтверждённые fills; принятие ордера биржей не является исполнением"
-      action={<Action path="/admin/orders?tab=fills">Все исполнения →</Action>}
+      title="Recent fills"
+      note="Confirmed fills only; exchange order acceptance is not execution"
+      action={<Action path="/admin/orders?tab=fills">All fills →</Action>}
     >
       {(items) => (
         <ul className="divide-waia-divider divide-y">
@@ -402,7 +401,7 @@ export function FillsPreview() {
               <div className="text-right text-xs">
                 <EvidenceTime at={item.executedAt} />
                 <p className="text-waia-fg-muted mt-1">
-                  Комиссия {item.fee} {item.feeAsset}
+                  Fee {item.fee} {item.feeAsset}
                 </p>
               </div>
             </li>
@@ -426,9 +425,9 @@ export function ActivityPanel({ full = false }: { full?: boolean }) {
   return (
     <ReadList<Cycle>
       path={`/api/trader/admin/console/cycles?limit=${full ? 50 : 7}`}
-      title="Что делает Трейдер"
-      note="Последние сохранённые циклы. NO_TRADE — подтверждённое решение не торговать"
-      action={full ? undefined : <Action path="/admin?tab=algorithm">Работа алгоритма →</Action>}
+      title="Trader activity"
+      note="Latest saved cycles. NO_TRADE is a confirmed decision not to trade"
+      action={full ? undefined : <Action path="/admin?tab=algorithm">Algorithm activity →</Action>}
     >
       {(items) => (
         <ul className="divide-waia-divider divide-y">
@@ -444,8 +443,8 @@ export function ActivityPanel({ full = false }: { full?: boolean }) {
               </div>
               <p className="text-waia-fg-muted mt-2 text-xs leading-6">
                 {item.reason.includes("NO_TRADE")
-                  ? "Решение: не торговать"
-                  : "Завершён цикл оценки"}{" "}
+                  ? "Decision: do not trade"
+                  : "Assessment cycle completed"}{" "}
                 · <span title={item.reason}>{item.reason}</span>
               </p>
               <Link
@@ -457,7 +456,7 @@ export function ActivityPanel({ full = false }: { full?: boolean }) {
                   mode: item.mode === "undetermined" ? "all" : item.mode,
                 })}
               >
-                Доказательства цикла →
+                Cycle evidence →
               </Link>
             </li>
           ))}
@@ -471,8 +470,8 @@ export function ClientsPreview() {
   return (
     <ReadList<{ id: string; name: string; access: string }>
       path="/api/trader/admin/console/clients?limit=5"
-      title="Клиенты"
-      action={<Action path="/admin/clients">Все клиенты →</Action>}
+      title="Clients"
+      action={<Action path="/admin/clients">All clients →</Action>}
     >
       {(items) => (
         <ul className="divide-waia-divider divide-y">
@@ -501,9 +500,9 @@ export function ResearchPreview() {
   return (
     <ReadList<{ id: string; title: string; state: string | null; observedAt: string | null }>
       path="/api/trader/admin/console/research/catalog?tab=campaigns&limit=5"
-      title="Исследования"
-      note="Кампании и сохранённые состояния; результат исследования не означает допуск к торговле"
-      action={<Action path="/admin/research">Все исследования →</Action>}
+      title="Research"
+      note="Campaigns and saved states; research results do not mean trading admission"
+      action={<Action path="/admin/research">All research →</Action>}
     >
       {(items) => (
         <ul className="divide-waia-divider divide-y">
@@ -519,14 +518,14 @@ export function ResearchPreview() {
                 <p>
                   {(
                     {
-                      DRAFT: "Черновик",
-                      ACTIVE: "Активна",
-                      PAUSED: "Приостановлена",
-                      ARCHIVED: "В архиве",
+                      DRAFT: "Draft",
+                      ACTIVE: "Active",
+                      PAUSED: "Paused",
+                      ARCHIVED: "Archived",
                     } as Record<string, string>
                   )[item.state ?? ""] ??
                     item.state ??
-                    "Состояние не сохранено"}
+                    "State not saved"}
                 </p>
                 <EvidenceTime at={item.observedAt} />
               </div>

@@ -595,11 +595,12 @@ async function verify0209(sql: Sql): Promise<unknown> {
         item.security_definer ||
         !item.owner_is_current_user ||
         item.volatility !== "i" ||
-        // DEE-871 issues no GRANT/REVOKE on these validators. Untouched default is cluster-class
-        // dependent: bare PG leaves `proacl` NULL (stock PUBLIC EXECUTE); the approved production
-        // target's function default ACL is owner-only `{postgres=X/postgres}`. Both mean no named
-        // role was granted EXECUTE. A named-role grant is refused. Function bodies stay pinned
-        // through `pg_get_functiondef` in the catalog digest.
+        // DEE-871 issues no GRANT/REVOKE on these validators. This checks explicit ACL entries
+        // outside the owner; it does not establish effective PUBLIC access. A NULL `proacl` uses
+        // `acldefault` (including stock PUBLIC EXECUTE), while a per-schema owner entry does not
+        // erase additive global defaults. Effective grants depend on both default-ACL layers and
+        // PostgreSQL's defaults. Function bodies stay pinned through `pg_get_functiondef` in the
+        // catalog digest.
         !item.default_acl,
     )
   ) {

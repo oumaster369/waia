@@ -16,7 +16,7 @@ export function previewClosedPeriodFee(input: {
     computedAt: new Date(0),
   });
   const label = artifact.billable
-    ? `предварительный расчёт, не счёт: ${artifact.performanceFee}`
-    : `Рассчитано ${artifact.performanceFee}; счёт не сформирован — ниже порога`;
+    ? `preliminary calculation, not an invoice: ${artifact.performanceFee}`
+    : `Calculated ${artifact.performanceFee}; invoice not created, below threshold`;
   return { artifact, label };
 }

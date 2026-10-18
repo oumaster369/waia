@@ -30,6 +30,33 @@ function deferred<T>() {
   return { promise, resolve };
 }
 describe("shared account observation HTTP boundary (injected auth, no production calls)", () => {
+  it.each(["getUserId", "hasTraderAccess", "hasOrgMembership", "hasOperatorAccess", "isAdminListedOrganization"] as const)(
+    "classifies cancellation during %s as unavailable, not verified revocation",
+    async (stage) => {
+      const controller = new AbortController();
+      const d = deps();
+      if (stage === "getUserId") {
+        vi.mocked(d.getUserId).mockImplementation(async () => { controller.abort(); return null; });
+      } else {
+        vi.mocked(d[stage]).mockImplementation(async () => { controller.abort(); return false; });
+      }
+      const surface = stage === "hasOperatorAccess" || stage === "isAdminListedOrganization" ? "admin" : "tenant";
+      const response = await handleAccountObservationGet(new Request(request(), { signal: controller.signal }), surface, d);
+      expect(response.status).toBe(503);
+      expect(d.resolveActiveBinding).not.toHaveBeenCalled();
+      expect(d.readLatest).not.toHaveBeenCalled();
+    },
+  );
+  it("cancellation during the final binding read cannot be reported as revocation", async () => {
+    const controller = new AbortController();
+    const d = deps();
+    vi.mocked(d.resolveActiveBinding).mockResolvedValueOnce(binding).mockImplementationOnce(async () => {
+      controller.abort(); return null;
+    });
+    const response = await handleAccountObservationGet(new Request(request(), { signal: controller.signal }), "tenant", d);
+    expect(response.status).toBe(503);
+    expect(d.readLatest).toHaveBeenCalledOnce();
+  });
   it("requires session and never opens the store on denial", async () => {
     const d = deps();
     vi.mocked(d.getUserId).mockResolvedValue(null);

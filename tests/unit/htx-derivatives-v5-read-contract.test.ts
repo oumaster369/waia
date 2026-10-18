@@ -65,7 +65,7 @@ const fillRow = `{"id":"1124147771","contract_code":"BTC-USDT","order_id":"13435
   "trade_fee":"0.01884","deduction_price":"","profit":"0","contract_type":"swap"}`;
 
 describe("HTX V5 read-only request contract", () => {
-  it("exposes only the six fixed GET paths and no mode setter or trading route", () => {
+  it("exposes only the seven fixed GET paths and no mode setter or trading route", () => {
     expect(Object.values(HTX_V5_READ_ONLY_ROUTES)).toEqual([
       "/v5/account/asset_mode",
       "/v5/account/balance",
@@ -73,6 +73,7 @@ describe("HTX V5 read-only request contract", () => {
       "/v5/trade/order/opens",
       "/v5/algo/order/opens",
       "/v5/trade/order/details",
+      "/v5/account/bills",
     ]);
     expect(buildHtxV5AssetModeRequest()).toEqual({
       method: "GET",

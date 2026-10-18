@@ -262,7 +262,7 @@ describePostgres("admin assistant turns persist on postgres", () => {
     expect(stageAt).toBeGreaterThanOrEqual(0);
     expect(stageAt).toBeLessThan(readyAt);
     expect(readyAt).toBeLessThan(answerAt);
-    expect(streamed).toContain("Получаю счета…");
+    expect(streamed).toContain("Retrieving accounts…");
 
     const assistant = await sqlClient<{ id: string; status: string }[]>`
       SELECT id, status FROM trader_admin_assistant_message

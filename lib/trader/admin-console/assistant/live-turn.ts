@@ -12,7 +12,7 @@ export async function runLiveAssistantTurn(input: {
   complete: (prompt: string) => Promise<{ text: string; usage?: { totalTokens?: number } }>;
 }): Promise<
   | { status: "answer"; answer: AssistantAnswer; usage: AssistantUsage }
-  | { status: "failed"; message: "Не удалось разобрать ответ модели"; usage: AssistantUsage }
+  | { status: "failed"; message: "Could not parse the model response"; usage: AssistantUsage }
   | { status: "stopped"; usage: AssistantUsage }
 > {
   let tokens = 0;

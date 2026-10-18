@@ -100,11 +100,9 @@ export function ageLabel(completedAtMs: number, nowMs: number): string {
 export function cabinetLiveLabel(view: CabinetLiveInput): string {
   if (view.status === "REVOKED") return "Revoked";
   if (view.status === "DISCONNECTED") return "Idle";
+  if (view.status === "ERROR") return view.observation ? "Last tick" : "Data unavailable";
   if (!view.observation) return "Connecting";
   if (view.status === "STALE" || view.stale) return "Last tick";
-  if (view.observation) return "Live";
-  if (view.status === "LOADING") return "Connecting";
-  if (view.status === "ERROR") return "Reconnecting";
   return "Live";
 }
 
@@ -121,7 +119,7 @@ export function usdtSpot(rows: readonly SpotBalance[] | null | undefined): {
 export function nonUsdtInventory(
   rows: readonly SpotBalance[] | null | undefined,
 ): readonly SpotBalance[] {
-  return nonZeroBalances(rows).filter((row) => row.asset !== "USDT" && row.asset !== "USDC");
+  return nonZeroBalances(rows).filter((row) => row.asset !== "USDT");
 }
 
 export function secondsUntilNextPoll(
@@ -171,7 +169,8 @@ export function summarizeFuturesBalance(
     hasLegacyDerivatives: Boolean(observation?.derivatives),
     hasFuturesProjection: false,
   };
-  if (observation?.schemaVersion !== "account-observation/v3" || !observation.htxV5) {
+  if ((observation?.schemaVersion !== "account-observation/v3" &&
+       observation?.schemaVersion !== "account-observation/v4") || !observation.htxV5) {
     return empty;
   }
 
@@ -213,7 +212,9 @@ export function summarizeCabinetObservation(
     usdtFree: usdt?.free ?? null,
     usdtLocked: usdt?.locked ?? null,
     openOrdersCount:
-      observation.openOrders.values === null ? null : observation.openOrders.values.length,
+      observation.openOrders.status === "COMPLETE" && observation.openOrders.error === null
+        ? (observation.openOrders.values?.length ?? null)
+        : null,
     lastTickMs: observation.collectionCompletedAtMs,
     observationStatus: observation.status,
   };

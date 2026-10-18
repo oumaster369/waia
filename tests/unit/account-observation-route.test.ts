@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/pg-proxy";
 import * as pgSchema from "@/db/schema.postgres";
+import { OrgScopeError } from "@/lib/waia-core/scope/org-context";
 const mocks = vi.hoisted(() => ({
   user: vi.fn(),
   access: vi.fn(),
@@ -20,7 +21,8 @@ vi.mock("@/db/waia-runtime-db", () => ({
   getWaiaRuntimeDb: mocks.access,
   disposeWaiaRuntimeDb: mocks.dispose,
 }));
-vi.mock("@/lib/waia-core/scope/org-context", () => ({
+vi.mock("@/lib/waia-core/scope/org-context", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/waia-core/scope/org-context")>()),
   assertOrgMembershipPostgres: mocks.membership,
 }));
 vi.mock("@/lib/waia-core/entitlements/authoritative", () => ({
@@ -123,6 +125,30 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 describe("account observation route wiring, no external requests", () => {
+  it.each([
+    new Error("private-connection-failure-canary"),
+    new Error("ORG_MEMBERSHIP_REQUIRED"),
+    new OrgScopeError("ORG_CONTEXT_REQUIRED"),
+  ])("does not classify an unverified membership read failure as revoked", async (failure) => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      mocks.membership.mockRejectedValue(failure);
+      const response = await accountObservationRoute(request(), "tenant");
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: "ACCOUNT_OBSERVATION_UNAVAILABLE" });
+      expect(mocks.projection).not.toHaveBeenCalled();
+      expect(mocks.dispose).toHaveBeenCalledOnce();
+      expect(log).toHaveBeenCalledOnce();
+      expect(JSON.parse(log.mock.calls[0][0])).toMatchObject({ stage: "MEMBERSHIP", outcome: "THREW" });
+      expect(JSON.stringify(log.mock.calls)).not.toContain("canary");
+    } finally { log.mockRestore(); }
+  });
+  it("keeps verified missing membership forbidden before opening projection", async () => {
+    mocks.membership.mockRejectedValue(new OrgScopeError("ORG_MEMBERSHIP_REQUIRED"));
+    expect((await accountObservationRoute(request(), "tenant")).status).toBe(403);
+    expect(mocks.projection).not.toHaveBeenCalled();
+    expect(mocks.dispose).toHaveBeenCalledOnce();
+  });
   it.each([tenantStream, adminStream])(
     "stream wrapper opens/disposes independent read contexts and revalidates fresh identity",
     async (get) => {
@@ -165,6 +191,7 @@ describe("account observation route wiring, no external requests", () => {
   });
   it("uses the fixed projection and disposes it after every poll", async () => {
     configureProjection();
+    vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_RELEASE_SHA", undefined);
     expect((await accountObservationRoute(request(), "tenant")).status).toBe(204);
     expect(mocks.projection).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -175,6 +202,38 @@ describe("account observation route wiring, no external requests", () => {
     expect(mocks.end).toHaveBeenCalledOnce();
     expect(mocks.dispose).toHaveBeenCalledOnce();
   });
+  it("keeps an explicit backend tuple release pin when the Worker release advances", async () => {
+    configureProjection();
+    vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_RELEASE_SHA", "b".repeat(40));
+    expect((await accountObservationRoute(request(), "tenant")).status).toBe(204);
+    expect(mocks.projection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tuple: expect.objectContaining({ releaseSha: "b".repeat(40) }),
+      }),
+    );
+    expect(process.env.WAIA_RELEASE_SHA).toBe("a".repeat(40));
+  });
+  it.each(["", " ".repeat(1) + "b".repeat(39), "b".repeat(39), "A".repeat(40)])(
+    "fails closed for an explicit invalid backend tuple release pin (%s)",
+    async (releaseSha) => {
+      configureProjection();
+      vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_RELEASE_SHA", releaseSha);
+      expect((await accountObservationRoute(request(), "tenant")).status).toBe(503);
+      expect(mocks.projection).not.toHaveBeenCalled();
+      expect(mocks.resolve).not.toHaveBeenCalled();
+    },
+  );
+  it.each([undefined, "", "a".repeat(39), "A".repeat(40)])(
+    "still requires a valid Worker release SHA with an explicit backend pin (%s)",
+    async (workerReleaseSha) => {
+      configureProjection();
+      vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_RELEASE_SHA", "b".repeat(40));
+      vi.stubEnv("WAIA_RELEASE_SHA", workerReleaseSha);
+      expect((await accountObservationRoute(request(), "tenant")).status).toBe(503);
+      expect(mocks.projection).not.toHaveBeenCalled();
+      expect(mocks.resolve).not.toHaveBeenCalled();
+    },
+  );
   it.each([
     ["personal active htx", "personal", "htx", "active", true],
     ["business active htx", "business", "htx", "active", false],
@@ -250,5 +309,28 @@ describe("account observation route wiring, no external requests", () => {
     mocks.latest.mockImplementation(async () => { mocks.user.mockResolvedValue(null); return null; });
     expect((await accountObservationRoute(request(), "tenant")).status).toBe(403);
     expect(mocks.end).toHaveBeenCalledOnce();
+  });
+});
+
+
+describe("DEE-1243 route-owned pre-fetch failure telemetry", () => {
+  it.each(["session", "runtime", "entitlement", "config"])("keeps public503 generic for %s and logs no dependency values", async stage => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      configureProjection();
+      if (stage === "session") mocks.user.mockRejectedValue(new Error("session-secret-canary"));
+      if (stage === "runtime") mocks.access.mockRejectedValue(new Error("database-url-query-canary"));
+      if (stage === "entitlement") mocks.entitlement.mockRejectedValue(new Error("organization-query-canary"));
+      if (stage === "config") vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_ENABLED", "0");
+      const response = await accountObservationRoute(request(), "tenant");
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: "ACCOUNT_OBSERVATION_UNAVAILABLE" });
+      const expected = { session: "SESSION_INITIAL", runtime: "RUNTIME_INIT", entitlement: "ENTITLEMENT", config: "PROJECTION_CONFIG" }[stage];
+      expect(log).toHaveBeenCalledTimes(1); expect(typeof log.mock.calls[0][0]).toBe("string");
+      expect(JSON.parse(log.mock.calls[0][0] as string)).toMatchObject({ event: "ACCOUNT_OBSERVATION_FAILURE", stage: expected, outcome: "THREW" });
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/canary|synthetic|account-a/);
+      expect(mocks.resolve).not.toHaveBeenCalled();
+      expect(mocks.end).not.toHaveBeenCalled();
+    } finally { log.mockRestore(); }
   });
 });

@@ -8,21 +8,21 @@ export type RequiredQuestion = {
 
 /** Operator questions the read-only assistant must be able to route. */
 export const REQUIRED_QUESTIONS: readonly RequiredQuestion[] = [
-  { id: "overview", question: "Что сейчас на обзоре?", tools: ["get_overview"] },
-  { id: "accounts", question: "Какие счета подключены?", tools: ["list_accounts"] },
-  { id: "orders", question: "Какие ордера ещё работают?", tools: ["list_orders"] },
+  { id: "overview", question: "What is on the overview now?", tools: ["get_overview"] },
+  { id: "accounts", question: "Which accounts are connected?", tools: ["list_accounts"] },
+  { id: "orders", question: "Which orders are still working?", tools: ["list_orders"] },
   {
     id: "clients",
-    question: "Кто из клиентов активен и какие счета не оплачены?",
+    question: "Which clients are active and which invoices are unpaid?",
     tools: ["list_clients", "list_invoices"],
   },
-  { id: "strategies", question: "Какие стратегии есть?", tools: ["strategy_performance"] },
-  { id: "research", question: "Чем закончился последний запуск?", tools: ["list_research_runs"] },
-  { id: "no-trade", question: "Почему не было сделки?", tools: ["no_trade_reasons"] },
-  { id: "incidents", question: "Какие ошибки открыты?", tools: ["list_incidents"] },
+  { id: "strategies", question: "Which strategies are available?", tools: ["strategy_performance"] },
+  { id: "research", question: "How did the latest run finish?", tools: ["list_research_runs"] },
+  { id: "no-trade", question: "Why was there no trade?", tools: ["no_trade_reasons"] },
+  { id: "incidents", question: "Which errors are open?", tools: ["list_incidents"] },
   {
     id: "system",
-    question: "Какой релиз указан и какие задания пропущены?",
+    question: "Which release is specified and which jobs were missed?",
     tools: ["system_status", "list_jobs", "release_info"],
   },
 ];

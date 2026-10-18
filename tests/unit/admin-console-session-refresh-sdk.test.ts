@@ -19,8 +19,19 @@ const jwt = (exp: number) =>
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
-it("actual SSR client rotates an expired session and persists the verified replacement for the browser and server render", async () => {
+it.each([
+  "/admin",
+  "/trader",
+  "/trader/accounts",
+  "/api/trader/account-observation",
+  "/api/trader/account-observation/binding",
+  "/api/trader/account-observation/stream",
+  "/api/trader/admin/account-observation",
+  "/api/trader/admin/account-observation/binding",
+  "/api/trader/admin/account-observation/stream",
+])("actual SSR client persists a verified expired-session replacement on %s", async (path) => {
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://fixture.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "fixture-public-key");
   const expires = Math.floor(Date.now() / 1000) + 3600;
@@ -63,7 +74,7 @@ it("actual SSR client rotates an expired session and persists the verified repla
         user,
       }),
     ).toString("base64url");
-  const request = new NextRequest("https://trader.waia.life/admin", {
+  const request = new NextRequest(`https://trader.waia.life${path}`, {
     headers: { cookie: `sb-fixture-auth-token=${old}` },
   });
   const response = await refreshAdminSession(request);
@@ -79,4 +90,66 @@ it("actual SSR client rotates an expired session and persists the verified repla
   expect(response.headers.get("x-middleware-request-cookie")).toContain(renewed!);
   expect(fetcher.mock.calls.some(([url]) => String(url).endsWith("/auth/v1/user"))).toBe(true);
   expect(response.headers.has("x-user-id")).toBe(false);
+});
+
+it.each([
+  ["/trader", "503"],
+  ["/api/trader/account-observation/binding", "503"],
+  ["/api/trader/admin/account-observation/binding", "throw"],
+])("persists SDK-rotated cookies but denies the request when user verification fails on %s (%s)", async (path, failure) => {
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://fixture.supabase.co");
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "fixture-public-key");
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const expires = Math.floor(Date.now() / 1000) + 3600;
+  const access = jwt(expires);
+  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes("/auth/v1/token")) {
+      expect(JSON.parse(String(init?.body))).toEqual({ refresh_token: "old-refresh" });
+      return new Response(JSON.stringify({
+        access_token: access,
+        refresh_token: "fresh-refresh",
+        expires_in: 3600,
+        expires_at: expires,
+        token_type: "bearer",
+        user,
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    expect(url).toBe("https://fixture.supabase.co/auth/v1/user");
+    expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${access}`);
+    if (failure === "throw") throw new Error("SYNTHETIC_USER_FETCH_OUTAGE");
+    return new Response(JSON.stringify({ message: "Synthetic Auth outage" }), {
+      status: 503, headers: { "Content-Type": "application/json" },
+    });
+  });
+  vi.stubGlobal("fetch", fetcher);
+  const old = "base64-" + Buffer.from(JSON.stringify({
+    access_token: jwt(1), refresh_token: "old-refresh", expires_at: 1,
+    expires_in: 3600, token_type: "bearer", user,
+  })).toString("base64url");
+  const request = new NextRequest(`https://trader.waia.life${path}`, {
+    headers: { cookie: `sb-fixture-auth-token=${old}` },
+  });
+  const response = await refreshAdminSession(request);
+  expect(response.status).toBe(503);
+  expect(response.headers.get("x-middleware-next")).toBeNull();
+  expect(response.headers.get("x-middleware-request-cookie")).toBeNull();
+  expect(response.headers.has("x-user-id")).toBe(false);
+  expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+  expect(response.headers.get("Retry-After")).toBe("5");
+  const renewed = response.cookies.get("sb-fixture-auth-token")?.value;
+  expect(renewed).toBeDefined();
+  expect(renewed).not.toBe(old);
+  const stored = JSON.parse(Buffer.from(renewed!.replace(/^base64-/, ""), "base64url").toString("utf8"));
+  expect(stored.access_token).toBe(access);
+  expect(stored.refresh_token).toBe("fresh-refresh");
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  if (path.startsWith("/api/")) {
+    expect(await response.json()).toEqual({ error: {
+      code: "AUTH_TEMPORARILY_UNAVAILABLE",
+      message: "Authentication is temporarily unavailable. Reload the page.",
+    } });
+  } else {
+    expect(await response.text()).toBe("Authentication is temporarily unavailable. Reload the page.");
+  }
 });

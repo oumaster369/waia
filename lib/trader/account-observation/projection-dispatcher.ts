@@ -7,6 +7,7 @@ import {
   type SignedProjectionResponse,
   type VerifiedProjectionRequest,
 } from "./projection-protocol";
+import type { FinancialHistoryRequest, FinancialHistoryResponse } from "./financial-history";
 import type { AccountObservation, ObservationBinding } from "./types";
 
 export const PROJECTION_DISPATCH_LIMITS = Object.freeze({
@@ -21,6 +22,7 @@ export const PROJECTION_DISPATCH_LIMITS = Object.freeze({
 
 type Reader = {
   resolveActiveBinding(scope: ProjectionScope): Promise<ObservationBinding | null>;
+  readFinancialHistory?(input: FinancialHistoryRequest): Promise<FinancialHistoryResponse | null>;
   readLatest(binding: ObservationBinding): Promise<AccountObservation | null>;
 };
 type LeaseState = { controller: AbortController; released: boolean; used: boolean; cryptoWork: number };
@@ -136,12 +138,14 @@ export function createProjectionDispatcher(options: {
       poisoned = true;
       invalidateRequests();
     }, PROJECTION_DISPATCH_LIMITS.stuckReadMs);
-    let data: AccountObservation | ObservationBinding | null;
+    let data: AccountObservation | ObservationBinding | FinancialHistoryResponse | null;
     try {
       assertJob(job);
       data = await (job.request.operation === "resolveBinding"
         ? reader.resolveActiveBinding(job.request.payload as ProjectionScope)
-        : reader.readLatest(job.request.payload as ObservationBinding));
+        : job.request.operation === "readFinancialHistory"
+          ? reader.readFinancialHistory ? reader.readFinancialHistory(job.request.payload as FinancialHistoryRequest) : Promise.reject(unavailable())
+          : reader.readLatest(job.request.payload as ObservationBinding));
     } catch {
       cancelJob(job);
       return;

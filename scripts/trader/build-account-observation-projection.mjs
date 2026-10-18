@@ -17,12 +17,17 @@ const allowedRepositoryInputs = new Set([
   "lib/trader/account-observation/derivatives/types.ts",
   "lib/trader/account-observation/host-role-probe.ts",
   "lib/trader/account-observation/postgres-reader.ts",
+  "lib/trader/account-observation/financial-history.ts",
+  "lib/trader/account-observation/financial-history-cursor.ts",
+  "lib/trader/account-observation/postgres-financial-history-read.ts",
   "lib/trader/account-observation/projection-dispatcher.ts",
   "lib/trader/account-observation/projection-http.ts",
   "lib/trader/account-observation/projection-protocol.ts",
   "lib/trader/account-observation/projection-service-config.ts",
   "lib/trader/account-observation/projection-service.ts",
   "lib/trader/account-observation/types.ts",
+  "lib/trader/account-observation/coverage.ts",
+  "lib/trader/account-observation/derivatives/htx-v5-bill-groups.ts",
   "lib/trader/account-observation/validation.ts",
 ]);
 

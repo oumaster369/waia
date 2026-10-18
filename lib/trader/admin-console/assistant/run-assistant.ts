@@ -18,7 +18,7 @@ export async function runAssistantTurn(input: {
   factRefs?: readonly { value: string }[];
 }): Promise<
   | { status: "answer"; answer: AssistantAnswer }
-  | { status: "failed"; message: "Не удалось разобрать ответ модели" }
+  | { status: "failed"; message: "Could not parse the model response" }
   | { status: "stopped" }
 > {
   const facts = input.facts ?? [];
@@ -40,10 +40,10 @@ export async function runAssistantTurn(input: {
       );
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return { status: "stopped" };
-      return { status: "failed", message: "Не удалось разобрать ответ модели" };
+      return { status: "failed", message: "Could not parse the model response" };
     }
   }
-  if (!parsed) return { status: "failed", message: "Не удалось разобрать ответ модели" };
+  if (!parsed) return { status: "failed", message: "Could not parse the model response" };
   const known = new Map(facts.map((f) => [f.id, f]));
   const selected = [...new Set(parsed.factIds)]
     .slice(0, 12)

@@ -119,7 +119,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("HTX V5 owned read-only transport", () => {
-  it("signs exactly six fixed typed V5 GET routes and returns post-read identity evidence", async () => {
+  it("signs the six legacy fixed typed V5 GET routes and returns post-read identity evidence", async () => {
     const f = setup({ expectedHtxUid: expectedUid });
     const fillStart = Date.now() - 60_000;
     const fillEnd = Date.now();
@@ -156,7 +156,7 @@ describe("HTX V5 owned read-only transport", () => {
     expect(Object.isFrozen(results[0])).toBe(true);
     expect(Object.isFrozen(results[0]?.identity)).toBe(true);
     const v5 = f.calls.filter(({ url }) => url.hostname === "api.hbdm.com");
-    expect(v5.map(({ url }) => url.pathname)).toEqual(Object.values(HTX_V5_READ_ONLY_ROUTES));
+    expect(v5.map(({ url }) => url.pathname)).toEqual(Object.values(HTX_V5_READ_ONLY_ROUTES).filter(path => path !== HTX_V5_READ_ONLY_ROUTES.bills));
     expect(
       v5.map(({ url }) => Object.fromEntries(url.searchParams.entries()).contract_code),
     ).toEqual([undefined, undefined, "BTC-USDT", "BTC-USDT", "BTC-USDT", "BTC-USDT"]);
@@ -216,6 +216,7 @@ describe("HTX V5 owned read-only transport", () => {
       "readAlgoOrders",
       "readAssetMode",
       "readBalance",
+      "readBills",
       "readFills",
       "readOpenOrders",
       "readPositions",
@@ -596,4 +597,14 @@ describe("HTX V5 owned read-only transport", () => {
       f.transport.dispose();
     });
   });
+});
+
+it.each([200, 500])("settles terminal native V5 bodies at HTTP %s", async status => {
+  const f = setup({ fetchImpl: async input => {
+    const url = new URL(String(input));
+    if (url.hostname === "api.huobi.pro") return json(payload(url.pathname));
+    return new Response(new ReadableStream({ start(c) { c.error(new Error("synthetic body failure")); } }), { status });
+  } });
+  await expect(f.transport.readAssetMode(signal())).rejects.toMatchObject({ code: "READ_FAILED" });
+  await expect(f.transport.settled()).resolves.toBeUndefined();
 });

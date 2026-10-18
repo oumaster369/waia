@@ -334,6 +334,38 @@ describe("HTX trade history sync API (DEE-350)", () => {
     );
   });
 
+  it("refuses invalid stored HTX policy before decrypt or connector creation", async () => {
+    const getDecryptedCredentials = vi.fn(async () => {
+      throw new Error("unexpected decrypt");
+    });
+    const createConnector = vi.fn(() => {
+      throw new Error("unexpected connector construction");
+    });
+    const result = await handleTradeHistorySyncPost(credentialId, syncTradesPostRequest({ symbol: SYNC_SYMBOL }), createDeps({
+      createCredentialService: (runtime, createProvider) => {
+        const service = runtime.kind === "sqlite"
+          ? createSqliteCredentialService(runtime.db, { createProvider })
+          : createPostgresCredentialService(runtime.db, { createProvider });
+        return {
+          ...service,
+          async listCredentialMetadata(context) {
+            return (await service.listCredentialMetadata(context)).map((row) => ({
+              ...row,
+              permissionMetadata: null,
+            }));
+          },
+          getDecryptedCredentials,
+        };
+      },
+      createConnector,
+    }));
+    expect(result.status).toBe(409);
+    expect((result.body as { error: { code: string } }).error.code).toBe(HTX_TRADE_HISTORY_SYNC_ERROR_CODES.STORED_POLICY_INVALID);
+    expect(getDecryptedCredentials).not.toHaveBeenCalled();
+    expect(createConnector).not.toHaveBeenCalled();
+    expect(JSON.stringify(result.body)).not.toContain("test-secret-key");
+  });
+
   it.each([false, true])("rejects different stored account before data fetch/write (stub=%s)", async (stubValidation) => {
     const recordSnapshot = vi.fn();
     const read = vi.fn();

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ObservationBinding } from "@/lib/trader/account-observation/types";
 import { observationBindingSchema } from "@/lib/trader/account-observation/validation";
 import { ACCOUNT_OBSERVATION_STALE_AFTER_MS } from "@/lib/trader/account-observation/cabinet-view";
+import { FinancialHistorySection } from "./financial-history-section";
 import { AccountObservationPanel } from "./account-observation-panel";
 import { readBoundedObservationJson } from "./polling-subscriber";
 import { createStreamingObservationSubscriber } from "./streaming-subscriber";
@@ -21,23 +22,60 @@ type BindingState = {
   status: "LOADING" | "NOT_CONFIGURED" | "ERROR" | "REVOKED";
 };
 
+function PendingHistoryStatus({
+  status,
+}: {
+  status: "LOADING" | "NOT_CONFIGURED" | "IDENTITY_PENDING" | "ERROR";
+}) {
+  const copy = {
+    LOADING: "Waiting for this account's current observation before checking financial history.",
+    NOT_CONFIGURED:
+      "Financial history is not available yet. No current observation configuration was returned.",
+    IDENTITY_PENDING: "History identity is not yet verified for this account.",
+    ERROR:
+      "Financial history status is unavailable while this account's current observation cannot be verified.",
+  };
+  return (
+    <section
+      aria-label="Financial history status"
+      className="border-border space-y-2 rounded-lg border p-4"
+    >
+      <h2 className="font-medium">Financial history</h2>
+      <p className="text-sm">{copy[status]}</p>
+      <p className="text-waia-fg-muted text-xs">
+        Connecting an account does not automatically enable financial history collection. History
+        requires separate authorization for this account.
+      </p>
+    </section>
+  );
+}
+
 /** GETs only an authorized stored binding/projection; it never connects to HTX or
  * configures a collector. Unmount/reset target when the authenticated session ends. */
 export function ConnectedAccountObservationPanel({
   target,
   mode = "tenant",
   fetcher = browserFetch,
+  sessionKey,
 }: {
   target: AccountObservationTarget | null;
   mode?: "tenant" | "admin";
   fetcher?: typeof fetch;
+  /** Change with the authenticated session, or unmount/reset target on session end. */
+  sessionKey?: string;
 }) {
   const key = target
     ? JSON.stringify([target.credentialId, target.exchangeAccountId, target.organizationId ?? ""])
     : "";
   const endpoint =
     mode === "admin" ? "/api/trader/admin/account-observation" : "/api/trader/account-observation";
-  const scope = useMemo(() => ({ key, endpoint, fetcher }), [key, endpoint, fetcher]);
+  const scope = useMemo(
+    () => ({ key, endpoint, fetcher, sessionKey }),
+    [key, endpoint, fetcher, sessionKey],
+  );
+  const [revokedScope, setRevokedScope] = useState<object | null>(null);
+  const historyRevoked = revokedScope === scope;
+  const onHistoryRevoked = useCallback(() => setRevokedScope(scope), [scope]);
   const [stored, setStored] = useState<BindingState | null>(null);
   const subscribe = useMemo(
     () => createStreamingObservationSubscriber({ endpointPath: endpoint, fetcher }),
@@ -149,10 +187,14 @@ export function ConnectedAccountObservationPanel({
 
   const current = stored?.scope === scope ? stored : null;
   const view = useAccountObservation({
-    binding: key ? (current?.binding ?? null) : null,
+    binding: key && !historyRevoked ? (current?.binding ?? null) : null,
     subscribe,
     staleAfterMs: ACCOUNT_OBSERVATION_STALE_AFTER_MS,
   });
+  if (historyRevoked)
+    return (
+      <AccountObservationPanel view={{ status: "REVOKED", observation: null, stale: false }} />
+    );
   if (!key)
     return (
       <AccountObservationPanel view={{ status: "DISCONNECTED", observation: null, stale: false }} />
@@ -170,8 +212,33 @@ export function ConnectedAccountObservationPanel({
         {current?.status === "NOT_CONFIGURED" || current?.status === "ERROR" ? (
           <p className="text-waia-fg-muted text-sm">Checking again automatically.</p>
         ) : null}
+        {current?.status !== "REVOKED" ? (
+          <PendingHistoryStatus status={current?.status ?? "LOADING"} />
+        ) : null}
       </div>
     );
   }
-  return <AccountObservationPanel view={view} />;
+  const uid = view.observation?.htxV5?.htxUid;
+  const historyKey = JSON.stringify([current.binding, uid, sessionKey]);
+  return (
+    <div className="space-y-4">
+      <AccountObservationPanel view={view} />
+      {uid && view.observation && view.status !== "REVOKED" && view.status !== "ERROR" ? (
+        <FinancialHistorySection
+          key={historyKey}
+          binding={current.binding}
+          uid={uid}
+          endpoint={endpoint}
+          fetcher={fetcher}
+          onRevoked={onHistoryRevoked}
+        />
+      ) : view.status !== "REVOKED" ? (
+        <PendingHistoryStatus
+          status={
+            view.status === "ERROR" ? "ERROR" : view.observation ? "IDENTITY_PENDING" : "LOADING"
+          }
+        />
+      ) : null}
+    </div>
+  );
 }

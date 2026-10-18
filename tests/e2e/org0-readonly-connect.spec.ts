@@ -42,12 +42,13 @@ test("admin navigation keeps Accounts and removes the Org0 connection step", asy
   const credentialRequests = watchForOrg0CredentialRequests(page);
 
   await page.goto("/admin");
-  const navigation = page.getByRole("navigation", { name: "Консоль администратора AI-TRADER" }).first();
-  await expect(navigation.getByRole("link", { name: "Счета" })).toBeVisible();
+  const navigation = page.getByRole("navigation", { name: "AI-TRADER admin console" }).first();
+  await expect(navigation.getByRole("link", { name: "Accounts" })).toBeVisible();
   await expect(navigation.getByRole("link", { name: /Подключение Org0/ })).toHaveCount(0);
-  await navigation.getByRole("link", { name: "Счета" }).click();
+  await expect(navigation.getByRole("link", { name: /Org0 connection|Connect.*Org0/i })).toHaveCount(0);
+  await navigation.getByRole("link", { name: "Accounts" }).click();
   await expect(page).toHaveURL(/\/admin\/accounts(?:\?|$)/);
-  await expect(page.getByRole("heading", { name: "Счета" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: /Access Key|Secret Key/i })).toHaveCount(0);
   expect(credentialRequests).toEqual([]);
 });
@@ -62,8 +63,9 @@ test("the legacy Org0 URL redirects to Accounts without loading a credential for
 
   await page.goto("/admin/org0-connect");
   await expect(page).toHaveURL(/\/admin\/accounts(?:\?|$)/);
-  await expect(page.getByRole("heading", { name: "Счета" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Подключение HTX к Org0/ })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /Connect HTX to Org0|Org0 connection/i })).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: /Access Key|Secret Key/i })).toHaveCount(0);
   expect(credentialRequests).toEqual([]);
 });

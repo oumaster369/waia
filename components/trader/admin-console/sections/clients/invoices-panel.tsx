@@ -127,16 +127,16 @@ export function InvoicesPanel() {
       setReadBackRequired(false);
       setMessage(
         response.status === 409
-          ? "Документ изменился. Проверьте свежий расчёт и отметьте подтверждения заново."
+          ? "Document changed. Check the latest calculation and complete attestations again."
           : response.ok && fresh.data.revision === result.revision
-            ? "Команда подтверждена повторным чтением документа."
+            ? "Command confirmed by document reread."
             : response.ok
-              ? "После команды документ изменился ещё раз. Проверьте актуальное состояние."
-              : `Команда отклонена: ${result.error?.code ?? "UNKNOWN"}. Сохранённый документ перечитан.`,
+              ? "The document changed again after the command. Check the current state."
+              : `Command rejected: ${result.error?.code ?? "UNKNOWN"}. Saved document reread.`,
       );
     } catch {
       setMessage(
-        "Подтверждение не получено. Команда могла примениться. Повтор закрыт до отдельного чтения документа.",
+        "Confirmation was not received. The command may have applied. Retry is blocked until a separate document read.",
       );
     } finally {
       window.clearTimeout(timeout);
@@ -160,7 +160,7 @@ export function InvoicesPanel() {
               className="border-waia-divider bg-waia-field-mid rounded-xl border px-5 py-4"
             >
               <p className="text-waia-fg-muted text-xs">
-                Сохранённая комиссия · {row.count} документов
+                Saved fee · {row.count} documents
               </p>
               <p className="mt-2 text-xl font-semibold tabular-nums">
                 {row.amount === null ? "—" : formatAdminMoney(row.amount, row.currency)}
@@ -171,16 +171,16 @@ export function InvoicesPanel() {
       ) : null}
       {items ? (
         <ConsolePanel
-          title="Счета на оплату"
-          note="Расчёт и черновик автоматические. Выпуск — после подтверждения администратора."
+          title="Invoices"
+          note="Calculation and draft creation are automatic. Issuance follows administrator confirmation."
         >
           <ConsoleTable
             rows={items}
             rowKey={(row) => row.id}
-            caption="Счета на оплату"
+            caption="Invoices"
             columns={[
               {
-                title: "Документ / биржевой счёт",
+                title: "Document / exchange account",
                 render: (row) => (
                   <div>
                     <DetailLink
@@ -199,7 +199,7 @@ export function InvoicesPanel() {
                 ),
               },
               {
-                title: "Статус",
+                title: "Status",
                 render: (row) => (
                   <div className="space-y-2">
                     <ConsoleBadge>{row.display.status}</ConsoleBadge>
@@ -215,7 +215,7 @@ export function InvoicesPanel() {
                 ),
               },
               {
-                title: "Комиссия сервиса",
+                title: "Service fee",
                 align: "right",
                 render: (row) => formatAdminMoney(row.performanceFee, row.currency),
               },
@@ -223,8 +223,7 @@ export function InvoicesPanel() {
           />
           {list.envelope?.data.truncated ? (
             <p className="border-waia-divider text-waia-fg-muted border-t p-4 text-xs">
-              Показано {items.length} из {list.envelope.data.total}. Экспорт содержит полную выборку
-              в пределах опубликованного лимита.
+              Showing {items.length} of {list.envelope.data.total}. Export includes the complete selection within the published limit.
             </p>
           ) : null}
         </ConsolePanel>
@@ -233,7 +232,7 @@ export function InvoicesPanel() {
         open={Boolean(selected)}
         onClose={() => context.update({ sel: null })}
         dismissible={!pending}
-        title="Счёт на оплату"
+        title="Invoice"
         description={selected ?? undefined}
         wide
       >
@@ -249,18 +248,17 @@ export function InvoicesPanel() {
             </div>
             {invoice?.revision !== current.revision ? (
               <p className="text-waia-warning text-xs">
-                Документ обновился после списка. Ниже показан свежий сохранённый расчёт; сумма
-                списка обновляется отдельно.
+                The document changed after the list was read. The latest saved calculation is shown below; the list amount refreshes separately.
               </p>
             ) : null}
-            <ConsolePanel title="Сохранённый расчёт">
+            <ConsolePanel title="Saved calculation">
               <dl className="divide-waia-divider divide-y">
                 {[
-                  ["Результат отчётного периода", current.stored.periodProfit],
-                  ["Накопленный реализованный результат", current.stored.cumulative],
-                  ["Предыдущий HWM", current.stored.previousHwm],
-                  ["Новая прибыль выше HWM", current.stored.newProfitAboveHwm],
-                  ["Комиссия сервиса", current.stored.performanceFee],
+                  ["Reporting period result", current.stored.periodProfit],
+                  ["Cumulative realized result", current.stored.cumulative],
+                  ["Previous HWM", current.stored.previousHwm],
+                  ["New profit above HWM", current.stored.newProfitAboveHwm],
+                  ["Service fee", current.stored.performanceFee],
                 ].map(([label, amount]) => (
                   <div
                     key={label}
@@ -271,20 +269,20 @@ export function InvoicesPanel() {
                   </div>
                 ))}
                 <div className="flex justify-between px-5 py-3 text-sm">
-                  <dt className="text-waia-fg-muted">Сохранённая ставка (доля)</dt>
+                  <dt className="text-waia-fg-muted">Saved rate (fraction)</dt>
                   <dd>{current.stored.feeRate}</dd>
                 </div>
               </dl>
             </ConsolePanel>
             {current.chain.ok === true ? (
-              <p className="text-waia-success text-xs">Цепочка сохранённого расчёта согласована.</p>
+              <p className="text-waia-success text-xs">The saved calculation chain is consistent.</p>
             ) : (
               <div className="border-waia-warning/30 bg-waia-warning/5 text-waia-warning rounded-lg border p-4 text-sm leading-6">
                 {current.chain.ok === false
-                  ? "Цепочка расчёта не сходится. Значения сохранённого документа не изменены."
-                  : "Для полной проверки цепочки не хватает сохранённых предыдущих значений."}
+                  ? "The calculation chain does not reconcile. Saved document values are unchanged."
+                  : "Saved previous values are missing for a complete chain check."}
                 {current.chain.ok === false && current.chain.link ? (
-                  <p>Несовпадающее звено: {current.chain.link}</p>
+                  <p>Mismatched link: {current.chain.link}</p>
                 ) : null}
                 {current.chain.reasons?.map((reason) => (
                   <DataState key={reason} state="unavailable" reason={reason} />
@@ -293,17 +291,17 @@ export function InvoicesPanel() {
             )}
             {current.coolingOffUntil ? (
               <p className="text-xs">
-                <EvidenceTime at={current.coolingOffUntil} label="Период ожидания до" />
+                <EvidenceTime at={current.coolingOffUntil} label="Cooling-off until" />
               </p>
             ) : null}
             {current.issuedAt ? (
               <p className="text-xs">
-                <EvidenceTime at={current.issuedAt} label="Выпущен" />
+                <EvidenceTime at={current.issuedAt} label="Issued" />
               </p>
             ) : null}
             {current.paidAt ? (
               <p className="text-xs">
-                <EvidenceTime at={current.paidAt} label="Оплачен" />
+                <EvidenceTime at={current.paidAt} label="Paid" />
               </p>
             ) : null}
             {message ? (
@@ -327,7 +325,7 @@ export function InvoicesPanel() {
                   const body = response?.ok ? await response.json().catch(() => null) : null;
                   if (body?.data?.id !== current.id || typeof body?.data?.revision !== "string") {
                     setMessage(
-                      "Документ не удалось перечитать. Повторная отправка остаётся закрытой.",
+                      "Could not reread the document. Resubmission remains blocked.",
                     );
                     return;
                   }
@@ -335,10 +333,10 @@ export function InvoicesPanel() {
                   setReadBackRequired(false);
                   detail.reload();
                   list.reload();
-                  setMessage("Документ перечитан. Проверьте его перед новой командой.");
+                  setMessage("Document reread. Review it before a new command.");
                 }}
               >
-                Перечитать документ
+                Reread document
               </button>
             ) : null}
             {current.evidence ? <InvoiceEvidencePanel evidence={current.evidence} /> : null}
@@ -351,10 +349,9 @@ export function InvoicesPanel() {
                 disabled={pending || readBackRequired || detail.refreshing}
                 className="border-waia-divider space-y-5 rounded-xl border p-5"
               >
-                <legend className="px-2 text-sm font-semibold">Ручное подтверждение</legend>
+                <legend className="px-2 text-sm font-semibold">Manual attestation</legend>
                 <p className="text-waia-fg-muted text-xs leading-6">
-                  Отметьте каждый пункт после проверки. Смена документа или его ревизии сбрасывает
-                  все отметки.
+                  Check each item after review. Changing the document or its revision clears all attestations.
                 </p>
                 <InvoiceAttestations
                   key={identity}
@@ -374,7 +371,7 @@ export function InvoicesPanel() {
                           setIssueIdentity(identity);
                         }}
                       />
-                      Подтверждаю выпуск проверенного документа
+                      I confirm issuance of the reviewed document
                     </label>
                     <button
                       type="button"
@@ -382,10 +379,10 @@ export function InvoicesPanel() {
                       disabled={!canIssue || !issueConfirmed || issueIdentity !== identity}
                       onClick={() => void command({ command: "issue", confirmed: true })}
                     >
-                      Выпустить
+                      Issue
                     </button>
                     <label className="grid gap-2 text-sm">
-                      Причина отмены подтверждения
+                      Reason for revoking confirmation
                       <textarea
                         className={`${controlClass} h-20 py-2`}
                         value={cancelReason}
@@ -400,15 +397,14 @@ export function InvoicesPanel() {
                         void command({ command: "cancel-pending", reason: cancelReason.trim() })
                       }
                     >
-                      Отменить выпуск
+                      Revoke issuance confirmation
                     </button>
                   </>
                 ) : null}
               </fieldset>
             ) : null}
             <p className="text-waia-fg-muted text-xs leading-6">
-              Закреплённый срок оплаты, частичная оплата и PDF недоступны до отдельной ратификации.
-              Обнаружение платежа не равно его зачёту.
+              A fixed payment deadline, partial payment and PDF are unavailable until separate ratification. Payment detection does not mean application.
             </p>
           </div>
         ) : null}

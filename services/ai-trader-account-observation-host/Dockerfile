@@ -3,6 +3,7 @@ FROM node:22-alpine AS dependencies
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
+COPY patches/postgres@3.4.9.patch ./patches/postgres@3.4.9.patch
 RUN corepack pnpm@10.28.1 install --frozen-lockfile
 
 FROM node:22-alpine

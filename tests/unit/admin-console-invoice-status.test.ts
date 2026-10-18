@@ -21,7 +21,7 @@ const base = {
 
 describe("admin console invoice status", () => {
   it("names a draft, a cooling-off draft, an issued invoice, and a paid invoice", () => {
-    expect(invoiceDisplayStatus({ ...base, state: "DRAFT" }).status).toBe("Черновик");
+    expect(invoiceDisplayStatus({ ...base, state: "DRAFT" }).status).toBe("Draft");
     expect(
       invoiceDisplayStatus({
         ...base,
@@ -29,8 +29,8 @@ describe("admin console invoice status", () => {
         approved: true,
         coolingOffUntil: "2026-09-24T00:00:00.000Z",
       }).status,
-    ).toBe("Ожидает проверки");
-    expect(invoiceDisplayStatus(base).status).toBe("Выставлен, не оплачен");
+    ).toBe("Awaiting review");
+    expect(invoiceDisplayStatus(base).status).toBe("Issued, unpaid");
     expect(
       invoiceDisplayStatus({
         ...base,
@@ -38,23 +38,23 @@ describe("admin console invoice status", () => {
         paymentApplied: true,
         paidAt: "2026-09-23T11:00:00.000Z",
       }).status,
-    ).toBe("Оплачен");
+    ).toBe("Paid");
   });
 
   it("keeps a detected payment unpaid, marks an overdue dispute, and never says partially paid", () => {
     const detected = invoiceDisplayStatus({ ...base, paymentDetected: true });
-    expect(detected.status).not.toBe("Оплачен");
-    expect(detected.payment).toBe("Платёж обнаружен, ждёт подтверждений");
+    expect(detected.status).not.toBe("Paid");
+    expect(detected.payment).toBe("Payment detected, awaiting confirmations");
     const overdue = invoiceDisplayStatus({
       ...base,
       now: "2026-10-01T00:00:00.000Z",
       disputeOpen: true,
       reconciliation: true,
     });
-    expect(overdue.status).toBe("Просрочен");
-    expect(overdue.flags).toContain("Оспорен");
-    expect(overdue.flags).toContain("На сверке");
-    expect(JSON.stringify(overdue)).not.toContain("Частично оплачен");
+    expect(overdue.status).toBe("Overdue");
+    expect(overdue.flags).toContain("Disputed");
+    expect(overdue.flags).toContain("Under reconciliation");
+    expect(JSON.stringify(overdue)).not.toContain("Partially paid");
     expect(overdue.dueNote).toContain("DEE-ADR-A");
     expect(invoiceDueAt("2026-09-01T00:00:00.000Z", 86_400_000)).toBe("2026-09-02T00:00:00.000Z");
   });

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountObservationFailure, AccountObservationReadFailure, createAccountObservationService } from
   "@/lib/trader/account-observation/service";
-import { parseAccountObservation } from "@/lib/trader/account-observation/validation";
+import { unavailableHtxV5Bills } from "@/lib/trader/account-observation/derivatives/htx-v5-bill-groups";
+import { accountObservationFinancialScopeAt, parseAccountObservation } from "@/lib/trader/account-observation/validation";
 import type { AccountObservation, AccountObservationReader, ObservationBinding, ObservationClock,
   HtxV5AccountObservation, ObservationConfig, ObservationLease, ObservationRepository, ObservedOrder, ReadEnvelope } from
   "@/lib/trader/account-observation/types";
@@ -797,4 +798,39 @@ describe("DEE-960 injected account observation — no production adapter or real
     expect(f.repository.release).not.toHaveBeenCalled(); expect(f.openReader).not.toHaveBeenCalled();
     expect(f.repository.commitIfCurrent).not.toHaveBeenCalled();
   });
+});
+
+function financialFixture() {
+  const scope = { enabled: true as const, scopeId: "00000000-0000-4000-8000-000000000007",
+    windowStartMs: 8000, windowEndMs: 9000, validFromMs: 9000, validUntilMs: 11000 };
+  const projection: HtxV5AccountObservation = { ...htxV5Projection(), schemaVersion: "htx-v5-observation/v2",
+    bills: { ...unavailableHtxV5Bills(scope, "SCOPE_EXPIRED"), status: "PARTIAL", unavailableReason: null,
+      values: [{ id: "1", contractCode: "", marginMode: "cross", currency: "USDT", type: "30",
+        category: "FUNDING_INCOME", amount: "1", createdTimeMs: 8500 }],
+      groups: [{ currency: "USDT", type: "30", category: "FUNDING_INCOME", observedAmountSum: "1", recordCount: 1 }],
+      readStartedAtMs: 10000, responseReceivedAtMs: 10000, readCompletedAtMs: 10000,
+      pageScope: { pageSize: 100, maxPages: 1, pagesRead: 1, nextFrom: "1", completeness: "UNKNOWN" } } };
+  return { scope, projection };
+}
+it("preserves base cadence and commits no amounts after optional scope expiry during V5 reading", async () => {
+  const { scope, projection } = financialFixture();
+  const f = setup({ htxV5: { enabled: true, expectedHtxUid: "456", financialHistory: scope }, leaseTtlMs: 300000 });
+  Object.defineProperty(f.reader, "readHtxV5", { value: async () => {
+    vi.setSystemTime(scope.validUntilMs); return { binding: { ...f.state.binding }, projection };
+  } });
+  const result = await f.service.tick(initial, "owner");
+  expect(result).toMatchObject({ status: "COMMITTED", observation: { schemaVersion: "account-observation/v4",
+    balances: { status: "COMPLETE" }, htxV5: { balance: { status: "COMPLETE" }, bills: { status: "UNAVAILABLE",
+      unavailableReason: "SCOPE_EXPIRED", values: null, groups: null } } } });
+  expect(f.state.failures).toBe(0); expect(f.state.nextDue).toBe(scope.validUntilMs + config.pollIntervalMs);
+});
+it("returns the actual financially sanitized transactional acknowledgement without restoring old amounts", async () => {
+  const { scope, projection } = financialFixture();
+  const f = setup({ htxV5: { enabled: true, expectedHtxUid: "456", financialHistory: scope }, leaseTtlMs: 300000 });
+  Object.defineProperty(f.reader, "readHtxV5", { value: async () => ({ binding: { ...f.state.binding }, projection }) });
+  vi.mocked(f.repository.commitIfCurrent).mockImplementation(async input => ({
+    observation: accountObservationFinancialScopeAt(input.observation, scope.validUntilMs),
+  }));
+  expect(await f.service.tick(initial, "owner")).toMatchObject({ status: "COMMITTED", observation: {
+    balances: { status: "COMPLETE" }, htxV5: { bills: { status: "UNAVAILABLE", values: null, groups: null } } } });
 });

@@ -5,19 +5,19 @@ export type AssistantSseEvent =
   | { event: "error"; data: { reason: string } };
 
 const STAGE_LABELS: Record<string, string> = {
-  get_overview: "Собираю сводку…",
-  list_accounts: "Получаю счета…",
-  list_orders: "Читаю ордера…",
-  list_clients: "Читаю клиентов…",
-  list_invoices: "Проверяю платежи…",
-  strategy_performance: "Считаю стратегии…",
-  list_research_runs: "Сравниваю запуски…",
-  list_incidents: "Читаю инциденты…",
-  system_status: "Проверяю систему…",
+  get_overview: "Gathering the summary…",
+  list_accounts: "Retrieving accounts…",
+  list_orders: "Reading orders…",
+  list_clients: "Reading clients…",
+  list_invoices: "Checking payments…",
+  strategy_performance: "Calculating strategies…",
+  list_research_runs: "Comparing runs…",
+  list_incidents: "Reading incidents…",
+  system_status: "Checking the system…",
 };
 
 export function assistantStageLabel(tool: string): string {
-  return STAGE_LABELS[tool] ?? "Читаю данные…";
+  return STAGE_LABELS[tool] ?? "Reading data…";
 }
 
 export function assistantToolEvents(tools: readonly string[]): AssistantSseEvent[] {

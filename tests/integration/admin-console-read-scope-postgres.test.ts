@@ -249,7 +249,7 @@ describe.skipIf(!enabled)("scope parity for admin read surfaces on Postgres", ()
     expect(detail.body).toMatchObject({
       data: {
         stored: { performanceFee: "30.00000001" },
-        display: { status: "Черновик", flags: ["На сверке"] },
+        display: { status: "Draft", flags: ["Under reconciliation"] },
       },
     });
     expect(detail.body).toMatchObject({

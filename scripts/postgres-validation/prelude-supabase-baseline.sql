@@ -2,19 +2,21 @@
 --
 -- `prelude-auth-stub.sql` reproduces a *bare* PostgreSQL cluster: the migration authority is the
 -- bootstrap superuser, `public` carries only its stock ACL, and no default privileges exist. The
--- approved WAIA production target is not that cluster class. It is a managed Supabase project where
+-- historical WAIA target snapshot used for this compatibility fixture differed from that bare
+-- cluster. This file reproduces that captured profile for migration verification; it is not a
+-- guarantee about every Supabase project or a statement about current production. In that captured
+-- profile:
 --
 --   * the migration authority is a NOSUPERUSER role holding CREATEROLE/CREATEDB/BYPASSRLS and
 --     owning the database (so it reaches `public` through `pg_database_owner`);
 --   * `anon`, `authenticated` and `service_role` exist and hold explicit `public` USAGE;
 --   * `ALTER DEFAULT PRIVILEGES` gives those three principals a fixed structural privilege set on
---     every newly created relation, and the migration authority's function default ACL is
---     owner-only EXECUTE (`{postgres=X/postgres}` on the approved target), not stock PUBLIC EXECUTE.
+--     every newly created relation, and the captured per-schema function default ACL contained
+--     a creator EXECUTE entry. That entry alone does not describe effective function privileges.
 --
--- Those differences are properties of the *cluster class*, not of one project: any Supabase project
--- provisioned by the same platform bootstrap produces them. Encoding them here — rather than
--- special-casing a project id, hostname or database instance — is what lets the H2/post-H2 catalog
--- verifiers be proved against both cluster classes from one deterministic, auditable definition.
+-- These are recorded compatibility assumptions for this fixture, not universal platform properties.
+-- Encoding the captured profile here lets the H2/post-H2 catalog verifiers cover both fixture classes
+-- from one deterministic, auditable definition.
 --
 -- Apply order: `prelude-auth-stub.sql`, then this file, as a cluster superuser, into a database
 -- OWNED BY `waia_platform_authority`. The migrations are then applied *as* that role.
@@ -24,8 +26,8 @@
 -- Idempotent: safe to re-run against an already-prepared validation database.
 
 -- 1. The third platform principal. `prelude-auth-stub.sql` already creates `anon`/`authenticated`.
---    `service_role` carries BYPASSRLS on Supabase, which is exactly why the corrected verifiers
---    must keep every read/write privilege class for it inside the frozen digest.
+--    This fixture gives `service_role` BYPASSRLS to match the captured profile, which is why the
+--    corrected verifiers must keep every read/write privilege class for it inside the frozen digest.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
@@ -43,19 +45,22 @@ $$;
 --    CREATE is deliberately NOT granted: the corrected verifiers keep schema CREATE digest-pinned.
 GRANT USAGE ON SCHEMA public TO waia_platform_authority, anon, authenticated, service_role;
 
--- 3. Default privileges for objects created by the migration authority in `public`, byte-equivalent
---    to the approved production target:
---      relations  postgres=arwdDxtm  anon/authenticated/service_role=Dxtm
---      functions  postgres=X                     (owner-only; no stock PUBLIC EXECUTE)
---      sequences  postgres=rwU       anon/authenticated/service_role=w
+-- 3. Default privileges for objects created by the migration authority in `public`, matching the
+--    captured compatibility profile:
+--      relations  authority=arwdDxtm anon/authenticated/service_role=Dxtm
+--      functions  authority=X                     (owner-only ACL entry)
+--      sequences  authority=rwU       anon/authenticated/service_role=w
+--    Per-schema defaults are additive to global defaults; these fixture statements do not erase
+--    global defaults. Effective function grants depend on both default ACL layers and PostgreSQL's
+--    acldefault behavior, so an owner entry alone does not establish that PUBLIC lacks EXECUTE.
 --    `Dxtm` = TRUNCATE, REFERENCES, TRIGGER, MAINTAIN — structural/destructive classes only, never
 --    SELECT/INSERT/UPDATE/DELETE. That distinction is the whole basis of the canonical projection.
 ALTER DEFAULT PRIVILEGES FOR ROLE waia_platform_authority IN SCHEMA public
   GRANT TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLES TO anon, authenticated, service_role;
--- Production's function default ACL is `{postgres=X/postgres}`. GRANT EXECUTE to the creator then
--- REVOKE from PUBLIC and the platform principals stores that owner-only entry. A bare REVOKE
--- against an absent default is a no-op and would leave `proacl` NULL (stock PUBLIC EXECUTE), which
--- is the DEE-1020 fixture bug that would fail 0209's `proacl IS NULL` check on the approved target.
+-- Preserve the historical per-schema creator entry used by the catalog compatibility fixture.
+-- These schema-scoped statements do not revoke global default EXECUTE from PUBLIC. A raw
+-- pg_default_acl entry must not be treated as a complete effective ACL for a created function;
+-- combine applicable defaults and inspect the resulting function ACL for that question.
 ALTER DEFAULT PRIVILEGES FOR ROLE waia_platform_authority IN SCHEMA public
   GRANT EXECUTE ON FUNCTIONS TO waia_platform_authority;
 ALTER DEFAULT PRIVILEGES FOR ROLE waia_platform_authority IN SCHEMA public

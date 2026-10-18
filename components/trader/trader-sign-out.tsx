@@ -65,7 +65,7 @@ export function TraderSignOut({
       if (activeRequest.current !== request) return;
       setError(
         locale === "ru"
-          ? "Выход не подтверждён. Повторите попытку: сессия могла остаться открытой."
+          ? "Sign out could not be confirmed. Please retry; do not assume your session has ended."
           : "Sign out could not be confirmed. Please retry; do not assume your session has ended.",
       );
       inFlight.current = false;
@@ -87,7 +87,7 @@ export function TraderSignOut({
         aria-describedby={error ? errorId : undefined}
         onClick={() => void signOut()}
       >
-        {locale === "ru" ? (pending ? "Выходим…" : "Выйти") : pending ? "Signing out…" : "Sign out"}
+        {locale === "ru" ? (pending ? "Signing out…" : "Sign out") : pending ? "Signing out…" : "Sign out"}
       </Button>
       {error ? (
         <p id={errorId} role="alert" className="text-destructive text-sm">

@@ -69,9 +69,22 @@ async function gotoExpectingCrossHostRedirect(
 test.describe("trader host routing (AT-E1 S2)", () => {
   test("offers sign-out in exchange and historical workspaces and retains failures", async ({
     page,
+    baseURL,
+    browser,
   }) => {
+    const email = `e2e-trader-sign-out-failure-${Date.now()}@example.com`;
+    const primaryContext = await browser.newContext({ baseURL: primaryBaseUrl(baseURL) });
+    try {
+      await signUpAndOpenDashboard(await primaryContext.newPage(), email);
+    } finally {
+      await primaryContext.close();
+    }
+    grantTraderEntitlementByUserEmail(email);
     for (const path of ["/trader", "/trader?campaign_run_id=e2e-sign-out"]) {
+      await signInOnLanding(page, email, TRADER_PASSWORD);
+      await page.waitForURL("**/trader");
       await page.goto(path);
+      expect((await page.request.get("/api/trader/exchange-credentials")).status()).toBe(200);
       const signOut = page.getByRole("button", { name: "Sign out", exact: true });
       await expect(signOut).toBeVisible();
       await page.route("**/api/auth/sign-out", (route) =>
@@ -83,9 +96,11 @@ test.describe("trader host routing (AT-E1 S2)", () => {
       ).toBeVisible();
       await expect(signOut).toBeEnabled();
       expect(new URL(page.url()).pathname).toBe("/trader");
+      expect((await page.request.get("/api/trader/exchange-credentials")).status()).toBe(200);
       await page.unroute("**/api/auth/sign-out");
       await signOut.click();
       await expect(page).toHaveURL("/");
+      expect((await page.request.get("/api/trader/exchange-credentials")).status()).toBe(401);
     }
   });
 
@@ -136,10 +151,10 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await page.waitForURL("**/trader");
     await page.goto("/admin");
     await expect(
-      page.getByRole("navigation", { name: "Консоль администратора AI-TRADER", exact: true }),
+      page.getByRole("navigation", { name: "AI-TRADER admin console", exact: true }),
     ).toBeVisible();
     await expect(page.getByTestId("admin-org-select")).toHaveCount(0);
-    await page.getByRole("button", { name: "Выйти", exact: true }).click();
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await expect(page).toHaveURL("/");
     await expectProtectedObserverApisFailClosed(page, 401);
   });
@@ -218,9 +233,9 @@ test.describe("trader host routing (AT-E1 S2)", () => {
     await page.waitForURL("**/trader");
     await page.goto(`/admin?organization_id=${organizationId}`);
     await expect(
-      page.getByRole("navigation", { name: "Консоль администратора AI-TRADER", exact: true }),
+      page.getByRole("navigation", { name: "AI-TRADER admin console", exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: "Обзор", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Overview", exact: true })).toBeVisible();
     await expect(page.getByTestId("admin-org-select")).toHaveCount(0);
   });
 

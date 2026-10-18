@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  postgres@3.4.9:
+    hash: f726670e53560553e1a898bb258f0f02922ecd39ea00f837513f0b6b924e580a
+    path: patches/postgres@3.4.9.patch
+
 importers:
 
   .:
@@ -43,7 +48,7 @@ importers:
         version: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       drizzle-orm:
         specifier: 0.41.0
-        version: 0.41.0(@types/better-sqlite3@7.6.13)(better-sqlite3@11.10.0)(postgres@3.4.9)
+        version: 0.41.0(@types/better-sqlite3@7.6.13)(better-sqlite3@11.10.0)(postgres@3.4.9(patch_hash=f726670e53560553e1a898bb258f0f02922ecd39ea00f837513f0b6b924e580a))
       jose:
         specifier: ^6.2.3
         version: 6.2.3
@@ -61,7 +66,7 @@ importers:
         version: 16.2.4(@babel/core@7.29.0)(@playwright/test@1.59.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       postgres:
         specifier: ^3.4.9
-        version: 3.4.9
+        version: 3.4.9(patch_hash=f726670e53560553e1a898bb258f0f02922ecd39ea00f837513f0b6b924e580a)
       react:
         specifier: 19.2.4
         version: 19.2.4
@@ -9304,11 +9309,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.41.0(@types/better-sqlite3@7.6.13)(better-sqlite3@11.10.0)(postgres@3.4.9):
+  drizzle-orm@0.41.0(@types/better-sqlite3@7.6.13)(better-sqlite3@11.10.0)(postgres@3.4.9(patch_hash=f726670e53560553e1a898bb258f0f02922ecd39ea00f837513f0b6b924e580a)):
     optionalDependencies:
       '@types/better-sqlite3': 7.6.13
       better-sqlite3: 11.10.0
-      postgres: 3.4.9
+      postgres: 3.4.9(patch_hash=f726670e53560553e1a898bb258f0f02922ecd39ea00f837513f0b6b924e580a)
 
   dunder-proto@1.0.1:
     dependencies:
@@ -11005,7 +11010,7 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  postgres@3.4.9: {}
+  postgres@3.4.9(patch_hash=f726670e53560553e1a898bb258f0f02922ecd39ea00f837513f0b6b924e580a): {}
 
   powershell-utils@0.1.0: {}
 

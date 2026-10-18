@@ -14,8 +14,8 @@ export function PromotionProposals() {
   );
   return (
     <ConsolePanel
-      title="Предложения исследовательского контура"
-      note="Предложение не назначает счёт, не продвигает стратегию и не открывает торговлю."
+      title="Research-mode proposals"
+      note="A proposal does not assign an account, promote a strategy or enable trading."
     >
       {read.loading ? (
         <ConsoleLoading />
@@ -29,22 +29,22 @@ export function PromotionProposals() {
             read.envelope.data.items.map((p) => (
               <details key={p.id} className="border-waia-divider rounded-lg border p-4">
                 <summary className="cursor-pointer text-sm">
-                  {p.symbols.join(", ") || "Инструменты не сохранены"} ·{" "}
-                  {p.disposition === "pending" ? "Ожидает проверки" : p.disposition}
+                  {p.symbols.join(", ") || "Instruments not saved"} ·{" "}
+                  {p.disposition === "pending" ? "Awaiting review" : p.disposition}
                   <span className="text-waia-fg-muted ml-3 text-xs">{p.proposalId ?? p.id}</span>
                 </summary>
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
                   <section>
-                    <h3 className="text-sm font-medium">1. Предложение и гипотеза</h3>
+                    <h3 className="text-sm font-medium">1. Proposal and hypothesis</h3>
                     <EvidenceTime at={p.createdAt} />
                     <p className="text-waia-fg-muted mt-2 text-xs break-all">
-                      {p.digests.hypothesis ?? "Гипотеза не сохранена"}
+                      {p.digests.hypothesis ?? "Hypothesis not saved"}
                     </p>
                   </section>
                   {(
                     [
-                      ["positive", "2. Подтверждающие доказательства"],
-                      ["negative", "3. Противоречащие доказательства"],
+                      ["positive", "2. Supporting evidence"],
+                      ["negative", "3. Contradicting evidence"],
                     ] as const
                   ).map(([key, label]) => (
                     <section key={key}>
@@ -54,12 +54,12 @@ export function PromotionProposals() {
                         rowKey={(r) => r.id}
                         caption={label}
                         columns={[
-                          { title: "Исход", render: (r) => r.polarity },
+                          { title: "Outcome", render: (r) => r.polarity },
                           {
-                            title: "Связь со сделкой",
+                            title: "Trade link",
                             render: (r) => (
                               <span className="text-xs break-all">
-                                {r.tradeRef || "Не сохранена"}
+                                {r.tradeRef || "Not saved"}
                               </span>
                             ),
                           },
@@ -68,7 +68,7 @@ export function PromotionProposals() {
                     </section>
                   ))}
                   <section>
-                    <h3 className="text-sm font-medium">4. Квалификация и кандидат</h3>
+                    <h3 className="text-sm font-medium">4. Qualification and candidate</h3>
                     {Object.entries(p.digests)
                       .filter(([k]) => k !== "hypothesis")
                       .map(([key, value]) => (
@@ -76,33 +76,32 @@ export function PromotionProposals() {
                           <summary className="cursor-pointer">
                             {
                               {
-                                candidate: "Кандидат",
+                                candidate: "Candidate",
                                 development: "Development",
                                 walkForward: "Walk-forward",
                               }[key as "candidate"]
                             }
                           </summary>
-                          <p className="mt-1 break-all">{value ?? "Не сохранено"}</p>
+                          <p className="mt-1 break-all">{value ?? "Not saved"}</p>
                         </details>
                       ))}
                   </section>
                   <section>
-                    <h3 className="mb-2 text-sm font-medium">5. Предложенные инструменты</h3>
-                    <p className="text-sm">{p.symbols.join(", ") || "Не сохранены"}</p>
+                    <h3 className="mb-2 text-sm font-medium">5. Proposed instruments</h3>
+                    <p className="text-sm">{p.symbols.join(", ") || "Not saved"}</p>
                   </section>
                   <section>
-                    <h3 className="mb-2 text-sm font-medium">6. Назначение счетов</h3>
+                    <h3 className="mb-2 text-sm font-medium">6. Account assignment</h3>
                     <DataState state="unavailable" reason={p.assignmentReason} />
                   </section>
                   <section>
-                    <h3 className="mb-2 text-sm font-medium">7. Решение оператора</h3>
+                    <h3 className="mb-2 text-sm font-medium">7. Operator decision</h3>
                     <p className="text-waia-fg-muted text-sm">
-                      Требуется отдельная проверка и управляемое продвижение. Эта карточка только
-                      показывает предложение.
+                      Separate review and governed promotion are required. This card only displays the proposal.
                     </p>
                     <p className="mt-2 text-xs">
-                      Полномочие капитала: {p.capitalAuthority ?? "не установлено"}; утверждение:{" "}
-                      {p.approvalAuthority ?? "не установлено"}.
+                      Capital authority: {p.capitalAuthority ?? "not established"}; assertion:{" "}
+                      {p.approvalAuthority ?? "not established"}.
                     </p>
                   </section>
                 </div>
@@ -110,7 +109,7 @@ export function PromotionProposals() {
             ))
           ) : (
             <p className="text-waia-fg-muted text-sm">
-              В выбранном периоде и охвате предложений нет.
+              No proposals in the selected period and scope.
             </p>
           )}
         </div>

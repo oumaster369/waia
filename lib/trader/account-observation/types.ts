@@ -8,6 +8,7 @@ import type {
   HtxDerivativesPositionRow,
 } from "./derivatives/types";
 import type {
+  HtxV5Bill,
   HtxV5AlgoOrder,
   HtxV5AssetMode,
   HtxV5BalanceDetail,
@@ -175,8 +176,7 @@ export type HtxV5FillsObservation = Readonly<{
     completeness: "UNKNOWN";
   }> | null;
 }>;
-export type HtxV5AccountObservation = Readonly<{
-  schemaVersion: "htx-v5-observation/v1";
+export type HtxV5AccountObservationBase = Readonly<{
   /** Descriptive source identity only; never a reusable authorization receipt. */
   htxUid: string | null;
   assetMode: HtxV5ValueObservation<HtxV5AssetMode>;
@@ -190,10 +190,49 @@ export type HtxV5AccountObservation = Readonly<{
   algoOrders: HtxV5AlgoOrdersObservation;
   fills: HtxV5FillsObservation;
 }>;
+export type HtxV5FinancialHistoryScope = Readonly<{
+  enabled: true;
+  scopeId: string;
+  windowStartMs: number;
+  windowEndMs: number;
+  validFromMs: number;
+  validUntilMs: number;
+}>;
+export type HtxV5FinancialUnavailableReason = "SCOPE_EXPIRED" | "SCOPE_NOT_YET_VALID";
+export type HtxV5BillsObservation = Readonly<{
+  status: "PARTIAL" | "ERROR" | "UNAVAILABLE";
+  unavailableReason: HtxV5FinancialUnavailableReason | null;
+  scopeId: string;
+  windowStartMs: number;
+  windowEndMs: number;
+  validFromMs: number;
+  validUntilMs: number;
+  windowConvention: "START_INCLUSIVE_END_EXCLUSIVE";
+  values: readonly HtxV5Bill[] | null;
+  groups: readonly import("./derivatives/htx-v5-bill-groups").HtxV5ObservedBillGroup[] | null;
+  readStartedAtMs: number | null;
+  responseReceivedAtMs: number | null;
+  readCompletedAtMs: number | null;
+  responseGeneratedAtMs: number | null;
+  error: ObservationReadError | null;
+  pageScope: Readonly<{ pageSize: 100; maxPages: 1; pagesRead: 1; nextFrom: string | null;
+    completeness: "UNKNOWN" }> | null;
+  completeness: "UNKNOWN";
+  amountSemantics: "RAW_SIGNED_AMOUNTS_NO_SIGN_CONVERSION";
+  accountBinding: "NOT_ESTABLISHED_BY_BILLS_RESPONSE";
+  netPnl: null;
+  dailyPnl: null;
+}>;
+export type HtxV5AccountObservation = HtxV5AccountObservationBase & (
+  Readonly<{ schemaVersion: "htx-v5-observation/v1" }> |
+  Readonly<{ schemaVersion: "htx-v5-observation/v2"; bills: HtxV5BillsObservation }>
+);
 export type HtxV5ObservationConfiguration = Readonly<{
   enabled: boolean;
   fillContracts?: readonly string[];
   expectedHtxUid?: string;
+  /** Exact optional financial capability; never inherited by self-service enrollment. */
+  financialHistory?: HtxV5FinancialHistoryScope;
 }>;
 /** Fixed reader bound used in the scheduler lease inequality and service timeout. */
 export const HTX_V5_READ_BUDGET_MS = 120_000;
@@ -215,7 +254,7 @@ export type AccountObservationFields = Readonly<{
 }>;
 /** Runtime validation enforces version-specific required/forbidden projection fields. */
 export type AccountObservation = AccountObservationFields & Readonly<{
-  schemaVersion: "account-observation/v1" | "account-observation/v2" | "account-observation/v3";
+  schemaVersion: "account-observation/v1" | "account-observation/v2" | "account-observation/v3" | "account-observation/v4";
   derivatives?: DerivativesAccountObservation;
   htxV5?: HtxV5AccountObservation;
 }>;
@@ -238,7 +277,7 @@ export type ObservationRepository = Readonly<{
       nextDueAtMs: number;
       consecutiveFailures: number;
     }>,
-  ): Promise<boolean>;
+  ): Promise<boolean | Readonly<{ observation: AccountObservation }>>;
   /** Token compare-and-release; an obsolete owner cannot release a successor. */
   release(lease: Pick<ObservationLease, "binding" | "ownerId" | "token">): Promise<void>;
 }>;

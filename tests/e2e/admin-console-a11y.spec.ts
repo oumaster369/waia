@@ -101,11 +101,11 @@ test("invoice confirmations belong to the selected invoice", async ({ page, base
   await page.waitForURL("**/trader");
   await page.goto("/admin/clients?tab=invoices");
   await page.getByRole("button", { name: new RegExp(invoices[0]!.id) }).click();
-  const approve = page.getByRole("button", { name: "Подтвердить выпуск" });
+  const approve = page.getByRole("button", { name: "Confirm issuance" });
   await expect(approve).toBeDisabled();
   for (const checkbox of await page.getByRole("checkbox").all()) await checkbox.check();
   await expect(approve).toBeEnabled();
-  await page.getByRole("button", { name: "Закрыть", exact: true }).click();
+  await page.getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("button", { name: new RegExp(invoices[1]!.id) }).click();
   await expect(approve).toBeDisabled();
   for (const checkbox of await page.getByRole("checkbox").all())
@@ -135,7 +135,7 @@ test("admin console main screens have no serious accessibility violations", asyn
   for (const path of SCREENS) {
     await page.goto(path);
     await expect(
-      page.getByRole("navigation", { name: "Консоль администратора AI-TRADER" }),
+      page.getByRole("navigation", { name: "AI-TRADER admin console" }),
     ).toBeVisible();
     const results = await new AxeBuilder({ page }).analyze();
     const serious = results.violations.filter(
@@ -147,25 +147,25 @@ test("admin console main screens have no serious accessibility violations", asyn
       fullPage: true,
     });
   }
-  await page.getByRole("button", { name: "Поиск по консоли" }).click();
-  await expect(page.getByRole("dialog", { name: "Перейти к разделу" })).toBeVisible();
-  await page.getByPlaceholder("Название раздела…").fill("Исследования");
+  await page.getByRole("button", { name: "Search console" }).click();
+  await expect(page.getByRole("dialog", { name: "Go to section" })).toBeVisible();
+  await page.getByPlaceholder("Section name…").fill("Research");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/admin\/research/);
-  await expect(page.getByRole("dialog", { name: "Перейти к разделу" })).not.toBeVisible();
-  await page.getByRole("tab", { name: "Запуски", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Go to section" })).not.toBeVisible();
+  await page.getByRole("tab", { name: "Runs", exact: true }).click();
   await expect(page).toHaveURL(/tab=runs/);
-  await page.getByRole("tab", { name: "Гипотезы и знания", exact: true }).click();
+  await page.getByRole("tab", { name: "Hypotheses and knowledge", exact: true }).click();
   await expect(page).toHaveURL(/tab=knowledge/);
   await page.goBack();
-  await expect(page.getByRole("tab", { name: "Запуски", exact: true })).toHaveAttribute(
+  await expect(page.getByRole("tab", { name: "Runs", exact: true })).toHaveAttribute(
     "aria-selected",
     "true",
   );
   await page.getByRole("button", { name: "History", exact: true }).click();
   await page
-    .getByRole("navigation", { name: "Консоль администратора AI-TRADER" })
-    .getByRole("link", { name: "Счета", exact: true })
+    .getByRole("navigation", { name: "AI-TRADER admin console" })
+    .getByRole("link", { name: "Accounts", exact: true })
     .click();
   await expect(page).toHaveURL(/mode=history/);
   await page.setViewportSize({ width: 1024, height: 768 });

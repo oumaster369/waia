@@ -3,19 +3,19 @@ import { ADMIN_REASON } from "@/lib/trader/admin-console/reason-codes";
 import { compareDecimal, subtractDecimal } from "@/lib/trader/risk/numeric";
 
 export const GUARDIAN_FRESH_AFTER_MS = 15 * 60 * 1000;
-export const UNALLOCATED_LABEL = "Не распределено";
+export const UNALLOCATED_LABEL = "Unattributed";
 
 const GUARDIAN_LABELS: Record<string, string> = {
-  HOLD: "Держать",
-  REDUCE_PARTIAL: "Сократить частично",
-  REDUCE_FULL: "Закрыть полностью",
+  HOLD: "Hold",
+  REDUCE_PARTIAL: "Reduce partially",
+  REDUCE_FULL: "Close fully",
 };
 
 const RISK_LABELS: Record<string, string> = {
-  NORMAL: "Обычный режим Risk",
-  CLOSE_ONLY: "Только закрытие",
-  HALT: "Остановлено",
-  KILLED: "Аварийная остановка",
+  NORMAL: "Normal Risk mode",
+  CLOSE_ONLY: "Close only",
+  HALT: "Stopped",
+  KILLED: "Emergency stop",
 };
 
 export type GuardianAssessmentPick = {

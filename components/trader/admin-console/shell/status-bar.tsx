@@ -53,7 +53,7 @@ export function StatusBar({
   const current = finance?.query === query ? finance : null;
   return (
     <div
-      aria-label="Состояние данных"
+      aria-label="Data state"
       className="border-waia-divider text-waia-fg-muted flex flex-wrap items-center gap-x-5 gap-y-2 border-b px-4 py-2.5 text-[10px] lg:px-8"
     >
       <span className="inline-flex items-center gap-2 font-medium tracking-wider">
@@ -64,24 +64,24 @@ export function StatusBar({
       </span>
       <span>
         {current
-          ? `Финансовый охват ${current.included}/${current.total}`
-          : "Финансовый охват: нет снимка"}
+          ? `Financial coverage ${current.included}/${current.total}`
+          : "Financial coverage: no snapshot"}
       </span>
-      {current?.observedAt ? <EvidenceTime at={current.observedAt} label="Наблюдения от" /> : null}
-      <span title="Измеряется после отображения данных; без достоверного измерения значение не показывается.">
-        {p95Ms == null ? "p95: нет измерения" : `p95: ${p95Ms} мс`}
+      {current?.observedAt ? <EvidenceTime at={current.observedAt} label="Observations since" /> : null}
+      <span title="Measured after displaying data; a value is not shown without a reliable measurement.">
+        {p95Ms == null ? "p95: no measurement" : `p95: ${p95Ms} ms`}
       </span>
       <span
         className="ml-auto"
         title={
           release?.sha
-            ? `${release.sha} · совпадение с деплоем не подтверждено`
+            ? `${release.sha} · deployment match unconfirmed`
             : "WAIA_RELEASE_SHA_NOT_SET"
         }
       >
         {release?.sha
-          ? `Релиз ${release.sha.slice(0, 8)} · не подтверждён`
-          : "Релиз: не установлен"}
+          ? `Release ${release.sha.slice(0, 8)} · unconfirmed`
+          : "Release: not established"}
       </span>
     </div>
   );

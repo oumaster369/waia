@@ -43,24 +43,24 @@ const EMPTY_OBSERVATION = {
 } as const;
 
 function freshnessLabel(row: RowView, nowMs: number): string {
-  if (row.observation === "loading") return "Загрузка…";
-  if (row.observation === "unavailable") return "Недоступно";
-  if (row.observation === "waiting" || row.lastTickMs === null) return "Подключение";
+  if (row.observation === "loading") return "Loading…";
+  if (row.observation === "unavailable") return "Unavailable";
+  if (row.observation === "waiting" || row.lastTickMs === null) return "Connecting";
   return nowMs - row.lastTickMs >= ACCOUNT_OBSERVATION_STALE_AFTER_MS
-    ? "Последнее чтение"
-    : "Актуально";
+    ? "Last read"
+    : "Current";
 }
 
 function ageLabelRu(completedAtMs: number, nowMs: number): string {
-  if (!Number.isFinite(completedAtMs) || completedAtMs > nowMs) return "время неизвестно";
+  if (!Number.isFinite(completedAtMs) || completedAtMs > nowMs) return "time unknown";
   const seconds = Math.floor((nowMs - completedAtMs) / 1000);
-  if (seconds < 5) return "только что";
-  if (seconds < 60) return `${seconds} с назад`;
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${seconds} s ago`;
   const minutes = Math.floor(seconds / 60);
-  if (minutes === 1) return "1 минуту назад";
-  if (minutes < 60) return `${minutes} мин. назад`;
+  if (minutes === 1) return "1 minute ago";
+  if (minutes < 60) return `${minutes} min ago`;
   const hours = Math.floor(minutes / 60);
-  return hours === 1 ? "1 час назад" : `${hours} ч назад`;
+  return hours === 1 ? "1 hour ago" : `${hours} h ago`;
 }
 
 function drillHref(account: ConnectedHtxAccountDto): string {
@@ -188,22 +188,22 @@ function futuresReadLabel(summary: FuturesBalanceSummary, nowMs: number): string
     !Number.isFinite(summary.readCompletedAtMs) ||
     summary.readCompletedAtMs > nowMs
   ) {
-    return "Время чтения неизвестно";
+    return "Read time unknown";
   }
   const stale = nowMs - summary.readCompletedAtMs >= ACCOUNT_OBSERVATION_STALE_AFTER_MS;
-  return `${stale ? "Устаревший срез" : "Срез"} · ${new Date(summary.readCompletedAtMs).toLocaleString("ru-RU")}`;
+  return `${stale ? "Stale snapshot" : "Snapshot"} · ${new Date(summary.readCompletedAtMs).toLocaleString("en-GB")}`;
 }
 
 function FuturesCell({ row, nowMs }: { row: RowView; nowMs: number }) {
   const href = drillHref(row);
-  if (row.observation === "loading") return <span>Загрузка</span>;
-  if (row.observation === "waiting") return <span>Ожидается первый снимок</span>;
+  if (row.observation === "loading") return <span>Loading</span>;
+  if (row.observation === "waiting") return <span>Waiting for the first snapshot</span>;
   if (row.observation === "unavailable" || !row.futures) {
     return (
       <div className="space-y-1">
-        <p>Данные фьючерсов недоступны</p>
+        <p>Futures data unavailable</p>
         <Link className="underline-offset-2 hover:underline" href={href}>
-          Детали счета
+          Account details
         </Link>
       </div>
     );
@@ -219,16 +219,16 @@ function FuturesCell({ row, nowMs }: { row: RowView; nowMs: number }) {
       <div className="space-y-1">
         <p>
           {summary.hasLegacyDerivatives
-            ? "Проверьте раздельные данные в деталях"
+            ? "Check separate data in the details"
             : summary.hasFuturesProjection
-              ? "Баланс фьючерсов недоступен"
-              : "Данные фьючерсов не получены"}
+              ? "Futures balance unavailable"
+              : "Futures data not received"}
         </p>
         {summary.readCompletedAtMs !== null ? (
           <p className="text-muted-foreground text-xs">{futuresReadLabel(summary, nowMs)}</p>
         ) : null}
         <Link className="text-muted-foreground underline-offset-2 hover:underline" href={href}>
-          Открыть детали
+          Open details
         </Link>
       </div>
     );
@@ -236,13 +236,13 @@ function FuturesCell({ row, nowMs }: { row: RowView; nowMs: number }) {
   return (
     <div className="space-y-1">
       <p>
-        Капитал HTX: <span className="font-mono">{summary.equityUsd} USD</span>
+        HTX equity: <span className="font-mono">{summary.equityUsd} USD</span>
       </p>
       <p>
-        Доступная маржа: <span className="font-mono">{summary.availableMarginUsd} USD</span>
+        Available margin: <span className="font-mono">{summary.availableMarginUsd} USD</span>
       </p>
       <p>
-        Нереализованный результат HTX:{" "}
+        HTX unrealized result:{" "}
         <span className="font-mono">{summary.profitUnrealUsd} USD</span>
       </p>
       <p className="text-muted-foreground text-xs">{futuresReadLabel(summary, nowMs)}</p>
@@ -295,14 +295,14 @@ export function ConnectedAccountsTable({
         if (first || result.revoked) {
           setError(
             result.revoked
-              ? "Доступ отозван. Данные счетов очищены."
-              : "Не удалось загрузить список счетов HTX.",
+              ? "Access revoked. Account data cleared."
+              : "Could not load the HTX account list.",
           );
           setRefreshNotice(null);
           setRows([]);
           setLoading(false);
         } else {
-          setRefreshNotice("Не удалось обновить список. Показаны ранее полученные данные.");
+          setRefreshNotice("Could not refresh the list. Previously received data is shown.");
         }
         return;
       }
@@ -367,9 +367,9 @@ export function ConnectedAccountsTable({
   }, [exchangeAccountId, organizationId, variant]);
 
   if (variant === "overview" && exchangeAccountId && !organizationId) {
-    return <AdminErrorState message="Для фильтра по счёту сначала выберите клиента." />;
+    return <AdminErrorState message="Select a client before filtering by account." />;
   }
-  if (loading) return <AdminLoadingState label="Загрузка счетов HTX…" />;
+  if (loading) return <AdminLoadingState label="Loading HTX accounts…" />;
   if (error) return <AdminErrorState message={error} />;
 
   const overviewSummary =
@@ -389,19 +389,19 @@ export function ConnectedAccountsTable({
       : null;
 
   return (
-    <section aria-label={variant === "overview" ? "Фьючерсы" : undefined} className="space-y-4">
+    <section aria-label={variant === "overview" ? "Futures" : undefined} className="space-y-4">
       {overviewSummary ? <OverviewFuturesSummaryView summary={overviewSummary} /> : null}
       <WaiaSurface variant="raised" className="space-y-4 p-5">
         <div>
           {variant === "overview" ? (
-            <h2 className="text-xl font-semibold">Счета HTX</h2>
+            <h2 className="text-xl font-semibold">HTX accounts</h2>
           ) : (
-            <h1 className="text-xl font-semibold">Счета HTX</h1>
+            <h1 className="text-xl font-semibold">HTX accounts</h1>
           )}
           <p className="text-muted-foreground mt-1 text-sm">
             {variant === "overview"
-              ? "Связанные счета в выбранном охвате. Фьючерсы показаны как текущие наблюдения в USD."
-              : "Личные счета AI-TRADER с активным подключением HTX. Финансовый результат здесь не рассчитывается."}
+              ? "Connected accounts in the selected scope. Futures are shown as current observations in USD."
+              : "Personal AI-TRADER accounts with an active HTX connection. Financial results are not calculated here."}
           </p>
           {refreshNotice ? (
             <p className="text-destructive mt-2 text-sm" role="status">
@@ -410,21 +410,21 @@ export function ConnectedAccountsTable({
           ) : null}
         </div>
         {rows.length === 0 ? (
-          <p className="text-muted-foreground text-sm">Пока нет счетов с подключённым HTX.</p>
+          <p className="text-muted-foreground text-sm">No accounts with connected HTX yet.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm" data-testid="admin-connected-accounts">
               <thead>
                 <tr className="text-muted-foreground border-b">
-                  <th className="py-2 pr-3 font-medium">Счёт</th>
-                  <th className="py-2 pr-3 font-medium">ID счёта HTX</th>
+                  <th className="py-2 pr-3 font-medium">Account</th>
+                  <th className="py-2 pr-3 font-medium">HTX account ID</th>
                   <th className="py-2 pr-3 font-medium">UID HTX</th>
-                  <th className="py-2 pr-3 font-medium">Состояние</th>
-                  <th className="py-2 pr-3 font-medium">Давность данных</th>
-                  <th className="py-2 pr-3 font-medium">Спот USDT · доступно</th>
-                  <th className="py-2 pr-3 font-medium">Спот USDT · в ордерах</th>
-                  <th className="py-2 pr-3 font-medium">Спот · открытые ордера</th>
-                  <th className="py-2 font-medium">Фьючерсы · USD</th>
+                  <th className="py-2 pr-3 font-medium">State</th>
+                  <th className="py-2 pr-3 font-medium">Data age</th>
+                  <th className="py-2 pr-3 font-medium">Spot USDT · available</th>
+                  <th className="py-2 pr-3 font-medium">Spot USDT · in orders</th>
+                  <th className="py-2 pr-3 font-medium">Spot · open orders</th>
+                  <th className="py-2 font-medium">Futures · USD</th>
                 </tr>
               </thead>
               <tbody>
@@ -436,7 +436,7 @@ export function ConnectedAccountsTable({
                       </Link>
                     </td>
                     <td className="py-2 pr-3 font-mono">{row.exchangeAccountId}</td>
-                    <td className="py-2 pr-3 font-mono">{row.htxUid ?? "Не получен"}</td>
+                    <td className="py-2 pr-3 font-mono">{row.htxUid ?? "Not received"}</td>
                     <td className="py-2 pr-3">{freshnessLabel(row, nowMs)}</td>
                     <td className="py-2 pr-3">
                       {row.lastTickMs ? ageLabelRu(row.lastTickMs, nowMs) : "—"}

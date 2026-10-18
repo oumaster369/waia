@@ -32,9 +32,9 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
     await expect(prepareHistoricalReconciliationFixture(env)).rejects.toThrow("DEE1130_BOOTSTRAP_REFUSED");
     expect(postgres).not.toHaveBeenCalled();
   });
-  it("captures all232 actual source SQL files and exact seed bytes without any connection", () => {
+  it("captures all233 actual source SQL files and exact seed bytes without any connection", () => {
     const source = readBootstrapSources();
-    expect(source.migrations).toHaveLength(232);
+    expect(source.migrations).toHaveLength(233);
     expect(source.migrations.slice(0, 222).at(-1)!.entry.tag).toBe("0221_trader_research_understanding_v1");
     expect(source.migrations[222]!.entry.tag).toBe("0222_trader_historical_reconciliation_v1");
     expect(source.migrations[223]!.entry).toEqual({ idx: 223, version: "7", when: 1780000000223,
@@ -55,6 +55,8 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
       tag: "0230_trader_observation_consent_revision_grants_v1", breakpoints: true });
     expect(source.migrations[231]!.entry).toEqual({ idx: 231, version: "7", when: 1780000000231,
       tag: "0231_trader_observation_purpose_projection_v1", breakpoints: true });
+    expect(source.migrations[232]!.entry).toEqual({ idx: 232, version: "7", when: 1780000000233,
+      tag: "0233_trader_account_financial_history_v1", breakpoints: true });
     for (const item of source.migrations) {
       expect(item.bytes).toEqual(readFileSync(`db/migrations_postgres/${item.entry.tag}.sql`));
       expect(item.identity.hash).toBe(createHash("sha256").update(item.bytes).digest("hex"));
@@ -64,6 +66,19 @@ describe("DEE1130 explicit fresh validation bootstrap admission", () => {
     expect(source.prelude).toEqual(readFileSync("scripts/postgres-validation/prelude-auth-stub.sql"));
     expect(postgres).not.toHaveBeenCalled();
   });
+  it.each(["missing", "malformed", "idx", "tag", "reserved-tag", "when", "version", "breakpoints"] as const)(
+    "refuses %s0233 while preserving the reserved0232 filename gap", field => {
+      const value = journal();
+      if (field === "missing") value.entries.splice(232, 1);
+      else if (field === "malformed") value.entries[232] = null;
+      else if (field === "idx") value.entries[232].idx = 233;
+      else if (field === "tag") value.entries[232].tag = "0233_unadmitted_history";
+      else if (field === "reserved-tag") value.entries[232].tag = "0232_trader_account_financial_history_v1";
+      else if (field === "when") value.entries[232].when = 1780000000232;
+      else if (field === "version") value.entries[232].version = "8";
+      else value.entries[232].breakpoints = false;
+      expect(() => assertBootstrapJournal(value)).toThrow("JOURNAL");
+    });
   it.each(["missing-prefix", "extra-future", "wrong-idx", "wrong-tag", "path-traversal", "wrong-version", "wrong-breakpoints", "wrong-when", "reordered", "duplicate-when"])(
     "refuses %s before migration input can be prepared", change => {
       const value = journal();

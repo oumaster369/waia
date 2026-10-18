@@ -275,7 +275,7 @@ export async function handleAdminConsoleAssistantMessagesPost(
         id: assistantMessageId,
         conversationId: parsed.data.conversationId,
         role: "assistant",
-        content: "Дневной лимит помощника исчерпан.",
+        content: "The assistant daily limit has been reached.",
         scopeJson: context,
         status: "failed",
         errorCode: budget.reason,
@@ -301,7 +301,7 @@ export async function handleAdminConsoleAssistantMessagesPost(
           id: assistantMessageId,
           conversationId: parsed.data.conversationId,
           role: "assistant",
-          content: "Языковая модель недоступна. Быстрые ответы работают без неё.",
+          content: "The language model is unavailable. Quick answers work without it.",
           scopeJson: context,
           status: "provider_unavailable",
           errorCode: ADMIN_REASON.providerUnavailable,
@@ -387,7 +387,7 @@ export async function handleAdminConsoleAssistantMessagesPost(
           id: assistantMessageId,
           conversationId: parsed.data.conversationId,
           role: "assistant",
-          content: "Языковая модель недоступна. Быстрые ответы работают без неё.",
+          content: "The language model is unavailable. Quick answers work without it.",
           scopeJson: context,
           status: "provider_unavailable",
           errorCode: ADMIN_REASON.providerUnavailable,
@@ -409,7 +409,7 @@ export async function handleAdminConsoleAssistantMessagesPost(
         ? turn.answer.summary
         : turn.status === "failed"
           ? turn.message
-          : "Ответ остановлен.";
+          : "Response stopped.";
     const status =
       turn.status === "answer" ? "complete" : turn.status === "stopped" ? "stopped" : "failed";
     await runtime.db.insert(traderAdminAssistantMessage).values({

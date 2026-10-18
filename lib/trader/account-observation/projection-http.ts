@@ -98,7 +98,8 @@ async function handleRequest(
     request.method !== "POST" ||
     typeof request.url !== "string" ||
     (request.url !== PROJECTION_PATHS.resolveBinding &&
-      request.url !== PROJECTION_PATHS.readLatest) ||
+      request.url !== PROJECTION_PATHS.readLatest &&
+      request.url !== PROJECTION_PATHS.readFinancialHistory) ||
     !validHeaders(request)
   ) {
     rejectAndClose(response);

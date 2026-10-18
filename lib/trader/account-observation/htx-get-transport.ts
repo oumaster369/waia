@@ -6,6 +6,7 @@ import { AccountObservationReadFailure } from "./service";
 import { observationBindingSchema } from "./validation";
 import type { ObservationBinding, ObservationClock } from "./types";
 import type { HtxObservationGetTransport } from "./htx-reader";
+import { createObservationResponseBodyOwner, settleObservationResponseBody, type ObservationResponseBodyOwner } from "./response-body-settlement";
 
 const positiveId = z.string().regex(/^[1-9]\d{0,39}$/);
 const size = z.string().regex(/^[1-9]\d{0,2}$/).refine(s => Number(s) <= 500);
@@ -86,7 +87,7 @@ function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | 
   const trackCancellation = (promise: Promise<unknown> | undefined) => {
     if (promise) void track(promise).catch(() => { cancellationFailed = true; });
   };
-  const cancelBody = (response: Response) => { trackCancellation(response.body?.cancel()); };
+  const cancelBody = (response: Response) => { trackCancellation(settleObservationResponseBody(response.body)); };
   const dispose = () => {
     disposed = true; active?.abort(); apiKey = ""; secret = "";
     // Drops references, not a promise of secure erasure of immutable JS strings.
@@ -164,7 +165,7 @@ function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | 
         if (await verifyReadAdmission(binding, keyDigest, controller.signal) !== true) denied("PERMISSION_DENIED");
         if (disposed || controller.signal.aborted) denied("READ_FAILED");
       };
-      let bodyReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+      let bodyOwner: ObservationResponseBodyOwner | undefined;
       const action = async () => {
         const { path, query, maxBytes } = validate(request);
         await current();
@@ -189,14 +190,14 @@ function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | 
           cancelBody(response); denied("INVALID_RESPONSE");
         }
         if (!response.body) return denied("INVALID_RESPONSE");
-        bodyReader = response.body.getReader();
+        bodyOwner = createObservationResponseBodyOwner(response.body);
         const decoder = new TextDecoder("utf-8", { fatal: true }); let bytes = 0; let body = "";
         const decode = (value?: Uint8Array) => {
           try { return value ? decoder.decode(value, { stream: true }) : decoder.decode(); }
           catch { return denied("INVALID_RESPONSE"); }
         };
         while (true) {
-          const chunk = await bodyReader.read();
+          const chunk = await bodyOwner.read();
           if (disposed || controller.signal.aborted) denied("READ_FAILED");
           if (chunk.done) break;
           if (!(chunk.value instanceof Uint8Array) || (bytes += chunk.value.byteLength) > maxBytes) denied("INVALID_RESPONSE");
@@ -225,7 +226,7 @@ function createBoundedGetTransport(input: TransportInput, lane: "OBSERVATION" | 
         return denied("READ_FAILED");
       } finally {
         // Best-effort cancellation does not await an uncooperative network dependency.
-        trackCancellation(bodyReader?.cancel());
+        if (bodyOwner) trackCancellation(bodyOwner.settled());
         parentSignal.removeEventListener("abort", cancel);
         controller.signal.removeEventListener("abort", rejectAbort); controller.abort();
         active = null;

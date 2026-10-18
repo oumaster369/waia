@@ -94,7 +94,7 @@ function sendRaw(port: number, raw: string): Promise<string> {
 }
 
 async function signedRequest(
-  operation: "resolveBinding" | "readLatest" = "readLatest",
+  operation: "resolveBinding" | "readLatest" | "readFinancialHistory" = "readLatest",
 ): Promise<SignedProjectionRequest> {
   const now = Date.now();
   return createProjectionRequest(
@@ -106,7 +106,17 @@ async function signedRequest(
         .padStart(12, "0")}`,
       issuedAtMs: now,
       deadlineMs: now + 5_000,
-      payload: operation === "readLatest" ? binding : scope,
+      payload:
+        operation === "readFinancialHistory"
+          ? {
+              binding,
+              pageSize: 100,
+              cursor: null,
+              filters: { windowStartMs: null, windowEndMs: null },
+            }
+          : operation === "readLatest"
+            ? binding
+            : scope,
     },
     key,
   );
@@ -197,6 +207,45 @@ afterEach(async () => {
 });
 
 describe("projection Node HTTP adapter", () => {
+  it("accepts the exact signed history path and rejects path suffixes before dispatch", async () => {
+    const fixture = createDispatcher(async (raw) => {
+      const request = await verifyProjectionRequest(raw, {
+        expectedTuple: tuple,
+        keyBytes: key,
+        clock: Date.now,
+      });
+      return createProjectionResponse(
+        request,
+        {
+          binding,
+          htxUid: "456",
+          currentFinancialStatus: "NOT_CONFIGURED",
+          records: [],
+          coverage: [],
+          nextCursor: null,
+          source: "PERSISTED_COLLECTOR_RECORDS_ONLY",
+          providerRequests: 0,
+          completeness: "UNKNOWN",
+        },
+        key,
+      );
+    });
+    const { port } = await start(fixture.dispatcher),
+      request = await signedRequest("readFinancialHistory");
+    const headers = {
+      "content-type": "application/json",
+      "x-waia-projection-signature": request.headers[0][1],
+    };
+    const response = await send(port, request.path, { body: request.body, headers });
+    expect(response.status).toBe(200);
+    for (const suffix of ["/", "?page=1", "%2f"]) {
+      expect(
+        (await send(port, request.path + suffix, { body: request.body, headers })).status,
+      ).toBe(503);
+    }
+    expect(fixture.calls.ran).toBe(1);
+  });
+
   it("forwards the exact signed request and returns a verifiable no-store response", async () => {
     const { dispatcher, calls } = createDispatcher();
     const { port } = await start(dispatcher);

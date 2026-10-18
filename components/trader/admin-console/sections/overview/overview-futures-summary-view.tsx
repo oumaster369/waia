@@ -8,14 +8,14 @@ import type {
 type Summary = ReturnType<typeof summarizeOverviewFutures>;
 
 const EXCLUSION_COPY: Record<OverviewFuturesExclusion, string> = {
-  DIRECTORY_STALE: "Список счетов не удалось обновить",
-  IDENTITY_UNAVAILABLE: "Не удалось проверить принадлежность счета",
-  DUPLICATE_IDENTITY: "Счет совпадает с другой записью",
-  OBSERVATION_UNAVAILABLE: "Текущие данные счета недоступны",
-  FUTURES_UNAVAILABLE: "Баланс фьючерсов недоступен",
-  TIME_INVALID: "Время последнего чтения неизвестно",
-  STALE: "Данные устарели",
-  AMOUNT_UNSUPPORTED: "Не удалось точно прочитать сумму",
+  DIRECTORY_STALE: "Could not refresh account list",
+  IDENTITY_UNAVAILABLE: "Could not verify account ownership",
+  DUPLICATE_IDENTITY: "Account matches another record",
+  OBSERVATION_UNAVAILABLE: "Current account data unavailable",
+  FUTURES_UNAVAILABLE: "Futures balance unavailable",
+  TIME_INVALID: "Last read time unknown",
+  STALE: "Data is stale",
+  AMOUNT_UNSUPPORTED: "Could not read the amount precisely",
 };
 
 function card(label: string, amount: string | null, summary: Summary) {
@@ -32,7 +32,7 @@ function card(label: string, amount: string | null, summary: Summary) {
         ) : null}
       </p>
       {partial && amount !== null ? (
-        <p className="text-waia-warning mt-3 text-xs">Известная часть</p>
+        <p className="text-waia-warning mt-3 text-xs">Known portion</p>
       ) : null}
     </div>
   );
@@ -59,39 +59,39 @@ export function OverviewFuturesSummaryView({
   const description =
     unavailableReason ??
     (values.state === "partial"
-      ? "Показана известная часть по свежим снимкам; это не результат выбранного периода."
+      ? "The known portion from fresh snapshots is shown; this is not the selected period result."
       : values.state === "complete"
-        ? "Текущий снимок по подключённым счетам HTX; нереализованный результат не относится к выбранному периоду."
+        ? "Current snapshot for connected HTX accounts; unrealized results do not refer to the selected period."
         : values.state === "empty"
-          ? "В этом охвате пока нет подключённых счетов HTX."
-          : "Нет полного актуального снимка по счетам в выбранном охвате.");
+          ? "No connected HTX accounts in this scope yet."
+          : "No complete current account snapshot in the selected scope.");
   const observedAt =
     values.oldestReadCompletedAtMs === null
       ? null
-      : new Date(values.oldestReadCompletedAtMs).toLocaleString("ru-RU");
+      : new Date(values.oldestReadCompletedAtMs).toLocaleString("en-GB");
 
   return (
-    <ConsolePanel title="Фьючерсы" note="Текущие наблюдения HTX · USD">
+    <ConsolePanel title="Futures" note="Current HTX observations · USD">
       <div className="space-y-4 p-4">
         <p className="text-waia-fg-muted text-sm">{description}</p>
         <div className="grid gap-3 sm:grid-cols-3">
-          {card("Капитал фьючерсов", values.equityUsd, values)}
-          {card("Доступная маржа фьючерсов", values.availableMarginUsd, values)}
-          {card("Нереализованный результат фьючерсов", values.profitUnrealUsd, values)}
+          {card("Futures equity", values.equityUsd, values)}
+          {card("Available futures margin", values.availableMarginUsd, values)}
+          {card("Unrealized futures result", values.profitUnrealUsd, values)}
         </div>
         {summary ? (
           <div className="text-waia-fg-muted flex flex-wrap justify-between gap-2 px-1 text-xs">
             <p>
-              Снимки учтены: {values.included} из {values.total}
+              Snapshots included: {values.included} of {values.total}
             </p>
-            {observedAt ? <p>Самое раннее чтение: {observedAt}</p> : null}
+            {observedAt ? <p>Earliest read: {observedAt}</p> : null}
           </div>
         ) : null}
         {values.excluded.length > 0 ? (
-          <ul className="text-waia-fg-muted space-y-1 text-xs" aria-label="Исключённые счета">
+          <ul className="text-waia-fg-muted space-y-1 text-xs" aria-label="Excluded accounts">
             {values.excluded.map((item) => (
               <li key={`${item.exchangeAccountId}:${item.reason}`}>
-                Счёт {item.exchangeAccountId}: {EXCLUSION_COPY[item.reason]}
+                Account {item.exchangeAccountId}: {EXCLUSION_COPY[item.reason]}
               </li>
             ))}
           </ul>

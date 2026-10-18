@@ -112,8 +112,9 @@ describe.skipIf(!enabled)("DEE-1235 synthetic HTX observation onboarding on Post
       entries: Array<{ tag: string }>;
     };
     const latestTag = journal.entries.at(-1)?.tag;
-    expect(journal.entries).toHaveLength(232);
-    expect(latestTag).toBe("0231_trader_observation_purpose_projection_v1");
+    expect(journal.entries).toHaveLength(233);
+    expect(journal.entries[231]?.tag).toBe("0231_trader_observation_purpose_projection_v1");
+    expect(latestTag).toBe("0233_trader_account_financial_history_v1");
     const expectedLatestHash = createHash("sha256")
       .update(readFileSync(join("db/migrations_postgres", `${latestTag}.sql`)))
       .digest("hex");
@@ -121,7 +122,7 @@ describe.skipIf(!enabled)("DEE-1235 synthetic HTX observation onboarding on Post
       SELECT count(*)::int AS n,
         (SELECT hash FROM drizzle.__drizzle_migrations ORDER BY created_at DESC, id DESC LIMIT 1) AS hash
       FROM drizzle.__drizzle_migrations`;
-    expect(migrationHead).toMatchObject({ n: 232, hash: expectedLatestHash });
+    expect(migrationHead).toMatchObject({ n: 233, hash: expectedLatestHash });
 
     db = drizzle(sql, { schema }) as WaiaPostgresDb;
     userId = randomUUID();

@@ -15,11 +15,11 @@ import { multiplyDecimal } from "@/lib/trader/risk/numeric";
 import type { StrategyWorkspaceItem } from "@/lib/trader/admin-console/research/strategy-workspace";
 import type { StrategyPerformance } from "@/lib/trader/admin-console/research/strategy-performance";
 const tabs = [
-  ["results", "Результаты"],
-  ["accounts", "Счета и сделки"],
-  ["decisions", "Решения"],
-  ["checks", "Проверки"],
-  ["versions", "Версии"],
+  ["results", "Results"],
+  ["accounts", "Accounts and trades"],
+  ["decisions", "Decisions"],
+  ["checks", "Checks"],
+  ["versions", "Versions"],
 ] as const;
 type Details = {
   performance: (StrategyPerformance & { mode: string })[];
@@ -37,33 +37,33 @@ type Details = {
   decisionsTruncated: boolean;
 };
 const modes: Record<string, string> = {
-  live: "Live — реальный контур",
-  paper: "Paper — виртуальный контур",
-  history: "History — воспроизведение",
+  live: "Live · real mode",
+  paper: "Paper · virtual mode",
+  history: "History · replay",
 };
 const evidenceLabels: Record<string, string> = {
-  pending: "Ожидает запуска",
-  running: "Выполняется",
-  completed: "Тест завершён",
-  failed: "Ошибка теста",
-  draft: "Черновик",
-  registered: "Зарегистрирована",
-  backtested: "Тест завершён",
-  walk_forward_validated: "Walk-forward пройден",
-  blind_validated: "Проверка завершена",
-  rejected: "Отклонена",
-  DRAFT: "Черновик продвижения",
-  PENDING_CONFIRM: "Ожидает подтверждения",
-  COOLING_OFF: "Период ожидания",
-  EFFECTIVE: "Продвижение действует",
-  CANCELLED: "Продвижение отменено",
-  REVOKED: "Продвижение отозвано",
-  OPEN: "Сделка открыта",
-  CLOSED: "Сделка закрыта",
-  FORCED_FLAT: "Позиция принудительно закрыта",
-  RESEARCHING: "Исследуется",
-  PAPER: "Тестируется в Paper",
-  RETIRED: "В архиве",
+  pending: "Awaiting run",
+  running: "Running",
+  completed: "Test completed",
+  failed: "Test error",
+  draft: "Draft",
+  registered: "Registered",
+  backtested: "Test completed",
+  walk_forward_validated: "Walk-forward passed",
+  blind_validated: "Review completed",
+  rejected: "Rejected",
+  DRAFT: "Promotion draft",
+  PENDING_CONFIRM: "Awaiting confirmation",
+  COOLING_OFF: "Cooling-off period",
+  EFFECTIVE: "Promotion effective",
+  CANCELLED: "Promotion cancelled",
+  REVOKED: "Promotion revoked",
+  OPEN: "Trade opened",
+  CLOSED: "Trade closed",
+  FORCED_FLAT: "Position forcibly closed",
+  RESEARCHING: "Under research",
+  PAPER: "Testing in Paper",
+  RETIRED: "Archived",
 };
 const money = (v: string | null) =>
   v === null ? (
@@ -89,10 +89,9 @@ export function StrategyDetails({
     <div className="space-y-5">
       <ConsoleBadge>{strategy.activityLabel}</ConsoleBadge>
       <p className="text-waia-fg-muted text-sm">
-        Доказательства относятся только к выбранной версии. Завершённый тест не означает
-        рекомендацию к продвижению.
+        Evidence applies only to the selected version. A completed test does not mean a recommendation for promotion.
       </p>
-      <nav className="flex flex-wrap gap-2" aria-label="Содержание стратегии">
+      <nav className="flex flex-wrap gap-2" aria-label="Strategy contents">
         {tabs.map(([id, label]) => (
           <button
             className={`${controlClass} ${tab === id ? "border-waia-accent-cool" : ""}`}
@@ -124,22 +123,22 @@ export function StrategyDetails({
                     <>
                       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {[
-                          ["Реализованный результат периода", money(result.realized)],
-                          ["Торговые комиссии", money(result.tradingFees)],
-                          ["Закрытые сделки", result.closedTradeCount ?? "Недоступно"],
+                          ["Period realized result", money(result.realized)],
+                          ["Trading fees", money(result.tradingFees)],
+                          ["Closed trades", result.closedTradeCount ?? "Unavailable"],
                           [
-                            "Доля прибыльных сделок",
+                            "Winning trade ratio",
                             result.winRate === null
-                              ? "Нет достоверного знаменателя"
+                              ? "No reliable denominator"
                               : `${formatAdminMoney(multiplyDecimal(result.winRate, "100"), "").trim()}%`,
                           ],
                           [
-                            "Фактор прибыли",
+                            "Profit factor",
                             result.profitFactor === null
-                              ? "Нет достоверного знаменателя"
+                              ? "No reliable denominator"
                               : formatAdminMoney(result.profitFactor, ""),
                           ],
-                          ["Просадка реализованного результата", money(result.maxRealizedDrawdown)],
+                          ["Realized-result drawdown", money(result.maxRealizedDrawdown)],
                         ].map(([label, value]) => (
                           <div key={String(label)}>
                             <p className="text-waia-fg-muted text-xs">{label}</p>
@@ -148,17 +147,16 @@ export function StrategyDetails({
                         ))}
                       </div>
                       <p className="text-waia-fg-muted text-xs">
-                        До комиссии сервиса. Комиссии учтены один раз. Просадка — в USDT по
-                        последовательности реализованного результата.
+                        Before the service fee. Fees are counted once. Drawdown is in USDT along the realized-result sequence.
                       </p>
                       <ConsoleTable
                         rows={result.daily}
                         rowKey={(r) => r.day}
-                        caption="Результат по дням"
+                        caption="Result by day"
                         columns={[
-                          { title: "День (UTC)", render: (r) => r.day },
-                          { title: "За день", render: (r) => money(r.realized) },
-                          { title: "С начала периода", render: (r) => money(r.cumulative) },
+                          { title: "Day (UTC)", render: (r) => r.day },
+                          { title: "Daily", render: (r) => money(r.realized) },
+                          { title: "Since period start", render: (r) => money(r.cumulative) },
                         ]}
                       />
                       <DataState
@@ -170,44 +168,43 @@ export function StrategyDetails({
                   ) : (
                     <>
                       <p className="text-waia-fg-muted text-sm">
-                        Счетов в наблюдаемых сделках: {result.accountCount ?? "неполный охват"}.
-                        Активность не означает назначение стратегии.
+                        Accounts in observed trades: {result.accountCount ?? "partial coverage"}. Activity does not mean strategy assignment.
                       </p>
                       <ConsoleTable
                         rows={result.trades}
                         rowKey={(r) => r.id}
-                        caption="Сделки выбранной версии"
+                        caption="Selected version trades"
                         columns={[
                           {
-                            title: "Рынок / счёт",
+                            title: "Market / account",
                             render: (r) => (
                               <>
                                 <p>{r.symbol}</p>
                                 <p className="text-waia-fg-muted text-xs break-all">
-                                  {r.account ?? "Счёт не установлен"}
+                                  {r.account ?? "Account not established"}
                                 </p>
                               </>
                             ),
                           },
                           {
-                            title: "Состояние",
+                            title: "State",
                             render: (r) =>
                               r.state === "OPEN"
-                                ? "Открыта"
+                                ? "Opened"
                                 : r.state === "CLOSED"
-                                  ? "Закрыта"
-                                  : "Принудительно закрыта",
+                                  ? "Closed"
+                                  : "Forcibly closed",
                           },
-                          { title: "Реализовано за сделку", render: (r) => money(r.realized) },
+                          { title: "Realized per trade", render: (r) => money(r.realized) },
                           {
-                            title: "Закрытие",
+                            title: "Close",
                             render: (r) => <EvidenceTime at={r.closedAt} label="" />,
                           },
                         ]}
                       />
                       {result.totalTrades > result.trades.length ? (
                         <p className="text-waia-fg-muted text-xs">
-                          Показано {result.trades.length} из {result.totalTrades}.
+                          Showing {result.trades.length} of {result.totalTrades}.
                         </p>
                       ) : null}
                     </>
@@ -220,29 +217,29 @@ export function StrategyDetails({
               <ConsoleTable
                 rows={read.envelope.data.decisions}
                 rowKey={(r) => r.id}
-                caption="Решения выбранной версии"
+                caption="Selected version decisions"
                 columns={[
                   {
-                    title: "Рынок / контур",
+                    title: "Market / mode",
                     render: (r) => (
                       <>
-                        {r.symbol} · {modes[r.mode] ?? "Контур не установлен"}
+                        {r.symbol} · {modes[r.mode] ?? "Mode not established"}
                       </>
                     ),
                   },
-                  { title: "Решение", render: (r) => r.decision },
+                  { title: "Decision", render: (r) => r.decision },
                   {
-                    title: "Основание",
+                    title: "Basis",
                     render: (r) => (
                       <>
-                        <p>{r.category ?? "Сохранённое основание"}</p>
+                        <p>{r.category ?? "Saved rationale"}</p>
                         <p className="text-waia-fg-muted text-xs break-all">{r.reason}</p>
                       </>
                     ),
                   },
-                  { title: "Время", render: (r) => <EvidenceTime at={r.at} label="" /> },
+                  { title: "Time", render: (r) => <EvidenceTime at={r.at} label="" /> },
                   {
-                    title: "Доказательства",
+                    title: "Evidence",
                     render: (r) => (
                       <Link
                         className="text-waia-accent-cool hover:underline"
@@ -252,7 +249,7 @@ export function StrategyDetails({
                           organization_id: r.organizationId,
                         })}
                       >
-                        Цикл
+                        Cycle
                       </Link>
                     ),
                   },
@@ -270,39 +267,39 @@ export function StrategyDetails({
           <ConsoleTable
             rows={strategy.evidence}
             rowKey={(r) => `${r.kind}:${r.id}`}
-            caption="Проверки и доказательства стратегии"
+            caption="Strategy checks and evidence"
             columns={[
               {
-                title: "Запись",
+                title: "Record",
                 render: (r) =>
                   ({
-                    trade: "Сделка",
-                    promotion: "Продвижение",
-                    candidate: "Квалификация",
-                    lifecycle: "Жизненный цикл",
-                    test: "Тест",
+                    trade: "Trade",
+                    promotion: "Promotion",
+                    candidate: "Qualification",
+                    lifecycle: "Lifecycle",
+                    test: "Test",
                   })[r.kind],
               },
               {
-                title: "Клиент",
+                title: "Client",
                 render: (r) => <span className="text-xs break-all">{r.organizationId}</span>,
               },
               {
-                title: "Статус",
+                title: "Status",
                 render: (r) => (
                   <span title={r.state}>
                     <ConsoleBadge>{evidenceLabels[r.state] ?? r.state}</ConsoleBadge>
                   </span>
                 ),
               },
-              { title: "Дата", render: (r) => <EvidenceTime at={r.at} label="" /> },
+              { title: "Date", render: (r) => <EvidenceTime at={r.at} label="" /> },
             ]}
           />
           <Link
             className={`${controlClass} inline-flex items-center`}
             href={context.href("/admin/strategy-promotions", { strategy_id: strategy.strategyId })}
           >
-            Открыть управляемое продвижение
+            Open governed promotion
           </Link>
         </>
       ) : null}
@@ -310,10 +307,10 @@ export function StrategyDetails({
         <ConsoleTable
           rows={all.filter((r) => r.strategyId === strategy.strategyId)}
           rowKey={(r) => r.version}
-          caption="Версии без наследования доказательств"
+          caption="Versions without evidence inheritance"
           columns={[
             {
-              title: "Версия",
+              title: "Version",
               render: (r) => (
                 <button
                   className="text-waia-accent-cool hover:underline"
@@ -325,8 +322,8 @@ export function StrategyDetails({
                 </button>
               ),
             },
-            { title: "Состояние", render: (r) => r.activityLabel },
-            { title: "Сохранённые записи", render: (r) => r.evidence.length },
+            { title: "State", render: (r) => r.activityLabel },
+            { title: "Saved records", render: (r) => r.evidence.length },
           ]}
         />
       ) : null}

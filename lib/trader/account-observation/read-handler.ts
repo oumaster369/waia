@@ -4,10 +4,19 @@ import {
   parseAccountObservation,
   sameObservationBinding,
 } from "./validation";
+import {
+  financialHistoryRequestSchema,
+  financialHistoryResponseSchema,
+  assertFinancialHistoryResponse,
+  type FinancialHistoryRequest,
+  type FinancialHistoryResponse,
+} from "./financial-history";
 import type { AccountObservation, ObservationBinding } from "./types";
+import type { ObservationFailureTrace } from "./failure-stage";
 import { personalOrganizationIdFromUserId } from "@/lib/waia-core/ids";
 
 export type ObservationReadDependencies = Readonly<{
+  failureTrace?: ObservationFailureTrace;
   getUserId(signal: AbortSignal): Promise<string | null>;
   hasTraderAccess(userId: string, organizationId: string, signal: AbortSignal): Promise<boolean>;
   hasOrgMembership(userId: string, organizationId: string, signal: AbortSignal): Promise<boolean>;
@@ -20,6 +29,10 @@ export type ObservationReadDependencies = Readonly<{
     userId: string,
     signal: AbortSignal,
   ): Promise<ObservationBinding | null>;
+  readFinancialHistory?(
+    input: FinancialHistoryRequest,
+    signal: AbortSignal,
+  ): Promise<FinancialHistoryResponse | null>;
   readLatest(binding: ObservationBinding, signal: AbortSignal): Promise<AccountObservation | null>;
 }>;
 const headers = {
@@ -41,10 +54,19 @@ export async function handleAccountObservationGet(
   request: Request,
   surface: "tenant" | "admin",
   deps: ObservationReadDependencies,
-  mode: "observation" | "binding" = "observation",
+  mode: "observation" | "binding" | "financial-history" = "observation",
 ): Promise<Response> {
-  if (request.method !== "GET") return error(405);
+  const trace = deps.failureTrace;
   const abort = new AbortController();
+  const fail = (status: number) => {
+    // Cancellation does not establish that access was revoked. Keep it
+    // fail-closed but retryable, including dependencies settling after abort.
+    if (abort.signal.aborted && (status === 401 || status === 403)) status = 503;
+    if (status === 503) trace?.report("THREW");
+    else trace?.complete();
+    return error(status);
+  };
+  if (request.method !== "GET") return fail(405);
   const cancel = () => abort.abort();
   request.signal.addEventListener("abort", cancel, { once: true });
   if (request.signal.aborted) abort.abort();
@@ -53,12 +75,16 @@ export async function handleAccountObservationGet(
     const timeout = new Promise<Response>((resolve) => {
       timer = setTimeout(() => {
         abort.abort();
+        trace?.report("TIMEOUT");
         resolve(error(503));
       }, 5000);
     });
     const execute = async (): Promise<Response> => {
+      if (abort.signal.aborted) return fail(503);
+      trace?.enter("SESSION_INITIAL");
       const userId = await deps.getUserId(abort.signal);
-      if (!userId) return error(401);
+      if (!userId) return fail(401);
+      trace?.enter("REQUEST");
       const url = new URL(request.url);
       const keys =
         mode === "observation"
@@ -74,12 +100,40 @@ export async function handleAccountObservationGet(
               "credentialId",
               "exchangeAccountId",
             ];
+      const optionalKeys =
+        mode === "financial-history" ? ["pageSize", "cursor", "windowStartMs", "windowEndMs"] : [];
       if (
+        optionalKeys.some((k) => url.searchParams.getAll(k).length > 1) ||
         keys.some((k) => url.searchParams.getAll(k).length !== 1) ||
-        [...url.searchParams.keys()].some((k) => !keys.includes(k))
+        [...url.searchParams.keys()].some((k) => !keys.includes(k) && !optionalKeys.includes(k))
       )
-        return error(400);
-      const params = Object.fromEntries(url.searchParams);
+        return fail(400);
+      const params = Object.fromEntries(
+        [...url.searchParams].filter(([key]) => keys.includes(key)),
+      );
+      const numberParam = (key: string, fallback: number | null): number | null => {
+        const value = url.searchParams.get(key);
+        if (value === null) return fallback;
+        if (!/^(0|[1-9]\d{0,15})$/.test(value)) throw new Error("INVALID_HISTORY_QUERY");
+        return Number(value);
+      };
+      let historyOptions: Omit<FinancialHistoryRequest, "binding"> | undefined;
+      if (mode === "financial-history") {
+        try {
+          historyOptions = {
+            pageSize: numberParam("pageSize", 100)!,
+            cursor: url.searchParams.get("cursor"),
+            filters: {
+              windowStartMs: numberParam("windowStartMs", null),
+              windowEndMs: numberParam("windowEndMs", null),
+            },
+          };
+          // Scope/binding validation follows authorization resolution; validate pagination now.
+          financialHistoryRequestSchema.omit({ binding: true }).parse(historyOptions);
+        } catch {
+          return fail(400);
+        }
+      }
       const parsed =
         mode === "observation"
           ? observationBindingSchema.safeParse(params)
@@ -92,51 +146,96 @@ export async function handleAccountObservationGet(
                     ? personalOrganizationIdFromUserId(userId)
                     : params.organizationId,
               });
-      if (!parsed.success) return error(400);
+      if (!parsed.success) return fail(400);
       const scope = parsed.data;
       async function allowed(): Promise<boolean> {
         if (abort.signal.aborted) return false;
+        trace?.enter("SESSION_RECHECK");
         const currentUserId = await deps.getUserId(abort.signal);
         if (abort.signal.aborted || currentUserId !== userId) return false;
-        const hasTraderAccess = await deps.hasTraderAccess(userId!, scope.organizationId, abort.signal);
+        trace?.enter("ENTITLEMENT");
+        const hasTraderAccess = await deps.hasTraderAccess(
+          userId!,
+          scope.organizationId,
+          abort.signal,
+        );
         if (abort.signal.aborted || !hasTraderAccess) return false;
         // Admin is platform-operator authority on the target org, not membership.
         // Tenant stays membership-gated. RLS still binds the row to this exact account.
         if (surface === "admin") {
-          const hasOperatorAccess = await deps.hasOperatorAccess(userId!, scope.organizationId, abort.signal);
+          trace?.enter("OPERATOR_PERMISSION");
+          const hasOperatorAccess = await deps.hasOperatorAccess(
+            userId!,
+            scope.organizationId,
+            abort.signal,
+          );
           if (abort.signal.aborted || !hasOperatorAccess) return false;
-          const isAdminListed = await deps.isAdminListedOrganization(scope.organizationId, abort.signal);
+          trace?.enter("ADMIN_LIST_SCOPE");
+          const isAdminListed = await deps.isAdminListedOrganization(
+            scope.organizationId,
+            abort.signal,
+          );
           return !abort.signal.aborted && isAdminListed;
         }
-        const hasOrgMembership = await deps.hasOrgMembership(userId!, scope.organizationId, abort.signal);
+        trace?.enter("MEMBERSHIP");
+        const hasOrgMembership = await deps.hasOrgMembership(
+          userId!,
+          scope.organizationId,
+          abort.signal,
+        );
         return !abort.signal.aborted && hasOrgMembership;
       }
-      if (!(await allowed())) return error(403);
+      if (!(await allowed())) return fail(403);
+      trace?.enter("PROJECTION_CONFIG");
       const current = await deps.resolveActiveBinding(scope, userId, abort.signal);
-      if (!(await allowed())) return error(403);
+      if (!(await allowed())) return fail(403);
       if (!current)
-        return mode === "binding" ? new Response(null, { status: 204, headers }) : error(403);
+        return mode === "binding" ? new Response(null, { status: 204, headers }) : fail(403);
+      trace?.enter("BINDING_VALIDATION");
       const binding = observationBindingSchema.parse(current);
       if (
         binding.organizationId !== scope.organizationId ||
         binding.credentialId !== scope.credentialId ||
         binding.exchangeAccountId !== scope.exchangeAccountId
       )
-        return error(403);
+        return fail(403);
       if (mode === "binding") return Response.json(binding, { headers });
-      if (!sameObservationBinding(binding, observationBindingSchema.parse(scope)))
-        return error(403);
-      const stored = await deps.readLatest(binding, abort.signal);
-      if (!(await allowed())) return error(403);
+      if (
+        mode === "observation" &&
+        !sameObservationBinding(binding, observationBindingSchema.parse(scope))
+      )
+        return fail(403);
+      trace?.enter("PROJECTION_REQUEST");
+      const historyRequest =
+        mode === "financial-history"
+          ? financialHistoryRequestSchema.parse({ binding, ...historyOptions })
+          : null;
+      const stored = historyRequest
+        ? deps.readFinancialHistory
+          ? await deps.readFinancialHistory(historyRequest, abort.signal)
+          : (() => {
+              throw new Error("HISTORY_UNAVAILABLE");
+            })()
+        : await deps.readLatest(binding, abort.signal);
+      if (!(await allowed())) return fail(403);
+      trace?.enter("PROJECTION_REQUEST");
       const after = await deps.resolveActiveBinding(binding, userId, abort.signal);
-      if (!after || !sameObservationBinding(after, binding)) return error(403);
-      if (abort.signal.aborted) return error(503);
+      if (!after || !sameObservationBinding(after, binding)) return fail(403);
+      if (abort.signal.aborted) return fail(503);
       if (!stored) return new Response(null, { status: 204, headers });
+      trace?.enter("OBSERVATION_VALIDATION");
+      if (historyRequest) {
+        const history = financialHistoryResponseSchema.parse(stored);
+        assertFinancialHistoryResponse(historyRequest, history);
+        return Response.json(history, { headers });
+      }
       const o = parseAccountObservation(stored);
-      if (!sameObservationBinding(binding, o.binding)) return error(503);
+      if (!sameObservationBinding(binding, o.binding)) return fail(503);
       return Response.json(o, { headers });
     };
-    return await Promise.race([execute().catch(() => error(503)), timeout]);
+    const response = await Promise.race([execute().catch(() => fail(503)), timeout]);
+    if (response.status !== 503) trace?.complete();
+    return response;
   } finally {
     clearTimeout(timer);
     request.signal.removeEventListener("abort", cancel);

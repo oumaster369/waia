@@ -136,23 +136,23 @@ export function OverviewPanel({ view }: { view: OverviewView }) {
   if (view.state === "unavailable") return <DataState state="unavailable" reason={view.reason} />;
   return (
     <section aria-label={RU.sections.overview} className="space-y-5">
-      <h2 className="px-1 text-lg font-semibold">Спот</h2>
+      <h2 className="px-1 text-lg font-semibold">Spot</h2>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {figure("Капитал спота", view.equity, view.currency, view.reasons?.equity?.[0])}
-        {figure("Свободно · спот", view.free, view.currency, view.reasons?.free?.[0])}
-        {figure("В позициях · спот", view.holdings, view.currency, view.reasons?.holdings?.[0])}
+        {figure("Spot equity", view.equity, view.currency, view.reasons?.equity?.[0])}
+        {figure("Available · spot", view.free, view.currency, view.reasons?.free?.[0])}
+        {figure("In positions · spot", view.holdings, view.currency, view.reasons?.holdings?.[0])}
         {figure(
-          "Резерв в ордерах · спот",
+          "Reserved in orders · spot",
           view.reserved,
           view.currency,
           view.reasons?.reserved?.[0],
         )}
         {figure(
-          "Результат спота",
+          "Spot result",
           view.pnl,
           view.currency,
           view.reasons?.pnl?.[0],
-          "До комиссии сервиса 30%",
+          "Before the 30% service fee",
         )}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs">
@@ -164,14 +164,14 @@ export function OverviewPanel({ view }: { view: OverviewView }) {
           data-testid="overview-last-known"
           className="border-waia-warning/25 bg-waia-warning/5 text-waia-warning rounded-lg border px-4 py-3 text-xs leading-6"
         >
-          Последняя известная оценка устаревших счетов:{" "}
-          {formatAdminMoney(view.lastKnownEstimate, view.currency)}. В актуальную сумму не включена.
+          Last known valuation of stale accounts:{" "}
+          {formatAdminMoney(view.lastKnownEstimate, view.currency)}. Excluded from the current total.
         </p>
       ) : null}
       {view.excluded.length > 0 ? (
         <ConsolePanel
-          title="Ограничения охвата"
-          note="Причина исключения каждого счёта из текущей оценки"
+          title="Coverage limitations"
+          note="Reason each account is excluded from the current valuation"
         >
           <ul className="divide-waia-divider divide-y">
             {view.excluded.map((row) => (

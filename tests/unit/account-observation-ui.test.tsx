@@ -1,4 +1,4 @@
-import { act, cleanup, render, renderHook, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AccountObservation,
@@ -425,9 +425,9 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
     render(<AccountObservationPanel view={view} />);
     expect(screen.getByText("obs-a")).toBeInTheDocument();
     expect(screen.getByText("BTC: free 1, locked 0.1, total 1.1")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Спот" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Фьючерсы" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Спот" })).toContainElement(
+    expect(screen.getByRole("region", { name: "Spot" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Futures" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Spot" })).toContainElement(
       screen.getByText("No working orders."),
     );
     expect(screen.getByText("No working orders.")).toBeInTheDocument();
@@ -577,10 +577,10 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
     render(<AccountObservationPanel view={{ status: "CURRENT", observation: o, stale: false }} />);
     expect(screen.getByTestId("cabinet-usdt-free")).toHaveTextContent("9007199254740993.00000001");
   });
-  it("treats a missing first snapshot as Connecting, not Unavailable", () => {
+  it("treats a legitimate first-snapshot LOADING state as Connecting", () => {
     render(
       <AccountObservationPanel
-        view={{ status: "ERROR", observation: null, stale: false, transport: "RECONNECTING" }}
+        view={{ status: "LOADING", observation: null, stale: false, transport: "RECONNECTING" }}
       />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("Connecting");
@@ -588,7 +588,14 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
     expect(screen.getByText(/Waiting for the first live snapshot/)).toBeInTheDocument();
     expect(screen.queryByText("Reconnecting automatically.")).not.toBeInTheDocument();
   });
-  it("keeps Live and last tick when the stream is reconnecting", () => {
+  it("shows Data unavailable rather than Connecting for ERROR without evidence", () => {
+    render(<AccountObservationPanel view={{ status: "ERROR", observation: null, stale: false, transport: "RECONNECTING" }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Data unavailable");
+    expect(screen.getByRole("status")).not.toHaveTextContent("Connecting");
+    expect(screen.getByText("Account data could not be read.")).toBeInTheDocument();
+    expect(screen.queryByText(/Waiting for the first live snapshot/)).not.toBeInTheDocument();
+  });
+  it("shows Last tick and a non-live dot for an ERROR with retained evidence", () => {
     render(
       <AccountObservationPanel
         view={{
@@ -599,8 +606,160 @@ describe("DEE-961 shared Admin/tenant renderer", () => {
         }}
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent("Live");
+    expect(screen.getByRole("status")).toHaveTextContent("Last tick");
+    expect(screen.getByRole("status")).not.toHaveTextContent("Live");
+    expect(screen.getByRole("status").querySelector("[aria-hidden=\"true\"]")).not.toHaveClass("bg-emerald-400");
     expect(screen.getByText("Reconnecting automatically.")).toBeVisible();
-    expect(screen.getByText(/ожидается следующий сбор|следующее обновление через/)).toBeVisible();
+    expect(screen.getByText(/waiting for the next collection|next update in/)).toBeVisible();
+  });
+});
+
+
+describe("DEE-1242 truthful Spot display", () => {
+  it("renders observed USDC decimal strings in native inventory", () => {
+    const usdc = { asset: "USDC", free: "25.00000001", locked: "0.02", total: "25.02000001" };
+    const saved = observation({ balances: component([usdc]), holdings: [usdc] });
+    render(<AccountObservationPanel view={{ status: "CURRENT", observation: saved, stale: false }} />);
+    expect(screen.getByText("USDC: free 25.00000001, locked 0.02, total 25.02000001")).toBeInTheDocument();
+    expect(within(screen.getByTestId("cabinet-usdt-free")).getByText("—")).toBeInTheDocument();
+  });
+
+  it.each(["PARTIAL", "ERROR"] as const)("does not claim absent orders or fills for an empty %s read", status => {
+    const empty = { ...component<never>([]), status, error: status === "ERROR" ? "READ_FAILED" as const : null };
+    const saved = observation({ status, openOrders: empty, trades: [{ symbol: "BTCUSDT", component: empty }] });
+    render(<AccountObservationPanel view={{ status: "PARTIAL", observation: saved, stale: false }} />);
+    expect(screen.queryByText("No working orders.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No fills in this window.")).not.toBeInTheDocument();
+    expect(screen.getAllByText("No rows received; completeness is not confirmed.")).toHaveLength(2);
+    expect(within(screen.getByTestId("cabinet-open-orders")).getByText("0 received")).toBeInTheDocument();
+    const coverage = status === "PARTIAL" ? "Partial read — some rows may be missing." : "Read failed — coverage unknown.";
+    expect(within(screen.getByRole("region", { name: "Open orders" })).getByText(coverage)).toBeInTheDocument();
+  });
+
+  it("keeps failed null rows unavailable and never displays an observed zero", () => {
+    const failed = { ...component<never>([]), status: "ERROR" as const, values: null, error: "READ_FAILED" as const };
+    render(<AccountObservationPanel view={{ status: "PARTIAL", observation: observation({ openOrders: failed }), stale: false }} />);
+    const orders = within(screen.getByRole("region", { name: "Open orders" }));
+    expect(orders.getByText("Unavailable — not an observed zero.")).toBeInTheDocument();
+    expect(orders.getByText("Read failed — coverage unknown.")).toBeInTheDocument();
+    expect(orders.queryByText("No working orders.")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("cabinet-open-orders")).getByText("—")).toBeInTheDocument();
+  });
+
+  it("labels nonempty partial order rows as received and preserves the row", () => {
+    const order = { symbol: "BTCUSDT", side: "buy" as const, type: "limit" as const, status: "open" as const,
+      quantity: "2.00", filledQuantity: "0", price: "4.00", orderId: "synthetic-order",
+      clientOrderId: "synthetic-client", createdAt: "2026-10-13T00:00:00Z", updatedAt: null };
+    const partial = { ...component([order]), status: "PARTIAL" as const };
+    render(<AccountObservationPanel view={{ status: "PARTIAL", observation: observation({ openOrders: partial }), stale: false }} />);
+    expect(within(screen.getByTestId("cabinet-open-orders")).getByText("1 received")).toBeInTheDocument();
+    const orders = within(screen.getByRole("region", { name: "Open orders" }));
+    expect(orders.getByText("Partial read — some rows may be missing.")).toBeInTheDocument();
+    expect(orders.getByText(/order synthetic-order/)).toBeInTheDocument();
+  });
+});
+
+
+describe("DEE-1244 bounded local Spot inventory pagination", () => {
+  function inventoryObservation(count: number, patch: Partial<AccountObservation> = {}): AccountObservation {
+    const rows = Array.from({ length: count }, (_, i) => ({
+      asset: `ALT${String(i).padStart(3, "0")}`, free: "0.000000000000000001", locked: "2.0000", total: "2.000000000000000001",
+    }));
+    return observation({ balances: component(rows), holdings: rows, ...patch });
+  }
+  const viewOf = (saved: AccountObservation) => ({ status: "CURRENT" as const, observation: saved, stale: false });
+  const inventoryRegion = () => within(screen.getByRole("region", { name: "Spot inventory (not PnL)" }));
+
+  it.each([1, 100])("keeps existing %i-currency inventory without pagination controls", count => {
+    render(<AccountObservationPanel view={viewOf(inventoryObservation(count))} />);
+    const region = inventoryRegion();
+    expect(region.getAllByRole("listitem")).toHaveLength(count);
+    expect(region.queryByText(/Showing/)).not.toBeInTheDocument();
+    expect(region.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("reaches every received currency with at most 100 DOM rows and exact native amounts", () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    render(<AccountObservationPanel view={viewOf(inventoryObservation(205))} />);
+    const region = inventoryRegion();
+    expect(screen.getAllByRole("button").map(button => button.getAttribute("aria-label"))).toEqual([
+      "Previous inventory page", "Next inventory page",
+    ]);
+    expect(region.getAllByRole("listitem")).toHaveLength(100);
+    expect(region.getByText("Showing 1–100 of 205 received currencies.")).toBeInTheDocument();
+    expect(region.queryByText(/^ALT100:/)).not.toBeInTheDocument();
+    fireEvent.click(region.getByRole("button", { name: "Next inventory page" }));
+    expect(region.getAllByRole("listitem")).toHaveLength(100);
+    expect(region.getByText("Showing 101–200 of 205 received currencies.")).toBeInTheDocument();
+    expect(region.getByText("ALT100: free 0.000000000000000001, locked 2.0000, total 2.000000000000000001")).toBeInTheDocument();
+    fireEvent.click(region.getByRole("button", { name: "Next inventory page" }));
+    expect(region.getAllByRole("listitem")).toHaveLength(5);
+    expect(region.getByText("Showing 201–205 of 205 received currencies.")).toBeInTheDocument();
+    expect(region.getByRole("button", { name: "Next inventory page" })).toBeDisabled();
+    fireEvent.click(region.getByRole("button", { name: "Previous inventory page" }));
+    expect(region.getByText("Showing 101–200 of 205 received currencies.")).toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it.each(["organizationId", "credentialId", "exchangeAccountId", "credentialRevision", "configurationRevision"] as const)(
+    "resets page immediately when %s changes", field => {
+      const saved = inventoryObservation(101);
+      const { rerender } = render(<AccountObservationPanel view={viewOf(saved)} />);
+      fireEvent.click(inventoryRegion().getByRole("button", { name: "Next inventory page" }));
+      expect(inventoryRegion().getByText("Showing 101–101 of 101 received currencies.")).toBeInTheDocument();
+      rerender(<AccountObservationPanel view={viewOf({ ...saved, binding: { ...binding, [field]: "changed" } })} />);
+      expect(inventoryRegion().getByText("Showing 1–100 of 101 received currencies.")).toBeInTheDocument();
+    },
+  );
+
+  it("keeps the current local page across a new snapshot of the same binding", () => {
+    const saved = inventoryObservation(101);
+    const { rerender } = render(<AccountObservationPanel view={viewOf(saved)} />);
+    fireEvent.click(inventoryRegion().getByRole("button", { name: "Next inventory page" }));
+    rerender(<AccountObservationPanel view={viewOf({ ...saved, observationId: "new-snapshot", collectionCompletedAtMs: now + 1 })} />);
+    expect(inventoryRegion().getByText("Showing 101–101 of 101 received currencies.")).toBeInTheDocument();
+  });
+
+  it("clamps a shrinking inventory and does not restore the removed page after growth", () => {
+    const { rerender } = render(<AccountObservationPanel view={viewOf(inventoryObservation(205))} />);
+    fireEvent.click(inventoryRegion().getByRole("button", { name: "Next inventory page" }));
+    fireEvent.click(inventoryRegion().getByRole("button", { name: "Next inventory page" }));
+    rerender(<AccountObservationPanel view={viewOf(inventoryObservation(101))} />);
+    expect(inventoryRegion().getByText("Showing 101–101 of 101 received currencies.")).toBeInTheDocument();
+    rerender(<AccountObservationPanel view={viewOf(inventoryObservation(205))} />);
+    expect(inventoryRegion().getByText("Showing 101–200 of 205 received currencies.")).toBeInTheDocument();
+  });
+
+  it("unmounts on revoke or unavailable balances and resets before evidence returns", () => {
+    const saved = inventoryObservation(101);
+    const { rerender } = render(<AccountObservationPanel view={viewOf(saved)} />);
+    fireEvent.click(inventoryRegion().getByRole("button", { name: "Next inventory page" }));
+    rerender(<AccountObservationPanel view={{ ...viewOf(saved), status: "REVOKED" }} />);
+    expect(screen.queryByRole("region", { name: "Spot inventory (not PnL)" })).not.toBeInTheDocument();
+    rerender(<AccountObservationPanel view={viewOf(saved)} />);
+    expect(inventoryRegion().getByText("Showing 1–100 of 101 received currencies.")).toBeInTheDocument();
+    fireEvent.click(inventoryRegion().getByRole("button", { name: "Next inventory page" }));
+    rerender(<AccountObservationPanel view={viewOf(observation({ status: "PARTIAL", balances: { ...component([]), status: "ERROR", values: null, error: "TIMEOUT" }, holdings: null }))} />);
+    expect(screen.queryByRole("region", { name: "Spot inventory (not PnL)" })).not.toBeInTheDocument();
+    expect(screen.getAllByText("Unavailable — not an observed zero.").length).toBeGreaterThan(0);
+    rerender(<AccountObservationPanel view={viewOf(saved)} />);
+    expect(inventoryRegion().getByText("Showing 1–100 of 101 received currencies.")).toBeInTheDocument();
+  });
+
+  it("labels partial native inventory as received and never changes balance completeness", () => {
+    const saved = inventoryObservation(101);
+    const partial = { ...saved, status: "PARTIAL" as const, balances: { ...saved.balances, status: "PARTIAL" as const }, holdings: null };
+    render(<AccountObservationPanel view={{ status: "PARTIAL", observation: partial, stale: false }} />);
+    fireEvent.click(inventoryRegion().getByRole("button", { name: "Next inventory page" }));
+    expect(inventoryRegion().getByText("Showing 101–101 of 101 received currencies.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("PARTIAL");
+    expect(screen.getByText("Unavailable — not an observed zero.")).toBeInTheDocument();
+  });
+
+  it("keeps empty inventory absent rather than publishing an account-wide zero", () => {
+    render(<AccountObservationPanel view={viewOf(inventoryObservation(0))} />);
+    expect(screen.queryByRole("region", { name: "Spot inventory (not PnL)" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Showing 0/)).not.toBeInTheDocument();
   });
 });

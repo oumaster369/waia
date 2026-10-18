@@ -16,10 +16,28 @@ import type {
   HtxV5OpenOrder,
   HtxV5Position,
 } from "@/lib/trader/account-observation/derivatives/htx-v5-read-contract";
-import { htxV5PositionOrderDisplay } from "@/lib/trader/account-observation/htx-v5-position-order-display";
+import { htxV5PositionOrderDisplay, type StopEvidenceReason } from "@/lib/trader/account-observation/htx-v5-position-order-display";
+import { HtxV5BillsSection } from "./htx-v5-bills-section";
 
 const MAX_VISIBLE_ROWS = 100;
 const MAX_VISIBLE_POSITION_ORDERS = 10;
+
+const STOP_EVIDENCE_REASON: Record<StopEvidenceReason, string> = {
+  READ_FAILED: "Positions or conditional orders could not be read successfully.",
+  INVALID_READ_TIME: "The positions or orders read time failed validation.",
+  STALE_DATA: "The positions or orders are stale.",
+  POSITION_UNBOUND: "The position is not bound to this account snapshot.",
+  POSITION_AMBIGUOUS: "The snapshot contains multiple rows for the same position; matching is ambiguous.",
+  SOURCE_INCOMPLETE: "The received sample is incomplete; stop orders may be missing.",
+  NO_MATCHING_SL: "No matching SL order was received; this does not prove its absence. A TP target does not replace a stop.",
+  DUPLICATE_ORDER_IDENTITY: "An order identity is duplicated in the received data; quantities are not compared.",
+  MULTIPLE_SL_CANDIDATES: "Multiple matching stop orders were received; their quantities are not added together.",
+  UNSUPPORTED_QUANTITY: "The received quantity cannot be compared exactly within the supported limits.",
+  UNQUALIFIED_CLOSING_SEMANTICS: "These data do not confirm how much of the position would be closed.",
+};
+
+const QUANTITY_RELATION = { LESS: "less than the quantity of the", EQUAL: "equal to the quantity of the", GREATER: "greater than the quantity of the" } as const;
+
 
 function hasPositiveContractVolume(volume: string): boolean {
   const significand = volume.split(/[eE]/, 1)[0] ?? "";
@@ -27,24 +45,24 @@ function hasPositiveContractVolume(volume: string): boolean {
 }
 
 const ERROR_COPY: Record<ObservationReadError, string> = {
-  TIMEOUT: "Истекло время чтения счёта.",
-  RATE_LIMITED: "Биржа временно ограничила чтение счёта.",
-  PERMISSION_DENIED: "Нет доступа к данным этого счёта.",
-  READ_FAILED: "Не удалось прочитать счёт.",
-  INVALID_RESPONSE: "Ответ биржи не прошёл проверку.",
-  IDENTITY_MISMATCH: "Не удалось подтвердить личность возвращённого счёта.",
+  TIMEOUT: "The account read timed out.",
+  RATE_LIMITED: "The exchange temporarily rate-limited the account read.",
+  PERMISSION_DENIED: "Access to this account's data is unavailable.",
+  READ_FAILED: "The account could not be read.",
+  INVALID_RESPONSE: "The exchange response failed validation.",
+  IDENTITY_MISMATCH: "The returned account identity could not be verified.",
 };
 
 const time = (value: number | null) =>
   value !== null && Number.isFinite(value) && Math.abs(value) <= 8.64e15
     ? new Date(value).toISOString()
-    : "Недоступно";
+    : "Unavailable";
 
 function Value({ label, value }: { label: string; value: string | null }) {
   return (
     <div>
       <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="font-mono text-sm tabular-nums">{value ?? "Недоступно"}</dd>
+      <dd className="font-mono text-sm tabular-nums">{value ?? "Unavailable"}</dd>
     </div>
   );
 }
@@ -65,11 +83,11 @@ function isStale(
 }
 
 function statusLabel(status: string, stale: boolean) {
-  if (status === "NOT_CONFIGURED") return "не настроено";
-  if (status === "ERROR") return "ошибка";
-  if (stale) return status === "PARTIAL" ? "устарело · частичные данные" : "устарело";
-  if (status === "PARTIAL") return "частичные данные";
-  return "актуально";
+  if (status === "NOT_CONFIGURED") return "not configured";
+  if (status === "ERROR") return "error";
+  if (stale) return status === "PARTIAL" ? "stale · partial data" : "stale";
+  if (status === "PARTIAL") return "partial data";
+  return "current";
 }
 
 function Header({
@@ -86,7 +104,7 @@ function Header({
       <h3 className="font-medium">{title}</h3>
       <span className="text-waia-fg-muted text-xs">{status}</span>
       {completedAt !== undefined ? (
-        <span className="text-muted-foreground text-xs">Прочитано: {time(completedAt)}</span>
+        <span className="text-muted-foreground text-xs">Read at: {time(completedAt)}</span>
       ) : null}
     </header>
   );
@@ -102,21 +120,21 @@ function ReadError({ error }: { error: ObservationReadError | null }) {
 
 function Coverage({ pageScope }: { pageScope: { completeness: "UNKNOWN" } | null }) {
   return pageScope ? (
-    <p className="text-muted-foreground text-xs">В этой выборке могут отсутствовать некоторые записи.</p>
+    <p className="text-muted-foreground text-xs">Some records may be missing from this sample.</p>
   ) : null;
 }
 
 function BalanceDetail({ row }: { row: HtxV5BalanceDetail }) {
   return (
     <WaiaSurface variant="raised" className="space-y-2 p-3">
-      <h4 className="font-medium">Обеспечение в {row.currency}</h4>
+      <h4 className="font-medium">Collateral in {row.currency}</h4>
       <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Value label="Капитал (в единицах валюты)" value={row.equity} />
-        <Value label="Доступно (в единицах валюты)" value={row.available} />
-        <Value label="Можно вывести (в единицах валюты)" value={row.withdrawAvailable} />
-        <Value label="Нереализованный результат (в единицах валюты)" value={row.profitUnreal} />
-        <Value label="Начальная маржа (в единицах валюты)" value={row.initialMargin} />
-        <Value label="Поддерживающая маржа (в единицах валюты)" value={row.maintenanceMargin} />
+        <Value label="Equity (native currency units)" value={row.equity} />
+        <Value label="Available (native currency units)" value={row.available} />
+        <Value label="Withdrawable (native currency units)" value={row.withdrawAvailable} />
+        <Value label="Unrealized PnL (native currency units)" value={row.profitUnreal} />
+        <Value label="Initial margin (native currency units)" value={row.initialMargin} />
+        <Value label="Maintenance margin (native currency units)" value={row.maintenanceMargin} />
       </dl>
     </WaiaSurface>
   );
@@ -138,56 +156,56 @@ function Balance({
       className="border-border space-y-3 rounded-lg border p-3"
     >
       <Header
-        title="Баланс фьючерсного счёта HTX"
+        title="HTX Futures account balance"
         status={statusLabel(observation.status, stale)}
         completedAt={observation.readCompletedAtMs}
       />
       {stale ? (
-        <p className="text-sm">Показан последний полученный баланс; данные могут устареть.</p>
+        <p className="text-sm">Last received balance shown; data may be stale.</p>
       ) : null}
       <ReadError error={observation.error} />
       {observation.status === "COMPLETE" && observation.value ? (
         <>
           <p className="text-muted-foreground text-xs">
-            Итоги счёта переданы HTX в USD. Обеспечение в отдельных валютах показано ниже и не
-            прибавляется к этим значениям.
+            Account totals are reported by HTX in USD. Native currency collateral is shown below and is not
+            added to these values.
           </p>
           <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Value label="Капитал счёта (USD)" value={observation.value.account.equityUsd} />
+            <Value label="Account equity (USD)" value={observation.value.account.equityUsd} />
             <Value
-              label="Доступная маржа (USD)"
+              label="Available margin (USD)"
               value={observation.value.account.availableMarginUsd}
             />
             <Value
-              label="Нереализованный результат (USD)"
+              label="Unrealized PnL (USD)"
               value={observation.value.account.profitUnrealUsd}
             />
             <Value
-              label="Начальная маржа (USD)"
+              label="Initial margin (USD)"
               value={observation.value.account.initialMarginUsd}
             />
             <Value
-              label="Поддерживающая маржа (USD)"
+              label="Maintenance margin (USD)"
               value={observation.value.account.maintenanceMarginUsd}
             />
             <Value
-              label="Ставка поддерживающей маржи"
+              label="Maintenance margin rate"
               value={observation.value.account.maintenanceMarginRate}
             />
           </dl>
           <div className="space-y-2">
-            <h4 className="text-sm font-medium">Обеспечение по валютам</h4>
+            <h4 className="text-sm font-medium">Collateral by currency</h4>
             {observation.value.details.length ? (
               observation.value.details.map((row, index) => (
                 <BalanceDetail key={row.currency + "-" + index} row={row} />
               ))
             ) : (
-              <p>Строки обеспечения по валютам не получены.</p>
+              <p>No currency collateral rows were received.</p>
             )}
           </div>
         </>
       ) : (
-        <p>Баланс недоступен — это не означает нулевое значение.</p>
+        <p>Balance unavailable — this does not mean zero.</p>
       )}
     </section>
   );
@@ -213,58 +231,73 @@ function Position({
   return (
       <WaiaSurface variant="raised" className="space-y-2 p-3">
       <h4 className="font-medium">
-        {row.contractCode} · {row.positionSide === "long" ? "лонг" : row.positionSide === "short" ? "шорт" : `${row.direction === "buy" ? "лонг" : "шорт"} (односторонний режим)`} ·{" "}
-        {row.marginMode === "cross" ? "кросс-маржа" : "изолированная маржа"}
+        {row.contractCode} · {row.positionSide === "long" ? "long" : row.positionSide === "short" ? "short" : `${row.direction === "buy" ? "long" : "short"} (one-way mode)`} ·{" "}
+        {row.marginMode === "cross" ? "cross margin" : "isolated margin"}
       </h4>
       <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Value label="Объём позиции (контракты)" value={row.volume} />
-        <Value label="Доступный объём (контракты)" value={row.available} />
-        <Value label="Средняя цена входа" value={row.openAveragePrice} />
-        <Value label="Расчётная цена" value={row.markPrice} />
-        <Value label="Последняя цена" value={row.lastPrice} />
-        <Value label="Цена ликвидации" value={row.liquidationPrice} />
-        <Value label="Нереализованный результат по данным HTX" value={row.profitUnreal} />
-        <Value label="Валюта маржи" value={row.marginCurrency} />
+        <Value label="Position quantity (contracts)" value={row.volume} />
+        <Value label="Available quantity (contracts)" value={row.available} />
+        <Value label="Average entry price" value={row.openAveragePrice} />
+        <Value label="Mark price" value={row.markPrice} />
+        <Value label="Last price" value={row.lastPrice} />
+        <Value label="Liquidation price" value={row.liquidationPrice} />
+        <Value label="Unrealized PnL reported by HTX" value={row.profitUnreal} />
+        <Value label="Margin currency" value={row.marginCurrency} />
       </dl>
       <div className="border-border space-y-1 rounded-md border p-3 text-sm">
-        <h5 className="font-medium">Полученные стоп-заявки и цели</h5>
+        <h5 className="font-medium">Received stop orders and targets</h5>
         {orders.status === "UNAVAILABLE" ? (
-          <p>Данные о совпавших заявках недоступны. Наличие защиты не подтверждено.</p>
+          <p>Matching order data unavailable. Protection is not confirmed.</p>
         ) : orders.status === "STALE" ? (
-          <p>Данные о совпавших заявках устарели. Наличие защиты не подтверждено.</p>
+          <p>Matching order data is stale. Protection is not confirmed.</p>
         ) : orders.stops.length === 0 && orders.targets.length === 0 ? (
-          <p>Совпавшие активные стоп-заявки и цели не получены. Наличие защиты не подтверждено.</p>
+          <p>No matching active stop orders or targets were received. Protection is not confirmed.</p>
         ) : (
           <>
             <ul className="space-y-1">
               {orders.stops.slice(0, MAX_VISIBLE_POSITION_ORDERS).map((order, index) => (
                 <li key={`stop-${order.algoId}-${index}`}>
-                  Стоп: цена {order.slTriggerPrice}; объём {order.volume} контр.
+                  Stop: price {order.slTriggerPrice}; quantity {order.volume} contracts
                 </li>
               ))}
               {orders.targets.slice(0, MAX_VISIBLE_POSITION_ORDERS).map((order, index) => (
                 <li key={`target-${order.algoId}-${index}`}>
-                  Цель: цена {order.tpTriggerPrice}; объём {order.volume} контр.
+                  Target: price {order.tpTriggerPrice}; quantity {order.volume} contracts
                 </li>
               ))}
             </ul>
             {orders.stops.length > MAX_VISIBLE_POSITION_ORDERS ? (
               <p>
-                Показаны первые {MAX_VISIBLE_POSITION_ORDERS} из {orders.stops.length} полученных
-                стоп-заявок.
+                Showing the first {MAX_VISIBLE_POSITION_ORDERS} of {orders.stops.length} received
+                stop orders.
               </p>
             ) : null}
             {orders.targets.length > MAX_VISIBLE_POSITION_ORDERS ? (
               <p>
-                Показаны первые {MAX_VISIBLE_POSITION_ORDERS} из {orders.targets.length} полученных
-                целей.
+                Showing the first {MAX_VISIBLE_POSITION_ORDERS} of {orders.targets.length} received
+                targets.
               </p>
             ) : null}
-            <p>Полнота покрытия позиции неизвестна; защита не подтверждена.</p>
+            <p>Position coverage is unknown; protection is not confirmed.</p>
           </>
         )}
+        <ul aria-label="Why protection is unconfirmed" className="text-muted-foreground space-y-1 text-xs">
+          {orders.reasons.map(reason => <li key={reason}>{STOP_EVIDENCE_REASON[reason]}</li>)}
+        </ul>
+        {orders.receivedQuantityComparison ? (
+          <p>
+            Received quantity of one SL order ({orders.receivedQuantityComparison.stopVolume} contracts){" "}
+            {QUANTITY_RELATION[orders.receivedQuantityComparison.relation]} position{" "}
+            ({orders.receivedQuantityComparison.positionVolume} contracts). This compares received numbers; it does not confirm protection.
+          </p>
+        ) : null}
         <p className="text-muted-foreground text-xs">
-          Это только полученные условные заявки; полнота покрытия позиции неизвестна.
+          Positions read at: {time(projection.positions.readCompletedAtMs)}.
+          Conditional orders read at: {time(projection.algoOrders.readCompletedAtMs)}.
+          These reads are not a simultaneous snapshot.
+        </p>
+        <p className="text-muted-foreground text-xs">
+          These are received conditional orders only; position coverage is unknown.
         </p>
       </div>
     </WaiaSurface>
@@ -296,19 +329,19 @@ function Rows<T>({
         completedAt={observation.readCompletedAtMs}
       />
       {stale ? (
-        <p className="text-sm">Показаны последние полученные данные; они могут устареть.</p>
+        <p className="text-sm">Last received data shown; it may be stale.</p>
       ) : null}
       <ReadError error={observation.error} />
       {visibleValues === null ? (
-        <p>Данные недоступны — это не подтверждённый пустой результат.</p>
+        <p>Data unavailable — this is not a confirmed empty result.</p>
       ) : visibleValues.length === 0 ? (
-        <p>{observation.status === "COMPLETE" ? empty : "В этом чтении строки не получены."}</p>
+        <p>{observation.status === "COMPLETE" ? empty : "No rows were received in this read."}</p>
       ) : (
         <div className="space-y-2">
           {visibleValues.map(children)}
           {observation.values && observation.values.length > MAX_VISIBLE_ROWS ? (
             <p>
-              Показаны первые {MAX_VISIBLE_ROWS} из {observation.values.length} полученных строк.
+              Showing the first {MAX_VISIBLE_ROWS} of {observation.values.length} received rows.
             </p>
           ) : null}
         </div>
@@ -325,21 +358,21 @@ function OpenOrder({ row }: { row: HtxV5OpenOrder }) {
         {row.contractCode} · {row.side} · {row.state}
       </h4>
       <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Value label="Объём заявки (контракты)" value={row.volume} />
-        <Value label="Сторона позиции" value={row.positionSide} />
-        <Value label="Полученная цена цели" value={row.tpTriggerPrice} />
-        <Value label="Полученная стоп-цена" value={row.slTriggerPrice} />
+        <Value label="Order quantity (contracts)" value={row.volume} />
+        <Value label="Position side" value={row.positionSide} />
+        <Value label="Received target price" value={row.tpTriggerPrice} />
+        <Value label="Received stop price" value={row.slTriggerPrice} />
       </dl>
     </WaiaSurface>
   );
 }
 
 const ALGO_TYPE: Record<HtxV5AlgoOrder["type"], string> = {
-  tp: "Заявка на фиксацию цели",
-  sl: "Стоп-заявка",
-  tpsl: "Объединённая стоп-заявка и цель",
-  trigger: "Триггерная заявка",
-  trailing_stop: "Трейлинг-стоп",
+  tp: "Take-profit order",
+  sl: "Stop order",
+  tpsl: "Combined stop and target order",
+  trigger: "Trigger order",
+  trailing_stop: "Trailing stop",
 };
 
 function AlgoOrder({ row }: { row: HtxV5AlgoOrder }) {
@@ -349,13 +382,13 @@ function AlgoOrder({ row }: { row: HtxV5AlgoOrder }) {
         {row.contractCode} · {ALGO_TYPE[row.type]}
       </h4>
       <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Value label="Объём заявки (контракты)" value={row.volume} />
-        <Value label="Сторона позиции" value={row.positionSide} />
-        <Value label="Полученная цена цели" value={row.tpTriggerPrice} />
-        <Value label="Полученная стоп-цена" value={row.slTriggerPrice} />
+        <Value label="Order quantity (contracts)" value={row.volume} />
+        <Value label="Position side" value={row.positionSide} />
+        <Value label="Received target price" value={row.tpTriggerPrice} />
+        <Value label="Received stop price" value={row.slTriggerPrice} />
         <Value
-          label="Только сокращение"
-          value={row.reduceOnly === null ? null : row.reduceOnly ? "Да" : "Нет"}
+          label="Reduce only"
+          value={row.reduceOnly === null ? null : row.reduceOnly ? "Yes" : "No"}
         />
       </dl>
     </WaiaSurface>
@@ -381,20 +414,20 @@ function AlgoOrders({
       className="border-border space-y-3 rounded-lg border p-3"
     >
       <Header
-        title="Условные заявки HTX"
+        title="HTX conditional orders"
         status={statusLabel(observation.status, stale)}
         completedAt={observation.readCompletedAtMs}
       />
       {stale ? (
         <p className="text-sm">
-          Показано последнее чтение условных заявок; данные могут устареть.
+          Last conditional orders read shown; data may be stale.
         </p>
       ) : null}
       <ReadError error={observation.error} />
       {visibleValues === null ? (
-        <p>Данные условных заявок недоступны. Наличие защиты не подтверждено.</p>
+        <p>Conditional order data unavailable. Protection is not confirmed.</p>
       ) : visibleValues.length === 0 ? (
-        <p>Строки условных заявок не получены. Наличие защиты не подтверждено.</p>
+        <p>No conditional order rows received. Protection is not confirmed.</p>
       ) : (
         <div className="space-y-2">
           {visibleValues.map((row, index) => (
@@ -402,7 +435,7 @@ function AlgoOrders({
           ))}
           {observation.values && observation.values.length > MAX_VISIBLE_ROWS ? (
             <p>
-              Показаны первые {MAX_VISIBLE_ROWS} из {observation.values.length} полученных строк.
+              Showing the first {MAX_VISIBLE_ROWS} of {observation.values.length} received rows.
             </p>
           ) : null}
         </div>
@@ -410,11 +443,11 @@ function AlgoOrders({
       <Coverage pageScope={observation.pageScope} />
       {hasOpenPositions ? (
         <p role="alert" className="text-sm">
-          Наличие защиты открытой позиции не подтверждено этим снимком.
+          This snapshot does not confirm protection of the open position.
         </p>
       ) : (
         <p className="text-muted-foreground text-sm">
-          Условные заявки показаны отдельно от позиций; полнота защиты не оценивается.
+          Conditional orders are shown separately from positions; protection completeness is not assessed.
         </p>
       )}
     </section>
@@ -425,17 +458,17 @@ function Fill({ row }: { row: HtxV5Fill }) {
   return (
     <WaiaSurface variant="raised" className="space-y-2 p-3">
       <h4 className="font-medium">
-        Исполнение · {row.contractCode} · {row.side}
+        Fill · {row.contractCode} · {row.side}
       </h4>
       <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Value label="Объём исполнения (контракты)" value={row.tradeVolume} />
-        <Value label="Цена исполнения" value={row.tradePrice} />
-        <Value label="Оборот по данным HTX" value={row.tradeTurnover} />
-        <Value label="Комиссия" value={row.tradeFee} />
-        <Value label="Валюта комиссии" value={row.feeCurrency} />
-        <Value label="Результат по данным HTX" value={row.profit} />
+        <Value label="Fill quantity (contracts)" value={row.tradeVolume} />
+        <Value label="Fill price" value={row.tradePrice} />
+        <Value label="Turnover reported by HTX" value={row.tradeTurnover} />
+        <Value label="Fee" value={row.tradeFee} />
+        <Value label="Fee currency" value={row.feeCurrency} />
+        <Value label="PnL reported by HTX" value={row.profit} />
       </dl>
-      <p className="text-muted-foreground text-xs">Время исполнения HTX: {time(row.createdTimeMs)}</p>
+      <p className="text-muted-foreground text-xs">HTX fill time: {time(row.createdTimeMs)}</p>
     </WaiaSurface>
   );
 }
@@ -457,33 +490,33 @@ function Fills({
       className="border-border space-y-3 rounded-lg border p-3"
     >
       <Header
-        title="Исполнения фьючерсных заявок HTX"
+        title="HTX Futures order fills"
         status={statusLabel(observation.status, stale)}
         completedAt={
           observation.status === "NOT_CONFIGURED" ? undefined : observation.readCompletedAtMs
         }
       />
       {stale ? (
-        <p className="text-sm">Показано последнее чтение исполнений; данные могут устареть.</p>
+        <p className="text-sm">Last fills read shown; data may be stale.</p>
       ) : null}
       {observation.status === "NOT_CONFIGURED" || observation.coverage === "NOT_CONFIGURED" ? (
-        <p>История исполнений недоступна; число исполнений неизвестно.</p>
+        <p>Fill history unavailable; the fill count is unknown.</p>
       ) : (
         <>
           <p className="text-muted-foreground text-sm">
-            Контракты чтения: {observation.contracts.join(", ") || "недоступно"}
+            Read contracts: {observation.contracts.join(", ") || "unavailable"}
           </p>
           <p className="text-muted-foreground text-sm">
-            Период истории: {time(observation.windowStartMs)} – {time(observation.windowEndMs)}
+            History window: {time(observation.windowStartMs)} – {time(observation.windowEndMs)}
           </p>
           <ReadError error={observation.error} />
           {visibleValues === null ? (
-            <p>Данные исполнений недоступны — это не подтверждённое отсутствие исполнений.</p>
+            <p>Fill data unavailable — this is not confirmed absence of fills.</p>
           ) : visibleValues.length === 0 ? (
             <p>
               {observation.status === "COMPLETE"
-                ? "Исполнения по указанным контрактам и за показанный период не получены."
-                : "В этом чтении строки исполнений не получены."}
+                ? "No fills were received for the specified contracts and displayed window."
+                : "No fill rows were received in this read."}
             </p>
           ) : (
             <div className="space-y-2">
@@ -492,8 +525,8 @@ function Fills({
               ))}
               {observation.values && observation.values.length > MAX_VISIBLE_ROWS ? (
                 <p>
-                  Показаны первые {MAX_VISIBLE_ROWS} из {observation.values.length} полученных
-                  исполнений.
+                  Showing the first {MAX_VISIBLE_ROWS} of {observation.values.length} received
+                  fills.
                 </p>
               ) : null}
             </div>
@@ -504,7 +537,7 @@ function Fills({
             }
           />
           <p className="text-sm">
-            Этот период не подтверждает полную дневную активность или итог за день.
+            This window does not confirm complete daily activity or a daily result.
           </p>
         </>
       )}
@@ -534,29 +567,29 @@ export function HtxV5AccountSection({
       className="border-border space-y-4 rounded-xl border p-4"
     >
       <div>
-        <h3 className="text-base font-semibold">Снимок фьючерсного счёта HTX</h3>
+        <h3 className="text-base font-semibold">HTX Futures account snapshot</h3>
         <p className="text-muted-foreground mt-1 text-sm">
-          Последние полученные данные счёта HTX. Объёмы позиций и заявок указаны в контрактах.
+          Last received HTX account data. Position and order quantities are in contracts.
         </p>
       </div>
       <Balance observation={projection.balance} inheritedStale={inheritedStale} nowMs={nowMs} />
       <section aria-label="HTX positions" className="border-border space-y-3 rounded-lg border p-3">
         <Header
-          title="Позиции HTX"
+          title="HTX positions"
           status={statusLabel(projection.positions.status, positionsStale)}
           completedAt={projection.positions.readCompletedAtMs}
         />
         {positionsStale ? (
-          <p className="text-sm">Показаны последние полученные позиции; данные могут устареть.</p>
+          <p className="text-sm">Last received positions shown; data may be stale.</p>
         ) : null}
         <ReadError error={projection.positions.error} />
         {visiblePositions === null ? (
-          <p>Данные позиций недоступны — это не подтверждённый нулевой объём.</p>
+          <p>Position data unavailable — this is not a confirmed zero quantity.</p>
         ) : visiblePositions.length === 0 ? (
           <p>
             {projection.positions.status === "COMPLETE"
-              ? "Открытые позиции не получены."
-              : "В этом чтении строки позиций не получены."}
+              ? "No open positions were received."
+              : "No position rows were received in this read."}
           </p>
         ) : (
           <div className="space-y-2">
@@ -572,15 +605,15 @@ export function HtxV5AccountSection({
             {projection.positions.values &&
             projection.positions.values.length > MAX_VISIBLE_ROWS ? (
               <p>
-                Показаны первые {MAX_VISIBLE_ROWS} из {projection.positions.values.length}{" "}
-                полученных позиций.
+                Showing the first {MAX_VISIBLE_ROWS} of {projection.positions.values.length}{" "}
+                received positions.
               </p>
             ) : null}
           </div>
         )}
       </section>
       <Rows
-        title="Открытые заявки HTX"
+        title="HTX open orders"
         observation={projection.openOrders}
         inheritedStale={inheritedStale}
         nowMs={nowMs}
@@ -597,6 +630,11 @@ export function HtxV5AccountSection({
         )}
       />
       <Fills observation={projection.fills} inheritedStale={inheritedStale} nowMs={nowMs} />
+      <HtxV5BillsSection
+        observation={projection.schemaVersion === "htx-v5-observation/v2" ? projection.bills : null}
+        inheritedStale={inheritedStale}
+        nowMs={nowMs}
+      />
     </section>
   );
 }

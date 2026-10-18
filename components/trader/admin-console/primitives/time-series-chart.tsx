@@ -25,7 +25,7 @@ export function AdminTimeSeriesChart({
   fxAt?: string | null;
 }) {
   const [metric, setMetric] = React.useState<"equity" | "pnl" | "drawdown">("equity");
-  const labels = { equity: "Капитал", pnl: "Результат Трейдера", drawdown: "Просадка в валюте" };
+  const labels = { equity: "Equity", pnl: "Trader result", drawdown: "Drawdown in currency" };
   const values = points.flatMap((p) => (p[metric] === null ? [] : [parseDecimal(p[metric]!)]));
   const min = values.reduce((a, b) => (a < b ? a : b), values[0] ?? 0n);
   const max = values.reduce((a, b) => (a > b ? a : b), values[0] ?? 0n);
@@ -53,15 +53,15 @@ export function AdminTimeSeriesChart({
     .join(" ");
   return (
     <ConsolePanel
-      title="История капитала и результата"
+      title="Equity and result history"
       note={
         fxAt
-          ? "USD: сохранённый ряд USDT пересчитан по текущей подтверждённой котировке"
-          : "Сохранённые оценки. Вводы и выводы не считаются торговым результатом"
+          ? "USD: the saved USDT series is converted using the current confirmed quote"
+          : "Saved valuations. Deposits and withdrawals are not trading results"
       }
     >
       <div className="space-y-4 p-5">
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Показатель графика">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Chart metric">
           {(Object.keys(labels) as (keyof typeof labels)[]).map((key) => (
             <button
               key={key}
@@ -88,7 +88,7 @@ export function AdminTimeSeriesChart({
               viewBox="0 0 760 224"
               className="text-waia-accent-cool h-56 w-full"
               role="img"
-              aria-label={`${labels[metric]}, ${currency}. Разрывы означают отсутствие полной оценки.`}
+              aria-label={`${labels[metric]}, ${currency}. Gaps indicate the absence of a complete valuation.`}
             >
               {[24, 112, 200].map((y) => (
                 <line key={y} x1="24" y1={y} x2="736" y2={y} stroke="currentColor" opacity="0.12" />
@@ -110,7 +110,7 @@ export function AdminTimeSeriesChart({
                     fill="currentColor"
                   >
                     <title>
-                      {new Date(point.at).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })}:{" "}
+                      {new Date(point.at).toLocaleString("en-GB", { timeZone: "Europe/Moscow" })}:{" "}
                       {formatAdminMoney(point[metric]!, currency)}
                     </title>
                   </circle>
@@ -120,14 +120,14 @@ export function AdminTimeSeriesChart({
             <figcaption className="text-waia-fg-muted flex flex-wrap justify-between gap-2 text-xs">
               <span>{formatAdminMoney(formatDecimal(min), currency)}</span>
               <span>
-                История собирается с <EvidenceTime at={points[0]?.at} />
+                History collected since <EvidenceTime at={points[0]?.at} />
               </span>
             </figcaption>
           </figure>
         )}
         {fxAt ? <EvidenceTime at={fxAt} /> : null}
         <div>
-          <p className="text-waia-fg-muted text-xs">Доходность и просадка в процентах</p>
+          <p className="text-waia-fg-muted text-xs">Return and drawdown in percent</p>
           <DataState state="unavailable" reason="RETURN_METHOD_NOT_RATIFIED" />
         </div>
         {points.some((point) => point.included !== point.total) ? (
@@ -135,14 +135,14 @@ export function AdminTimeSeriesChart({
         ) : null}
         {points.length > 0 ? (
           <details className="text-xs">
-            <summary className="cursor-pointer py-2">Точные значения и охват</summary>
+            <summary className="cursor-pointer py-2">Exact values and coverage</summary>
             <div className="max-h-64 overflow-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr>
-                    <th className="p-2">Время, Москва</th>
+                    <th className="p-2">Time, Moscow</th>
                     <th className="p-2">{labels[metric]}</th>
-                    <th className="p-2">Охват</th>
+                    <th className="p-2">Coverage</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -153,7 +153,7 @@ export function AdminTimeSeriesChart({
                       </td>
                       <td className="p-2 tabular-nums">
                         {point[metric] === null
-                          ? "Нет полной оценки"
+                          ? "No complete valuation"
                           : formatAdminMoney(point[metric]!, currency)}
                       </td>
                       <td className="p-2">

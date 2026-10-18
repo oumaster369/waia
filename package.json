@@ -2,6 +2,7 @@
   "name": "waia-app",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.34.1",
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "db:generate:postgres": "drizzle-kit generate --config drizzle.postgres.config.ts",
@@ -205,6 +206,9 @@
     "wrangler": "^4.87.0"
   },
   "pnpm": {
+    "patchedDependencies": {
+      "postgres@3.4.9": "patches/postgres@3.4.9.patch"
+    },
     "onlyBuiltDependencies": [
       "better-sqlite3"
     ]

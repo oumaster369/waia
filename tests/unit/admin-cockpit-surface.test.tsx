@@ -242,7 +242,7 @@ describe("admin dashboard", () => {
     );
     render(<AdminDashboardPage />);
     expect(screen.queryByTestId("admin-org-select")).not.toBeInTheDocument();
-    expect((await screen.findAllByText(/Нужен Postgres/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Postgres is required/)).length).toBeGreaterThan(0);
   });
 
   it("reads the canonical console overview endpoint", async () => {

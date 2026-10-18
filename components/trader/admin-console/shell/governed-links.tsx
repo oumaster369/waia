@@ -2,23 +2,23 @@ import Link from "next/link";
 
 const LINKS = {
   system: [
-    { href: "/admin/system?tab=audit", label: "Журнал аудита" },
-    { href: "/admin/system?tab=authority", label: "Полномочия исполнения" },
-    { href: "/admin/kill-switches", label: "Аварийные выключатели" },
-    { href: "/admin/live-enable", label: "Допуск к live" },
+    { href: "/admin/system?tab=audit", label: "Audit log" },
+    { href: "/admin/system?tab=authority", label: "Execution authority" },
+    { href: "/admin/kill-switches", label: "Emergency switches" },
+    { href: "/admin/live-enable", label: "Live admission" },
   ],
-  strategies: [{ href: "/admin/strategy-promotions", label: "Продвижение стратегий" }],
+  strategies: [{ href: "/admin/strategy-promotions", label: "Strategy promotions" }],
   research: [
-    { href: "/admin/fhv-operations", label: "Операции исследования" },
-    { href: "/admin/research?tab=qualification", label: "Диагностика оценки" },
+    { href: "/admin/fhv-operations", label: "Research operations" },
+    { href: "/admin/research?tab=qualification", label: "Valuation diagnostics" },
     { href: "/admin/research/discovery", label: "Discovery" },
-    { href: "/admin/account-observation", label: "Наблюдение счетов" },
+    { href: "/admin/account-observation", label: "Account observation" },
   ],
 } as const;
 
 export function GovernedProcessLinks({ section }: { section: keyof typeof LINKS }) {
   return (
-    <nav aria-label="Управляемые процессы">
+    <nav aria-label="Governed workflows">
       {LINKS[section].map((link) => (
         <Link key={link.href} href={link.href}>
           {link.label}

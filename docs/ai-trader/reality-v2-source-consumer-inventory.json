@@ -45,7 +45,7 @@
     "expectedFileCount": 164,
     "sortedPathDigestHex": "db43614e8967c2d5b0f3e4aea5ed7493d6fec4a8f1c267d7e942c3428432d09f",
     "contentPins": [
-      {"path": "lib/trader/balances/sync-handler.ts","sha256": "12459d9d3695758069c0b9f76c862738e53544d1e2b4245fe2410e3aad0f584b"},
+      {"path": "lib/trader/balances/sync-handler.ts","sha256": "a90143a381e7ac0129bf09f3c74fd897f44aeb879beb857c1126819602896fc0"},
       {"path": "lib/trader/connectors/alternative-me/fear-greed-client.ts","sha256": "70a8038d142842547d322b768ac55055e09f3a8ac91227c7bcb8bea70ef53b5d"},
       {"path": "lib/trader/connectors/announcements/binance-announcements-client.ts","sha256": "e0d5abd9fc84674f0f312af92af1c71e9622b973f75473b3fb35515234c1c158"},
       {"path": "lib/trader/connectors/announcements/bybit-announcements-client.ts","sha256": "d7032fb516664b8877a078ea901303968cda8624ac9f0293b730b02e3c423020"},
@@ -207,8 +207,8 @@
       {"path": "lib/trader/market-data/volume-qualification/research-session-htx-volume-authority-v1.ts","sha256": "1e8745caf168f6b1303e7a4cd6a94d9fa67987f745724fa8cc7f2ab07db8971a"},
       {"path": "lib/trader/mi/raw-capture-repository-postgres.ts","sha256": "b1e0590063d825fc1c845f14adcb7eceff2ce985eca04d5cf3e36f6c5aa6e8e6"},
       {"path": "lib/trader/mi/raw-capture-v1.ts","sha256": "962e8ba588901eebe25b03774aa4f4312b9dc560acf4dde8608113f060579d70"},
-      {"path": "lib/trader/positions/sync-handler.ts","sha256": "94a58646ffaade83b2b66c4a55f46724bfba67182ed1078679682a7a2e186c2e"},
-      {"path": "lib/trader/trade-history/sync-handler.ts","sha256": "8ae15a5ee861117535ab83f94bf3aa6e3397d3aec5acfbe24b06c1d56d1ecd27"}
+      {"path": "lib/trader/positions/sync-handler.ts","sha256": "d9fb8a921ed45685d33d7592d2fa49272dab18f8d72944c92e953b11406ba080"},
+      {"path": "lib/trader/trade-history/sync-handler.ts","sha256": "f7f17ca569481c61cd87cdc070017c62e23d940545ff761ad72c7b1f050fbedf"}
     ]
   },
   "sourceRules": [
@@ -310,18 +310,18 @@
     "contentPins": [
       {"path": "lib/trader/account-observation/credential-read-boundary.ts","sha256": "9d6c9ea688ea90b82f060f83b919bade9643e6ba0a54dfd13dfbbe4d3216ab88"},
       {"path": "lib/trader/account-observation/credential-store.ts","sha256": "c6daebfc774f03544772b5e3bbe4d08fb2252213a7cfc439899dc485a7029eb9"},
-      {"path": "lib/trader/account-observation/derivatives/htx-account-transport.ts","sha256": "03a1e22dc92eed1353e3113fbe811ce9ff0df69a23546c56d895e05cc5b1c802"},
-      {"path": "lib/trader/account-observation/derivatives/htx-v5-read-transport.ts","sha256": "75516621c1e29769d48d80c4264c750d716b8d3e6c718ca08c074df32b7cf126"},
-      {"path": "lib/trader/account-observation/htx-get-transport.ts","sha256": "997568ee070b8abfa11c220d06b3bc21b51b92c9a1ac0c9d8a23ebe6442d0a58"},
+      {"path": "lib/trader/account-observation/derivatives/htx-account-transport.ts","sha256": "b3efa558721969b9160b2a9c4be8649ddee8e70bb8e17e460f120ac810dc1dcc"},
+      {"path": "lib/trader/account-observation/derivatives/htx-v5-read-transport.ts","sha256": "a18ab74bf522f1f0a5d09900f488b61d8676d7e765d9943afac418fa6dc0dc19"},
+      {"path": "lib/trader/account-observation/htx-get-transport.ts","sha256": "417e240f4eeac03fcc5716d388ace7b16cc366d39da752c554d201a6ff73a3ed"},
       {"path": "lib/trader/account-observation/htx-reader.ts","sha256": "579b982960ced862610b2c917fc17ed502316fa6672480c32098a676fc4a4898"},
-      {"path": "lib/trader/account-observation/service.ts","sha256": "fad2d5275e5e25376b4a627fdddef9fdf704251e083f3c9eced1fa67b52f76cb"},
-      {"path": "lib/trader/account-observation/types.ts","sha256": "d9c55d63be1da86e397bd90557ba5be1d47d875f70b259eb7b68ed57f72e65eb"},
+      {"path": "lib/trader/account-observation/service.ts","sha256": "fd9f1c6c8f5d0e581935279fd0d753be1540b4e68bea6dd5f7101423cafcfa69"},
+      {"path": "lib/trader/account-observation/types.ts","sha256": "9a5048684a07fbc6b7e58a951d2841bbb1e5db6fbfe412606c41396702bd85e9"},
       {"path": "lib/trader/admin-console/collectors/fetch-news.ts","sha256": "5207fb0c80a46b83b3a82fdeed0e4bb13f409fcdc847c3d93a3b151d0d931633"},
       {"path": "lib/trader/admin-console/collectors/run-due.ts","sha256": "a06cd64107d225f86f6d23063a5b9af3d7bfae015afebc68514ba6107f93f9b6"},
       {"path": "lib/trader/admin-console/money/htx-public-tickers.ts","sha256": "72f9e0cb9403a8ecb0c1ede772079048ee082802c08e3541240f5e9c32ff906c"},
       {"path": "lib/trader/backtest/historical-simulation-v2.ts","sha256": "4b6bb74d89c7ca3ede9ff0d085b63402747ac27e95c85e67d2a78fdb8d2610dd"},
       {"path": "lib/trader/backtest/replay-benchmark-harness.ts","sha256": "41176048d2d72d303fccdc54d66abb28c80fc29cb4155d220be60012f681d380"},
-      {"path": "lib/trader/balances/sync-handler.ts","sha256": "12459d9d3695758069c0b9f76c862738e53544d1e2b4245fe2410e3aad0f584b"},
+      {"path": "lib/trader/balances/sync-handler.ts","sha256": "a90143a381e7ac0129bf09f3c74fd897f44aeb879beb857c1126819602896fc0"},
       {"path": "lib/trader/balances/types.ts","sha256": "bcbe1df0e281c9931932029eebcced85e68cb2241abad87355ff056f5e9d2240"},
       {"path": "lib/trader/connectors/alternative-me/fear-greed-client.ts","sha256": "70a8038d142842547d322b768ac55055e09f3a8ac91227c7bcb8bea70ef53b5d"},
       {"path": "lib/trader/connectors/announcements/binance-announcements-client.ts","sha256": "e0d5abd9fc84674f0f312af92af1c71e9622b973f75473b3fb35515234c1c158"},
@@ -421,7 +421,7 @@
       {"path": "lib/trader/paper/paper-cycle-runner.ts","sha256": "67f4e2a72dc82b920ba34c4dcb52584fc11e9a8f374aee29bb4dd277b3e78bf9"},
       {"path": "lib/trader/paper/paper-cycle.types.ts","sha256": "2cc6871ebb5e35a5b4d82f83d382dd69b7b790fb8fce0359e9697db72fd58af7"},
       {"path": "lib/trader/paper/scheduled-noncapital-owner-postgres-v1.ts","sha256": "7f62b2e03ba2b9c1642dc2146ea1a06cf56b2e7c2152aa9e84e2dd34deccfb23"},
-      {"path": "lib/trader/positions/sync-handler.ts","sha256": "94a58646ffaade83b2b66c4a55f46724bfba67182ed1078679682a7a2e186c2e"},
+      {"path": "lib/trader/positions/sync-handler.ts","sha256": "d9fb8a921ed45685d33d7592d2fa49272dab18f8d72944c92e953b11406ba080"},
       {"path": "lib/trader/positions/types.ts","sha256": "8ec00886cc56e1bae84f25325d5fbe56cbf9051e89f767cfd486d076624d02f7"},
       {"path": "lib/trader/reality/v2/contracts.ts","sha256": "168daae2e15959c970b24b86b09c60e44823d8775420c8b3ebc319bf1b9a7cae"},
       {"path": "lib/trader/reality/v2/execution-report-delivery-cli.ts","sha256": "c30f1cde6e0496a2300fbbe1dde24b1a069a75a4442eaf103dbb5ea9cd58d4c9"},
@@ -449,7 +449,7 @@
       {"path": "lib/trader/security/htx-credential-types.ts","sha256": "6f18a484d6d99410b1e352b3f68b5600a76bf82ab2d9e0b0220b2ec7064a40b3"},
       {"path": "lib/trader/security/htx-secure-credential-resolver.ts","sha256": "2cc22aed5e617325ce2d718b102ec2955f65d0af40377b5a210525177301e807"},
       {"path": "lib/trader/symbols/normalize-htx-spot-symbol.ts","sha256": "5d4847711fa0b1b5e97b13ef0c55d1be51ade88fc810253c189ef1db1bdae60c"},
-      {"path": "lib/trader/trade-history/sync-handler.ts","sha256": "8ae15a5ee861117535ab83f94bf3aa6e3397d3aec5acfbe24b06c1d56d1ecd27"},
+      {"path": "lib/trader/trade-history/sync-handler.ts","sha256": "f7f17ca569481c61cd87cdc070017c62e23d940545ff761ad72c7b1f050fbedf"},
       {"path": "lib/trader/trade-history/types.ts","sha256": "644ad7f0b49f92daa83b4aa970ba2a2529268c36ea28bd9cae61bcb5f7ce3152"},
       {"path": "scripts/trader/fhv-acquire-htx-v2.ts","sha256": "0737e1a579fa7307ed0604c2ede4de860c1eaa202e2f8275346b02c5b248de5a"},
       {"path": "scripts/trader/fhv-control-replay-cli.ts","sha256": "dd832fc6d73878b04717a720c0772865c951674bea3ac66b929bf21f5f6b362c"},
@@ -500,7 +500,7 @@
       "id": "ACCOUNT_OBSERVATION_HTX_V5_READ_TRANSPORT",
       "pathPattern": "^lib/trader/account-observation/derivatives/htx-v5-read-transport\\.ts$",
       "disposition": "EXCLUDED_OBSERVATION_ONLY_NO_CANONICAL_AUTHORITY",
-      "reason": "DEE-1231 fixed six-route HTX V5 signed-GET transport with same-key permission and identity rechecks. Credential permissions must be readOnly or explicitly consented readOnly,trade; fixed observation-only operations do not imply a strictly read-only credential scope. No arbitrary path/body, order, canonical Reality, Risk or capital authority."
+      "reason": "DEE-1231 fixed HTX V5 signed-GET transport; DEE-1233 adds an optional finite-scope, one-page bills GET under the exact current binding. Same-key permission and identity rechecks, current-binding checks and existing deadlines remain unchanged. Credential permissions must be readOnly or explicitly consented readOnly,trade; fixed observation-only operations do not imply a strictly read-only credential scope. No arbitrary path/body, order, canonical Reality, Risk or capital authority."
     },
     {
       "id": "ACCOUNT_OBSERVATION_NORMALIZED_DTOS",

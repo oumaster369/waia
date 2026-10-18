@@ -204,3 +204,11 @@ describe("HTX derivatives private read transport", () => {
     await rateLimited.transport.settled();
   });
 });
+
+it.each([200, 500])("settles terminal native derivative bodies at HTTP %s", async status => {
+  const f = setup({ fetchImpl: async () => new Response(new ReadableStream({
+    start(c) { c.error(new Error("synthetic body failure")); },
+  }), { status }) });
+  await expect(f.transport.readAccount("usdt_cross_shared", new AbortController().signal)).rejects.toMatchObject({ code: "READ_FAILED" });
+  await expect(f.transport.settled()).resolves.toBeUndefined();
+});

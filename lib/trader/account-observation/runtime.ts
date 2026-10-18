@@ -101,6 +101,9 @@ export function createObservationConfiguration(
       );
     });
   }
+  if (config.htxV5?.financialHistory &&
+    (config.htxDerivativesFamilies?.length || config.existingKeyReadConsentId === config.htxV5.financialHistory.scopeId))
+    throw new Error("ACCOUNT_OBSERVATION_INVALID_FINANCIAL_SCOPE");
   config.htxV5?.fillContracts?.sort();
   const revision = "sha256:" + createHash("sha256").update(JSON.stringify(config)).digest("hex");
   return Object.freeze({
@@ -119,6 +122,7 @@ export function createObservationConfiguration(
     ...(config.htxCoverage ? { htxCoverage: Object.freeze({ ...config.htxCoverage }) } : {}),
     ...(config.htxV5 ? { htxV5: Object.freeze({ ...config.htxV5,
       ...(config.htxV5.fillContracts ? { fillContracts: Object.freeze([...config.htxV5.fillContracts]) } : {}),
+      ...(config.htxV5.financialHistory ? { financialHistory: Object.freeze({ ...config.htxV5.financialHistory }) } : {}),
     }) } : {}),
     revision,
   });

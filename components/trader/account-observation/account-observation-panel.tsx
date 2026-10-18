@@ -2,6 +2,8 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { ObservationComponent } from "@/lib/trader/account-observation/types";
+import type { Balance } from "@/lib/trader/connectors/types";
+import { Button } from "@/components/ui/button";
 import {
   ACCOUNT_OBSERVATION_FIRST_TICK_COPY,
   ageLabel,
@@ -68,11 +70,17 @@ function Rows<T>({
   return (
     <section aria-label={title} className="border-border space-y-2 rounded-lg border p-3">
       <h3 className="font-medium">{title}</h3>
+      {component.status === "PARTIAL" && <p>Partial read — some rows may be missing.</p>}
+      {component.status === "ERROR" && <p>Read failed — coverage unknown.</p>}
       {component.error && <p>Read error: {component.error}</p>}
       {component.values === null ? (
         <p>Unavailable — not an observed zero.</p>
       ) : component.values.length === 0 ? (
-        <p>{emptyComplete}</p>
+        <p>
+          {component.status === "COMPLETE" && component.error === null
+            ? emptyComplete
+            : "No rows received; completeness is not confirmed."}
+        </p>
       ) : (
         <>
           <ul className="space-y-1 text-sm">
@@ -97,6 +105,44 @@ function transportCopy(view: AccountObservationView): string | null {
   return null;
 }
 
+function SpotInventory({ rows }: { rows: readonly Balance[] }) {
+  const [page, setPage] = useState(0);
+  const lastPage = Math.max(0, Math.ceil(rows.length / MAX_VISIBLE_ROWS) - 1);
+  const currentPage = Math.min(page, lastPage);
+  // Clamp before rendering when a later snapshot has fewer received currencies.
+  if (page > lastPage) setPage(lastPage);
+  const start = currentPage * MAX_VISIBLE_ROWS;
+  const end = Math.min(start + MAX_VISIBLE_ROWS, rows.length);
+
+  return (
+    <section aria-label="Spot inventory (not PnL)" className="border-border space-y-2 rounded-lg border p-3">
+      <h4 className="font-medium">Spot inventory (not PnL)</h4>
+      <ul>
+        {rows.slice(start, end).map((row, i) => (
+          <li key={`${row.asset}-${start + i}`}>
+            {row.asset}: free {row.free}, locked {row.locked}, total {row.total}
+          </li>
+        ))}
+      </ul>
+      {rows.length > MAX_VISIBLE_ROWS && (
+        <>
+          <p aria-live="polite">Showing {start + 1}–{end} of {rows.length} received currencies.</p>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" size="sm" aria-label="Previous inventory page"
+              disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>
+              Previous
+            </Button>
+            <Button type="button" variant="outline" size="sm" aria-label="Next inventory page"
+              disabled={currentPage === lastPage} onClick={() => setPage(currentPage + 1)}>
+              Next
+            </Button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 /** One renderer for Admin and tenant; it cannot authorize reads or control trading. */
 export function AccountObservationPanel({ view }: { view: AccountObservationView }) {
   const observation = view.status === "REVOKED" ? null : view.observation;
@@ -106,7 +152,7 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [observation]);
-  const live = Boolean(observation) && !view.stale && view.status !== "REVOKED";
+  const live = Boolean(observation) && !view.stale && view.status !== "REVOKED" && view.status !== "ERROR";
   const usdt = observation ? usdtSpot(observation.balances.values) : null;
   const inventory = observation ? nonUsdtInventory(observation.balances.values) : [];
   const nextIn = observation ? secondsUntilNextPoll(observation.collectionCompletedAtMs, nowMs) : 0;
@@ -118,9 +164,9 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Счёт HTX</h2>
+          <h2 className="text-lg font-semibold">HTX account</h2>
           <p className="text-muted-foreground mt-1 text-sm">
-            Только просмотр. Данные спота и фьючерсов показаны отдельно; заявки отсюда не отправляются.
+            Read only. Spot and Futures data are shown separately; orders cannot be submitted here.
           </p>
         </div>
         <p
@@ -146,53 +192,61 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
             ? "Access revoked; account data cleared."
             : view.status === "DISCONNECTED"
               ? "No observation available."
-              : ACCOUNT_OBSERVATION_FIRST_TICK_COPY}
+              : view.status === "ERROR"
+                ? "Account data could not be read."
+                : ACCOUNT_OBSERVATION_FIRST_TICK_COPY}
         </p>
       ) : (
         <>
           <WaiaSurface variant="raised" className="space-y-2 p-4" data-testid="account-identity-summary">
             <h3 className="font-semibold">
-              HTX · счёт {observation.binding.exchangeAccountId} · UID{" "}
-              {observation.htxV5?.htxUid ?? "не указан в снимке"}
+              HTX · account {observation.binding.exchangeAccountId} · UID{" "}
+              {observation.htxV5?.htxUid ?? "not included in the snapshot"}
             </h3>
             <p className="text-muted-foreground text-sm">
-              Спот и фьючерсы ниже приведены отдельно. Общая стоимость активов не рассчитывается.
+              Spot and Futures are shown separately below. Total asset value is not calculated.
             </p>
             <p className="text-sm">
-              Результат за день: недоступен. Для него нет подтверждённой дневной базы и полного учёта переводов,
-              финансирования и комиссий.
+              Daily result: unavailable. A verified daily baseline and complete accounting of transfers,
+              funding and fees are missing.
             </p>
             <p className="text-muted-foreground text-xs">
-              Обновлено {ageLabel(observation.collectionCompletedAtMs, nowMs)} ·{" "}
-              {nextIn > 0 ? `следующее обновление через ${nextIn} с` : "ожидается следующий сбор"}
+              Updated {ageLabel(observation.collectionCompletedAtMs, nowMs)} ·{" "}
+              {nextIn > 0 ? `next update in ${nextIn} s` : "waiting for the next collection"}
             </p>
           </WaiaSurface>
           <p className="text-muted-foreground text-xs">
             Last received observation — do not treat it as a current complete account snapshot.
           </p>
-          <section aria-label="Спот" className="border-border space-y-3 rounded-xl border p-4">
-            <h3 className="text-base font-semibold">Спот · баланс и заявки</h3>
+          <section aria-label="Spot" className="border-border space-y-3 rounded-xl border p-4">
+            <h3 className="text-base font-semibold">Spot · balances and orders</h3>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <Metric
-                label="USDT доступно"
+                label="Available USDT"
                 value={usdt ? usdt.free : "—"}
-                hint={usdt ? "Свободный остаток" : "Нет в этом снимке"}
+                hint={usdt ? "Free balance" : "Not in this snapshot"}
                 testId="cabinet-usdt-free"
               />
               <Metric
-                label="USDT в открытых заявках"
+                label="USDT in open orders"
                 value={usdt ? usdt.locked : "—"}
-                hint={usdt ? "Зарезервировано на HTX" : "Нет в этом снимке"}
+                hint={usdt ? "Reserved on HTX" : "Not in this snapshot"}
                 testId="cabinet-usdt-locked"
               />
               <Metric
-                label="Открытые заявки"
+                label="Open orders"
                 value={
                   observation.openOrders.values === null
                     ? "—"
-                    : String(observation.openOrders.values.length)
+                    : observation.openOrders.status === "COMPLETE" && observation.openOrders.error === null
+                      ? String(observation.openOrders.values.length)
+                      : `${observation.openOrders.values.length} received`
                 }
-                hint="Активные заявки, отдельно от позиций"
+                hint={
+                  observation.openOrders.status === "COMPLETE" && observation.openOrders.error === null
+                    ? "Active orders, separate from positions"
+                    : "Received orders; full coverage is not confirmed"
+                }
                 testId="cabinet-open-orders"
               />
             </div>
@@ -202,16 +256,16 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
             ) : null}
             {observation.holdings === null ? <p>Unavailable — not an observed zero.</p> : null}
             {inventory.length > 0 ? (
-              <section className="border-border space-y-2 rounded-lg border p-3">
-                <h4 className="font-medium">Spot inventory (not PnL)</h4>
-                <ul>
-                  {inventory.slice(0, MAX_VISIBLE_ROWS).map((row, i) => (
-                    <li key={`${row.asset}-${i}`}>
-                      {row.asset}: free {row.free}, locked {row.locked}, total {row.total}
-                    </li>
-                  ))}
-                </ul>
-              </section>
+              <SpotInventory
+                key={JSON.stringify([
+                  observation.binding.organizationId,
+                  observation.binding.credentialId,
+                  observation.binding.exchangeAccountId,
+                  observation.binding.credentialRevision,
+                  observation.binding.configurationRevision,
+                ])}
+                rows={inventory}
+              />
             ) : null}
             <Rows
               title="Open orders"
@@ -236,8 +290,8 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
               </Rows>
             ))}
           </section>
-          <section aria-label="Фьючерсы" className="border-border space-y-3 rounded-xl border p-4">
-            <h3 className="text-base font-semibold">Фьючерсы · маржа, позиции и заявки</h3>
+          <section aria-label="Futures" className="border-border space-y-3 rounded-xl border p-4">
+            <h3 className="text-base font-semibold">Futures · margin, positions and orders</h3>
             <DerivativesAccountSection
               projection={
                 observation.schemaVersion === "account-observation/v2" ||
@@ -257,7 +311,7 @@ export function AccountObservationPanel({ view }: { view: AccountObservationView
             ) : null}
           </section>
           <p className="text-muted-foreground text-sm">
-            Месячная выписка здесь не публикуется. Недостающие значения не выводятся из предположений.
+            A monthly statement is not published here. Missing values are not inferred.
           </p>
           <dl className="text-muted-foreground grid gap-1 text-xs">
             <dt>Observation ID</dt>

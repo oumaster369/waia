@@ -12,6 +12,7 @@ import {
 export const ACCOUNT_OBSERVATION_ASSIGNMENT_MANIFEST_SCHEMA =
   "waia.account_observation_assignment_manifest.v1";
 /** Bounded before parsing so an oversized file cannot be walked at all. */
+export const ACCOUNT_OBSERVATION_FINANCIAL_MANIFEST_SCHEMA = "waia.account_observation_assignment_manifest.v2";
 export const ACCOUNT_OBSERVATION_MANIFEST_MAX_BYTES = 65536;
 
 export type AccountObservationManifestRefusal =
@@ -75,7 +76,7 @@ const assignmentSchema = z
 
 const manifestSchema = z
   .object({
-    schemaVersion: z.literal(ACCOUNT_OBSERVATION_ASSIGNMENT_MANIFEST_SCHEMA),
+    schemaVersion: z.enum([ACCOUNT_OBSERVATION_ASSIGNMENT_MANIFEST_SCHEMA, ACCOUNT_OBSERVATION_FINANCIAL_MANIFEST_SCHEMA]),
     releaseSha: z.string().regex(/^[0-9a-f]{40}$/),
     host: z.enum(["api.huobi.pro", "api-aws.huobi.pro"]),
     intervalMs: z.number().int().min(1000).max(86400000),
@@ -142,6 +143,8 @@ export function parseAccountObservationAssignmentManifest(
   const parsed = manifestSchema.safeParse(raw);
   if (!parsed.success) refuse("SCHEMA");
   const { contentSha256, ...body } = parsed.data;
+  const financial = body.assignments.some(item => item.htxV5?.financialHistory !== undefined);
+  if (financial !== (body.schemaVersion === ACCOUNT_OBSERVATION_FINANCIAL_MANIFEST_SCHEMA)) refuse("SCHEMA");
   const digest = accountObservationManifestDigest(body);
   if (digest !== contentSha256) refuse("CONTENT_DIGEST");
   if (!/^[0-9a-f]{64}$/.test(expected.expectedDigest) || digest !== expected.expectedDigest) {
