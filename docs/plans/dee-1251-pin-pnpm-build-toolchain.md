@@ -60,3 +60,7 @@ YAML parsing verified all 35 version declarations; `git diff --check` passed. In
 ## Rollout
 
 Review and merge through the ordinary human gate. This change affects the next dependency installation; it does not mutate live configuration or traffic. A rejected frozen lockfile remains a failure and must not be bypassed.
+
+## Current-head CI follow-up
+
+PR 793/head 342c3efe passed the external Workers Builds check and the GitHub OpenNext bundle. The preview deployment job skipped upload because its secrets were unavailable. The account-observation CI contract failed because it deliberately hashes the complete historical `integration` and `historical-postgres17` jobs. For each block, exact comparison against the base proves the only change is `version: 10` to `version: 10.34.1`; update the two expected hashes without weakening that complete-job contract. The remaining current-head checks and independent review of this follow-up remain required.
