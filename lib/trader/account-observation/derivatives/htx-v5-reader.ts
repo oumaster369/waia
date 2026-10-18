@@ -144,7 +144,9 @@ export function createHtxV5ObservationReader(input: ReaderInput): HtxV5Observati
   const contracts = snapshotContracts(config.contracts);
   const financialHistory = config.financialHistory === undefined ? undefined :
     Object.freeze(htxV5FinancialHistoryScopeSchema.parse(config.financialHistory));
-  if (financialHistory && (!expectedHtxUid || contracts.length)) fail("INVALID_RESPONSE");
+  // Keep the same 31-read / 120-second budget when both optional sources are enabled:
+  // 3 values + 2 open-order pages + 10 algo pages + 14 fill pages + 1 bills page.
+  if (financialHistory && (!expectedHtxUid || contracts.length > 7)) fail("INVALID_RESPONSE");
   if (!credential || typeof credential !== "object" || typeof fetchImpl !== "function" ||
       typeof authorizeCurrent !== "function" || !Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 120_000 ||
       !Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1 || maxResponseBytes > 1_048_576 ||
