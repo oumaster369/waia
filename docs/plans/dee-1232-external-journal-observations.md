@@ -16,8 +16,10 @@ state:
   prUrl: https://github.com/oumaster369/waia/pull/763
   lastValidatedGitSha: bdffaf29e78ec63d90f7e06144f191a020b394cc
   lastValidationAt: 2026-10-08
+  currentIntegrationHead: 913cbb6f683b742155615a19a1927794dd5c7846
+  currentIntegrationBase: 50b9c8c4f24d67922cc0d178349652b40a478b9e
   blockedReason: null
-  nextAction: "Publish the qualified local package in existing draft PR763; qualify source delivery/current binding and correctly ordered migration/runtime admission before activation."
+  nextAction: "Complete current-head CI and source-package integration for PR763. Keep source delivery, migration application and runtime activation on HOLD."
 provenance:
   createdFrom: chat
   gapRegistry: null
@@ -86,7 +88,12 @@ Preparation rejects accessors/proxies, snapshots caller metadata, copies typed b
 
 Implementation is locally qualified on 8 October. The 22 new preparation tests and 26 distinct native PostgreSQL 17 cases passed; full lint (zero errors, 337 existing warnings), typecheck and fresh build passed. The unchanged parser suite was not replayed. Independent implementation review resolved four findings and inspected final native deltas. Native proof uses two real restricted LOGINs with verified TLS on a disposable loopback-only database; none of these results is production/source-delivery acceptance. Native acceptance must use real restricted LOGINs against a newly owned isolated service; superuser `SET ROLE` does not prove assignment isolation. Required native cases include cross-login/source denial, stale/revoked binding, lease race/expiry, failed-insert rollback, final-CAS rollback, exact ambiguous retry, conflicting retry, no secret-column/registry-update/record-update/truncate access, and complete pending/discard restart.
 
-**Migration HOLD:** current main has 232 Drizzle entries through `0231`; PR759's future `0232` remains reserved/HOLD. This package allocates no number and changes neither `db/schema.postgres.ts` nor either migration journal. Final schema/migration packaging must await root's correct integration ordering and separate migration admission.
+**Migration HOLD:** the current `db/migrations_postgres/meta/_journal.json` has 233 entries; its latest row is `idx: 232`, tagged `0233_trader_account_financial_history_v1`. That financial-history migration source is separately approved and present in the repository, but it has not been applied to production/runtime; no production migration replay occurred in this integration. This external-journal package allocates no migration number and changes neither schema nor migration journals. Its SQL fixture remains unnumbered local-test-only. Do not infer runtime application from the journal entry or reuse `0233` for this package; any future external-journal migration needs separate design, ordering and admission.
+
+### Current-main integration (2026-10-19)
+
+The existing PR branch was refreshed by an ordinary local merge of `origin/main` at `50b9c8c4f24d67922cc0d178349652b40a478b9e`, producing `913cbb6f683b742155615a19a1927794dd5c7846` (tree `3f2374b625ef11b0ba8ed1eb92cfce1bf4d7e69c`). The eight PR-owned plan/source/test paths were unchanged by the merge. This changes the dependency context, including the separately approved `postgres@3.4.9` patch; prior source/native validation at `bdffaf29` is historical and does not qualify the merged head. Focused validation on the merged head has now passed: 44 external-journal parser/storage tests, 7 transaction-close tests against an isolated copy with the exact lock-pinned `postgres@3.4.9` patch, and 26 native external-journal tests against a disposable loopback-only PostgreSQL 17 TLS fixture with two restricted logins. Compact command/results and native fixture details are retained in the project’s validation evidence records. Current-head CI and source-package integration remain repository-level gates; these results do not authorize source delivery, migration application, or runtime activation. No production migration was applied or replayed.
+
 
 **Runtime/source HOLD:** no source reader, live journal channel, enrollment verifier, credential/key access, archive execution or production integration is implemented. `sourceEvidence.prefixVerified` is an explicit input contract for a future qualified source reader, not cryptographic proof or a newly established live source. Its `observedAtMs` is in the database clock domain; host `Date.now()` is not assumed synchronized, and future evidence is strictly refused. A future reader must qualify that clock mapping. File identity alone cannot prove an unchanged prefix; truncation/rotation refusal and current key/UID/API-mode binding still require independently qualified source evidence. Enrollment and generation creation remain operator-owned. No live history, complete history, day PnL, stop protection or production readiness claim follows from this package.
 
