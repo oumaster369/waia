@@ -50,6 +50,58 @@ function connectedFetcher(history: typeof fetch, getObservation = () => observat
   });
 }
 describe("DEE-1249 persisted history", () => {
+  it("sums only loaded, deduplicated records with exact currency and type separation", async () => {
+    const first = historyPage(["10001"], cursor(1));
+    const second = historyPage(["10001", "10002", "10003", "10004"]);
+    second.coverage = first.coverage;
+    Object.assign(second.records[2].bill, { currency: "USD", amount: "1.25" });
+    Object.assign(second.records[3].bill, {
+      type: "30",
+      category: "FUNDING_INCOME",
+      amount: "0.5",
+    });
+    render(
+      section(
+        vi
+          .fn<typeof fetch>()
+          .mockResolvedValueOnce(json(first))
+          .mockResolvedValueOnce(json(second)),
+      ),
+    );
+    await settle();
+    const totals = screen.getByRole("region", { name: "Loaded record totals" });
+    expect(within(totals).getByText(/Loaded records: 1/)).toBeVisible();
+    expect(within(totals).queryByText("1.25")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Load more history" }));
+    await settle();
+    const rows = within(totals).getAllByRole("row").slice(1);
+    expect(
+      rows.map((row) =>
+        within(row)
+          .getAllByRole("cell")
+          .map((cell) => cell.textContent),
+      ),
+    ).toEqual([
+      ["USD", "31 · funding expenditure", "1", "1.25"],
+      ["USDT", "30 · funding income", "1", "0.5"],
+      ["USDT", "31 · funding expenditure", "2", "-1.500000000000000002"],
+    ]);
+    expect(within(totals).getByText(/not the full account or period/)).toBeVisible();
+    const pnl = screen.getByRole("region", { name: "Profit calculation availability" });
+    expect(within(pnl).getAllByText("Unavailable")).toHaveLength(2);
+    expect(within(pnl).getByText(/do not establish net or daily profit/)).toBeVisible();
+  });
+  it("keeps original bill amounts when exact aggregation is unsupported", async () => {
+    const page = historyPage();
+    page.records[0].bill.amount = "1e129";
+    render(section(vi.fn<typeof fetch>().mockResolvedValue(json(page))));
+    await settle();
+    expect(screen.getByText("1e129 USDT")).toBeVisible();
+    expect(screen.getByText(/Exact totals are unavailable/)).toBeVisible();
+    expect(
+      screen.queryByRole("table", { name: "Loaded amounts by currency and record type" }),
+    ).not.toBeInTheDocument();
+  });
   it("preserves raw signed decimals, older provenance and history when currently NOT_CONFIGURED", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(historyPage()));
     render(section(fetcher));
@@ -98,6 +150,10 @@ describe("DEE-1249 persisted history", () => {
     resolve(json(historyPage([])));
     await settle();
     expect(screen.getByText(/No persisted records were returned/)).toBeVisible();
+    expect(screen.getByText(/Totals unavailable: no records loaded/)).toBeVisible();
+    expect(
+      screen.queryByRole("table", { name: "Loaded amounts by currency and record type" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText(/0 records in one page/)).toBeVisible();
     expect(fetcher.mock.calls[2][0]).not.toContain("cursor=");
   });
@@ -238,6 +294,11 @@ describe("DEE-1249 persisted history", () => {
     ).toHaveLength(200);
     expect(screen.getByRole("button", { name: "Load more history" })).toBeDisabled();
     expect(fetcher).toHaveBeenCalledTimes(10);
+    expect(
+      within(screen.getByRole("region", { name: "Loaded record totals" })).getByText(
+        /The display limit has been reached/,
+      ),
+    ).toBeVisible();
   });
   it("times out and never overlaps an abort-ignoring request", async () => {
     vi.useFakeTimers();
