@@ -40,6 +40,14 @@ This is one UI follow-up under DEE-1233. The parent remains open for broader pro
 - WP-1: UTC date controls and strict calendar parsing; filter-aware bounded paging; keyed result reset and late-response rejection; native validity and focus preservation.
 - WP-2: focused date/boundary and rendered tests; mounted browser coverage for filtered pagination, clearing previous results, invalid input, focus, account isolation and revocation; desktop/mobile visual inspection; independent source review.
 
+## Acceptance
+
+- Optional start and through dates use UTC; the through date includes that whole day by sending the following midnight as the exclusive upper bound.
+- Every page request and response check uses the applied period. Changing that period clears prior rows, cursor, coverage and loaded totals, and rejects late responses for the previous period.
+- Invalid or reversed dates preserve the prior valid result and send no request. Applying a valid period preserves form focus.
+- Loaded totals remain exact, separated by currency and record type, with unknown completeness. The change adds no profit claim, trading request or account-isolation exception.
+- Focused tests, mounted browser coverage, build, typecheck, lint and independent review pass; PR CI must pass before integration.
+
 ## Validation and current stage
 
 The six implementation/test files were validated before this publication commit: 37 focused tests across two files, production Next.js build, standalone TypeScript check, repository lint with zero errors and 337 existing warnings, and one mounted Chrome scenario using synthetic tenant/admin responses. Desktop/mobile screenshots were inspected. The independent review passed after the focus and native-validity fixes.
