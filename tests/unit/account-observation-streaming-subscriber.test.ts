@@ -60,6 +60,25 @@ describe("authenticated fetch SSE and serialized fallback, no external network",
     await vi.advanceTimersByTimeAsync(60_000);
     expect(fetcher).toHaveBeenCalledOnce();
   });
+  it.each(["http", "event"])(
+    "%s configuration change stops the invalidated binding without fallback",
+    async (kind) => {
+      const fetcher = vi.fn<typeof fetch>(async () =>
+        kind === "http"
+          ? new Response(JSON.stringify({ error: "ACCOUNT_OBSERVATION_BINDING_CHANGED" }), {
+              status: 409,
+              headers: { "content-type": "application/json" },
+            })
+          : streamed("event: binding-changed\ndata: null\n\n" + sse("observation", observation())),
+      );
+      const { emit } = subscribe(fetcher);
+      await settle();
+      expect(emit).toHaveBeenCalledWith({ type: "binding-changed" });
+      expect(emit.mock.calls.some(([event]) => event.type === "observation")).toBe(false);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(fetcher).toHaveBeenCalledOnce();
+    },
+  );
   it("a revoke event stops even when more frames already arrived", async () => {
     const fetcher = vi.fn<typeof fetch>(async () =>
       streamed(sse("revoked", null) + sse("observation", observation())),

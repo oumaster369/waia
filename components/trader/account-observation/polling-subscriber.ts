@@ -116,6 +116,21 @@ export function createPollingObservationSubscriber({
           signal: controller.signal,
         });
         if (stopped || controller.signal.aborted) return;
+        if (response.status === 409) {
+          const control = await readBoundedObservationJson(response, controller.signal, 8192);
+          if (
+            !control ||
+            typeof control !== "object" ||
+            Object.keys(control).length !== 1 ||
+            !("error" in control) ||
+            control.error !== "ACCOUNT_OBSERVATION_BINDING_CHANGED"
+          )
+            throw new Error("INVALID_BINDING_CONTROL");
+          if (stopped || controller.signal.aborted) return;
+          emit({ type: "binding-changed" });
+          stop();
+          return;
+        }
         if (response.status === 401 || response.status === 403) {
           emit({ type: "revoked" });
           stop();

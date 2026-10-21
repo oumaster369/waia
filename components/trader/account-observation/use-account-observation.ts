@@ -10,7 +10,7 @@ import type {
 export type ObservationEvent =
   | { type: "observation"; observation: AccountObservation }
   | { type: "transport"; transport: "STREAMING" | "POLLING" | "RECONNECTING" }
-  | { type: "connected" | "disconnected" | "error" | "revoked" };
+  | { type: "connected" | "disconnected" | "error" | "revoked" | "binding-changed" };
 
 /** The adapter owns authenticated transport, validation and bounded reconnects.
  * It must honor abort, release resources on unsubscribe and emit no raw errors. */
@@ -51,10 +51,12 @@ export function useAccountObservation({
   binding,
   subscribe,
   staleAfterMs = ACCOUNT_OBSERVATION_STALE_AFTER_MS,
+  onBindingChanged,
 }: {
   binding: ObservationBinding | null;
   subscribe: ObservationSubscriber;
   staleAfterMs?: number;
+  onBindingChanged?: () => void;
 }): AccountObservationView {
   const key = bindingKey(binding);
   const expiryMs =
@@ -107,6 +109,15 @@ export function useAccountObservation({
       if (event.type === "transport") {
         transport = event.transport;
         publish(connection);
+      } else if (event.type === "binding-changed") {
+        revoked = true; // End this exact binding; never reconnect it.
+        transport = undefined;
+        latest = null;
+        publish("LOADING");
+        controller.abort();
+        clearInterval(timer);
+        dispose();
+        onBindingChanged?.();
       } else if (event.type === "revoked") {
         revoked = true;
         transport = undefined;
@@ -172,7 +183,7 @@ export function useAccountObservation({
       clearInterval(timer);
       dispose();
     };
-  }, [key, subscribe, expiryMs, scope]);
+  }, [key, subscribe, expiryMs, scope, onBindingChanged]);
 
   if (!key) return { status: "DISCONNECTED", observation: null, stale: false };
   // Prevent even a single render of previous account/session data before effect cleanup.

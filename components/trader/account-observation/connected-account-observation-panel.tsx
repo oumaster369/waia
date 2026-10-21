@@ -76,6 +76,14 @@ export function ConnectedAccountObservationPanel({
   const [revokedScope, setRevokedScope] = useState<object | null>(null);
   const historyRevoked = revokedScope === scope;
   const onHistoryRevoked = useCallback(() => setRevokedScope(scope), [scope]);
+  // A finite lookup budget per invalidated binding; later legitimate revisions
+  // receive their own budget. Never resume a stream for the invalidated revision.
+  const [recovery, setRecovery] = useState<{
+    scope: object;
+    previous: ObservationBinding;
+  } | null>(null);
+  const activeRecovery = recovery?.scope === scope ? recovery : null;
+  const bindingScope = useMemo(() => ({ scope, activeRecovery }), [scope, activeRecovery]);
   const [stored, setStored] = useState<BindingState | null>(null);
   const subscribe = useMemo(
     () => createStreamingObservationSubscriber({ endpointPath: endpoint, fetcher }),
@@ -87,14 +95,16 @@ export function ConnectedAccountObservationPanel({
     const [credentialId, exchangeAccountId, organizationId] = JSON.parse(key) as string[];
     let stopped = false;
     let failures = 0;
+    let attempts = 0;
     let next: ReturnType<typeof setTimeout> | undefined;
     let deadline: ReturnType<typeof setTimeout> | undefined;
     let request: AbortController | undefined;
     const publish = (status: BindingState["status"], binding: ObservationBinding | null = null) => {
-      if (!stopped) setStored({ scope, status, binding });
+      if (!stopped) setStored({ scope: bindingScope, status, binding });
     };
     const load = async () => {
       if (stopped) return;
+      attempts++;
       const controller = new AbortController();
       request = controller;
       let accepted = false;
@@ -114,7 +124,7 @@ export function ConnectedAccountObservationPanel({
             !observationBindingSchema.shape.organizationId.safeParse(organizationId).success)
         ) {
           stopped = true;
-          setStored({ scope, status: "ERROR", binding: null });
+          setStored({ scope: bindingScope, status: "ERROR", binding: null });
           return;
         }
         const params = new URLSearchParams({ credentialId, exchangeAccountId });
@@ -151,6 +161,22 @@ export function ConnectedAccountObservationPanel({
             (mode === "admin" && binding.organizationId !== organizationId)
           )
             throw new Error("BINDING_MISMATCH");
+          if (
+            activeRecovery &&
+            binding.credentialRevision !== activeRecovery.previous.credentialRevision
+          ) {
+            publish("REVOKED");
+            stopped = true;
+            controller.abort();
+            return;
+          }
+          if (
+            activeRecovery &&
+            (binding.organizationId !== activeRecovery.previous.organizationId ||
+              binding.credentialRevision !== activeRecovery.previous.credentialRevision ||
+              binding.configurationRevision === activeRecovery.previous.configurationRevision)
+          )
+            throw new Error("BINDING_NOT_ADVANCED");
           accepted = true;
           publish("LOADING", binding);
         }
@@ -162,7 +188,7 @@ export function ConnectedAccountObservationPanel({
       } finally {
         clearTimeout(deadline);
         request = undefined;
-        if (!stopped && !accepted)
+        if (!stopped && !accepted && (!activeRecovery || attempts < 3))
           next = setTimeout(
             () => {
               void load();
@@ -183,13 +209,19 @@ export function ConnectedAccountObservationPanel({
       clearTimeout(deadline);
       request?.abort();
     };
-  }, [key, endpoint, fetcher, mode, scope]);
+  }, [key, endpoint, fetcher, mode, bindingScope, activeRecovery]);
 
-  const current = stored?.scope === scope ? stored : null;
+  const current = stored?.scope === bindingScope ? stored : null;
+  const currentBinding = current?.binding ?? null;
+  const onBindingChanged = useCallback(() => {
+    if (!currentBinding) return;
+    setRecovery({ scope, previous: currentBinding });
+  }, [scope, currentBinding]);
   const view = useAccountObservation({
     binding: key && !historyRevoked ? (current?.binding ?? null) : null,
     subscribe,
     staleAfterMs: ACCOUNT_OBSERVATION_STALE_AFTER_MS,
+    onBindingChanged,
   });
   if (historyRevoked)
     return (
@@ -209,8 +241,14 @@ export function ConnectedAccountObservationPanel({
             stale: false,
           }}
         />
-        {current?.status === "NOT_CONFIGURED" || current?.status === "ERROR" ? (
+        {!activeRecovery &&
+        (current?.status === "NOT_CONFIGURED" || current?.status === "ERROR") ? (
           <p className="text-waia-fg-muted text-sm">Checking again automatically.</p>
+        ) : null}
+        {activeRecovery && (current?.status === "ERROR" || current?.status === "NOT_CONFIGURED") ? (
+          <button type="button" onClick={() => setRecovery({ ...activeRecovery })}>
+            Retry current account binding
+          </button>
         ) : null}
         {current?.status !== "REVOKED" ? (
           <PendingHistoryStatus status={current?.status ?? "LOADING"} />
