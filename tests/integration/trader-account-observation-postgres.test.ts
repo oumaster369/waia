@@ -761,11 +761,13 @@ describe.skipIf(!enabled)("DEE-960 actual PostgreSQL 17 fenced observation stora
       expect(tenant.status).toBe(200); expect(adminResponse.status).toBe(200);
       expect(await adminResponse.json()).toEqual(await tenant.json());
     });
-    it("refuses another tenant and stale credential/configuration bindings", async () => {
+    it("refuses foreign or stale credentials and identifies an authorized configuration change", async () => {
       const deps = makeDeps();
       expect((await handleAccountObservationGet(requestFor({ ...b, organizationId: randomUUID() }), "tenant", deps)).status).toBe(403);
       expect((await handleAccountObservationGet(requestFor({ ...b, credentialRevision: "2" }), "tenant", deps)).status).toBe(403);
-      expect((await handleAccountObservationGet(requestFor({ ...b, configurationRevision: "stale-config" }), "tenant", deps)).status).toBe(403);
+      const changed = await handleAccountObservationGet(requestFor({ ...b, configurationRevision: "stale-config" }), "tenant", deps);
+      expect(changed.status).toBe(409);
+      expect(await changed.json()).toEqual({ error: "ACCOUNT_OBSERVATION_BINDING_CHANGED" });
     });
     it("hides a retained derivative projection immediately after credential revocation", async () => {
       await admin`UPDATE exchange_credentials SET status='revoked' WHERE id=${b.credentialId}`;
