@@ -1,12 +1,19 @@
 "use client";
 
+import { useState } from "react";
+
 import type { ObservationBinding } from "@/lib/trader/account-observation/types";
-import type { FinancialHistoryRecord } from "@/lib/trader/account-observation/financial-history";
+import type {
+  FinancialHistoryRequest,
+  FinancialHistoryRecord,
+} from "@/lib/trader/account-observation/financial-history";
 import {
   htxV5BillGroups,
   type HtxV5BillCategory,
 } from "@/lib/trader/account-observation/derivatives/htx-v5-bill-groups";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { financialHistoryPeriodFromDates } from "./financial-history-period";
 import { useFinancialHistory, HISTORY_MAX_ROWS } from "./use-financial-history";
 
 function utc(value: number) {
@@ -106,26 +113,106 @@ function LoadedRecordTotals({
   );
 }
 
-/** Keyed by the parent so another identity cannot render this component's previous state. */
-export function FinancialHistorySection(props: {
+type HistoryProps = {
   binding: ObservationBinding;
   uid: string;
   endpoint: "/api/trader/account-observation" | "/api/trader/admin/account-observation";
   fetcher: typeof fetch;
   onRevoked: () => void;
-}) {
-  const history = useFinancialHistory(props);
-  const busy = history.status === "LOADING" || history.loadingMore;
+};
+
+/** Keyed by the parent so another identity cannot render this component's previous state. */
+export function FinancialHistorySection(props: HistoryProps) {
+  const [startDate, setStartDate] = useState("");
+  const [throughDate, setThroughDate] = useState("");
+  const [filters, setFilters] = useState<FinancialHistoryRequest["filters"]>({
+    windowStartMs: null,
+    windowEndMs: null,
+  });
+  const [error, setError] = useState<string | null>(null);
+  const controls = (
+    <form
+      aria-label="Financial history period"
+      noValidate
+      className="space-y-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!event.currentTarget.checkValidity()) {
+          setError("Complete or clear invalid UTC dates before applying the period.");
+          event.currentTarget.reportValidity();
+          return;
+        }
+        try {
+          setFilters(financialHistoryPeriodFromDates(startDate, throughDate));
+          setError(null);
+        } catch {
+          setError("Enter valid UTC dates with the start on or before the through date.");
+        }
+      }}
+    >
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="space-y-1 text-sm">
+          <span>Start date (UTC)</span>
+          <Input
+            type="date"
+            min="1970-01-01"
+            value={startDate}
+            onChange={(event) => setStartDate(event.target.value)}
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span>Through date (UTC)</span>
+          <Input
+            type="date"
+            min="1970-01-01"
+            value={throughDate}
+            onChange={(event) => setThroughDate(event.target.value)}
+          />
+        </label>
+        <Button type="submit" variant="outline" size="sm">
+          Apply period
+        </Button>
+      </div>
+      <p className="text-waia-fg-muted text-xs">
+        Both dates are included. Leave a date blank for no bound on that side.
+      </p>
+      {error ? (
+        <p role="alert" className="text-sm">
+          {error}
+        </p>
+      ) : null}
+    </form>
+  );
   return (
     <section
       aria-label="Persisted financial history"
       className="border-border space-y-4 rounded-lg border p-4"
     >
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="font-medium">Persisted financial history</h2>
-          <p className="text-waia-fg-muted text-xs">Received records only · completeness unknown</p>
-        </div>
+      <header>
+        <h2 className="font-medium">Persisted financial history</h2>
+        <p className="text-waia-fg-muted text-xs">Received records only · completeness unknown</p>
+      </header>
+      {controls}
+      <FinancialHistoryView
+        key={`${filters.windowStartMs}:${filters.windowEndMs}`}
+        {...props}
+        filters={filters}
+      />
+    </section>
+  );
+}
+
+/** A period change remounts this view before another period can display old rows. */
+function FinancialHistoryView(
+  props: HistoryProps & {
+    filters: FinancialHistoryRequest["filters"];
+  },
+) {
+  const history = useFinancialHistory(props);
+  const busy = history.status === "LOADING" || history.loadingMore;
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
         <Button
           type="button"
           variant="outline"
@@ -135,7 +222,14 @@ export function FinancialHistorySection(props: {
         >
           Refresh history
         </Button>
-      </header>
+      </div>
+      <p className="text-sm">
+        Requested period (UTC):{" "}
+        {props.filters.windowStartMs === null ? "No start bound" : utc(props.filters.windowStartMs)}
+        {" to "}
+        {props.filters.windowEndMs === null ? "No end bound" : utc(props.filters.windowEndMs)}
+        {" · start included, end excluded."}
+      </p>
       <p className="text-waia-fg-muted text-sm">
         Saved records from bounded collection windows, separate from the latest snapshot above.
         Amounts retain their reported sign and currency. No currency conversion or profit
@@ -315,6 +409,6 @@ export function FinancialHistorySection(props: {
           </Button>
         </>
       ) : null}
-    </section>
+    </div>
   );
 }

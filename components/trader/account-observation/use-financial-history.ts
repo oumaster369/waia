@@ -6,6 +6,7 @@ import {
   financialHistoryResponseSchema,
   FINANCIAL_HISTORY_LIMITS,
   type FinancialHistoryResponse,
+  type FinancialHistoryRequest,
 } from "@/lib/trader/account-observation/financial-history";
 import type { ObservationBinding } from "@/lib/trader/account-observation/types";
 import { readBoundedObservationJson } from "./polling-subscriber";
@@ -35,13 +36,16 @@ export function useFinancialHistory({
   endpoint,
   fetcher,
   onRevoked,
+  filters,
 }: {
   binding: ObservationBinding;
   uid: string;
   endpoint: "/api/trader/account-observation" | "/api/trader/admin/account-observation";
   fetcher: typeof fetch;
   onRevoked: () => void;
+  filters: FinancialHistoryRequest["filters"];
 }) {
+  const { windowStartMs, windowEndMs } = filters;
   const [state, setState] = useState<State>(initial);
   const actions = useRef<{ refresh: () => void; more: () => void } | null>(null);
   useEffect(() => {
@@ -88,6 +92,8 @@ export function useFinancialHistory({
           pageSize: String(HISTORY_PAGE_SIZE),
         });
         if (endpoint.includes("/admin/")) params.set("organizationId", binding.organizationId);
+        if (windowStartMs !== null) params.set("windowStartMs", String(windowStartMs));
+        if (windowEndMs !== null) params.set("windowEndMs", String(windowEndMs));
         if (cursor) params.set("cursor", cursor);
         const response = await fetcher(`${endpoint}/financial-history?${params}`, {
           method: "GET",
@@ -125,7 +131,7 @@ export function useFinancialHistory({
             binding,
             pageSize: HISTORY_PAGE_SIZE,
             cursor,
-            filters: { windowStartMs: null, windowEndMs: null },
+            filters: { windowStartMs, windowEndMs },
           },
           page,
         );
@@ -188,7 +194,7 @@ export function useFinancialHistory({
       request?.abort();
       actions.current = null;
     };
-  }, [binding, uid, endpoint, fetcher, onRevoked]);
+  }, [binding, uid, endpoint, fetcher, onRevoked, windowStartMs, windowEndMs]);
   return {
     ...state,
     refresh: () => actions.current?.refresh(),
