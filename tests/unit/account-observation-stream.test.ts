@@ -57,10 +57,26 @@ describe("bounded SSE uses the real scoped read handler with injected storage/au
       const result = await handleAccountObservationStream(request(), (next) =>
         handleAccountObservationGet(next, "admin", deps),
       );
-      expect(result.status).toBe(403);
+      expect(result.status).toBe(field === "configurationRevision" ? 409 : 403);
       expect(deps.readLatest).not.toHaveBeenCalled();
     },
   );
+  it("ends a previously authorized stream with a typed configuration transition", async () => {
+    const deps = dependencies();
+    const response = await handleAccountObservationStream(request(), (next) =>
+      handleAccountObservationGet(next, "admin", deps),
+    );
+    const reader = response.body!.getReader();
+    expect(text(await reader.read())).toContain(observation().observationId);
+    vi.mocked(deps.resolveActiveBinding).mockResolvedValue({
+      ...binding,
+      configurationRevision: "2",
+    });
+    const changed = reader.read();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(text(await changed)).toBe("event: binding-changed\ndata: null\n\n");
+    expect((await reader.read()).done).toBe(true);
+  });
   it("admin stream keeps reading after membership loss and still revokes on operator loss", async () => {
     const deps = dependencies();
     const response = await handleAccountObservationStream(request(), (next) =>

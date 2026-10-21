@@ -137,9 +137,11 @@ export async function handleAccountObservationStream(
       event =
         response.status === 204
           ? "missing"
-          : response.status === 401 || response.status === 403
-            ? "revoked"
-            : "error";
+          : response.status === 409
+            ? "binding-changed"
+            : response.status === 401 || response.status === 403
+              ? "revoked"
+              : "error";
       await response.body?.cancel();
     }
     const bytes = encoder.encode(`event: ${event}\ndata: ${data}\n\n`);

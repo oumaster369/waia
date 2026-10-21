@@ -286,4 +286,113 @@ describe("DEE-961 connected panel (fake HTTP only)", () => {
     expect(screen.getByRole("status")).toHaveTextContent("REVOKED");
     expect(vi.getTimerCount()).toBe(0);
   });
+  it("clears the old revision, bounds discovery across 204, then waits for a natural current snapshot", async () => {
+    const next = { ...binding, configurationRevision: "2" };
+    let lookups = 0;
+    let streams = 0;
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      if (String(input).includes("/binding?")) {
+        lookups++;
+        if (lookups === 2) return new Response(null, { status: 204 });
+        return json(lookups === 1 ? binding : next);
+      }
+      streams++;
+      if (streams === 1) return streamed(observation());
+      if (streams === 2)
+        return new Response(JSON.stringify({ error: "ACCOUNT_OBSERVATION_BINDING_CHANGED" }), {
+          status: 409,
+          headers: { "content-type": "application/json" },
+        });
+      if (streams === 3)
+        return new Response("event: missing\ndata: null\n\n", {
+          headers: { "content-type": "text/event-stream" },
+        });
+      return streamed({
+        ...observation(),
+        binding: next,
+        observationId: "44444444-4444-4444-8444-444444444444",
+      });
+    });
+    render(<ConnectedAccountObservationPanel target={target} fetcher={fetcher} />);
+    await settle();
+    expect(screen.getByText("33333333-3333-4333-8333-333333333333")).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    await settle();
+    expect(screen.queryByText("33333333-3333-4333-8333-333333333333")).not.toBeInTheDocument();
+    expect(lookups).toBe(2);
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    await settle();
+    expect(lookups).toBe(3);
+    expect(screen.queryByText("33333333-3333-4333-8333-333333333333")).not.toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    await settle();
+    expect(screen.getByText("44444444-4444-4444-8444-444444444444")).toBeInTheDocument();
+    expect(
+      String(
+        fetcher.mock.calls.find(([url]) => String(url).includes("configurationRevision=2"))?.[0],
+      ),
+    ).toContain("configurationRevision=2");
+  });
+  it("gives a later legitimate revision its own bounded rediscovery", async () => {
+    let lookups = 0;
+    let streams = 0;
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      if (String(input).includes("/binding?"))
+        return json({ ...binding, configurationRevision: String(++lookups) });
+      streams++;
+      if (streams === 2 || streams === 4)
+        return new Response(JSON.stringify({ error: "ACCOUNT_OBSERVATION_BINDING_CHANGED" }), {
+          status: 409,
+          headers: { "content-type": "application/json" },
+        });
+      return streamed({
+        ...observation(),
+        binding: { ...binding, configurationRevision: String(lookups) },
+        observationId:
+          lookups === 3 ? "55555555-5555-4555-8555-555555555555" : observation().observationId,
+      });
+    });
+    render(<ConnectedAccountObservationPanel target={target} fetcher={fetcher} />);
+    await settle();
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    await settle();
+    expect(lookups).toBe(2);
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    await settle();
+    expect(lookups).toBe(3);
+    expect(screen.getByText("55555555-5555-4555-8555-555555555555")).toBeInTheDocument();
+  });
+  it.each(["same", "foreign", "credential"])(
+    "does not resume invalidated data for %s rediscovery",
+    async (kind) => {
+      let lookups = 0;
+      const next =
+        kind === "foreign"
+          ? { ...binding, exchangeAccountId: "foreign" }
+          : kind === "credential"
+            ? { ...binding, credentialRevision: "2", configurationRevision: "2" }
+            : binding;
+      const fetcher = vi.fn<typeof fetch>(async (input) => {
+        if (String(input).includes("/binding?")) return json(++lookups === 1 ? binding : next);
+        return new Response(JSON.stringify({ error: "ACCOUNT_OBSERVATION_BINDING_CHANGED" }), {
+          status: 409,
+          headers: { "content-type": "application/json" },
+        });
+      });
+      render(<ConnectedAccountObservationPanel target={target} fetcher={fetcher} />);
+      await settle();
+      await act(async () => vi.advanceTimersByTimeAsync(120_000));
+      await settle();
+      expect(lookups).toBe(kind === "credential" ? 2 : 4);
+      expect(fetcher.mock.calls.filter(([url]) => String(url).includes("/stream?"))).toHaveLength(
+        1,
+      );
+      expect(screen.queryByText("33333333-3333-4333-8333-333333333333")).not.toBeInTheDocument();
+      if (kind === "credential") expect(screen.getByRole("status")).toHaveTextContent("REVOKED");
+      else
+        expect(
+          screen.getByRole("button", { name: "Retry current account binding" }),
+        ).toBeInTheDocument();
+    },
+  );
 });

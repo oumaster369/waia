@@ -40,8 +40,24 @@ const headers = {
   Vary: "Cookie",
   "X-Content-Type-Options": "nosniff",
 };
+// Only an authorized configuration-only transition may trigger binding rediscovery.
+function configurationChanged(a: ObservationBinding, b: ObservationBinding): boolean {
+  return (
+    a.organizationId === b.organizationId &&
+    a.credentialId === b.credentialId &&
+    a.exchangeAccountId === b.exchangeAccountId &&
+    a.credentialRevision === b.credentialRevision &&
+    a.configurationRevision !== b.configurationRevision
+  );
+}
 const error = (status: number) =>
-  Response.json({ error: "ACCOUNT_OBSERVATION_UNAVAILABLE" }, { status, headers });
+  Response.json(
+    {
+      error:
+        status === 409 ? "ACCOUNT_OBSERVATION_BINDING_CHANGED" : "ACCOUNT_OBSERVATION_UNAVAILABLE",
+    },
+    { status, headers },
+  );
 
 /** Shared Admin/tenant HTTP adapter. No exchange credential access.
  * Every poll independently validates session, entitlement and account, then rechecks before return.
@@ -204,7 +220,9 @@ export async function handleAccountObservationGet(
         mode === "observation" &&
         !sameObservationBinding(binding, observationBindingSchema.parse(scope))
       )
-        return fail(403);
+        return fail(
+          configurationChanged(observationBindingSchema.parse(scope), binding) ? 409 : 403,
+        );
       trace?.enter("PROJECTION_REQUEST");
       const historyRequest =
         mode === "financial-history"
@@ -220,7 +238,8 @@ export async function handleAccountObservationGet(
       if (!(await allowed())) return fail(403);
       trace?.enter("PROJECTION_REQUEST");
       const after = await deps.resolveActiveBinding(binding, userId, abort.signal);
-      if (!after || !sameObservationBinding(after, binding)) return fail(403);
+      if (!after || !sameObservationBinding(after, binding))
+        return fail(after && configurationChanged(binding, after) ? 409 : 403);
       if (abort.signal.aborted) return fail(503);
       if (!stored) return new Response(null, { status: 204, headers });
       trace?.enter("OBSERVATION_VALIDATION");
