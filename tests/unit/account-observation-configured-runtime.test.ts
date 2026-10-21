@@ -85,6 +85,17 @@ function withV5(item: ConfiguredHtxObservationAssignment,
   const config = createObservationConfiguration({ ...parameters, leaseTtlMs: 120_401, htxV5 });
   return { ...item, config, binding: { ...item.binding, configurationRevision: config.revision } };
 }
+function withV5Bills(item: ConfiguredHtxObservationAssignment) {
+  const base = withV5(item);
+  const { revision: _revision, ...parameters } = base.config;
+  const now = Date.now();
+  const config = createObservationConfiguration({ ...parameters, htxV5: {
+    ...base.config.htxV5!,
+    financialHistory: { enabled: true, scopeId: "00000000-0000-4000-8000-000000000003",
+      windowStartMs: now - 10_000, windowEndMs: now, validFromMs: now, validUntilMs: now + 300_000 },
+  } });
+  return { ...base, config, binding: { ...base.binding, configurationRevision: config.revision } };
+}
 function setup(overrides: Partial<Input> = {}) {
   const item = assignment();
   const collectorSql = { purpose: "collector" } as unknown as Sql;
@@ -261,6 +272,33 @@ describe("configured observation runtime, real local composition with mock persi
       expect(options).toMatchObject({ method: "GET", redirect: "error" });
     }
     expect(JSON.stringify(ports.commitIfCurrent.mock.calls)).not.toMatch(/synthetic|Signature|AccessKey|apiSecret/);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("reports only bounded bills diagnostics from the normal read without changing the stored result", async () => {
+    const f = setup();
+    const item = withV5Bills(f.item);
+    f.input.configured = [item];
+    f.input.iterationTimeoutMs = 200_000;
+    const ordinaryFetch = f.fetchImpl.getMockImplementation()!;
+    f.fetchImpl.mockImplementation((url, options) => {
+      const target = new URL(String(url));
+      if (target.hostname === "api.hbdm.com" && target.pathname === "/v5/account/bills")
+        return Promise.resolve(Response.json({ code: 201, data: [], ts: Date.now() }));
+      return ordinaryFetch(url, options);
+    });
+    const diagnostic = vi.fn(() => { throw new Error("diagnostic sink failure"); });
+    f.input.reportHtxV5BillsDiagnostic = diagnostic;
+
+    await stopAfterTick(f);
+
+    expect(diagnostic).toHaveBeenCalledTimes(1);
+    expect(diagnostic).toHaveBeenCalledWith({ reason: "BILLS_CODE_INVALID",
+      code: { httpStatus: 200, codeType: "NUMBER", decimalToken: "201" } });
+    expect(ports.commitIfCurrent).toHaveBeenCalledTimes(1);
+    expect(ports.commitIfCurrent.mock.calls[0][0].observation.htxV5.bills).toMatchObject({
+      status: "ERROR", error: "INVALID_RESPONSE", values: null,
+    });
+    expect(JSON.stringify(diagnostic.mock.calls)).not.toMatch(/synthetic-key|synthetic-secret|456|apiSecret|body/);
     expect(vi.getTimerCount()).toBe(0);
   });
   it("aborts a real configured V5 read on shutdown and settles its late body before releasing ownership", async () => {

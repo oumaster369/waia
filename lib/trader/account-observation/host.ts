@@ -7,6 +7,7 @@ import { observationBindingSchema } from "./validation";
 import { htxObservationCoverageSchema, htxObservationReaderLimitsSchema } from "./coverage";
 import { observationPoolLimits, observationReaderPoolLimits, probeObservationPool } from "./host-role-probe";
 import type { ObservationClock } from "./types";
+import type { HtxV5BillsDiagnosticEvent } from "./derivatives/htx-v5-read-contract";
 
 type OwnedResource = Readonly<{ dispose(): Promise<void> }>;
 export type ObservationSqlResource = OwnedResource & Readonly<{ sql: Sql }>;
@@ -24,6 +25,7 @@ export type ObservationHostInput = Readonly<{
   openReader(signal: AbortSignal, limits: typeof observationReaderPoolLimits): Promise<ObservationSqlResource>;
   openCredentialService(signal: AbortSignal): Promise<ObservationCredentialResource>;
   fetchImpl: typeof fetch; clock: ObservationClock; report(event: ObservationHostEvent): void;
+  reportHtxV5BillsDiagnostic?(event: HtxV5BillsDiagnosticEvent): void;
 }>;
 const failure = () => new Error("ACCOUNT_OBSERVATION_HOST_FAILED");
 const aborted = () => new Error("ACCOUNT_OBSERVATION_HOST_ABORTED");
@@ -32,6 +34,7 @@ function validate(input: ObservationHostInput) {
   try {
     if (!input || [input.openCollector, input.openReader, input.openCredentialService, input.fetchImpl,
       input.clock?.now, input.clock?.sleep, input.report].some(fn => typeof fn !== "function") ||
+      input.reportHtxV5BillsDiagnostic !== undefined && typeof input.reportHtxV5BillsDiagnostic !== "function" ||
       typeof input.ownerId !== "string" || !/^[A-Za-z0-9._:-]{1,128}$/.test(input.ownerId) ||
       !["api.huobi.pro", "api-aws.huobi.pro"].includes(input.host) ||
       !Number.isSafeInteger(input.intervalMs) || input.intervalMs < 1000 || input.intervalMs > 86400000 ||

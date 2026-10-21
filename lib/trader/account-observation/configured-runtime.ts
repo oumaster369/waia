@@ -16,6 +16,8 @@ import { openHtxObservationReader, type HtxObservationCredentialHandle } from ".
 import { createHtxReadAdmission } from "./htx-read-admission";
 import { createHtxDerivativesObservationReader } from "./derivatives/reader";
 import { createHtxV5ObservationReader } from "./derivatives/htx-v5-reader";
+import { createHtxV5BillsDiagnostics, discardHtxV5BillsDiagnostic } from "./derivatives/htx-v5-read-contract";
+import type { HtxV5BillsDiagnosticEvent } from "./derivatives/htx-v5-read-contract";
 import { HTX_V5_READ_BUDGET_MS } from "./types";
 import type { HtxV5ObservationReader } from "./derivatives/htx-v5-reader";
 import type { HtxObservationReaderOptions } from "./htx-reader";
@@ -57,6 +59,7 @@ export function createConfiguredHtxObservationRuntime(
     verifyReadAdmission?: AdmissionVerifier;
     clock: ObservationClock;
     report(event: ObservationRuntimeEvent): void;
+    reportHtxV5BillsDiagnostic?(event: HtxV5BillsDiagnosticEvent): void;
     ownerId: string;
     intervalMs: number;
     iterationTimeoutMs: number;
@@ -125,6 +128,7 @@ export function createConfiguredHtxObservationRuntime(
     verifyReadAdmission,
     clock,
     report,
+    reportHtxV5BillsDiagnostic,
     ownerId,
     intervalMs,
     iterationTimeoutMs,
@@ -299,6 +303,7 @@ export function createConfiguredHtxObservationRuntime(
       let admission: ReturnType<typeof createHtxReadAdmission> | undefined;
       let derivatives: ReturnType<typeof createHtxDerivativesObservationReader> | undefined;
       let htxV5Reader: HtxV5ObservationReader | undefined;
+      let htxV5BillsDiagnostics: ReturnType<typeof createHtxV5BillsDiagnostics> | undefined;
       let openerWork: Promise<void> | undefined;
       let openedDone!: () => void;
       const openingDone = new Promise<void>(resolve => { openedDone = resolve; });
@@ -373,6 +378,9 @@ export function createConfiguredHtxObservationRuntime(
                   derivativeReaders.add(derivatives);
                 }
                 if (config.htxV5?.enabled) {
+                  htxV5BillsDiagnostics = config.htxV5.financialHistory
+                    ? createHtxV5BillsDiagnostics()
+                    : undefined;
                   htxV5Reader = createHtxV5ObservationReader({
                     credential: handle,
                     clock,
@@ -383,6 +391,7 @@ export function createConfiguredHtxObservationRuntime(
                     expectedPermission: config.existingKeyReadConsentId ? "readOnly,trade" : "readOnly",
                     ...(config.htxV5.fillContracts ? { contracts: config.htxV5.fillContracts } : {}),
                     ...(config.htxV5.financialHistory ? { financialHistory: config.htxV5.financialHistory } : {}),
+                    ...(htxV5BillsDiagnostics ? { billsDiagnosticSink: htxV5BillsDiagnostics.sink } : {}),
                     authorizeCurrent: source.authorizeOpen,
                   });
                   htxV5Readers.set(htxV5Reader, accountKey);
@@ -444,10 +453,26 @@ export function createConfiguredHtxObservationRuntime(
           readTrades: reader.readTrades,
           settled: reader.settled,
           ...(derivatives ? { readDerivativesAccount: derivatives.readDerivativesAccount } : {}),
-          ...(htxV5Reader ? { readHtxV5: async (requestSignal: AbortSignal) => Object.freeze({
-            binding: readerOptions.binding,
-            projection: await htxV5Reader!.read(requestSignal),
-          }) } : {}),
+          ...(htxV5Reader ? { readHtxV5: async (requestSignal: AbortSignal) => {
+            const projection = await htxV5Reader!.read(requestSignal);
+            const reason = htxV5BillsDiagnostics?.read();
+            try {
+              if (projection.schemaVersion === "htx-v5-observation/v2" &&
+                  projection.bills.error === "INVALID_RESPONSE" && reason && reportHtxV5BillsDiagnostic) {
+                const code = reason === "BILLS_CODE_INVALID"
+                  ? htxV5BillsDiagnostics?.readCodeDiagnostic() ?? undefined
+                  : undefined;
+                try {
+                  reportHtxV5BillsDiagnostic(Object.freeze({ reason, ...(code ? { code } : {}) }));
+                } catch {
+                  // Optional diagnostics must never affect the observation result or lease lifecycle.
+                }
+              }
+            } finally {
+              if (htxV5BillsDiagnostics) discardHtxV5BillsDiagnostic(htxV5BillsDiagnostics.sink);
+            }
+            return Object.freeze({ binding: readerOptions.binding, projection });
+          } } : {}),
           dispose() {
             if (released) return;
             released = true;

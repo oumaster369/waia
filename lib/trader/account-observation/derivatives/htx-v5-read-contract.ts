@@ -47,6 +47,11 @@ export type HtxV5BillsCodeDiagnostic = Readonly<{
   codeType: "MISSING" | "STRING" | "NUMBER" | "BOOLEAN" | "NULL" | "OBJECT" | "ARRAY";
   decimalToken?: string;
 }>;
+/** Narrow host-only diagnostic event. It intentionally carries no account or response data. */
+export type HtxV5BillsDiagnosticEvent = Readonly<{
+  reason: HtxV5BillsDiagnosticReason;
+  code?: HtxV5BillsCodeDiagnostic;
+}>;
 type BillsDiagnosticState = { reason: HtxV5BillsDiagnosticReason | null; httpStatus: 200 | null; codeDiagnostic?: HtxV5BillsCodeDiagnostic };
 const billsDiagnosticStates = new WeakMap<HtxV5BillsDiagnosticSink, BillsDiagnosticState>();
 const BILLS_CODE_TYPES: readonly HtxV5BillsCodeDiagnostic["codeType"][] = Object.freeze([

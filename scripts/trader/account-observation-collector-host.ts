@@ -34,6 +34,7 @@ import {
 import { observationPoolLimits, observationReaderPoolLimits, probeObservationCredentialPool } from "@/lib/trader/account-observation/host-role-probe";
 import { isProductionDeployment } from "@/lib/trader/security/deployment-tier";
 import { SecretsStoreMasterKeyProvider } from "@/lib/trader/security/secrets-store-master-key-provider";
+import type { HtxV5BillsDiagnosticEvent } from "@/lib/trader/account-observation/derivatives/htx-v5-read-contract";
 
 export const ACCOUNT_OBSERVATION_COLLECTOR_SERVICE = "ai-trader-account-observation-host";
 export const ACCOUNT_OBSERVATION_COLLECTOR_STARTED =
@@ -287,6 +288,8 @@ export type AccountObservationCollectorDependencies = Readonly<{
   fetchImpl?: typeof fetch;
   clock?: typeof accountObservationClock;
   report?(event: ObservationHostEvent): void;
+  /** Fixed, response-free V5 bills diagnostics; callback failures are ignored. */
+  reportHtxV5BillsDiagnostic?(event: HtxV5BillsDiagnosticEvent): void;
   onStarted?(
     started: Readonly<{
       assignments: number;
@@ -323,6 +326,13 @@ export async function runAccountObservationCollector(
     ((event: ObservationHostEvent) => {
       process.stdout.write(`[${ACCOUNT_OBSERVATION_COLLECTOR_SERVICE}] ${event}\n`);
     });
+  const reportHtxV5BillsDiagnostic = dependencies.reportHtxV5BillsDiagnostic ??
+    ((event: HtxV5BillsDiagnosticEvent) => {
+      process.stdout.write(`[${ACCOUNT_OBSERVATION_COLLECTOR_SERVICE}] ${JSON.stringify({
+        event: "htx_v5_bills_diagnostic",
+        ...event,
+      })}\n`);
+    });
   const host = createAccountObservationHost({
     configured: trusted.configured,
     host: trusted.host,
@@ -339,6 +349,7 @@ export async function runAccountObservationCollector(
     fetchImpl: dependencies.fetchImpl ?? fetch,
     clock: dependencies.clock ?? accountObservationClock,
     report,
+    reportHtxV5BillsDiagnostic,
   });
 
   dependencies.onStarted?.(
