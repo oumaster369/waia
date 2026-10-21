@@ -59,7 +59,7 @@ export function createConfiguredHtxObservationRuntime(
     verifyReadAdmission?: AdmissionVerifier;
     clock: ObservationClock;
     report(event: ObservationRuntimeEvent): void;
-    reportHtxV5BillsDiagnostic?(event: HtxV5BillsDiagnosticEvent): void;
+    reportHtxV5BillsDiagnostic?(event: HtxV5BillsDiagnosticEvent): void | Promise<void>;
     ownerId: string;
     intervalMs: number;
     iterationTimeoutMs: number;
@@ -463,7 +463,11 @@ export function createConfiguredHtxObservationRuntime(
                   ? htxV5BillsDiagnostics?.readCodeDiagnostic() ?? undefined
                   : undefined;
                 try {
-                  reportHtxV5BillsDiagnostic(Object.freeze({ reason, ...(code ? { code } : {}) }));
+                  void Promise.resolve(reportHtxV5BillsDiagnostic(Object.freeze({
+                    stage: "READ_COMPLETED", reason, ...(code ? { code } : {}),
+                  }))).catch(() => {
+                    // A rejected reporter cannot own the read, commit, or lease lifecycle.
+                  });
                 } catch {
                   // Optional diagnostics must never affect the observation result or lease lifecycle.
                 }

@@ -288,8 +288,8 @@ export type AccountObservationCollectorDependencies = Readonly<{
   fetchImpl?: typeof fetch;
   clock?: typeof accountObservationClock;
   report?(event: ObservationHostEvent): void;
-  /** Fixed, response-free V5 bills diagnostics; callback failures are ignored. */
-  reportHtxV5BillsDiagnostic?(event: HtxV5BillsDiagnosticEvent): void;
+  /** Fixed read-phase diagnostics, not commit evidence; callback failures are ignored. */
+  reportHtxV5BillsDiagnostic?(event: HtxV5BillsDiagnosticEvent): void | Promise<void>;
   onStarted?(
     started: Readonly<{
       assignments: number;

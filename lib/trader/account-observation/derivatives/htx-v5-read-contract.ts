@@ -47,8 +47,9 @@ export type HtxV5BillsCodeDiagnostic = Readonly<{
   codeType: "MISSING" | "STRING" | "NUMBER" | "BOOLEAN" | "NULL" | "OBJECT" | "ARRAY";
   decimalToken?: string;
 }>;
-/** Narrow host-only diagnostic event. It intentionally carries no account or response data. */
+/** Host-only read-phase event, not evidence of a committed observation. No account or response data. */
 export type HtxV5BillsDiagnosticEvent = Readonly<{
+  stage: "READ_COMPLETED";
   reason: HtxV5BillsDiagnosticReason;
   code?: HtxV5BillsCodeDiagnostic;
 }>;

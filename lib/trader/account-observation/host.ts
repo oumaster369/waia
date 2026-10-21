@@ -25,7 +25,7 @@ export type ObservationHostInput = Readonly<{
   openReader(signal: AbortSignal, limits: typeof observationReaderPoolLimits): Promise<ObservationSqlResource>;
   openCredentialService(signal: AbortSignal): Promise<ObservationCredentialResource>;
   fetchImpl: typeof fetch; clock: ObservationClock; report(event: ObservationHostEvent): void;
-  reportHtxV5BillsDiagnostic?(event: HtxV5BillsDiagnosticEvent): void;
+  reportHtxV5BillsDiagnostic?(event: HtxV5BillsDiagnosticEvent): void | Promise<void>;
 }>;
 const failure = () => new Error("ACCOUNT_OBSERVATION_HOST_FAILED");
 const aborted = () => new Error("ACCOUNT_OBSERVATION_HOST_ABORTED");

@@ -274,7 +274,8 @@ describe("configured observation runtime, real local composition with mock persi
     expect(JSON.stringify(ports.commitIfCurrent.mock.calls)).not.toMatch(/synthetic|Signature|AccessKey|apiSecret/);
     expect(vi.getTimerCount()).toBe(0);
   });
-  it("reports only bounded bills diagnostics from the normal read without changing the stored result", async () => {
+  it.each(["synchronous failure", "asynchronous rejection", "unsettled reporter", "fenced commit"])(
+    "isolates read-phase diagnostics from the observation lifecycle: %s", async (scenario) => {
     const f = setup();
     const item = withV5Bills(f.item);
     f.input.configured = [item];
@@ -286,13 +287,18 @@ describe("configured observation runtime, real local composition with mock persi
         return Promise.resolve(Response.json({ code: 201, data: [], ts: Date.now() }));
       return ordinaryFetch(url, options);
     });
-    const diagnostic = vi.fn(() => { throw new Error("diagnostic sink failure"); });
+    const diagnostic = vi.fn(() => {
+      if (scenario === "asynchronous rejection") return Promise.reject(new Error("diagnostic sink failure"));
+      if (scenario === "unsettled reporter") return new Promise<void>(() => {});
+      if (scenario === "synchronous failure") throw new Error("diagnostic sink failure");
+    });
+    if (scenario === "fenced commit") ports.commitIfCurrent.mockResolvedValue(false);
     f.input.reportHtxV5BillsDiagnostic = diagnostic;
 
     await stopAfterTick(f);
 
     expect(diagnostic).toHaveBeenCalledTimes(1);
-    expect(diagnostic).toHaveBeenCalledWith({ reason: "BILLS_CODE_INVALID",
+    expect(diagnostic).toHaveBeenCalledWith({ stage: "READ_COMPLETED", reason: "BILLS_CODE_INVALID",
       code: { httpStatus: 200, codeType: "NUMBER", decimalToken: "201" } });
     expect(ports.commitIfCurrent).toHaveBeenCalledTimes(1);
     expect(ports.commitIfCurrent.mock.calls[0][0].observation.htxV5.bills).toMatchObject({
