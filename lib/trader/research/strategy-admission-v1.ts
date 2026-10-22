@@ -78,6 +78,11 @@ const EULER = 0.5772156649015329;
 export type StrategyAdmissionSplit = "is" | "validation" | "holdout";
 export type StrategyAdmissionKind = "event" | "continuous";
 export type StrategyAdmissionSide = "long" | "short" | "two_sided";
+export type StrategyAdmissionSplitUse = Readonly<{
+  specSha256: string;
+  hypothesisId: string;
+  split: "validation" | "holdout";
+}>;
 export type StrategyAdmissionVerdict =
   | "candidate"
   | "rejected"
@@ -207,6 +212,7 @@ type StrategyAdmissionJournalLine =
 export class AppendOnlyStrategyAdmissionJournal {
   protected readonly rows: StrategyAdmissionJournalRow[] = [];
   protected readonly families = new Map<string, number>();
+  private readonly committedSplitUses = new Set<string>();
   durable = false;
 
   /** In-process durable cache. Postgres load/commit is what survives a new process. */
@@ -219,6 +225,7 @@ export class AppendOnlyStrategyAdmissionJournal {
   static fromSnapshot(snapshot: {
     families: readonly { specSha256: string; familySize: number }[];
     rows: readonly StrategyAdmissionJournalRow[];
+    splitUses?: readonly (Omit<StrategyAdmissionSplitUse, "split"> & { split: string })[];
   }): AppendOnlyStrategyAdmissionJournal {
     const journal = AppendOnlyStrategyAdmissionJournal.openDurableMemory();
     for (const family of snapshot.families) {
@@ -227,6 +234,16 @@ export class AppendOnlyStrategyAdmissionJournal {
         throw new StrategyAdmissionError("family_size_mismatch");
       }
       journal.families.set(family.specSha256, family.familySize);
+    }
+    for (const use of snapshot.splitUses ?? []) {
+      if (!use || typeof use.specSha256 !== "string" ||
+          !/^[a-f0-9]{64}(?![\s\S])/.test(use.specSha256) ||
+          typeof use.hypothesisId !== "string" || [...use.hypothesisId].length < 1 ||
+          [...use.hypothesisId].length > 128 ||
+          (use.split !== "validation" && use.split !== "holdout")) {
+        throw new StrategyAdmissionError("admission_journal_unavailable", "invalid committed split use");
+      }
+      journal.committedSplitUses.add(JSON.stringify([use.specSha256, use.hypothesisId, use.split]));
     }
     const ordered = [...snapshot.rows].sort((left, right) => left.rowIndex - right.rowIndex);
     for (const row of ordered) {
@@ -303,18 +320,20 @@ export class AppendOnlyStrategyAdmissionJournal {
     return stored;
   }
 
-  splitUseCount(input: {
-    specSha256: string;
-    hypothesisId: string;
-    split: "validation" | "holdout";
-  }): number {
-    return this.rows.filter(
+  splitUseCount(input: StrategyAdmissionSplitUse): number {
+    const scoredUses = this.rows.filter(
       (row) =>
         row.specSha256 === input.specSha256 &&
         row.hypothesisId === input.hypothesisId &&
         row.split === input.split &&
         row.countsAsSplitUse,
     ).length;
+    // A pre-disclosure consume survives even if no scored result was committed.
+    // It is spent state, not a fabricated metric row or a second use of a scored row.
+    const committedUse = this.committedSplitUses.has(
+      JSON.stringify([input.specSha256, input.hypothesisId, input.split]),
+    ) ? 1 : 0;
+    return Math.max(scoredUses, committedUse);
   }
 
   assertSplitAvailable(input: {
