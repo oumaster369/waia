@@ -31,8 +31,9 @@ test("persisted history paging, selected account isolation, empty coverage and r
       writes.push(`${req.method()} ${path}`);
   });
   let denied = false;
+  const periodGate: { release?: () => void } = {};
   const historyRequests: string[] = [];
-  await context.route("**/api/trader/**account-observation**", (route) => {
+  await context.route("**/api/trader/**account-observation**", async (route) => {
     const url = new URL(route.request().url());
     const exact = {
       ...binding,
@@ -41,6 +42,29 @@ test("persisted history paging, selected account isolation, empty coverage and r
     if (url.pathname.endsWith("/financial-history")) {
       historyRequests.push(url.toString());
       if (denied) return route.fulfill({ status: 403 });
+      const requestedStart = url.searchParams.get("windowStartMs");
+      if (requestedStart !== null) {
+        const start = Number(requestedStart);
+        const isFirstPeriod = start === Date.parse("2026-03-08T00:00:00Z");
+        if (!isFirstPeriod)
+          await new Promise<void>((resolve) => {
+            periodGate.release = resolve;
+          });
+        const more = url.searchParams.has("cursor");
+        const filtered = historyPage(
+          [isFirstPeriod ? (more ? "20002" : "20001") : "30001"],
+          isFirstPeriod && !more ? cursor(2) : null,
+          exact,
+        );
+        filtered.records[0].bill.createdTimeMs = start + 1000;
+        filtered.records[0].bill.amount = isFirstPeriod ? (more ? "-0.01" : "4.01") : "8";
+        Object.assign(filtered.coverage[0].provenance, {
+          windowStartMs: start,
+          windowEndMs: start + 86_400_000,
+        });
+        if (more) filtered.coverage = [];
+        return route.fulfill({ json: filtered });
+      }
       const pageData =
         exact.exchangeAccountId === "account-b"
           ? historyPage([], null, exact)
@@ -104,6 +128,62 @@ test("persisted history paging, selected account isolation, empty coverage and r
     totals.getByRole("cell", { name: "-1.500000000000000002", exact: true }),
   ).toBeVisible();
   await expect(totals.getByText(/completeness is unknown/)).toBeVisible();
+  const startInput = panel.getByLabel("Start date (UTC)");
+  const throughInput = panel.getByLabel("Through date (UTC)");
+  const apply = panel.getByRole("button", { name: "Apply period" });
+  await startInput.fill("2026-03-08");
+  await throughInput.fill("2026-03-08");
+  await apply.focus();
+  await page.keyboard.press("Enter");
+  await expect(apply).toBeFocused();
+  await expect(panel.getByText("20001", { exact: true })).toBeVisible();
+  await expect(panel.getByText("10001", { exact: true })).toHaveCount(0);
+  await expect(panel.getByText("10002", { exact: true })).toHaveCount(0);
+  await panel.getByRole("button", { name: "Load more history" }).click();
+  await expect(panel.getByText("20002", { exact: true })).toBeVisible();
+  await expect(totals.getByRole("cell", { name: "4", exact: true })).toBeVisible();
+  const filteredRequests = historyRequests
+    .map((url) => new URL(url))
+    .filter(
+      (url) => url.searchParams.get("windowStartMs") === String(Date.parse("2026-03-08T00:00:00Z")),
+    );
+  expect(filteredRequests).toHaveLength(2);
+  expect(
+    filteredRequests.every(
+      (url) => url.searchParams.get("windowEndMs") === String(Date.parse("2026-03-09T00:00:00Z")),
+    ),
+  ).toBe(true);
+  expect(filteredRequests[0].searchParams.has("cursor")).toBe(false);
+  expect(filteredRequests[1].searchParams.get("cursor")).toBe(cursor(2));
+  // Native invalidity must not turn an incomplete optional date into an open bound.
+  await startInput.evaluate((el: HTMLInputElement) => el.setCustomValidity("Complete the date"));
+  const beforeInvalid = historyRequests.length;
+  await apply.click();
+  await expect(panel.getByRole("alert")).toHaveText(
+    "Complete or clear invalid UTC dates before applying the period.",
+  );
+  expect(historyRequests).toHaveLength(beforeInvalid);
+  await expect(panel.getByText("20001", { exact: true })).toBeVisible();
+  await startInput.evaluate((el: HTMLInputElement) => el.setCustomValidity(""));
+  await startInput.fill("2026-03-09");
+  await throughInput.fill("2026-03-09");
+  await apply.focus();
+  await page.keyboard.press("Enter");
+  await expect(apply).toBeFocused();
+  await expect(panel.getByText("20001", { exact: true })).toHaveCount(0);
+  await expect(panel.getByText("20002", { exact: true })).toHaveCount(0);
+  await expect(totals).toHaveCount(0);
+  await expect.poll(() => periodGate.release !== undefined).toBe(true);
+  periodGate.release!();
+  await expect(panel.getByText("30001", { exact: true })).toBeVisible();
+  await expect(apply).toBeFocused();
+  expect(new URL(historyRequests.at(-1)!).searchParams.has("cursor")).toBe(false);
+  await expect(panel.getByText(/completeness unknown/).first()).toBeVisible();
+  await expect(
+    panel
+      .getByRole("region", { name: "Profit calculation availability" })
+      .getByText("Unavailable", { exact: true }),
+  ).toHaveCount(2);
   await panel.screenshot({ path: info.outputPath("history-desktop.png") });
   await page.setViewportSize({ width: 390, height: 844 });
   await panel.screenshot({ path: info.outputPath("history-mobile.png") });
@@ -140,5 +220,9 @@ test("persisted history paging, selected account isolation, empty coverage and r
     historyRequests.every((url) => !/credentialRevision|configurationRevision|htxUid/.test(url)),
   ).toBe(true);
   expect(writes).toEqual([]);
+  await info.attach("period-history-requests", {
+    body: JSON.stringify({ historyRequests, writes }, null, 2),
+    contentType: "application/json",
+  });
   await admin.close();
 });

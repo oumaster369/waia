@@ -50,6 +50,125 @@ function connectedFetcher(history: typeof fetch, getObservation = () => observat
   });
 }
 describe("DEE-1249 persisted history", () => {
+  const applyPeriod = (start: string, through: string) => {
+    fireEvent.change(screen.getByLabelText("Start date (UTC)"), { target: { value: start } });
+    fireEvent.change(screen.getByLabelText("Through date (UTC)"), { target: { value: through } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply period" }));
+  };
+  const periodPage = (day: string, ids = ["10001"], next: string | null = null) => {
+    const page = historyPage(ids, next);
+    const start = Date.parse(`${day}T00:00:00.000Z`);
+    for (const record of page.records) record.bill.createdTimeMs = start + 1000;
+    // All fixture rows share the source provenance, including coverage.
+    Object.assign(page.coverage[0].provenance, {
+      windowStartMs: start,
+      windowEndMs: start + 86_400_000,
+    });
+    return page;
+  };
+  it("requests the applied UTC period on every page and keeps exact loaded-only totals", async () => {
+    const first = periodPage("2026-03-08", ["10001"], cursor(1));
+    const second = periodPage("2026-03-08", ["10001", "10002"]);
+    second.coverage = first.coverage;
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json(historyPage()))
+      .mockResolvedValueOnce(json(first))
+      .mockResolvedValueOnce(json(second));
+    render(section(fetcher));
+    await settle();
+    applyPeriod("2026-03-08", "2026-03-09");
+    expect(
+      screen.queryByRole("list", { name: "Persisted financial records" }),
+    ).not.toBeInTheDocument();
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Load more history" }));
+    await settle();
+    for (const call of fetcher.mock.calls.slice(1)) {
+      const params = new URL(String(call[0]), "https://example.test").searchParams;
+      expect(params.get("windowStartMs")).toBe(String(Date.parse("2026-03-08T00:00:00Z")));
+      expect(params.get("windowEndMs")).toBe(String(Date.parse("2026-03-10T00:00:00Z")));
+    }
+    expect(String(fetcher.mock.calls[1][0])).not.toContain("cursor=");
+    expect(String(fetcher.mock.calls[2][0])).toContain(`cursor=${cursor(1)}`);
+    const totals = screen.getByRole("region", { name: "Loaded record totals" });
+    expect(within(totals).getByText("-1.500000000000000002")).toBeVisible();
+    expect(within(totals).getByText(/not the full account or period/)).toBeVisible();
+    expect(
+      within(screen.getByRole("region", { name: "Profit calculation availability" })).getAllByText(
+        "Unavailable",
+      ),
+    ).toHaveLength(2);
+  });
+  it("clears period rows and ignores a late response from an aborted previous period", async () => {
+    let resolveOld!: (response: Response) => void;
+    const old = periodPage("2026-03-08");
+    old.records[0].bill.amount = "99";
+    const current = periodPage("2026-03-09", ["10002"]);
+    current.records[0].bill.amount = "7";
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json(historyPage()))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOld = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(json(current));
+    render(section(fetcher));
+    await settle();
+    applyPeriod("2026-03-08", "2026-03-08");
+    await settle();
+    const oldSignal = fetcher.mock.calls[1][1]?.signal;
+    applyPeriod("2026-03-09", "2026-03-09");
+    expect(
+      screen.queryByRole("list", { name: "Persisted financial records" }),
+    ).not.toBeInTheDocument();
+    expect(oldSignal?.aborted).toBe(true);
+    await settle();
+    resolveOld(json(old));
+    await settle();
+    expect(screen.getByText("7 USDT")).toBeVisible();
+    expect(screen.queryByText("99 USDT")).not.toBeInTheDocument();
+    expect(String(fetcher.mock.calls[2][0])).not.toContain("cursor=");
+  });
+  it("keeps the period controls mounted and rejects native invalid dates without broadening bounds", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json(historyPage()));
+    render(section(fetcher));
+    await settle();
+    const start = screen.getByLabelText("Start date (UTC)") as HTMLInputElement;
+    const apply = screen.getByRole("button", { name: "Apply period" });
+    start.focus();
+    fireEvent.change(start, { target: { value: "1969-12-31" } });
+    expect(start.validity.rangeUnderflow).toBe(true);
+    fireEvent.click(apply);
+    await settle();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("alert")).toHaveTextContent("Complete or clear invalid UTC dates");
+    expect(screen.getByText("-0.750000000000000001 USDT")).toBeVisible();
+    applyPeriod("2026-03-08", "2026-03-09");
+    expect(screen.getByLabelText("Start date (UTC)")).toBe(start);
+    expect(screen.getByRole("button", { name: "Apply period" })).toBe(apply);
+    await settle();
+  });
+  it("rejects reversed dates without fetching and rejects an out-of-period response", async () => {
+    const outside = periodPage("2026-03-10");
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json(historyPage()))
+      .mockResolvedValueOnce(json(outside));
+    render(section(fetcher));
+    await settle();
+    applyPeriod("2026-03-10", "2026-03-08");
+    await settle();
+    expect(screen.getByRole("alert")).toHaveTextContent("Enter valid UTC dates");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    applyPeriod("2026-03-08", "2026-03-09");
+    await settle();
+    expect(screen.getByRole("alert")).toHaveTextContent("Financial history could not be verified");
+    expect(screen.queryByRole("region", { name: "Loaded record totals" })).not.toBeInTheDocument();
+  });
   it("sums only loaded, deduplicated records with exact currency and type separation", async () => {
     const first = historyPage(["10001"], cursor(1));
     const second = historyPage(["10001", "10002", "10003", "10004"]);
