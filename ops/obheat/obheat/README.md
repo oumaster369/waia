@@ -1,6 +1,6 @@
 # OB-HEATMAP
 
-Секундная тепловая карта агрегированного стакана линейных перпов BTCUSDT и ETHUSDT.
+Секундная тепловая карта агрегированного стакана линейных перпов. Основные символы — BTCUSDT и ETHUSDT. Альты SOL, NEAR, LINK, ZEC, HYPE, SUI, XRP и BNB входят в `SYMBOLS` и на проде собираются отдельным процессом `obheat-collect-alt` (перпы BYBIT/OKX/HTX, каталог `/srv/obheat-alt`). Страница проксирует их, если задан `OBHEAT_ALT_URL`.
 Площадки: Binance USD-M, Bybit linear, OKX swap, HTX linear. Обратные контракты не пишутся.
 Спот сюда не суммируется.
 
@@ -59,10 +59,10 @@
 | `GET /levels?symbol=BTCUSDT&venue=ALL&minutes=60` | стены, глубина, дисбаланс и модельные кластеры |
 | `GET /trades?symbol=BTCUSDT&venue=ALL&minutes=60` | сделки за окно |
 | `GET /liquidations?symbol=BTCUSDT&venue=ALL&minutes=60` | ликвидации за окно |
-| `GET /api/liquidity?symbol=BTCUSDT&venue=ALL` | last, ближайшие стены, тренд, magnet, свежесть. `BTC`/`ETH` — алиасы |
+| `GET /api/liquidity?symbol=BTCUSDT&venue=ALL` | last, ближайшие стены, тренд, magnet, свежесть. Короткое имя (`BTC`, `SOL`) — алиас |
 | `GET /stream?symbol=BTCUSDT&venue=ALL` | SSE: `column` (как раньше) и `liquidity` раз в секунду |
 
-`symbol`: `BTCUSDT` или `ETHUSDT`. `venue`: `ALL` и десять площадок из `OBHEAT_VENUES` (BINANCE, BYBIT, OKX, HTX, BITGET, GATE, BINANCE_SPOT, COINBASE, OKX_SPOT, BYBIT_SPOT). Окно `minutes` 1..4320, столбцов не больше 2000. Бин суммирует только честные секунды; дыра — `null`, не ноль.
+`symbol`: `BTCUSDT`, `ETHUSDT` и альты `SOLUSDT`, `NEARUSDT`, `LINKUSDT`, `ZECUSDT`, `HYPEUSDT`, `SUIUSDT`, `XRPUSDT`, `BNBUSDT`. Спот и Coinbase заданы только для BTC и ETH. `venue`: `ALL` и десять площадок из `OBHEAT_VENUES` (BINANCE, BYBIT, OKX, HTX, BITGET, GATE, BINANCE_SPOT, COINBASE, OKX_SPOT, BYBIT_SPOT). Окно `minutes` 1..4320, столбцов не больше 2000. Бин суммирует только честные секунды; дыра — `null`, не ноль.
 
 `/health` по площадке: `ok`, `partial`, `stale` (нет честной книги >10 с), `resync` (дыра, ждём снимок), `rate_limited` (418/429), `unavailable` (451 или geographic block — ретраи редкие, остальные площадки не ждут). `degraded: true`, если хоть одна площадка не `ok`.
 

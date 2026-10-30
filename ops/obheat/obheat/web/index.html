@@ -62,6 +62,7 @@
   <div class="group" id="venues"></div>
   <div class="group" id="windows"></div>
   <div class="group" id="modes"></div>
+  <div class="group" id="fanctl" title="Веер прогноза: не торговый сигнал"></div>
   <select id="palette" title="Палитра">
     <option value="coinglass">желто-зелено-фиолетовая</option>
     <option value="side">bid/ask</option>
@@ -199,11 +200,80 @@ function buttons(root, items, current, onPick) {
   }
 }
 
+const FAN = {model: "cone_cal", data: null, sym: null};
+async function loadFan() {
+  try {
+    const d = await api("forecast?symbol=" + view.symbol);
+    if (d && d.models) { FAN.data = d; ui.shot = null; draw(); }
+  } catch (e) { /* optional layer */ }
+}
+setInterval(loadFan, 60000);
+function drawFan(cols, yOf, padL, plotW, futW, padT, plotH, minP, maxP) {
+  const d = FAN.data, m = d.models[FAN.model];
+  if (!m) return;
+  const t0s = cols[0].ts, tLast = cols[cols.length - 1].ts, iss = d.t0 / 1000, end = iss + 240 * 60;
+  const x0 = padL + plotW;
+  const tx = ts => ts <= tLast ? padL + (ts - t0s) / Math.max(1, tLast - t0s) * plotW : x0 + (ts - tLast) / Math.max(60, end - tLast) * futW;
+  const H = d.horizons, px = d.px;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(padL, padT, plotW + futW, plotH); ctx.clip();
+  ctx.fillStyle = "rgba(10,12,22,0.92)"; ctx.fillRect(x0, padT, futW, plotH);
+  // pale continuation of current walls
+  const last = [...cols].reverse().find(c => c.book_ok && (c.bids || c.asks));
+  if (last) {
+    const rows = [...(last.bids || []).map(r => [r, "b"]), ...(last.asks || []).map(r => [r, "a"])].filter(([r]) => r[0] >= minP && r[0] <= maxP && r[2] >= ui.threshold);
+    const mx = Math.max(1, ...rows.map(([r]) => r[2]));
+    for (const [r, side] of rows) {
+      const a = 0.04 + 0.22 * Math.sqrt(r[2] / mx);
+      ctx.fillStyle = side === "b" ? `rgba(61,220,132,${a.toFixed(3)})` : `rgba(196,107,255,${a.toFixed(3)})`;
+      ctx.fillRect(x0, yOf(r[0]) - 1, futW, 2);
+    }
+  }
+  const xi = tx(iss);
+  const pts = qi => [[xi, yOf(px)], ...H.map(h => [tx(iss + h * 60), yOf(m.q[String(h)][qi])])];
+  const band = (lo, hi, alpha) => {
+    const a = pts(lo), b = pts(hi).reverse();
+    ctx.beginPath(); ctx.moveTo(a[0][0], a[0][1]);
+    for (const p of a.slice(1)) ctx.lineTo(p[0], p[1]);
+    for (const p of b) ctx.lineTo(p[0], p[1]);
+    ctx.closePath(); ctx.fillStyle = `rgba(255,170,60,${alpha})`; ctx.fill();
+  };
+  band(0, 6, 0.13); band(1, 5, 0.18); band(2, 4, 0.30);
+  ctx.lineWidth = 0.7; ctx.strokeStyle = "rgba(255,220,170,0.22)";
+  for (const p of m.paths || []) {
+    ctx.beginPath(); ctx.moveTo(xi, yOf(px));
+    p.forEach((v, k) => ctx.lineTo(tx(iss + (k + 1) * d.step_min * 60), yOf(v)));
+    ctx.stroke();
+  }
+  const med = pts(3);
+  ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(255,200,90,0.95)";
+  ctx.beginPath(); ctx.moveTo(med[0][0], med[0][1]); for (const p of med.slice(1)) ctx.lineTo(p[0], p[1]); ctx.stroke();
+  ctx.setLineDash([3, 3]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(255,255,255,0.55)";
+  ctx.beginPath(); ctx.moveTo(xi, padT); ctx.lineTo(xi, padT + plotH); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x0, padT); ctx.lineTo(x0, padT + plotH); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.font = "10px system-ui, sans-serif"; ctx.fillStyle = "#cfd5e3";
+  H.forEach((h, k) => {
+    const x = tx(iss + h * 60), pu = Math.round(100 * m.p_up[String(h)]);
+    ctx.fillText(`${h < 60 ? h + "м" : h / 60 + "ч"} ↑${pu}% ↓${100 - pu}%`, Math.min(x - 24, x0 + futW - 70), padT + 12 + k * 12);
+  });
+  const cl = d.calib_live && d.calib_live[FAN.model] && d.calib_live[FAN.model]["60"];
+  const cb = d.calib_backtest && d.calib_backtest[FAN.model] && d.calib_backtest[FAN.model]["60"];
+  const c = cl && cl.n_eff >= 30 ? [cl, "live"] : cb ? [cb, "история"] : null;
+  const y2 = padT + plotH - 8;
+  if (c) ctx.fillText(`покрытие 80% (1ч, ${c[1]}): ${Math.round(c[0].cov80 * 100)}%, n=${c[0].n_eff}`, x0 + 4, y2 - 12);
+  ctx.fillStyle = "#ffb86b";
+  ctx.fillText(`${{cone: "конус", cone_cal: "конус калибр.", analog: "аналоги"}[FAN.model]} · ${fmtTime(iss, false)} · не торговый сигнал`, x0 + 4, y2);
+  ctx.restore();
+}
+
 function renderControls() {
   ui.window = view.windowId;
+  buttons(document.getElementById("fanctl"), [{id: "off", label: "Прогноз: выкл"}, {id: "cone_cal", label: "Конус калибр."}, {id: "cone", label: "Конус"}, {id: "analog", label: "Аналоги"}], FAN.model, id => { FAN.model = id; ui.shot = null; renderControls(); draw(); });
   buttons(document.getElementById("symbols"), [
     {id: "BTCUSDT", label: "BTC"},
-    {id: "ETHUSDT", label: "ETH"}
+    {id: "ETHUSDT", label: "ETH"},
+    ...["SOL","NEAR","LINK","ZEC","HYPE","SUI","XRP","BNB"].map(c => ({id: c + "USDT", label: c}))
   ], view.symbol, id => { if (id !== view.symbol) switchTo({symbol: id}); });
   buttons(document.getElementById("venues"), Object.entries(VENUE_LABEL).map(([id, label]) => ({id, label})), view.venue, id => { if (id !== view.venue) switchTo({venue: id}); });
   buttons(document.getElementById("windows"), Object.entries(WINDOWS).map(([id, row]) => ({id, label: row.label})), view.windowId, id => { if (id !== view.windowId) switchTo({windowId: id}); });
@@ -251,7 +321,7 @@ function expandCompact(heat) {
       if (b) bids.push([price, 0, ObheatChart.usdFromScale(b, maxUsd)]);
       if (a) asks.push([price, 0, ObheatChart.usdFromScale(a, maxUsd)]);
     }
-    const priceStep = prices.length > 1 ? Math.abs(prices[1] - prices[0]) : (heat.symbol === "ETHUSDT" ? 0.5 : 10);
+    const priceStep = prices.length > 1 ? Math.abs(prices[1] - prices[0]) : (({ETHUSDT:0.5,SOLUSDT:0.02,NEARUSDT:0.001,LINKUSDT:0.002,ZECUSDT:0.2,HYPEUSDT:0.01,SUIUSDT:0.0002,XRPUSDT:0.0002,BNBUSDT:0.1})[heat.symbol] || 10);
     const ohlc = (heat.ohlc || [])[x] || null;
     columns.push({
       ts: times[x], venue: heat.venue, symbol: heat.symbol, book_ok: !!(heat.book_ok || [])[x],
@@ -275,6 +345,7 @@ function closeStream() {
 
 function switchTo(patch) {
   ObheatChart.retarget(view, patch);
+  if (patch.symbol) { FAN.data = null; setTimeout(loadFan, 50); }
   closeStream();
   ui.hover = null;
   ui.shot = null;
@@ -364,7 +435,7 @@ function listen(epoch) {
 }
 
 function coinName() {
-  return view.symbol === "ETHUSDT" ? "ETH" : "BTC";
+  return view.symbol.replace(/USDT$/, "");
 }
 
 function paintStatus() {
@@ -594,7 +665,7 @@ function draw() {
   if (!(maxP > minP)) { minP -= 1; maxP += 1; }
   const zoomKey = view.zoom ? [view.zoom.i0, view.zoom.i1, view.zoom.p0, view.zoom.p1].join(",") : "";
   const tail = all[all.length - 1];
-  const sig = [all.length, all[0].ts, tail.ts, tail.mid, width, height, ui.palette, ui.threshold, ui.brightT, view.symbol, view.venue, view.windowId, zoomKey, ui.layers.book, ui.layers.estimate, ui.layers.candles, ui.layers.prints, ui.layers.vwap].join("|");
+  const sig = [all.length, all[0].ts, tail.ts, tail.mid, width, height, ui.palette, ui.threshold, ui.brightT, view.symbol, view.venue, view.windowId, zoomKey, ui.layers.book, ui.layers.estimate, ui.layers.candles, ui.layers.prints, ui.layers.vwap, FAN.model, FAN.data && FAN.data.t0].join("|");
   if (ui.hover && !ui.drag && ui.sig === sig && ui.shot && ui.geom) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(ui.shot, 0, 0);
@@ -608,7 +679,11 @@ function draw() {
   const padB = 22;
   const profileW = 44;
   const axisW = 72;
-  const plotW = Math.max(10, width - padL - profileW - axisW);
+  const fullW = Math.max(10, width - padL - profileW - axisW);
+  const fanOn = FAN.model !== "off" && FAN.data && FAN.data.sym === view.symbol && FAN.data.models;
+  const futW = fanOn ? Math.round(fullW * 0.22) : 0;
+  ui.futW = futW;
+  const plotW = Math.max(10, fullW - futW);
   const plotH = Math.max(10, height - padT - padB);
   const yOf = price => padT + (maxP - price) / (maxP - minP) * plotH;
   const xOf = index => padL + (index + 0.5) / cols.length * plotW;
@@ -667,12 +742,13 @@ function draw() {
     const text = fmtPrice(lastPrice);
     ctx.font = "12px system-ui, sans-serif";
     const tw = ctx.measureText(text).width + 10;
-    const tagX = padL + plotW + profileW;
+    const tagX = padL + plotW + futW + profileW;
     ctx.fillStyle = "#1a1e28";
     ctx.fillRect(tagX, y - 9, Math.min(axisW - 4, tw), 16);
     ctx.fillStyle = "#f7f8fb";
     ctx.fillText(text, tagX + 4, y + 3);
   }
+  if (fanOn) drawFan(cols, yOf, padL, plotW, futW, padT, plotH, minP, maxP);
   labelWalls(yOf, padL, plotW, minP, maxP, lastPrice);
   drawWallEvents(cols, xOf, yOf, minP, maxP);
   paintLegend(usd, ui.brightT, padT, plotH);
@@ -713,7 +789,8 @@ function paintLegend(sorted, floor, padT, plotH) {
 function paintAxis(yOf, minP, maxP, padL, plotW, profileW, padT, plotH, cols) {
   const ticks = Math.max(6, Math.floor(plotH / 36));
   ctx.font = "11px system-ui, sans-serif";
-  const labelX = padL + plotW + profileW + 4;
+  const fw = ui.futW || 0;
+  const labelX = padL + plotW + fw + profileW + 4;
   for (let tick = 0; tick <= ticks; tick++) {
     const price = maxP - (maxP - minP) * tick / ticks;
     const y = yOf(price);
@@ -721,7 +798,7 @@ function paintAxis(yOf, minP, maxP, padL, plotW, profileW, padT, plotH, cols) {
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(padL, y);
-    ctx.lineTo(padL + plotW, y);
+    ctx.lineTo(padL + plotW + fw, y);
     ctx.stroke();
     ctx.fillStyle = "#9aa3b5";
     ctx.fillText(fmtPrice(price), labelX, y + 4);
@@ -736,7 +813,7 @@ function paintAxis(yOf, minP, maxP, padL, plotW, profileW, padT, plotH, cols) {
     const y = yOf(row.price);
     const w = (row.usd / maxUsd) * (profileW - 8);
     ctx.fillStyle = row.side === "bid" ? "rgba(61,220,132,0.85)" : "rgba(196,107,255,0.85)";
-    ctx.fillRect(padL + plotW + 4, y - 1.5, Math.max(1, w), 3);
+    ctx.fillRect(padL + plotW + fw + 4, y - 1.5, Math.max(1, w), 3);
   }
 }
 
@@ -1096,6 +1173,7 @@ canvas.addEventListener("pointerleave", () => {
 window.addEventListener("resize", () => { ui.shot = null; draw(); });
 renderControls();
 reload();
+loadFan();
 setInterval(async () => {
   const epoch = view.epoch;
   const symbol = view.symbol;

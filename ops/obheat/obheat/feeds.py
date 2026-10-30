@@ -353,6 +353,29 @@ class ObheatOKX(_HubFeed, OKXFeed):
         kwargs["checksum_validation"] = False
         super().__init__(engine, **kwargs)
 
+    async def _liquidations(self, pairs: list):
+        # cryptofeed OKX.subscribe() поднимает новый REST-цикл ликвидаций на каждом
+        # реконнекте и не гасит старый. Циклы копятся до 429. Здесь один цикл на фид.
+        if getattr(self, "_obheat_liq_running", False):
+            return
+        self._obheat_liq_running = True
+        delay = 2.0
+        try:
+            while True:
+                started = time.monotonic()
+                try:
+                    await OKXFeed._liquidations(self, pairs)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    if time.monotonic() - started > 120:
+                        delay = 2.0
+                    LOG.warning("okx liquidations poll failed (%s), retry in %.0fs", type(exc).__name__, delay)
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, 60.0)
+        finally:
+            self._obheat_liq_running = False
+
     async def message_handler(self, msg: str, conn, timestamp: float) -> None:
         self._conn = conn
         await super().message_handler(msg, conn, timestamp)

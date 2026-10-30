@@ -282,7 +282,7 @@ def _read_rows(
     # venue=ALL is its own partition (the collector writes the summed ladder).
     # Opening every venue folder and materialising those list columns was the
     # multi-GB serve path: one 60min window was ~1.2 GB, four in parallel ~4 GB.
-    files = _parquet_files(root, symbol, venue, minute_only=("minute" in kinds and kinds == ("minute",)))
+    files = _parquet_files(root, symbol, venue, minute_only=("minute" in kinds and kinds == ("minute",)), start=start)
     if not files:
         return []
     import duckdb
@@ -365,18 +365,44 @@ def backfill_one(data_dir: Path) -> bool:
         release_arrow()
 
 
+_BACKFILL_DONE: set = set()   # folders of past days already fully converted (bounded by #folders)
+
+
 def _next_hour_without_minutes(data_dir: Path):
+    # memleak fix 2026-10-15: the old version did sorted(root.glob(...*.parquet))
+    # over the whole history (millions of part files) every 30 s -> serve RSS
+    # sawtooth 1->4 GB and ~90% CPU. Now: lazy os.scandir per folder, only HH.parquet
+    # names, and past-day folders are skipped once fully converted.
+    import os
+    from datetime import datetime as _dt, timezone as _tz
     root = Path(data_dir) / "data"
     if not root.exists():
         return None
-    for path in sorted(root.glob("date=*/venue=*/symbol=*/*.parquet")):
-        stem = path.name[:-8] if path.name.endswith(".parquet") else ""
-        if not stem.isdigit():
-            continue
-        target = path.with_name(f"{stem}-minute.parquet")
-        if target.exists() and target.stat().st_mtime >= path.stat().st_mtime:
-            continue
-        return path
+    today = f"date={_dt.now(_tz.utc):%Y-%m-%d}"
+    for day in sorted(e.name for e in os.scandir(root) if e.is_dir() and e.name.startswith("date=")):
+        for venue in sorted(e.name for e in os.scandir(root / day) if e.is_dir()):
+            for sym in sorted(e.name for e in os.scandir(root / day / venue) if e.is_dir()):
+                folder = root / day / venue / sym
+                key = folder.as_posix()
+                if key in _BACKFILL_DONE:
+                    continue
+                hours = []
+                with os.scandir(folder) as it:
+                    for e in it:
+                        n = e.name
+                        if n.endswith(".parquet") and n[:-8].isdigit():
+                            hours.append(n)
+                for n in sorted(hours):
+                    path = folder / n
+                    target = folder / f"{n[:-8]}-minute.parquet"
+                    try:
+                        if target.exists() and target.stat().st_mtime >= path.stat().st_mtime:
+                            continue
+                    except OSError:
+                        continue
+                    return path
+                if day < today:
+                    _BACKFILL_DONE.add(key)
     return None
 
 
@@ -463,15 +489,30 @@ def _minute_rows_from_hour(path: Path) -> list[dict]:
     return out
 
 
-def _parquet_files(root: Path, symbol: str, venue: str | None, minute_only: bool) -> list[str]:
+def _parquet_files(root: Path, symbol: str, venue: str | None, minute_only: bool, start: datetime | None = None) -> list[str]:
+    # memleak fix 2026-10-14: prune by date=/HH before handing files to duckdb.
+    # Passing every part file of the whole history (millions) made each read
+    # load all parquet footers -> serve RSS grew to 13 GB.
+    hour0 = None
+    day0 = None
+    if start is not None:
+        s = start if start.tzinfo else start.replace(tzinfo=timezone.utc)
+        s = s.astimezone(timezone.utc)
+        day0 = f"date={s:%Y-%m-%d}"
+        hour0 = s.hour
     if venue is None:
         folders = list(root.glob(f"date=*/venue=*/symbol={symbol}"))
     else:
         folders = list(root.glob(f"date=*/venue={venue}/symbol={symbol}"))
     found = []
     for folder in folders:
+        day = folder.parent.parent.name
+        if day0 is not None and day < day0:
+            continue
         for path in folder.glob("*.parquet"):
             name = path.name
+            if day0 is not None and day == day0 and name[:2].isdigit() and int(name[:2]) < hour0:
+                continue
             is_minute = name.endswith("-minute.parquet")
             if minute_only != is_minute:
                 continue

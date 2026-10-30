@@ -36,6 +36,10 @@ _CACHE: dict[tuple, dict] = {}
 # process off the history files. The dict itself is also capped: two windows
 # per coin, four overall, and nothing older than a minute.
 _FRESH_S = 30.0
+# 15.10.2026: свежесть кэша по шагу. Колонка 1m/5m появляется раз в минуту/5 мин —
+# пересчитывать суточное окно каждые 30 с было основной нагрузкой serve (~60% CPU).
+_FRESH_BY_STEP = {"1s": 30.0, "5s": 30.0, "15s": 30.0, "1m": 90.0, "5m": 240.0}
+_ALT_URL = os.environ.get("OBHEAT_ALT_URL", "").rstrip("/")
 _SSE_LOCK = threading.Lock()
 _SSE: dict[int, float] = {}
 _SSE_SEQ = 0
@@ -144,7 +148,7 @@ def public_bind(bind: str) -> bool:
 def token_ok(presented: str, expected: str) -> bool:
     if not expected or not presented:
         return False
-    return hmac.compare_digest(presented, expected)
+    return hmac.compare_digest(presented.encode("utf-8", "surrogateescape"), expected.encode("utf-8", "surrogateescape"))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -163,6 +167,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = _route_path(parsed.path)
         query = parse_qs(parsed.query)
+        if _ALT_URL and path not in ("/", "/health", "/meta") and _is_alt(query):
+            self._alt_proxy(path, parsed.query)
+            return
         try:
             if path == "/":
                 self._raw(200, "text/html; charset=utf-8", self._page_bytes())
@@ -184,12 +191,80 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, _liquidity(self.data_dir, query))
             elif path == "/stream":
                 self._stream(_symbol(query), _venue(query))
+            elif path == "/forecast":
+                sym = _symbol(query)
+                body = _read_bytes(Path("/srv/obheat/forecast") / f"latest_{sym}.json", b'{"error":"no forecast"}')
+                self._raw(200, "application/json; charset=utf-8", body)
             else:
                 self._json(404, {"error": "not found"})
+        except (BrokenPipeError, ConnectionResetError):
+            # Client (admin/feedwatch/proxy) closed early — not a server fault.
+            return
         except ValueError as exc:
-            self._json(400, {"error": str(exc)})
+            try:
+                self._json(400, {"error": str(exc)})
+            except (BrokenPipeError, ConnectionResetError):
+                return
         except Exception as exc:  # noqa: BLE001
-            self._json(500, {"error": str(exc)})
+            try:
+                self._json(500, {"error": str(exc)})
+            except (BrokenPipeError, ConnectionResetError):
+                return
+
+    def _alt_proxy(self, path: str, raw_query: str) -> None:
+        """15.10.2026: альты обслуживает отдельный serve (127.0.0.1, данные /srv/obheat-alt)."""
+        import urllib.error
+        import urllib.request
+        q = "&".join(p for p in raw_query.split("&") if not p.startswith("token="))
+        url = f"{_ALT_URL}{path}" + (f"?{q}" if q else "")
+        timeout = 3600 if path == "/stream" else 60
+        try:
+            resp = urllib.request.urlopen(urllib.request.Request(url, headers={"Accept-Encoding": "identity"}), timeout=timeout)
+            code = resp.status
+        except urllib.error.HTTPError as exc:
+            resp, code = exc, exc.code
+        except Exception as exc:  # noqa: BLE001
+            try:
+                self._json(502, {"error": f"alt collector unavailable: {type(exc).__name__}"})
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
+        try:
+            if path == "/stream":
+                self.close_connection = True
+                self.send_response(code)
+                self.send_header("Content-Type", resp.headers.get("Content-Type", "text/event-stream; charset=utf-8"))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                while True:
+                    chunk = resp.read1(65536) if hasattr(resp, "read1") else resp.read(4096)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+                return
+            body = resp.read()
+            ctype = resp.headers.get("Content-Type", "application/json; charset=utf-8")
+            if ctype.startswith("application/json") and "gzip" in self.headers.get("Accept-Encoding", "").lower() and len(body) > 1024:
+                body = gzip.compress(body, compresslevel=5)
+                self.send_response(code)
+                self.send_header("Content-Encoding", "gzip")
+                self.send_header("Vary", "Accept-Encoding")
+            else:
+                self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, TimeoutError, OSError):
+            return
+        finally:
+            try:
+                resp.close()
+            except Exception:  # noqa: BLE001
+                pass
 
     def _allowed(self, query: str) -> bool:
         if not public_bind(self.bind):
@@ -298,7 +373,7 @@ def time_sleep() -> None:
 def _route_path(path: str) -> str:
     if path in {"", "/"}:
         return "/"
-    for route in ("/health", "/meta", "/book", "/heatmap", "/trades", "/liquidations", "/levels", "/stream", "/api/liquidity"):
+    for route in ("/health", "/meta", "/book", "/heatmap", "/trades", "/liquidations", "/levels", "/stream", "/api/liquidity", "/forecast"):
         if path == route or path.endswith(route):
             return route
     if path.endswith("/"):
@@ -322,10 +397,18 @@ def _one(query: dict, name: str, default: str | None = None) -> str:
     return values[0]
 
 
+def _is_alt(query: dict) -> bool:
+    from obheat.symbols import ALT_SYMBOLS
+    sym = ((query.get("symbol") or [""])[0] or "").upper()
+    if sym and not sym.endswith("USDT"):
+        sym += "USDT"
+    return sym in ALT_SYMBOLS
+
+
 def _symbol(query: dict) -> str:
     symbol = _one(query, "symbol", "BTCUSDT").upper()
     if symbol not in SYMBOLS:
-        raise ValueError("symbol must be BTCUSDT or ETHUSDT")
+        raise ValueError("unknown symbol")
     return symbol
 
 
@@ -361,7 +444,7 @@ def _heatmap(data_dir: Path, query: dict) -> dict:
     levels = max(16, min(MAX_LEVELS, int(_one(query, "levels", "40"))))
     key = (str(data_dir), symbol, venue, minutes, step, width, levels)
     hit = _cache_get(key)
-    if hit is not None and time.monotonic() - hit["at"] < _FRESH_S:
+    if hit is not None and time.monotonic() - hit["at"] < _FRESH_BY_STEP.get(step, _FRESH_S):
         return hit["compact"]
     # Wait out the current one-file backfill instead of answering with an
     # empty grid. `/` and `/health` do not take this lock.
@@ -371,7 +454,7 @@ def _heatmap(data_dir: Path, query: dict) -> dict:
         return _empty_compact(symbol, venue, step, minutes)
     try:
         fresh = _cache_get(key)
-        if fresh is not None and time.monotonic() - fresh["at"] < _FRESH_S:
+        if fresh is not None and time.monotonic() - fresh["at"] < _FRESH_BY_STEP.get(step, _FRESH_S):
             return fresh["compact"]
         window = read_window(data_dir, symbol, venue, minutes, step, include_prints=False)
         compact = _compact_heatmap(window, width, levels)
