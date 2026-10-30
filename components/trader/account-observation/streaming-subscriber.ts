@@ -84,6 +84,21 @@ export function createStreamingObservationSubscriber({
           signal: controller.signal,
         });
         if (!active()) return;
+        if (response.status === 409) {
+          const control = await readBoundedObservationJson(response, controller.signal, 8192);
+          if (
+            !control ||
+            typeof control !== "object" ||
+            Object.keys(control).length !== 1 ||
+            !("error" in control) ||
+            control.error !== "ACCOUNT_OBSERVATION_BINDING_CHANGED"
+          )
+            throw new Error("INVALID_BINDING_CONTROL");
+          if (stopped || controller.signal.aborted) return;
+          emit({ type: "binding-changed" });
+          stop();
+          return;
+        }
         if (response.status === 401 || response.status === 403) {
           revoked();
           return;
@@ -136,13 +151,19 @@ export function createStreamingObservationSubscriber({
                     OBSERVATION_STREAM_MAX_FRAME_BYTES
                 )
                   throw new Error("FRAME_LIMIT");
-                const match = /^event: (observation|missing|revoked|error)\ndata: ([^\n]*)$/.exec(
-                  frame,
-                );
+                const match =
+                  /^event: (observation|missing|binding-changed|revoked|error)\ndata: ([^\n]*)$/.exec(
+                    frame,
+                  );
                 if (!match) throw new Error("INVALID_FRAME");
                 if (match[1] === "observation") observe(JSON.parse(match[2]));
                 else {
                   if (match[2] !== "null") throw new Error("INVALID_CONTROL");
+                  if (match[1] === "binding-changed") {
+                    emit({ type: "binding-changed" });
+                    stop();
+                    return;
+                  }
                   if (match[1] === "revoked") {
                     revoked();
                     return;

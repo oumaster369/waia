@@ -189,6 +189,33 @@ describe("account observation route wiring, no external requests", () => {
     expect(await response.text()).not.toContain("fallback");
     expect(mocks.dispose).toHaveBeenCalledOnce();
   });
+  it("returns typed 409 only for an authorized configuration change, then 204 until a new observation", async () => {
+    configureProjection();
+    const next = { ...binding, configurationRevision: "config-2" };
+    mocks.resolve.mockResolvedValue(next);
+    const changed = await accountObservationRoute(request(), "tenant");
+    expect(changed.status).toBe(409);
+    expect(await changed.json()).toEqual({ error: "ACCOUNT_OBSERVATION_BINDING_CHANGED" });
+    expect(mocks.latest).not.toHaveBeenCalled();
+    const currentRequest = new Request(
+      "http://localhost/api/trader/account-observation?" + new URLSearchParams(next),
+    );
+    expect((await accountObservationRoute(currentRequest, "tenant")).status).toBe(204);
+    expect(mocks.latest).toHaveBeenCalledWith(next, expect.any(AbortSignal));
+  });
+  it("keeps credential revision changes terminal", async () => {
+    configureProjection();
+    mocks.resolve.mockResolvedValue({ ...binding, credentialRevision: "2" });
+    expect((await accountObservationRoute(request(), "tenant")).status).toBe(403);
+    expect(mocks.latest).not.toHaveBeenCalled();
+  });
+  it("discards an in-flight read when the authorized configuration changes", async () => {
+    configureProjection();
+    mocks.resolve
+      .mockResolvedValueOnce(binding)
+      .mockResolvedValue({ ...binding, configurationRevision: "config-2" });
+    expect((await accountObservationRoute(request(), "tenant")).status).toBe(409);
+  });
   it("uses the fixed projection and disposes it after every poll", async () => {
     configureProjection();
     vi.stubEnv("WAIA_ACCOUNT_OBSERVATION_PROJECTION_RELEASE_SHA", undefined);
