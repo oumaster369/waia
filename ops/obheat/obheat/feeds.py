@@ -14,7 +14,7 @@ from decimal import Decimal
 
 import aiohttp
 from cryptofeed import FeedHandler
-from cryptofeed.connection import AsyncConnection
+from cryptofeed.connection import AsyncConnection, WebsocketEndpoint
 from cryptofeed.defines import (
     ASK,
     BID,
@@ -43,6 +43,26 @@ from obheat.native import start_native_feeds
 from obheat.symbols import ours_from_std, std_symbol_for
 
 LOG = logging.getLogger("obheat.feeds")
+
+
+def _okx_endpoints_on_443() -> list[WebsocketEndpoint]:
+    """cryptofeed 2.5.0 всё ещё открывает ws.okx.com:8443. Публичный сокет OKX — 443."""
+    cloned = []
+    for endpoint in OKXFeed.websocket_endpoints:
+        address = endpoint.address.replace(":8443", ":443")
+        sandbox = endpoint.sandbox.replace(":8443", ":443") if isinstance(endpoint.sandbox, str) else endpoint.sandbox
+        cloned.append(
+            WebsocketEndpoint(
+                address=address,
+                sandbox=sandbox,
+                instrument_filter=endpoint.instrument_filter,
+                channel_filter=endpoint.channel_filter,
+                limit=endpoint.limit,
+                options={"compression": None},
+                authentication=endpoint.authentication,
+            )
+        )
+    return cloned
 
 
 def _side(value: str) -> str:
@@ -348,6 +368,7 @@ class ObheatBybit(_HubFeed, Bybit):
 
 class ObheatOKX(_HubFeed, OKXFeed):
     obheat_venue = "OKX"
+    websocket_endpoints = _okx_endpoints_on_443()
 
     def __init__(self, engine: Engine, **kwargs) -> None:
         kwargs["checksum_validation"] = False

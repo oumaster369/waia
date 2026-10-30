@@ -182,6 +182,24 @@ class BookAndScanTests(unittest.TestCase):
         self.assertFalse(token_ok("secret", "other"))
 
 
+class OkxSocketTests(unittest.TestCase):
+    def test_public_and_private_sockets_use_port_443(self) -> None:
+        from cryptofeed.exchanges import OKX as OKXFeed
+
+        from obheat.feeds import ObheatOKX, ObheatOKXSpot
+
+        parent = list(OKXFeed.websocket_endpoints)
+        self.assertTrue(any(":8443" in endpoint.address for endpoint in parent))
+        for cls in (ObheatOKX, ObheatOKXSpot):
+            ours = list(cls.websocket_endpoints)
+            self.assertEqual(len(ours), len(parent))
+            for old, new in zip(parent, ours):
+                self.assertEqual(new.address, old.address.replace(":8443", ":443"))
+                self.assertNotIn(":8443", new.address)
+                self.assertEqual(new.channel_filter, old.channel_filter)
+            self.assertTrue(any(endpoint.address.startswith("wss://ws.okx.com:443/ws/v5/public") for endpoint in ours))
+
+
 class OkxLiquidationGuardTests(unittest.TestCase):
     def test_second_liquidation_loop_does_not_start(self) -> None:
         from obheat.feeds import ObheatOKX
