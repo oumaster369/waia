@@ -68,23 +68,36 @@ async def bitget_loop(engine: Engine, symbols: list[str]) -> None:
         try:
             async with websockets.connect("wss://ws.bitget.com/v2/ws/public", ping_interval=20) as ws:
                 await ws.send(json.dumps({"op": "subscribe", "args": args}))
-                async for raw in ws:
-                    msg = json.loads(raw, parse_float=Decimal)
-                    arg = msg.get("arg") or {}
-                    symbol = reverse.get(arg.get("instId"))
-                    if symbol is None or ("BITGET", symbol) not in engine.specs:
-                        continue
-                    for row in msg.get("data") or []:
-                        bids = row.get("bids") or []
-                        asks = row.get("asks") or []
-                        seq = int(row.get("seq") or row.get("ts") or _seq())
-                        if msg.get("action") == "snapshot":
-                            _replace(engine, "BITGET", symbol, bids, asks, seq)
-                        else:
-                            _merge(engine, "BITGET", symbol, bids, asks, seq, "bitget update")
+                # Bitget рвёт сокет примерно через 2 минуты без текстового "ping".
+                pinger = asyncio.ensure_future(_bitget_ping(ws))
+                try:
+                    async for raw in ws:
+                        if raw == "pong":
+                            continue
+                        msg = json.loads(raw, parse_float=Decimal)
+                        arg = msg.get("arg") or {}
+                        symbol = reverse.get(arg.get("instId"))
+                        if symbol is None or ("BITGET", symbol) not in engine.specs:
+                            continue
+                        for row in msg.get("data") or []:
+                            bids = row.get("bids") or []
+                            asks = row.get("asks") or []
+                            seq = int(row.get("seq") or row.get("ts") or _seq())
+                            if msg.get("action") == "snapshot":
+                                _replace(engine, "BITGET", symbol, bids, asks, seq)
+                            else:
+                                _merge(engine, "BITGET", symbol, bids, asks, seq, "bitget update")
+                finally:
+                    pinger.cancel()
         except Exception as exc:
             LOG.exception("bitget native loop failed")
             await asyncio.sleep(_transport_backoff("BITGET", exc))
+
+
+async def _bitget_ping(ws) -> None:
+    while True:
+        await asyncio.sleep(25)
+        await ws.send("ping")
 
 
 async def gate_loop(engine: Engine, symbols: list[str]) -> None:
@@ -242,6 +255,9 @@ class GateSync:
                     self.awaiting = False
                 continue
             self.pending.append(update)
+            # Снимок старше буфера не склеивается. Нужен новый, а не вечное ожидание.
+            self.snapshot_id = None
+            self.need_snapshot = True
             break
 
     def _apply_first(self, update: dict) -> None:

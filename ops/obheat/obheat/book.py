@@ -294,9 +294,17 @@ class L2Book:
         """high_freq: update — version == last+1, иначе дыра. snapshot заменяет книгу."""
         version = int(version)
         event = event or "snapshot"
+        # HTX отдаёт целые доллары как JSON int (85965). price_tick считает голый int
+        # уже тиками, и уровень становился 0.00085965 — книга «пересечена».
+        bids = [[Decimal(lv[0]) if isinstance(lv[0], int) else lv[0], *lv[1:]] for lv in bids or []]
+        asks = [[Decimal(lv[0]) if isinstance(lv[0], int) else lv[0], *lv[1:]] for lv in asks or []]
         if event == "snapshot":
             if self.last_seq is not None and version < self.last_seq:
-                return ApplyResult("late", "late snapshot")
+                # HTX нумерует version внутри сокета. После реконнекта новый поток
+                # может быть сильно ниже last_seq. Отбрасываем только близкий поздний
+                # снимок ещё живой книги.
+                if self.status == VALID and self.last_seq - version <= 50:
+                    return ApplyResult("late", "late snapshot")
             if self.last_seq is not None and version == self.last_seq:
                 return ApplyResult("late", "duplicate snapshot")
             jumped = self.last_seq is not None and version > self.last_seq + 1

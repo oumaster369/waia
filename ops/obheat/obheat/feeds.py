@@ -14,7 +14,7 @@ from decimal import Decimal
 
 import aiohttp
 from cryptofeed import FeedHandler
-from cryptofeed.connection import AsyncConnection
+from cryptofeed.connection import AsyncConnection, WebsocketEndpoint
 from cryptofeed.defines import (
     ASK,
     BID,
@@ -43,6 +43,26 @@ from obheat.native import start_native_feeds
 from obheat.symbols import ours_from_std, std_symbol_for
 
 LOG = logging.getLogger("obheat.feeds")
+
+
+def _okx_endpoints_on_443() -> list[WebsocketEndpoint]:
+    """cryptofeed 2.5.0 всё ещё открывает ws.okx.com:8443. Публичный сокет OKX — 443."""
+    cloned = []
+    for endpoint in OKXFeed.websocket_endpoints:
+        address = endpoint.address.replace(":8443", ":443")
+        sandbox = endpoint.sandbox.replace(":8443", ":443") if isinstance(endpoint.sandbox, str) else endpoint.sandbox
+        cloned.append(
+            WebsocketEndpoint(
+                address=address,
+                sandbox=sandbox,
+                instrument_filter=endpoint.instrument_filter,
+                channel_filter=endpoint.channel_filter,
+                limit=endpoint.limit,
+                options={"compression": None},
+                authentication=endpoint.authentication,
+            )
+        )
+    return cloned
 
 
 def _side(value: str) -> str:
@@ -348,10 +368,34 @@ class ObheatBybit(_HubFeed, Bybit):
 
 class ObheatOKX(_HubFeed, OKXFeed):
     obheat_venue = "OKX"
+    websocket_endpoints = _okx_endpoints_on_443()
 
     def __init__(self, engine: Engine, **kwargs) -> None:
         kwargs["checksum_validation"] = False
         super().__init__(engine, **kwargs)
+
+    async def _liquidations(self, pairs: list):
+        # cryptofeed OKX.subscribe() поднимает новый REST-цикл ликвидаций на каждом
+        # реконнекте и не гасит старый. Циклы копятся до 429. Здесь один цикл на фид.
+        if getattr(self, "_obheat_liq_running", False):
+            return
+        self._obheat_liq_running = True
+        delay = 2.0
+        try:
+            while True:
+                started = time.monotonic()
+                try:
+                    await OKXFeed._liquidations(self, pairs)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    if time.monotonic() - started > 120:
+                        delay = 2.0
+                    LOG.warning("okx liquidations poll failed (%s), retry in %.0fs", type(exc).__name__, delay)
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, 60.0)
+        finally:
+            self._obheat_liq_running = False
 
     async def message_handler(self, msg: str, conn, timestamp: float) -> None:
         self._conn = conn

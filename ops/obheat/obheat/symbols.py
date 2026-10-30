@@ -101,3 +101,17 @@ def step_of(symbol: str) -> Decimal:
 
 def ours_from_std(std_symbol: str) -> str | None:
     return STD_TO_OURS.get(std_symbol)
+
+
+# 15.10.2026: альты для «Стакана» — отдельный лёгкий процесс obheat-collect-alt
+# (только перпы BYBIT/OKX/HTX, без Binance REST, данные /srv/obheat-alt).
+ALT_SYMBOLS = ("SOLUSDT", "NEARUSDT", "LINKUSDT", "ZECUSDT", "HYPEUSDT", "SUIUSDT", "XRPUSDT", "BNBUSDT")
+CORE_SYMBOLS = SYMBOLS
+SYMBOLS = CORE_SYMBOLS + ALT_SYMBOLS
+PRICE_STEP.update({"SOLUSDT": Decimal("0.02"), "NEARUSDT": Decimal("0.001"), "LINKUSDT": Decimal("0.002"), "ZECUSDT": Decimal("0.2"), "HYPEUSDT": Decimal("0.01"), "SUIUSDT": Decimal("0.0002"), "XRPUSDT": Decimal("0.0002"), "BNBUSDT": Decimal("0.1")})
+for _s in ALT_SYMBOLS:
+    _b = _s[:-4]
+    STD_TO_OURS[f"{_b}-USDT-PERP"] = _s
+    OURS_TO_PERP_STD[_s] = f"{_b}-USDT-PERP"
+    CCXT_SYMBOL[("PERP", _s)] = f"{_b}/USDT:USDT"
+OURS_TO_STD = {value: key for key, value in STD_TO_OURS.items()}

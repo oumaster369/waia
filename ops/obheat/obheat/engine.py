@@ -255,13 +255,18 @@ class Engine:
                 continue
             minute = ts.replace(second=0, microsecond=0)
             self._minute_rows[(minute, row["venue"], row["symbol"])].append(row)
-        if ts.second != 59:
-            return []
-        closed = ts.replace(second=0, microsecond=0)
+        # memleak fix 2026-10-14: a minute used to close only when second :59
+        # was sampled. Skipped :59 (slow sample) left the bucket in memory
+        # forever (~25% of minutes) -> collector RSS 26 GB. Close every bucket
+        # older than the current minute too.
+        current = ts.replace(second=0, microsecond=0)
         out = []
         for key, bucket in list(self._minute_rows.items()):
             minute, venue, symbol = key
-            if minute != closed or not bucket:
+            if not (minute < current or (minute == current and ts.second == 59)):
+                continue
+            if not bucket:
+                self._minute_rows.pop(key, None)
                 continue
             merged = _merge_second_rows(bucket)
             merged["row_kind"] = "minute"
@@ -288,7 +293,12 @@ class Engine:
                 else:
                     recent = list(self.recent_trades.get((symbol, venue), ()))
                 walls = self.walls.observe(second, venue, symbol, top_walls(column, 8))
-                clusters = estimate_liquidations(recent)
+                # 15.10: модель ликвидаций пересчитывается раз в 5 с (была каждую секунду; ~40% CPU, голодал WS-цикл -> обрывы/ресинки)
+                lc = self.__dict__.setdefault("_liq_cache", {}); hit = lc.get((symbol, venue))
+                if hit is not None and 0 <= second - hit[0] < 5:
+                    clusters = hit[1]
+                else:
+                    clusters = estimate_liquidations(recent); lc[(symbol, venue)] = (second, clusters)
                 symbols[symbol][venue] = build_snapshot(second, symbol, venue, column, walls, clusters, freshness)
         return {"ts": second, "symbols": symbols}
 

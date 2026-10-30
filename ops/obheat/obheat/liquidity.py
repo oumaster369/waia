@@ -18,12 +18,14 @@ SYMBOL_ALIASES = {
     "BTCUSDT": "BTCUSDT",
     "ETHUSDT": "ETHUSDT",
 }
+from obheat.symbols import ALT_SYMBOLS as _ALTS  # 15.10.2026 альты
+SYMBOL_ALIASES.update({**{a: a for a in _ALTS}, **{a[:-4]: a for a in _ALTS}})
 
 
 def canonical_symbol(symbol: str) -> str:
     key = symbol.strip().upper()
     if key not in SYMBOL_ALIASES:
-        raise ValueError("symbol must be BTC, ETH, BTCUSDT or ETHUSDT")
+        raise ValueError("unknown symbol " + key)
     return SYMBOL_ALIASES[key]
 
 
