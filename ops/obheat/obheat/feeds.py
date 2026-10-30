@@ -38,6 +38,7 @@ from cryptofeed.symbols import str_to_symbol
 from obheat.book import BinanceSync
 from obheat.engine import Engine
 from obheat.rest import governor
+from obheat.resync import ResyncScheduler
 from obheat.native import start_native_feeds
 from obheat.symbols import ours_from_std, std_symbol_for
 
@@ -81,9 +82,7 @@ class _HubFeed:
 
     def __init__(self, engine: Engine, **kwargs) -> None:
         self.engine = engine
-        self._resync_busy: set[str] = set()
-        self._resync_next: dict[str, float] = {}
-        self._resync_failures: dict[str, int] = {}
+        self._resync_sched = ResyncScheduler()
         self._conn: AsyncConnection | None = None
         super().__init__(**kwargs)
 
@@ -133,23 +132,28 @@ class _HubFeed:
             self._schedule_resync(symbol)
 
     def _schedule_resync(self, symbol: str) -> None:
-        now = time.time()
-        if now < self._resync_next.get(symbol, 0.0):
+        # Каждый дифф при needs_resync сюда приходит. Без паузы успешная
+        # переподписка (Bybit/OKX/HTX) сразу планирует следующую и сажает цикл.
+        if not self._resync_sched.allow(symbol, time.time()):
             return
-        if symbol in self._resync_busy:
-            return
-        self._resync_busy.add(symbol)
 
         async def run() -> None:
+            error = False
             try:
                 await self._resync(symbol)
-                self._resync_failures[symbol] = 0
             except Exception:
-                self._resync_failures[symbol] = self._resync_failures.get(symbol, 0) + 1
-                self._resync_next[symbol] = time.time() + min(300.0, 60.0 * self._resync_failures[symbol])
+                error = True
                 LOG.exception("resync %s %s failed", self._venue(), symbol)
             finally:
-                self._resync_busy.discard(symbol)
+                healed = False
+                if not error:
+                    try:
+                        book = self.engine.book(self._venue(), symbol)
+                        healed = book.status == "VALID" and not book.needs_resync
+                    except Exception:
+                        error = True
+                        LOG.exception("resync %s %s status", self._venue(), symbol)
+                self._resync_sched.finish(symbol, healed=healed, now=time.time(), error=error)
 
         asyncio.get_running_loop().create_task(run())
 
@@ -242,7 +246,7 @@ class ObheatBinance(_HubFeed, BinanceFutures):
                 if result.kind == "gap":
                     break
         if session.awaiting:
-            self._resync_next[symbol] = time.time() + 60.0
+            self._resync_sched.defer(symbol, time.time() + 60.0)
 
 
 class ObheatBybit(_HubFeed, Bybit):
@@ -534,7 +538,7 @@ class ObheatBinanceSpot(_HubFeed, Binance):
                 if result.kind == "gap":
                     break
         if session.awaiting:
-            self._resync_next[symbol] = time.time() + 60.0
+            self._resync_sched.defer(symbol, time.time() + 60.0)
 
 
 class ObheatCoinbase(_HubFeed, Coinbase):

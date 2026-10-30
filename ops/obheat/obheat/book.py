@@ -29,6 +29,9 @@ TICK = 100_000_000
 # Жёсткий потолок на сторону. Дифф дописывает цены и не удаляет дальние,
 # без потолка RSS коллектора рос (340 → 535 МБ за полчаса) без остановки.
 MAX_LEVELS = 8192
+# Диффы, пока ждём снимок. Без потолка час resync — это сотни тысяч сообщений
+# в списке и потом один проход, который держит цикл.
+SYNC_PENDING_CAP = 512
 
 
 def price_tick(value) -> int:
@@ -334,20 +337,29 @@ class BinanceSync:
 
     def on_diff(self, msg: dict) -> list[ApplyResult]:
         if self.awaiting:
-            self.pending.append(msg)
+            self._buffer(msg)
             if self.snapshot_id is not None:
                 return self._drain()
             return [ApplyResult("ignored", "buffered")]
         if self.book.status != VALID or self.book.needs_resync:
-            self.pending.append(msg)
+            self._buffer(msg)
             self.awaiting = True
             return [ApplyResult("ignored", "buffered")]
         result = self._apply(msg)
         if result.kind == "gap":
-            self.pending.append(msg)
+            self._buffer(msg)
             self.awaiting = True
             self.snapshot_id = None
         return [result]
+
+    def _buffer(self, msg: dict) -> None:
+        self.pending.append(msg)
+        extra = len(self.pending) - SYNC_PENDING_CAP
+        if extra > 0:
+            del self.pending[:extra]
+            # Старый хвост уже не мост к снимку. Нужен новый снимок, не догон дырявого буфера.
+            self.awaiting = True
+            self.snapshot_id = None
 
     def on_snapshot(self, last_update_id: int, bids, asks) -> list[ApplyResult]:
         self.snapshot_id = int(last_update_id)

@@ -11,6 +11,7 @@ from decimal import Decimal
 import aiohttp
 import websockets
 
+from obheat.book import SYNC_PENDING_CAP
 from obheat.engine import Engine
 from obheat.rest import governor
 
@@ -97,7 +98,8 @@ async def gate_loop(engine: Engine, symbols: list[str]) -> None:
                     await ws.send(json.dumps({"time": int(time.time()), "channel": "futures.order_book_update", "event": "subscribe", "payload": [GATE_CONTRACT[symbol], "100ms", "100"]}))
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as http:
                     for symbol in active:
-                        await _gate_snapshot(sync[symbol], http)
+                        ok = await _gate_snapshot(sync[symbol], http)
+                        note_gate_snapshot(sync[symbol], ok, time.time())
                     async for raw in ws:
                         msg = json.loads(raw, parse_float=Decimal)
                         result = msg.get("result") or {}
@@ -105,20 +107,38 @@ async def gate_loop(engine: Engine, symbols: list[str]) -> None:
                         if symbol is None or ("GATE", symbol) not in engine.specs:
                             continue
                         sync[symbol].on_update(result)
-                        if sync[symbol].need_snapshot:
-                            sync[symbol].need_snapshot = False
-                            await _gate_snapshot(sync[symbol], http)
+                        state = sync[symbol]
+                        if state.need_snapshot and time.time() >= state.next_snapshot_at:
+                            ok = await _gate_snapshot(state, http)
+                            note_gate_snapshot(state, ok, time.time())
         except Exception as exc:
             LOG.exception("gate native loop failed")
             await asyncio.sleep(_transport_backoff("GATE", exc))
 
 
-async def _gate_snapshot(sync: "GateSync", http: aiohttp.ClientSession) -> None:
+def gate_snapshot_backoff(failures: int) -> float:
+    """Пауза после неудачного снимка Gate. Первая неудача — 2 с, потолок 60 с."""
+    step = min(max(int(failures), 1), 6)
+    return float(min(60, 2 ** step))
+
+
+def note_gate_snapshot(sync: "GateSync", ok: bool, now: float) -> None:
+    """Снимок не сбросил флаг навсегда: неудача снова просит снимок, но не сразу."""
+    if ok:
+        sync.snapshot_failures = 0
+        sync.next_snapshot_at = 0.0
+        sync.need_snapshot = bool(sync.awaiting and sync.snapshot_id is None)
+        return
+    sync.snapshot_failures += 1
+    sync.need_snapshot = True
+    sync.next_snapshot_at = now + gate_snapshot_backoff(sync.snapshot_failures)
+
+
+async def _gate_snapshot(sync: "GateSync", http: aiohttp.ClientSession) -> bool:
     gov = governor("GATE")
     symbol = sync.symbol
-    sync.need_snapshot = False
     if gov.is_unavailable() or not await gov.wait_turn(f"depth:{symbol}", min_interval=60.0):
-        return
+        return False
     contract = GATE_CONTRACT[symbol]
     url = f"https://api.gateio.ws/api/v4/futures/usdt/order_book?contract={contract}&limit=100&with_id=true"
     async with http.get(url) as response:
@@ -128,10 +148,11 @@ async def _gate_snapshot(sync: "GateSync", http: aiohttp.ClientSession) -> None:
             if gov.is_unavailable():
                 sync.engine.mark_unavailable("GATE", text[:180])
             LOG.error("gate snapshot %s failed status=%s body=%s", symbol, response.status, text[:200])
-            return
+            return False
         gov.ok(response.headers)
     data = json.loads(text, parse_float=Decimal)
     sync.on_snapshot(data)
+    return True
 
 
 def _coinbase_update(engine: Engine, symbol: str, changes: list) -> None:
@@ -166,17 +187,28 @@ class GateSync:
         self.snapshot_id: int | None = None
         self.awaiting = True
         self.need_snapshot = False
+        self.snapshot_failures = 0
+        self.next_snapshot_at = 0.0
 
     def on_update(self, result: dict) -> None:
         update = _gate_update(result)
         if update is None:
             return
         if self.awaiting:
-            self.pending.append(update)
+            self._remember(update)
             if self.snapshot_id is not None:
                 self._drain()
             return
         self._apply(update)
+
+    def _remember(self, update: dict) -> None:
+        self.pending.append(update)
+        extra = len(self.pending) - SYNC_PENDING_CAP
+        if extra > 0:
+            del self.pending[:extra]
+            self.awaiting = True
+            self.snapshot_id = None
+            self.need_snapshot = True
 
     def on_snapshot(self, data: dict) -> None:
         snapshot_id = int(data.get("id") or data.get("current") or data.get("u") or _seq())
@@ -204,7 +236,10 @@ class GateSync:
                 continue
             if update["U"] <= target <= update["u"]:
                 self._apply_first(update)
-                self.awaiting = False
+                # Дыра внутри первого апдейта сама ставит awaiting и просит снимок.
+                # Не затирать это: иначе диффы идут в пустую книгу и снимок не зовётся.
+                if not self.need_snapshot:
+                    self.awaiting = False
                 continue
             self.pending.append(update)
             break

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Drop-in upgrade of the production OB-HEATMAP tree.
 # Replaces /opt/obheat/app/obheat, pip-installs into /opt/obheat/venv,
-# restarts collect then serve, and restores the previous tree if health fails.
+# restarts collect (and collect-alt, when that unit exists) then serve,
+# and restores the previous tree if health fails.
 # Does not print OBHEAT_TOKEN and does not rewrite /etc/obheat.env.
 set -euo pipefail
 
@@ -16,6 +17,10 @@ VENV=/opt/obheat/venv
 TS="$(date -u +%Y%m%d%H%M%S)"
 BAK="/root/obheat-app-bak-${TS}.tgz"
 ROLLBACK=0
+HAS_ALT=0
+if systemctl cat obheat-collect-alt.service >/dev/null 2>&1; then
+  HAS_ALT=1
+fi
 
 rollback() {
   if [[ "$ROLLBACK" -eq 1 ]]; then
@@ -24,6 +29,9 @@ rollback() {
   ROLLBACK=1
   echo "upgrade failed; restoring ${BAK}" >&2
   systemctl stop obheat-serve.service obheat-collect.service || true
+  if [[ "$HAS_ALT" -eq 1 ]]; then
+    systemctl stop obheat-collect-alt.service || true
+  fi
   rm -rf "$APP"
   tar -C /opt/obheat -xzf "$BAK"
   if [[ -x "$VENV/bin/pip" && -f "$APP/obheat/requirements.txt" ]]; then
@@ -31,6 +39,9 @@ rollback() {
   fi
   chown -R obheat:obheat /opt/obheat || true
   systemctl start obheat-collect.service || true
+  if [[ "$HAS_ALT" -eq 1 ]]; then
+    systemctl start obheat-collect-alt.service || true
+  fi
   systemctl start obheat-serve.service || true
   echo "rolled back to ${BAK}" >&2
   exit 1
@@ -63,6 +74,14 @@ sleep 2
 if ! systemctl is-active --quiet obheat-collect.service; then
   echo "obheat-collect did not stay up" >&2
   rollback
+fi
+if [[ "$HAS_ALT" -eq 1 ]]; then
+  systemctl restart obheat-collect-alt.service
+  sleep 2
+  if ! systemctl is-active --quiet obheat-collect-alt.service; then
+    echo "obheat-collect-alt did not stay up" >&2
+    rollback
+  fi
 fi
 systemctl restart obheat-serve.service
 sleep 2

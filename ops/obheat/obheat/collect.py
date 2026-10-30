@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from obheat.engine import Engine
+from obheat.loopwatch import loop_lag_threshold, start_loop_watch
 from obheat.normalize import load_ccxt_specs
 from obheat.symbols import SYMBOLS, VENUES
 
@@ -76,8 +77,14 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit("no feeds")
     feed = handler.feeds[0]
     start = feed.start
+    watch_stop = None
 
     def start_with_sampler(loop) -> None:
+        nonlocal watch_stop
+        threshold = loop_lag_threshold()
+        if threshold > 0:
+            watch_stop = start_loop_watch(loop, threshold_s=threshold)
+            LOG.info("event loop watchdog threshold=%.1fs (OBHEAT_LOOP_LAG_S)", threshold)
         loop.create_task(_sample_loop(engine))
         if hasattr(handler, "obheat_native_start"):
             handler.obheat_native_start(engine, list(symbols), loop)
@@ -88,6 +95,8 @@ def main(argv: list[str] | None = None) -> None:
     try:
         handler.run()
     finally:
+        if watch_stop is not None:
+            watch_stop.set()
         engine.flush()
 
 
